@@ -76,5 +76,20 @@ Before exploring external compilers, the first iteration of the port should rely
 **Future Considerations: Numba**
 If the pure Python/NumPy implementation proves to be too slow due to the Python interpreter's overhead in the `call_model` sequential loop, **Numba** (`@numba.njit`) would be the natural next step. It can JIT-compile the Python function to machine code, granting Fortran-like execution speeds. This, however, should be evaluated only after exhausting NumPy optimizations.
 
+---
+
+## 4. Multithreading and Parallelization Potential
+
+Yes, the project can absolutely be parallelized, and doing so will yield massive performance improvements during the calibration phase.
+
+The Fortran codebase currently runs sequentially. However, the optimization algorithms (Particle Swarm Optimization and Latin Hypercube) evaluate the model (`call_model`) thousands of times across different parameter sets (`n_particles`).
+
+**How to Parallelize in Python:**
+- **Embarrassingly Parallel Workloads:** Evaluating the objective function for each particle in the PSO swarm is independent of the other particles. This means the simulation for Particle A and Particle B can run at the exact same time on different CPU cores.
+- **Avoid Multithreading (The GIL):** Because the core simulation is CPU-bound math, standard Python *multithreading* (`threading` module) will not provide a speedup due to Python's Global Interpreter Lock (GIL). The GIL prevents multiple native threads from executing Python bytecodes at once.
+- **Use Multiprocessing:** Instead of threads, you must use **multiprocessing**. By using libraries like `concurrent.futures.ProcessPoolExecutor` or `joblib.Parallel`, you can spawn multiple isolated Python processes, each taking a chunk of the particle swarm and utilizing 100% of available CPU cores.
+
+In summary, parallelizing the optimization step across multiple CPU cores via multiprocessing is highly feasible and strongly recommended.
+
 ## Summary
 The `air2stream` project is an excellent candidate for a Python port. The extensive use of standard arrays, basic ODE integration, and text I/O align perfectly with Python's scientific ecosystem. The most critical step in porting will be managing the 1-based to 0-based index shift and utilizing `numpy` to pre-vectorize as much of the internal simulation logic as possible.
