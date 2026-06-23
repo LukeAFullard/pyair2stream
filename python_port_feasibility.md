@@ -166,12 +166,12 @@ To systematically port `air2stream` to Python while ensuring accuracy and correc
 1. **Initialize the Project**: Create a new Python package (e.g., `pyair2stream`). Set up a standard environment with `numpy` and `pandas`. (Completed)
 2. **Port `AIR2STREAM_MODULES.f90`**: Create a `config.py` or a data class `CommonData`. Translate all `ALLOCATABLE` arrays into placeholder `numpy` arrays (`None` initially) and parameters into class attributes. (Completed - `pyair2stream/config.py` created with `CommonData` dataclass enforcing `numpy.float64` for numerical precision)
 
-### Phase 2: File I/O & Parsing
+### Phase 2: File I/O & Parsing (Completed)
 
-1. **Port `AIR2STREAM_READ.f90`**: Create an `io.py` module.
-2. **Read Configs**: Implement functions to read the configuration text files (`input.txt`, `parameters.txt`) and populate the `CommonData` instance. The duplicate `version == 4` block in the Fortran code (lines 81-86) is a known copy-paste bug (verified in `AIR2STREAM_READ.f90` lines 81-86, where a block meant for `version == 8` parameters is incorrectly guarded by `IF (version == 4)`). This **must be fixed** by changing the second condition to `IF (version == 8)` in the Python port, and the correction should be documented.
-3. **Parse Time Series**: Use `pandas.read_csv()` to parse time series data. Implement careful logic to handle the sentinel values (`-999`) in `Qmedia` calculation, and accurately reproduce the exact warm-up year logic (indices 1-365) and `tt` array generation, disregarding leap years for the warm-up period.
-4. **Validation**: Write simple scripts to parse the input files using the Fortran executable and the new Python code, and assert that the loaded array shapes and values are exactly identical.
+1. **Port `AIR2STREAM_READ.f90`**: Create an `io.py` module. (Completed)
+2. **Read Configs**: Implement functions to read the configuration text files (`input.txt`, `parameters.txt`) and populate the `CommonData` instance. The duplicate `version == 4` block in the Fortran code (lines 81-86) is a known copy-paste bug (verified in `AIR2STREAM_READ.f90` lines 81-86, where a block meant for `version == 8` parameters is incorrectly guarded by `IF (version == 4)`). This **has been fixed** by changing the second condition to `IF (version == 8)` in the Python port. (Completed)
+3. **Parse Time Series**: Use `pandas.read_csv()` to parse time series data. Implement careful logic to handle the sentinel values (`-999`) in `Qmedia` calculation, and accurately reproduce the exact warm-up year logic (indices 1-365) and `tt` array generation, disregarding leap years for the warm-up period. (Completed)
+4. **Validation**: Write simple scripts to parse the input files using the Fortran executable and the new Python code, and assert that the loaded array shapes and values are exactly identical. (Completed with `tests/test_io.py`)
 
 ### Phase 3: Core Simulation Loop & Objective Functions
 
