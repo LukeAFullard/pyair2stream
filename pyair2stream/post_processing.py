@@ -131,7 +131,14 @@ def post_process(data: CommonData, toll: float = None):
         # Plot temperatures on primary y-axis
         l1 = ax.plot(dates, df['Tair'], '.', color=light_blue, label='Air temperature', markersize=2)
         l2 = ax.plot(dates, df['Twat_obs_agg'], '.', color=blue, label='Observed water temperature', markersize=2)
-        l3 = ax.plot(dates, df['Twat_mod_agg'], '.', color=orange, label='Simulated water temperature', markersize=2)
+
+        # If Twat_mod_agg is mostly NaN (like in forward projections where obs is missing), fallback to Twat_mod
+        mod_series = df['Twat_mod_agg'] if df['Twat_mod_agg'].notna().sum() > 0 else df['Twat_mod']
+
+        # We can also backfill/overlay Twat_mod for dates where aggregation failed but raw model ran
+        mod_series = mod_series.combine_first(df['Twat_mod'])
+
+        l3 = ax.plot(dates, mod_series, '.', color=orange, label='Simulated water temperature', markersize=2)
 
         ax.set_xlabel('Time')
         ax.set_ylabel('Temperature [\u00B0C]')
