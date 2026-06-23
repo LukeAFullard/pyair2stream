@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 from typing import Optional
+import concurrent.futures
 
 from .config import CommonData
 from .model import call_model, funcobj
@@ -13,6 +14,16 @@ def sub_1(data: CommonData) -> np.float64:
     """
     call_model(data)
     return np.float64(funcobj(data))
+
+def eval_particle_worker(args):
+    """
+    Top-level helper for multiprocessing.
+    Args should be a tuple of (CommonData, parameter_array, n_par).
+    """
+    data, p_vals, n_par = args
+    # When passed to a new process via executor.map, 'data' is already a local deserialized copy.
+    data.par[:n_par] = p_vals
+    return sub_1(data)
 
 def forward_mode(data: CommonData) -> None:
     """
@@ -60,79 +71,92 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
         v[j, :] = v_rand[j, :] * dvmax
         pbest[j, :] = x[j, :]
 
-    for k in range(n_particles):
-        data.par[:n_par] = x[:, k]
-        eff_index = sub_1(data)
-        fitbest[k] = eff_index
-        # Fix: Included initial evaluations in history
-        if eff_index >= data.mineff_index:
-            row = list(x[:, k]) + [eff_index]
-            history.append(row)
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        results = list(executor.map(eval_particle_worker, [(data, x[:, k], n_par) for k in range(n_particles)]))
 
-    # Fix: use fitbest to find initial global best instead of fit
-    best_idx = int(np.argmax(fitbest))
-    foptim = fitbest[best_idx]
-    gbest[:] = x[:, best_idx]
-
-    for i in range(n_run):
         for k in range(n_particles):
-            r = np.random.rand(2 * n_par)
-            status = 0
+            eff_index = results[k]
+            fitbest[k] = eff_index
+            if eff_index >= data.mineff_index:
+                row = list(x[:, k]) + [eff_index]
+                history.append(row)
 
-            for j in range(n_par):
-                v[j, k] = w * v[j, k] + data.c1 * r[j] * (pbest[j, k] - x[j, k]) + data.c2 * r[j + n_par] * (gbest[j] - x[j, k])
-                x[j, k] = x[j, k] + v[j, k]
+        # Fix: use fitbest to find initial global best instead of fit
+        best_idx = int(np.argmax(fitbest))
+        foptim = fitbest[best_idx]
+        gbest[:] = x[:, best_idx]
 
-                # Absorbing wall
-                if x[j, k] > data.parmax[j]:
-                    x[j, k] = data.parmax[j]
-                    v[j, k] = 0.0
-                    status = 1
-                elif x[j, k] < data.parmin[j]:
-                    x[j, k] = data.parmin[j]
-                    v[j, k] = 0.0
-                    status = 1
+        for i in range(n_run):
+            # We can also parallelize the updates in each run
+            # Collect particles to evaluate
+            particles_to_eval = []
+            eval_indices = []
+            for k in range(n_particles):
+                r = np.random.rand(2 * n_par)
+                status = 0
 
-            if status == 0:
-                data.par[:n_par] = x[:, k]
-                eff_index = sub_1(data)
+                for j in range(n_par):
+                    v[j, k] = w * v[j, k] + data.c1 * r[j] * (pbest[j, k] - x[j, k]) + data.c2 * r[j + n_par] * (gbest[j] - x[j, k])
+                    x[j, k] = x[j, k] + v[j, k]
+
+                    # Absorbing wall
+                    if x[j, k] > data.parmax[j]:
+                        x[j, k] = data.parmax[j]
+                        v[j, k] = 0.0
+                        status = 1
+                    elif x[j, k] < data.parmin[j]:
+                        x[j, k] = data.parmin[j]
+                        v[j, k] = 0.0
+                        status = 1
+
+                if status == 0:
+                    particles_to_eval.append((data, x[:, k], n_par))
+                    eval_indices.append(k)
+                else:
+                    fit[k] = -1e30
+
+            eval_results = list(executor.map(eval_particle_worker, particles_to_eval))
+
+            idx = 0
+            for k in eval_indices:
+                eff_index = eval_results[idx]
                 fit[k] = eff_index
                 if eff_index >= data.mineff_index:
                     row = list(x[:, k]) + [eff_index]
                     history.append(row)
-            else:
-                fit[k] = -1e30
+                idx += 1
 
-            if fit[k] > fitbest[k]:
-                fitbest[k] = fit[k]
-                pbest[:, k] = x[:, k]
+            for k in range(n_particles):
+                if fit[k] > fitbest[k]:
+                    fitbest[k] = fit[k]
+                    pbest[:, k] = x[:, k]
 
-        best_idx = int(np.argmax(fitbest))
-        foptim = fitbest[best_idx]
-        gbest[:] = pbest[:, best_idx]
+            best_idx = int(np.argmax(fitbest))
+            foptim = fitbest[best_idx]
+            gbest[:] = pbest[:, best_idx]
 
-        w = w - dw
+            w = w - dw
 
-        if i >= 9:
-            if (i + 1) % max(1, int(n_run / 10)) == 0:
-                perc = float(i + 1) / float(n_run) * 100.0
-                print(f"Calcolo al {perc:.1f} %")
+            if i >= 9:
+                if (i + 1) % max(1, int(n_run / 10)) == 0:
+                    perc = float(i + 1) / float(n_run) * 100.0
+                    print(f"Calcolo al {perc:.1f} %")
 
-        count = 0
-        for k in range(n_particles):
-            norm = 0.0
-            for j in range(n_par):
-                if data.flag_par[j]:
-                    diff = (pbest[j, k] - gbest[j]) / (data.parmax[j] - data.parmin[j])
-                    norm += diff ** 2
-            norm = np.sqrt(norm)
-            # Fix: meaningful tolerance instead of norm < 0.0
-            if norm < 1e-4:
-                count += 1
+            count = 0
+            for k in range(n_particles):
+                norm = 0.0
+                for j in range(n_par):
+                    if data.flag_par[j]:
+                        diff = (pbest[j, k] - gbest[j]) / (data.parmax[j] - data.parmin[j])
+                        norm += diff ** 2
+                norm = np.sqrt(norm)
+                # Fix: meaningful tolerance instead of norm < 0.0
+                if norm < 1e-4:
+                    count += 1
 
-        if count >= (0.9 * n_particles):
-            print('- Warning: PSO has been stopped')
-            break
+            if count >= (0.9 * n_particles):
+                print('- Warning: PSO has been stopped')
+                break
 
     data.par_best = gbest.copy()
     data.finalfit = foptim

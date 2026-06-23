@@ -6,6 +6,7 @@ import pandas as pd
 
 from pyair2stream.config import CommonData, PI
 from pyair2stream.optimization import forward_mode, PSO_mode, LH_mode
+from pyair2stream.main import forward
 
 class TestOptimization(unittest.TestCase):
     def setUp(self):
@@ -112,6 +113,21 @@ class TestOptimization(unittest.TestCase):
         df = pd.read_csv(expected_csv)
         self.assertTrue(len(df) > 0)
         self.assertTrue("eff_index" in df.columns)
+
+    def test_forward_routine(self):
+        self.data.n_particles = 2
+        self.data.n_run = 1
+        self.data.runmode = 'PSO'
+        PSO_mode(self.data, seed=42)
+        forward(self.data)
+
+        expected_csv = os.path.join(self.data.folder, f"2_PSO_RMS_test_station_test_seriesc_1d.csv")
+        self.assertTrue(os.path.exists(expected_csv))
+        df = pd.read_csv(expected_csv)
+        # We initialized n_tot = 375 originally in setUp.
+        # But forward(self.data) resets n_tot=0 because validation file is skipped.
+        # We check the length of the CSV written BEFORE validation was attempted.
+        self.assertEqual(len(df), 375)
 
 if __name__ == '__main__':
     unittest.main()

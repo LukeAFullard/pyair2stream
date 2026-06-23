@@ -113,6 +113,14 @@ def read_Tseries(data: CommonData, p: str) -> None:
 
     filename = os.path.join(data.name, f"{data.station}_{data.series}{p}.txt")
 
+    if not os.path.exists(filename):
+        if p == 'v':
+            print(f'Validation file {filename} not found --> validation is skipped')
+            data.n_tot = 0
+            return
+        else:
+            raise FileNotFoundError(f"Missing required data file: {filename}")
+
     # Read the data using pandas
     # Assuming columns are Year, Month, Day, Tair, Twat_obs, Q
     # We will use delim_whitespace=True or sep=r'\s+'
