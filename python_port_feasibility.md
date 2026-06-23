@@ -23,6 +23,10 @@ The project is structured into five files:
 4. `AIR2STREAM_RUNMODE.f90`: Contains the optimization algorithms (Particle Swarm Optimization (PSO) and Latin Hypercube (LH)).
 5. `AIR2STREAM_MAIN.f90`: The main entry point that ties the modules together.
 
+- **Post-Processing Scripts (`post_processing.m`)**:
+  **Verification Status:** *Verified.* A MATLAB script handles result visualization.
+  **Modernization Detail:** The post-processing logic (reading binary output files for dotty plots and text files for time-series plots) can be directly translated to Python using `matplotlib` and `pandas`/`numpy`. This removes the need for a separate MATLAB license and unifies the pipeline under Python.
+
 ---
 
 ## 1. What Can Be Easily Ported
@@ -133,6 +137,12 @@ To systematically port `air2stream` to Python while ensuring accuracy and correc
 1. **Multiprocessing**: In the PSO implementation, wrap the particle evaluations using `concurrent.futures.ProcessPoolExecutor.map` to parallelize the objective function calculations.
 2. **Port `AIR2STREAM_MAIN.f90`**: Create `main.py` that wires the IO, model execution, and optimization routines based on the run mode.
 3. **Final Validation**: Run a full calibration (`PSO` mode) using both Fortran and Python on the same input data. Verify that the final converged parameters and execution time are comparable.
+
+### Phase 6: Post-Processing & Visualization
+1. **Port `post_processing.m`**: Create a `post_processing.py` (or Jupyter Notebook).
+2. **Translate Plotting Logic**: Use `numpy` to parse the output binary and text files (e.g., `0_PSO_RMS_...out`, `2_PSO_RMS_...out`).
+3. **Generate Visualizations**: Utilize `matplotlib` and `pandas` to generate the parameter dotty plots and the calibration/validation time-series plots, replicating the exact style (e.g., color-blind palettes) and output formats (PDF/PNG) of the original MATLAB script.
+4. **Integration**: Unify the simulation and visualization into a single end-to-end Python script or CLI command.
 
 ## Summary
 The `air2stream` project is an excellent candidate for a Python port. The extensive use of standard arrays, basic ODE integration, and text I/O align perfectly with Python's scientific ecosystem. The critical steps involve meticulous management of the index shift, replacing manual loops with `numpy` and `pandas` vectorizations where appropriate, and leveraging `multiprocessing` to bypass the GIL for optimization performance.
