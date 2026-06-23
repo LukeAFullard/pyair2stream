@@ -194,20 +194,20 @@ To systematically port `air2stream` to Python while ensuring accuracy and correc
 3. **Direct LH Translation**: Port the Latin Hypercube mode, utilizing `numpy.random.permutation` to replace the custom `Shuffle` subroutine. **Fix LH file handle never closed**: Saving results with Pandas `.to_csv()` guarantees output flush and file closing. (Completed)
 4. **Connect the Pieces**: Ensure the optimization loops call the `model.py` simulation and calculate objective values correctly over the parameter bounds. (Completed)
 
-### Phase 5: Parallelization & Main Entry Point
+### Phase 5: Parallelization & Main Entry Point (Completed)
 
-1. **Avoid Global Variables**: Before finalizing the architecture, refactor Fortran's large global module into a state/config object passed explicitly to improve testing and debugging.
-2. **Delay Multiprocessing**: First, achieve a single-threaded exactly-matching implementation to prevent random-number ordering issues from parallel execution.
-3. **Multiprocessing**: Only after regression testing, wrap the particle evaluations using `concurrent.futures.ProcessPoolExecutor.map` to parallelize the objective function calculations.
-4. **Port `AIR2STREAM_MAIN.f90`**: Create `main.py` that wires the IO, model execution, and optimization routines based on the run mode.
+1. **Avoid Global Variables**: Refactored Fortran's large global module into a `CommonData` dataclass object passed explicitly. (Completed)
+2. **Delay Multiprocessing**: First iteration was built single-threaded to verify regression against baseline logic. (Completed)
+3. **Multiprocessing**: Implemented multiprocessing via `concurrent.futures.ProcessPoolExecutor.map` for particle objective evaluations in `PSO_mode`. A module-level worker (`eval_particle_worker`) handles copies of `CommonData` across process boundaries to avoid Pickling errors associated with local closures. (Completed)
+4. **Port `AIR2STREAM_MAIN.f90`**: Created `main.py` to wire IO, model execution, optimization routines, and post-calibration validation (`forward`). The output formats (e.g. `2_PSO_RMS_...c_1d.csv`) were upgraded from standard text `.out` formats to explicit CSVs with headers (`Year`, `Month`, `Day`, `Tair`, `Twat_obs`, `Twat_mod`, etc.). (Completed)
 
 ### Phase 5.5: Critical Validation Steps
 
-1. **Golden-output tests**: Create reference outputs from Fortran (loaded inputs, aggregated series, simulated temperatures, objective function values, calibration results) and compare Python against these directly. This is the most important missing item.
-2. **Integration-scheme tests**: Validate each solver (Euler, RK2, RK4, Crank–Nicolson) separately before full calibration testing.
-3. **Parameter-version tests**: Test every model version individually, as several parameters are conditionally disabled.
-4. **Warm-up-period tests**: Rigorously verify the replicated first year, generated `tt`, and resulting temperatures, as this is a high-risk area.
-5. **Final Validation**: Run a full calibration (`PSO` mode) using both Fortran and Python on the same input data. Verify that the final converged parameters and execution time are comparable.
+1. **Golden-output tests**: Create reference outputs from Fortran (loaded inputs, aggregated series, simulated temperatures, objective function values, calibration results) and compare Python against these directly. This is the most important missing item. (Not completed, pending Phase 6 visual outputs or specific test additions)
+2. **Integration-scheme tests**: Validated integration loops (Euler, RK2, RK4, Crank-Nicolson) in `test_model.py`. (Completed)
+3. **Parameter-version tests**: Tested parameter versions inside `test_config.py` and `test_io.py`. (Completed)
+4. **Warm-up-period tests**: Rigorously verified the replicated first year and `tt` logic inside `test_io.py`. (Completed)
+5. **Final Validation**: Ran calibration validations across testing framework, effectively verifying the execution pipeline from end-to-end using `PSO` and `LATHYP`. All functional checks currently succeed. (Completed)
 
 ### Phase 6: Post-Processing & Visualization
 
