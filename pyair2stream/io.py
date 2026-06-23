@@ -140,11 +140,27 @@ def read_Tseries(data: CommonData, p: str) -> None:
 
     date_col = pd.to_datetime(df['Date'])
 
-    # Map headers to internal names and handle missing data with -999.0 for backward compatibility
-    # If not provided, assume T_water is just missing (-999.0)
-    Tair = df.get('T_air', pd.Series(np.full(len(df), -999.0))).fillna(-999.0).astype(np.float64).values
+    # Validate Start Date
+    if len(date_col) > 0 and (date_col.iloc[0].month != 1 or date_col.iloc[0].day != 1):
+        raise ValueError(f"The time series in {filename} must start on January 1st.")
+
+    # Validate Daily Scale (no gaps)
+    expected_dates = pd.date_range(start=date_col.iloc[0], end=date_col.iloc[-1], freq='D')
+    if len(date_col) != len(expected_dates) or not date_col.equals(pd.Series(expected_dates)):
+        raise ValueError(f"The time series in {filename} must be continuous at a daily time scale with no gaps.")
+
+    # Validate completeness of T_air and Discharge
+    if 'T_air' not in df.columns or df['T_air'].isnull().any():
+        raise ValueError(f"The series of observed air temperature in {filename} must be complete. It cannot have gaps or missing data.")
+
+    if 'Discharge' not in df.columns or df['Discharge'].isnull().any():
+        raise ValueError(f"The series of discharge in {filename} must be complete. It cannot have gaps or missing data.")
+
+    # T_water handles missing data via -999.0
+    Tair = df['T_air'].astype(np.float64).values
+    Q = df['Discharge'].astype(np.float64).values
+
     Twat_obs = df.get('T_water', pd.Series(np.full(len(df), -999.0))).fillna(-999.0).astype(np.float64).values
-    Q = df.get('Discharge', pd.Series(np.full(len(df), -999.0))).fillna(-999.0).astype(np.float64).values
 
     n_tot_raw = len(df)
 
