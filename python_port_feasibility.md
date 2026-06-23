@@ -169,15 +169,15 @@ To systematically port `air2stream` to Python while ensuring accuracy and correc
 ### Phase 2: File I/O & Parsing
 
 1. **Port `AIR2STREAM_READ.f90`**: Create an `io.py` module.
-2. **Read Configs**: Implement functions to read the configuration text files (`input.txt`, `parameters.txt`) and populate the `CommonData` instance. Pay close attention to the `version == 4` vs `version == 8` copy-paste bug and replicate (or document the fix).
+2. **Read Configs**: Implement functions to read the configuration text files (`input.txt`, `parameters.txt`) and populate the `CommonData` instance. The duplicate `version == 4` block in the Fortran code (lines 81-86) is a known copy-paste bug and **must be fixed** by changing it to `version == 8` in the Python port, which should be documented.
 3. **Parse Time Series**: Use `pandas.read_csv()` to parse time series data. Implement careful logic to handle the sentinel values (`-999`) in `Qmedia` calculation, and accurately reproduce the exact warm-up year logic (indices 1-365) and `tt` array generation, disregarding leap years for the warm-up period.
 4. **Validation**: Write simple scripts to parse the input files using the Fortran executable and the new Python code, and assert that the loaded array shapes and values are exactly identical.
 
 ### Phase 3: Core Simulation Loop & Objective Functions
 
 1. **Port `AIR2STREAM_SUBROUTINES.f90`**: Create a `model.py` module.
-2. **Translate Integrators**: Port the numerical integration steps (Euler, RK2, RK4, Crank-Nicolson). Pay extremely close attention to the `0-based` vs `1-based` indexing shift here.
-3. **Port Missing Subroutines**: Implement the `aggregation` subroutine (to handle time resolutions and `I_pos`/`I_inf` indexing) and the `statis` subroutine (to compute statistical denominators).
+2. **Translate Integrators**: Port the numerical integration steps (Euler, RK2, RK4, Crank-Nicolson). Pay extremely close attention to the `0-based` vs `1-based` indexing shift here. **Crucially, do not vectorize the ODE integration loop**. The model is stateful and sequential; operations must be strictly ordered to match Fortran precision. Use `numpy.float64` explicitly everywhere to identically match the `REAL(KIND=8)` Fortran behavior.
+3. **Port Subroutines Exactly**: Ensure the `aggregation` subroutine (handles time resolutions and `I_pos`/`I_inf` indexing) and the `statis` subroutine (computes statistical denominators) are ported exactly. They are present in the original codebase and are critical for correct objective function calculation.
 4. **Control Flow**: Refactor `GO TO` statements into early returns and replace `PAUSE` statements with exceptions or warnings.
 5. **Translate Objectives**: Port the `funcobj` subroutines (NSE, KGE, RMS). Vectorize these calculations using `numpy` arrays instead of `DO` loops.
 6. **Validation**: Manually hardcode a test input state (one array of parameters and driving variables) into both Fortran and Python. Compare the resulting water temperature (`Twat_mod`) output arrays step-by-step. They must match to floating-point precision.
@@ -185,15 +185,24 @@ To systematically port `air2stream` to Python while ensuring accuracy and correc
 ### Phase 4: Optimization Engine (PSO & LH)
 
 1. **Port `AIR2STREAM_RUNMODE.f90`**: Create an `optimization.py` module.
-2. **Direct PSO Translation**: Port the particle swarm optimization logic. Use `numpy` matrix operations to update the swarm positions and velocities in one go. Ensure the "dead code" early exit norm check (`norm .lt. 0.0`) is handled correctly (replicated or documented and removed).
+2. **Direct PSO Translation**: Port the particle swarm optimization logic. Use `numpy` matrix operations to update the swarm positions and velocities in one go. **Fix** the legacy PSO bugs: ensure initial best selection uses `fitbest` instead of `fit` to correctly assign the global best, and update the impossible early exit norm check (`norm .lt. 0.0`) to a standard small tolerance (e.g., `norm < 1e-6`). Both fixes should be documented in the release notes.
 3. **Direct LH Translation**: Port the Latin Hypercube mode, utilizing `numpy.random.permutation` to replace the custom `Shuffle` subroutine.
 4. **Connect the Pieces**: Ensure the optimization loops call the `model.py` simulation and calculate objective values correctly over the parameter bounds.
 
 ### Phase 5: Parallelization & Main Entry Point
 
-1. **Multiprocessing**: In the PSO implementation, wrap the particle evaluations using `concurrent.futures.ProcessPoolExecutor.map` to parallelize the objective function calculations.
-2. **Port `AIR2STREAM_MAIN.f90`**: Create `main.py` that wires the IO, model execution, and optimization routines based on the run mode.
-3. **Final Validation**: Run a full calibration (`PSO` mode) using both Fortran and Python on the same input data. Verify that the final converged parameters and execution time are comparable.
+1. **Avoid Global Variables**: Before finalizing the architecture, refactor Fortran's large global module into a state/config object passed explicitly to improve testing and debugging.
+2. **Delay Multiprocessing**: First, achieve a single-threaded exactly-matching implementation to prevent random-number ordering issues from parallel execution.
+3. **Multiprocessing**: Only after regression testing, wrap the particle evaluations using `concurrent.futures.ProcessPoolExecutor.map` to parallelize the objective function calculations.
+4. **Port `AIR2STREAM_MAIN.f90`**: Create `main.py` that wires the IO, model execution, and optimization routines based on the run mode.
+
+### Phase 5.5: Critical Validation Steps
+
+1. **Golden-output tests**: Create reference outputs from Fortran (loaded inputs, aggregated series, simulated temperatures, objective function values, calibration results) and compare Python against these directly. This is the most important missing item.
+2. **Integration-scheme tests**: Validate each solver (Euler, RK2, RK4, Crank–Nicolson) separately before full calibration testing.
+3. **Parameter-version tests**: Test every model version individually, as several parameters are conditionally disabled.
+4. **Warm-up-period tests**: Rigorously verify the replicated first year, generated `tt`, and resulting temperatures, as this is a high-risk area.
+5. **Final Validation**: Run a full calibration (`PSO` mode) using both Fortran and Python on the same input data. Verify that the final converged parameters and execution time are comparable.
 
 ### Phase 6: Post-Processing & Visualization
 
