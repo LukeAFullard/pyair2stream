@@ -1,2 +1,9 @@
 __pycache__/
 *.pyc
+*.png
+*.pdf
+*.out
+*.csv
+demo_output/
+test_opt_output/
+test_pp_output/

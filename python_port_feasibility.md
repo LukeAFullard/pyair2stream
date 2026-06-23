@@ -209,12 +209,12 @@ To systematically port `air2stream` to Python while ensuring accuracy and correc
 4. **Warm-up-period tests**: Rigorously verified the replicated first year and `tt` logic inside `test_io.py`. (Completed)
 5. **Final Validation**: Ran calibration validations across testing framework, effectively verifying the execution pipeline from end-to-end using `PSO` and `LATHYP`. All functional checks currently succeed. (Completed)
 
-### Phase 6: Post-Processing & Visualization
+### Phase 6: Post-Processing & Visualization (Completed)
 
-1. **Port `post_processing.m`**: Create a `post_processing.py` (or Jupyter Notebook).
-2. **Translate Plotting Logic**: Use `numpy` to parse the output binary and text files (e.g., `0_PSO_RMS_...out`, `2_PSO_RMS_...out`).
-3. **Generate Visualizations**: Utilize `matplotlib` and `pandas` to generate the parameter dotty plots and the calibration/validation time-series plots, replicating the exact style (e.g., color-blind palettes) and output formats (PDF/PNG) of the original MATLAB script.
-4. **Integration**: Unify the simulation and visualization into a single end-to-end Python script or CLI command.
+1. **Port `post_processing.m`**: Created `pyair2stream/post_processing.py` replicating the exact logic of the MATLAB original. (Completed)
+2. **Translate Plotting Logic**: Since we transitioned from opaque binary and spaced text blocks to standardized CSV formats with headers during Phase 4/5, the plotting logic natively reads the new `0_*.csv`, `2_*.csv`, and `3_*.csv` outputs using `pandas.read_csv()`. (Completed)
+3. **Generate Visualizations**: Utilized `matplotlib` with standard `pandas` datetimes to generate parameter dotty plots and calibration/validation time-series plots exactly replicating the MATLAB color-blind palette layout. Output generation for both PDF and PNG formats succeeds perfectly. (Completed)
+4. **Integration**: Added a direct call to `post_process` at the end of `pyair2stream/main.py`. Now running the model via CLI automatically runs the entire simulation pipeline and immediately processes its outputs into visual graphs. Verification tests were written in `tests/test_post_processing.py`. (Completed)
 
 ### Phase 7: User Documentation
 

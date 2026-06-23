@@ -8,6 +8,7 @@ from .io import read_calibration, read_Tseries
 from .model import call_model, aggregation, statis, funcobj
 from .optimization import forward_mode, PSO_mode, LH_mode
 from .config import CommonData
+from .post_processing import post_process
 
 def forward(data: CommonData) -> None:
     """
@@ -116,6 +117,11 @@ def main():
 
     t2 = time.time()
     print(f"Computation time was {t2 - t1:.4f} seconds.")
+
+    # Automatically trigger post-processing visualization
+    print('Starting post-processing visualizations...')
+    post_process(data)
+    print('Post-processing completed.')
 
 if __name__ == '__main__':
     main()
