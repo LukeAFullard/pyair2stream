@@ -1,0 +1,16 @@
+project_name: "synthetic_example"
+station_name: "LowFlow"
+series: "c"
+time_resolution: "1d"
+version: 8
+Tice_cover: 0.0
+objective_function: "NSE"
+integrator: "RK4"
+run_mode: "FORWARD"
+
+paths:
+  input_data: "examples/synthetic_example/projection_low_flow.csv"
+  output_dir: "examples/synthetic_example"
+
+# Parameters injected from the previous calibration run
+parameters_forward: [3.067194, 0.806589, 0.608348, 0.226832, 0.415946, 2.417189, 0.431137, 0.698419]

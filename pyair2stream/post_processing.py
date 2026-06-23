@@ -128,13 +128,24 @@ def post_process(data: CommonData, toll: float = None):
         fig, ax = plt.subplots(figsize=(18/2.54, 10/2.54))
         ax.set_title(f"{title_prefix}, RMSE={rmse:.4f}\u00B0C")
 
-        ax.plot(dates, df['Tair'], '.', color=light_blue, label='Air temperature', markersize=2)
-        ax.plot(dates, df['Twat_obs_agg'], '.', color=blue, label='Observed water temperature', markersize=2)
-        ax.plot(dates, df['Twat_mod_agg'], '.', color=orange, label='Simulated water temperature', markersize=2)
+        # Plot temperatures on primary y-axis
+        l1 = ax.plot(dates, df['Tair'], '.', color=light_blue, label='Air temperature', markersize=2)
+        l2 = ax.plot(dates, df['Twat_obs_agg'], '.', color=blue, label='Observed water temperature', markersize=2)
+        l3 = ax.plot(dates, df['Twat_mod_agg'], '.', color=orange, label='Simulated water temperature', markersize=2)
 
         ax.set_xlabel('Time')
         ax.set_ylabel('Temperature [\u00B0C]')
-        ax.legend(loc='lower right')
+
+        # Plot discharge on secondary y-axis
+        ax2 = ax.twinx()
+        l4 = ax2.plot(dates, df['Q'], '-', color='grey', alpha=0.3, label='Discharge (Q)', linewidth=1)
+        ax2.set_ylabel('Discharge')
+        ax2.set_ylim(bottom=0) # Discharge shouldn't be negative
+
+        # Combine legends
+        lines = l1 + l2 + l3 + l4
+        labels = [l.get_label() for l in lines]
+        ax.legend(lines, labels, loc='lower right')
 
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%b-%y'))
         fig.autofmt_xdate()
