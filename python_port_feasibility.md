@@ -173,6 +173,13 @@ To systematically port `air2stream` to Python while ensuring accuracy and correc
 3. **Parse Time Series**: Use `pandas.read_csv()` to parse time series data. Implement careful logic to handle the sentinel values (`-999`) in `Qmedia` calculation, and accurately reproduce the exact warm-up year logic (indices 1-365) and `tt` array generation, disregarding leap years for the warm-up period. (Completed)
 4. **Validation**: Write simple scripts to parse the input files using the Fortran executable and the new Python code, and assert that the loaded array shapes and values are exactly identical. (Completed with `tests/test_io.py`)
 
+### Phase 2.5: Pre-processing Plans (Pending)
+1. **Validation Checks**: Implement validation checks in `io.py` after parsing the time series:
+    - **Air Temperature & Discharge**: Ensure the series for observed air temperature and discharge are complete. They cannot have gaps or missing data.
+    - **Water Temperature**: Check and allow no-data values, ensuring missing water temperatures are properly set to the `-999` sentinel.
+    - **Start Date Enforcement**: Enforce that the series starts on the 1st of January. If data is available after that date, air temperature should be reconstructed and the value `-999` assigned to water temperature to pad the series correctly.
+    - **Daily Scale**: Ensure the data explicitly represents a daily time scale, as the core model equations solve with a daily time step.
+
 ### Phase 3: Core Simulation Loop & Objective Functions (Completed)
 
 1. **Port `AIR2STREAM_SUBROUTINES.f90`**: Create a `model.py` module. (Completed - `pyair2stream/model.py` created)
