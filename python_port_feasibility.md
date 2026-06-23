@@ -163,8 +163,8 @@ To systematically port `air2stream` to Python while ensuring accuracy and correc
 
 ### Phase 1: Setup & Data Structures
 
-1. **Initialize the Project**: Create a new Python package (e.g., `pyair2stream`). Set up a standard environment with `numpy` and `pandas`.
-2. **Port `AIR2STREAM_MODULES.f90`**: Create a `config.py` or a data class `CommonData`. Translate all `ALLOCATABLE` arrays into placeholder `numpy` arrays (`None` initially) and parameters into class attributes.
+1. **Initialize the Project**: Create a new Python package (e.g., `pyair2stream`). Set up a standard environment with `numpy` and `pandas`. (Completed)
+2. **Port `AIR2STREAM_MODULES.f90`**: Create a `config.py` or a data class `CommonData`. Translate all `ALLOCATABLE` arrays into placeholder `numpy` arrays (`None` initially) and parameters into class attributes. (Completed - `pyair2stream/config.py` created with `CommonData` dataclass enforcing `numpy.float64` for numerical precision)
 
 ### Phase 2: File I/O & Parsing
 
