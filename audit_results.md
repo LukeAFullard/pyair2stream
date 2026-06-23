@@ -1,41 +1,44 @@
-# Audit of Python Port Feasibility Claims
+# Audit of python_port_feasibility.md Claims
 
-This document contains the audit results of the claims made in `python_port_feasibility.md` against the original Fortran codebase of `air2stream`.
+I have reviewed the `python_port_feasibility.md` file against the actual `air2stream` Fortran codebase and verified the following 8 claims.
 
-## Critical issues for an accurate port
+**1. PSO global best initialised from wrong array**
+*Claim:* Line 71: `CALL best(fit, k, foptim)` passes `fit` (still all zeros) instead of `fitbest` (populated just above). `gbest` is set from a random particle rather than the best-performing one, corrupting the first iteration's global attractor.
+*Verification Status:* **True**. In `AIR2STREAM_RUNMODE.f90` lines 66-70 populate `fitbest`. Then, line 71 reads: `CALL best(fit,k,foptim)`. The `fit` array has not been populated yet, meaning `gbest` will be initialized incorrectly.
 
-*   **Do not replace the optimisation algorithms initially**
-    *   **Audit Status: Verified.** The optimization algorithms (`PSO` and `LH`) are deeply intertwined with the execution flow and parameter handling. Replacing them immediately with external libraries like `scipy.optimize` would introduce a high risk of divergence. A direct, exactly replicated port is required first for validation.
+**2. PSO convergence check is permanently dead**
+*Claim:* Line 145: `IF (norm .lt. 0.0)` — `norm` is a square root and can never be negative. The early-exit mechanism never fires regardless of convergence.
+*Verification Status:* **True**. In `AIR2STREAM_RUNMODE.f90` lines 144-145, `norm=SQRT(norm)` calculates the square root (which is non-negative), followed immediately by `IF (norm .lt. 0.0) THEN`. This block is unreachable.
 
-*   **Replicate Fortran floating-point behaviour**
-    *   **Audit Status: Verified.** The codebase extensively uses `REAL(KIND=8)`, which corresponds to 64-bit precision floating-point numbers. (e.g., `AIR2STREAM_MODULES.f90: REAL(KIND=8) :: Qmedia, theta_j, theta_j1, DD_j, DD_j1`). Using `numpy.float64` strictly is essential to avoid drift.
+**3. Version 8 parameters never zeroed**
+*Claim:* Lines 81–86: the block labelled `!air2stream with 8 parameters` is guarded by `IF (version == 4)`. When `version == 8`, parameters 5–8 are not zeroed, but the block intended to do so is skipped.
+*Verification Status:* **True**. In `AIR2STREAM_READ.f90` lines 81-86, there is a block:
+```fortran
+IF (version == 4) THEN                                      !air2stream with 8 parameters
+     parmin(5)=0;    parmax(5)=0;    flag_par(5)=.false.;
+     parmin(6)=0;    parmax(6)=0;    flag_par(6)=.false.;
+     parmin(7)=0;    parmax(7)=0;    flag_par(7)=.false.;
+     parmin(8)=0;    parmax(8)=0;    flag_par(8)=.false.;
+END IF
+```
+This comes after the actual `version == 4` block and is clearly meant for `version == 8` but incorrectly checks `version == 4`.
 
-*   **Preserve execution order**
-    *   **Audit Status: Verified.** The ODE integration step inside `AIR2STREAM_SUBROUTINES.f90` (e.g., `call_model`) sequentially calculates variables day-by-day where `Twat_mod(j)` depends on `Twat_mod(j-1)`. Vectorizing this loop would change the results or break dependencies entirely.
+**4. LH file handle never closed**
+*Claim:* Line 239: `! CLOSE(10)` is commented out. In LATHYP mode the binary output file is never explicitly closed, risking incomplete/unflushed output.
+*Verification Status:* **True**. In `AIR2STREAM_RUNMODE.f90` line 239 (within `SUBROUTINE LH_mode`), the code has `!    CLOSE(10)`, leaving the file unclosed.
 
-*   **Replicate missing-value handling exactly**
-    *   **Audit Status: Verified.** The sentinel value `-999` is heavily used to denote missing or initialization values. For instance, `IF (Twat_obs(i) .ne. -999) THEN` is explicitly tested in multiple subroutines like `aggregation` and data loading.
+**5. `funcobj` requires `I_pos`/`I_inf` indirection — not directly vectorisable**
+*Claim:* Before computing NSE/KGE/RMS, the subroutine averages `Twat_mod` over variable-width aggregation windows using the `I_pos` index array and `I_inf` range matrix. A direct `np.mean((obs - mod)**2)` is incorrect.
+*Verification Status:* **True**. In `AIR2STREAM_SUBROUTINES.f90` lines 150-157, `Twat_mod_agg` is calculated using nested loops over `I_inf(i,1)` to `I_inf(i,2)` indexing `Twat_mod(I_pos(j))`, making direct vectorization of `Twat_mod` non-trivial without recreating this aggregation correctly.
 
-*   **Port aggregation exactly**
-    *   **Audit Status: Verified.** The `python_port_feasibility.md` initially claimed or implied this might be missing, but `SUBROUTINE aggregation` exists in `AIR2STREAM_SUBROUTINES.f90` and performs critical logic for varying time scales (daily, weekly, monthly).
+**6. `Tice_cover` floor clamp not mentioned**
+*Claim:* Line 85 clamps every output step: `Twat_mod[j+1] = max(Twat_mod[j+1], Tice_cover)`. Omitting this in Python will silently produce wrong temperatures whenever the model goes below the ice threshold.
+*Verification Status:* **True**. In `AIR2STREAM_SUBROUTINES.f90` line 85, after all numerical integrations, `Twat_mod(j+1)=MAX(Twat_mod(j+1),Tice_cover);` correctly enforces the ice threshold.
 
-*   **Port statis exactly**
-    *   **Audit Status: Verified.** `SUBROUTINE statis` is fully implemented in `AIR2STREAM_SUBROUTINES.f90` and computes key statistics (`mean_obs`, `TSS_obs`, `std_obs`) which are fundamental to the objective functions later on.
+**7. Initial PSO evaluations excluded from dotty-plot output**
+*Claim:* The `WRITE(10)` block (line 106) is only reached during the main `n_run` iteration loop. The initial particle evaluations (lines 66–70) are never written to the binary output file.
+*Verification Status:* **True**. In `AIR2STREAM_RUNMODE.f90`, the initial run of parameters on lines 66-70 sets `fitbest` but does not `WRITE(10)`. Writing only occurs in the `DO i=1,n_run` loop starting at line 76 (write on line 106).
 
-## Bugs that should be intentionally handled
-
-*   **PSO initial best selection**
-    *   **Description:** In `AIR2STREAM_RUNMODE.f90`, during PSO initialization, `fitbest` is populated with `eff_index` for each particle. However, the subsequent call `CALL best(fit,k,foptim)` uses the `fit` array (which is still `0` for all indices). This randomly/incorrectly sets the initial global best (`gbest`) to the position of the first particle (`k=1`) instead of the true best.
-    *   **Decision:** **Fix and document.** While an exact behavioural clone would replicate this error, it undermines the optimization algorithm's convergence rate. The port should pass `fitbest` to evaluate the initial global best correctly, documenting this correction in the port's release notes.
-
-*   **Dead PSO convergence test**
-    *   **Description:** In `AIR2STREAM_RUNMODE.f90`, the early convergence check calculates a norm distance, applies `SQRT(norm)`, and then checks `IF (norm .lt. 0.0)`. Since a square root is non-negative, this condition is impossible and the PSO loop will always run for `n_run` iterations.
-    *   **Decision:** **Fix and document.** The port should implement a standard small tolerance check (e.g., `norm < 1e-6`) to allow for actual early stopping, improving performance. This deviation from the Fortran behaviour should be clearly documented.
-
-*   **Duplicate `version == 4` block**
-    *   **Description:** In `AIR2STREAM_READ.f90` lines 67-72, the `version == 4` logic is defined. However, at lines 81-86, there is another block: `IF (version == 4) THEN !air2stream with 8 parameters`. This copy-paste error overrides the configuration for an 8-parameter model version.
-    *   **Decision:** **Fix and document.** The second block should be corrected to `IF (version == 8) THEN` in the Python port to allow the 8-parameter version to function as originally intended.
-
-## Missing validation steps & Recommended implementation changes
-
-The remaining claims regarding the absolute need for **Golden-output tests**, **Integration-scheme tests**, and the recommendations against **multithreading** in favour of **multiprocessing** are conceptually sound and essential for the Python porting effort. No specific Fortran flaws contradict these recommendations.
+**8. PSO random re-seeding per iteration makes results non-reproducible**
+*Claim:* Line 77 calls `random_seed()` inside every iteration, re-seeding from system time. Results cannot be reproduced even with the same input. Python's `np.random` does not replicate this behaviour by default.
+*Verification Status:* **True**. In `AIR2STREAM_RUNMODE.f90` line 77, right inside `DO i=1,n_run`, `CALL random_seed()` is executed, reseeding the RNG on every outer iteration, inherently breaking reproducibility.
