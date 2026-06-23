@@ -56,17 +56,45 @@ Most of the codebase translates very naturally to Python:
 
 ---
 
-## 2. What Is More Difficult / Requires Care
+## 2. What Requires Careful Attention
 
-While entirely possible, the following aspects will require careful translation to avoid bugs or performance regressions:
+While the math is straightforward, several Fortran-specific behaviors and existing logical bugs must be carefully managed or replicated during the port:
 
-- **0-Based vs. 1-Based Indexing**:
-  **Verification Status:** *Critical Note.* Fortran arrays are 1-based by default, and slice operations are inclusive on both ends. Python arrays are 0-based, and slices are exclusive on the upper bound.
-  **Action Required:** The mathematical logic uses indices heavily (e.g., `Twat_mod(j+1) = Twat_mod(j) + ...`). The porting effort must meticulously map index bounds. If a loop runs `DO j=1, n_tot-1`, the Python equivalent `range(0, n_tot - 1)` must be checked so the indices align correctly with array shapes.
+- **1-based vs 0-based Indexing**:
+  **Verification Status:** *Verified.* Fortran arrays are 1-indexed. Python (and `numpy`) is 0-indexed. Off-by-one errors are the most common source of bugs in Fortran-to-Python ports.
+  **Action Required:** All loops `DO i = 1, n_tot` must become `for i in range(n_tot):` and corresponding array accesses must be adjusted carefully. This is particularly critical in the numerical integration logic (e.g., RK4 step assignments) where `Twat_mod(j+1)` relies on `Twat_mod(j)`.
 
-- **Sequential State Updates (The Time Loop)**:
-  **Verification Status:** *Verified.* The simulation loop (`call_model`) sequentially calculates water temperature at `j+1` using RK4, RK2, Euler, or Crank-Nicolson, relying on the state at `j`.
-  **Action Required:** Because the state at step `t+1` depends strictly on `t`, the final temporal integration loop cannot be fully vectorized. However, inputs (like air temperature and discharge evaluations) and non-recursive terms can be pre-vectorized using `numpy`. The remaining sequential ODE step must be written clearly, prioritizing algorithmic correctness over premature vectorization attempts that might violate causality.
+- **Warm-up Year Logic and `tt` calculations**:
+  **Verification Status:** *Verified.* The warm-up year replication logic (`AIR2STREAM_READ.f90`) manually replicates the first year to indices 1-365, setting `date(1:365)` to `-999`. Furthermore, the time variable `tt` is calculated strictly as fractions of `365.0` for the warm-up year (indices 1-365), regardless of leap years.
+  **Action Required:** A naive pandas implementation using a standard datetime index will produce wrong `tt` values. The specific manual replication logic and `tt` fractional day-of-year calculations must be reproduced exactly.
+
+- **`Qmedia` excludes `-999` sentinels**:
+  **Verification Status:** *Verified.* When calculating the mean flow (`Qmedia`), the Fortran code explicitly excludes values where `Q(i) == -999`.
+  **Action Required:** A naive `df['Q'].mean()` in pandas is incorrect. The sentinel values must be masked or replaced with `NaN` before aggregation (e.g., `df['Q'].replace(-999, np.nan).mean()`).
+
+- **Duplicate `version == 4` block and skipped `version == 8`**:
+  **Verification Status:** *Verified.* In `AIR2STREAM_READ.f90` (lines 67-72 and 81-86), there is a copy-paste bug where a block intended for `version == 8` is actually guarded by `IF (version == 4)`. This makes the second block redundant and skips zeroing unused parameters for version 8.
+  **Action Required:** A faithful port should document this bug. If the goal is strict parity, this bug must be replicated. If the goal is a modernized fix, the condition should be corrected, but this must be explicitly noted to users.
+
+- **Missing Subroutines: `aggregation` and `statis`**:
+  **Verification Status:** *Verified.* `aggregation` (handles daily/weekly/monthly modes and index arrays `I_pos`/`I_inf`) and `statis` (computes KGE/NSE denominators like `mean_obs`, `TSS_obs`, `std_obs`) are critical components called before objective functions in both calibration and validation.
+  **Action Required:** These must be explicitly ported. The logic inside `statis` can be highly vectorized in Python.
+
+- **Missing Subroutine: `Shuffle`**:
+  **Verification Status:** *Verified.* The codebase contains a custom Fisher-Yates shuffle implementation (`SUBROUTINE Shuffle`) used in `LH_mode`.
+  **Action Required:** This can be cleanly replaced by `numpy.random.permutation` or `numpy.random.shuffle`, but its usage must be mapped correctly.
+
+- **Control Flow Statements (`PAUSE` and `GO TO`)**:
+  **Verification Status:** *Verified.* The codebase contains a blocking `PAUSE` statement (line 377 of SUBROUTINES) and a `GO TO 200` early exit (line 397 of SUBROUTINES).
+  **Action Required:** Python has no equivalent for `PAUSE` or `GO TO`. `PAUSE` must become an exception (`raise RuntimeError`) or a logged warning. `GO TO` must be restructured as an early `return` or conditional block.
+
+- **Sequential ODE Integration (`call_model`)**:
+  **Verification Status:** *Verified.* The core model integration step (`AIR2STREAM_SUBROUTINES.f90`) computes the next time step's water temperature `Twat_mod(j+1)` based on the current step `Twat_mod(j)`.
+  **Action Required:** This loop is inherently sequential and **cannot** be directly vectorized across the time dimension using simple `numpy` array operations. The time integration must remain a sequential loop in Python. However, performance can be heavily optimized by pre-calculating all forcing arrays (air temp, discharge) before the loop starts.
+
+- **PSO Norm Convergence Check is Dead Code**:
+  **Verification Status:** *Verified.* In `AIR2STREAM_RUNMODE.f90`, the variable `norm` is square-rooted (`norm=SQRT(norm)`), making it always `>= 0`. The subsequent check `IF (norm .lt. 0.0)` is therefore never true, making the early-exit block permanently unreachable.
+  **Action Required:** A faithful port must replicate this dead code behavior (or simply remove the check but note the deviation), as the early exit logic never triggers in the Fortran version.
 
 - **Custom Optimization Algorithms (`AIR2STREAM_RUNMODE.f90`)**:
   **Verification Status:** *Strictly Verified.* The project contains manual implementations of Particle Swarm Optimization (PSO) and Latin Hypercube (LH) sampling. Independent verification confirms these are precisely implemented as `SUBROUTINE PSO_mode` and `SUBROUTINE LH_mode` in `AIR2STREAM_RUNMODE.f90`, correctly managing state by allocating large matrices (e.g., `ALLOCATABLE :: x, v, pbest`).
@@ -141,22 +169,25 @@ To systematically port `air2stream` to Python while ensuring accuracy and correc
 ### Phase 2: File I/O & Parsing
 
 1. **Port `AIR2STREAM_READ.f90`**: Create an `io.py` module.
-2. **Read Configs**: Implement functions to read the configuration text files (`input.txt`, `parameters.txt`) and populate the `CommonData` instance.
-3. **Parse Time Series**: Replace manual loop-based data reading and the `leap_year` subroutine with `pandas.read_csv()` to parse time series data, ensuring the dates map cleanly to a standard `datetime` index.
+2. **Read Configs**: Implement functions to read the configuration text files (`input.txt`, `parameters.txt`) and populate the `CommonData` instance. Pay close attention to the `version == 4` vs `version == 8` copy-paste bug and replicate (or document the fix).
+3. **Parse Time Series**: Use `pandas.read_csv()` to parse time series data. Implement careful logic to handle the sentinel values (`-999`) in `Qmedia` calculation, and accurately reproduce the exact warm-up year logic (indices 1-365) and `tt` array generation, disregarding leap years for the warm-up period.
 4. **Validation**: Write simple scripts to parse the input files using the Fortran executable and the new Python code, and assert that the loaded array shapes and values are exactly identical.
 
 ### Phase 3: Core Simulation Loop & Objective Functions
 
 1. **Port `AIR2STREAM_SUBROUTINES.f90`**: Create a `model.py` module.
 2. **Translate Integrators**: Port the numerical integration steps (Euler, RK2, RK4, Crank-Nicolson). Pay extremely close attention to the `0-based` vs `1-based` indexing shift here.
-3. **Translate Objectives**: Port the `funcobj` subroutines (NSE, KGE, RMS). Vectorize these calculations using `numpy` arrays instead of `DO` loops.
-4. **Validation**: Manually hardcode a test input state (one array of parameters and driving variables) into both Fortran and Python. Compare the resulting water temperature (`Twat_mod`) output arrays step-by-step. They must match to floating-point precision.
+3. **Port Missing Subroutines**: Implement the `aggregation` subroutine (to handle time resolutions and `I_pos`/`I_inf` indexing) and the `statis` subroutine (to compute statistical denominators).
+4. **Control Flow**: Refactor `GO TO` statements into early returns and replace `PAUSE` statements with exceptions or warnings.
+5. **Translate Objectives**: Port the `funcobj` subroutines (NSE, KGE, RMS). Vectorize these calculations using `numpy` arrays instead of `DO` loops.
+6. **Validation**: Manually hardcode a test input state (one array of parameters and driving variables) into both Fortran and Python. Compare the resulting water temperature (`Twat_mod`) output arrays step-by-step. They must match to floating-point precision.
 
-### Phase 4: Optimization Engine (PSO)
+### Phase 4: Optimization Engine (PSO & LH)
 
 1. **Port `AIR2STREAM_RUNMODE.f90`**: Create an `optimization.py` module.
-2. **Direct PSO Translation**: Port the particle swarm optimization logic. Use `numpy` matrix operations to update the swarm positions and velocities in one go.
-3. **Connect the Pieces**: Ensure the PSO loop calls the `model.py` simulation and calculates objective values correctly over the parameter bounds.
+2. **Direct PSO Translation**: Port the particle swarm optimization logic. Use `numpy` matrix operations to update the swarm positions and velocities in one go. Ensure the "dead code" early exit norm check (`norm .lt. 0.0`) is handled correctly (replicated or documented and removed).
+3. **Direct LH Translation**: Port the Latin Hypercube mode, utilizing `numpy.random.permutation` to replace the custom `Shuffle` subroutine.
+4. **Connect the Pieces**: Ensure the optimization loops call the `model.py` simulation and calculate objective values correctly over the parameter bounds.
 
 ### Phase 5: Parallelization & Main Entry Point
 
