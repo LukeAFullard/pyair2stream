@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import argparse
 import numpy as np
 import pandas as pd
 
@@ -87,18 +88,22 @@ def forward(data: CommonData) -> None:
 
 
 def main():
-    print('       .__       ________            __                                  ')
-    print('_____  |__|______\_____  \   _______/  |________   ____ _____    _____   ')
-    print('\__  \ |  \_  __ \/  ____/  /  ___/\   __\_  __ \_/ __ \\__  \  /     \  ')
-    print(' / __ \|  ||  | \/       \  \___ \  |  |  |  | \/\  ___/ / __ \|  Y Y  \ ')
-    print('(____  /__||__|  \_______ \/____  > |__|  |__|    \___  >____  /__|_|  / ')
-    print('     \/                  \/     \/                    \/     \/      \/  ')
+    parser = argparse.ArgumentParser(description="pyair2stream - Python Port of air2stream")
+    parser.add_argument("--config", type=str, default="config.yaml", help="Path to the configuration YAML file.")
+    args = parser.parse_args()
+
+    print(r'       .__       ________            __                                  ')
+    print(r'_____  |__|______\_____  \   _______/  |________   ____ _____    _____   ')
+    print(r'\__  \ |  \_  __ \/  ____/  /  ___/\   __\_  __ \_/ __ \__  \  /     \  ')
+    print(r' / __ \|  ||  | \/       \  \___ \  |  |  |  | \/\  ___/ / __ \|  Y Y  \ ')
+    print(r'(____  /__||__|  \_______ \/____  > |__|  |__|    \___  >____  /__|_|  / ')
+    print(r'     \/                  \/     \/                    \/     \/      \/  ')
     print('pyair2stream Version 1.0.0 (Python Port)')
     print('')
 
     t1 = time.time()
 
-    data = read_calibration()
+    data = read_calibration(config_file=args.config)
     read_Tseries(data, 'c')
     aggregation(data)
     statis(data)
