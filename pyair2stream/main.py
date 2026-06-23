@@ -103,7 +103,12 @@ def main():
 
     t1 = time.time()
 
-    data = read_calibration(config_file=args.config)
+    try:
+        data = read_calibration(config_file=args.config)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
     read_Tseries(data, 'c')
     aggregation(data)
     statis(data)

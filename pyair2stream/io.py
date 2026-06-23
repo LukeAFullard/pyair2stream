@@ -13,7 +13,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data = CommonData()
 
     if not os.path.exists(config_file):
-        raise FileNotFoundError(f"Configuration file not found: {config_file}")
+        raise FileNotFoundError(f"Configuration file not found: {config_file}\nPlease refer to USER_GUIDE.md for instructions on how to create a configuration file.")
 
     with open(config_file, 'r') as f:
         config = yaml.safe_load(f)
@@ -94,11 +94,8 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         elif data.version == 7:
             data.parmin[3] = 0.0; data.parmax[3] = 0.0; data.flag_par[3] = False
         # Bug fix: Fortran had 'IF (version == 4)' twice.
-        # The second one was clearly meant for version 8.
-        elif data.version == 8:
-            data.parmin[4:8] = 0.0
-            data.parmax[4:8] = 0.0
-            data.flag_par[4:8] = False
+        # The second one was clearly meant for version 8, but version 8 uses all 8 parameters.
+        # We do not zero out any parameters for version 8.
 
         out_param_path = os.path.join(data.folder, 'parameters.txt')
         with open(out_param_path, 'w') as f:

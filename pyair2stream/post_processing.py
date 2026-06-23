@@ -6,11 +6,21 @@ import matplotlib.dates as mdates
 
 from .config import CommonData
 
-def post_process(data: CommonData, toll: float = 2.0):
+def post_process(data: CommonData, toll: float = None):
     """
     Analyzes and plots the results of the pyair2stream simulation.
     Replicates post_processing.m
     """
+    if toll is None:
+        if data.fun_obj == 'RMS':
+            toll = 2.0
+        elif data.fun_obj == 'NSE':
+            toll = 0.5
+        elif data.fun_obj == 'KGE':
+            toll = 0.5
+        else:
+            toll = 0.5
+
     # Colorblind barrier-free color palette
     orange = '#E69F00'
     blue = '#0072B2'
