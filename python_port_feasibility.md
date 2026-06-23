@@ -49,7 +49,7 @@ While entirely possible, the following aspects will require careful translation 
 
 - **Sequential State Updates (The Time Loop)**:
   The core of the simulation in `call_model` involves a time loop (`DO j=1, n_tot-1`) calculating water temperature at step `j+1` based on step `j` using Runge-Kutta or Euler methods.
-  Because the state at step `t+1` depends on `t`, this loop *cannot* be simply vectorized with standard NumPy operations. In pure Python, executing a loop with hundreds of thousands of iterations is slow.
+  Because the state at step `t+1` depends on `t`, the final state update cannot be completely vectorized. However, a significant portion of the work within the loop (e.g., evaluating inputs, evaluating the non-recursive sinusoidal terms, precomputing parameters) can be pre-vectorized using `numpy`. The remaining sequential update loop can then be run using pure Python or NumPy primitives.
 
 - **Custom Optimization Algorithms (`AIR2STREAM_RUNMODE.f90`)**:
   The codebase implements its own Particle Swarm Optimization (PSO) and Latin Hypercube (LH) sampling.
@@ -68,12 +68,13 @@ While entirely possible, the following aspects will require careful translation 
 
 Because `air2stream` relies on optimization (PSO), the core simulation (`call_model`) is evaluated thousands of times (`n_particles * n_run`).
 
-If the inner sequential loop of `call_model` is written in standard Python, the overhead of the Python interpreter will make the optimization run significantly slower than the Fortran executable.
+**Initial Strategy: Maximize NumPy Usage**
+Before exploring external compilers, the first iteration of the port should rely entirely on `numpy` to handle performance. While the sequential nature of `call_model` prevents a single vector operation from solving the ODE, `numpy` can still drastically improve speed by:
+1. **Pre-computing inputs:** All terms that do not depend on `Twat_mod(j)` (such as `Tair`, `Q`, and the trigonometric functions of time) can be computed for the entire array before the sequential loop starts.
+2. **Vectorizing the optimization search space:** Within the PSO algorithm, operations updating the velocity and position of all particles simultaneously can be handled as large matrix operations in `numpy` rather than looping over individual particles.
 
-**How to achieve Fortran-like speeds in Python:**
-To maintain performance, the core numerical routines (`call_model` and `RK4_air2stream`) should be wrapped with **Numba** (`@numba.njit`). Numba is a Just-In-Time (JIT) compiler that translates Python functions directly to optimized machine code using LLVM.
-
-By applying Numba to the bottleneck simulation functions and using NumPy for vectorized operations elsewhere, the Python port will likely match (and potentially exceed, depending on compiler flags) the execution speed of the original Fortran code, without needing to write C extensions or Cython.
+**Future Considerations: Numba**
+If the pure Python/NumPy implementation proves to be too slow due to the Python interpreter's overhead in the `call_model` sequential loop, **Numba** (`@numba.njit`) would be the natural next step. It can JIT-compile the Python function to machine code, granting Fortran-like execution speeds. This, however, should be evaluated only after exhausting NumPy optimizations.
 
 ## Summary
-The `air2stream` project is an excellent candidate for a Python port. The extensive use of standard arrays, basic ODE integration, and text I/O align perfectly with Python's scientific ecosystem. The most critical step in porting will be managing the 1-based to 0-based index shift and ensuring `Numba` is utilized to compile the core sequential time-stepping loop for performance.
+The `air2stream` project is an excellent candidate for a Python port. The extensive use of standard arrays, basic ODE integration, and text I/O align perfectly with Python's scientific ecosystem. The most critical step in porting will be managing the 1-based to 0-based index shift and utilizing `numpy` to pre-vectorize as much of the internal simulation logic as possible.
