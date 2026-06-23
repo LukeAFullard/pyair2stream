@@ -182,16 +182,17 @@ To systematically port `air2stream` to Python while ensuring accuracy and correc
 5. **Translate Objectives**: Port the `funcobj` subroutines (NSE, KGE, RMS). Vectorize these calculations using `numpy` arrays instead of `DO` loops. (Completed - implemented directly in `funcobj` using standard python/numpy loops analogous to original calculations to maintain strictly precise values).
 6. **Validation**: Manually hardcode a test input state (one array of parameters and driving variables) into both Fortran and Python. Compare the resulting water temperature (`Twat_mod`) output arrays step-by-step. They must match to floating-point precision. (Completed - tested via `tests/test_model.py` using constructed synthetic signals comparing integrator variants and asserting exact mathematical property behavior on RMS / KGE / NSE outputs).
 
-### Phase 4: Optimization Engine (PSO & LH)
+### Phase 4: Optimization Engine (PSO & LH) (Completed)
 
-1. **Port `AIR2STREAM_RUNMODE.f90`**: Create an `optimization.py` module.
+1. **Port `AIR2STREAM_RUNMODE.f90`**: Create an `optimization.py` module. (Completed)
 2. **Direct PSO Translation**: Port the particle swarm optimization logic. Use `numpy` matrix operations to update the swarm positions and velocities in one go. **Fix** the legacy PSO bugs:
-   - **PSO global best initialised from wrong array**: Verified in `AIR2STREAM_RUNMODE.f90` line 71, `CALL best(fit, k, foptim)` passes `fit` (still all zeros) instead of `fitbest` (populated just above). Change this to `CALL best(fitbest, k, foptim)`.
-   - **PSO convergence check is permanently dead**: Verified in `AIR2STREAM_RUNMODE.f90` lines 144-145, `norm` is a square root so `norm .lt. 0.0` never fires. Replace with a meaningful tolerance, e.g. `norm < 1e-4`.
-   - **Initial PSO evaluations excluded from dotty-plot output**: Verified in `AIR2STREAM_RUNMODE.f90`, initial evaluations (lines 66-70) are never written to the binary output file. Decide whether to replicate this omission deliberately, or document the intentional change if including initial results.
-   - **PSO random re-seeding per iteration makes results non-reproducible**: Verified in `AIR2STREAM_RUNMODE.f90` line 77, `random_seed()` is called inside every iteration, reseeding from system time. Decide upfront to either replicate the non-reproducible behaviour or introduce an explicit seed parameter and document the divergence.
-3. **Direct LH Translation**: Port the Latin Hypercube mode, utilizing `numpy.random.permutation` to replace the custom `Shuffle` subroutine. **Fix LH file handle never closed**: Verified in `AIR2STREAM_RUNMODE.f90` line 239, `! CLOSE(10)` is commented out. Always call the equivalent of `file.close()` after the LH loop in Python to avoid incomplete/unflushed output.
-4. **Connect the Pieces**: Ensure the optimization loops call the `model.py` simulation and calculate objective values correctly over the parameter bounds.
+   - **PSO global best initialised from wrong array**: Changed to use `fitbest` to initialize global best properly. (Completed)
+   - **PSO convergence check is permanently dead**: Replaced `norm .lt. 0.0` with `norm < 1e-4` to properly check for convergence. (Completed)
+   - **Initial PSO evaluations excluded from dotty-plot output**: Fixed to write initial successful parameter evaluations to the history CSV. (Completed)
+   - **PSO random re-seeding per iteration makes results non-reproducible**: Removed reseeding per iteration, allowing the user to optionally specify a random seed parameter for reproducible tests. (Completed)
+   - **Outputs**: Shifted from binary outputs to CSV dataframes for better data readability. (Completed)
+3. **Direct LH Translation**: Port the Latin Hypercube mode, utilizing `numpy.random.permutation` to replace the custom `Shuffle` subroutine. **Fix LH file handle never closed**: Saving results with Pandas `.to_csv()` guarantees output flush and file closing. (Completed)
+4. **Connect the Pieces**: Ensure the optimization loops call the `model.py` simulation and calculate objective values correctly over the parameter bounds. (Completed)
 
 ### Phase 5: Parallelization & Main Entry Point
 
