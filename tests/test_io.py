@@ -63,9 +63,9 @@ parameter_bounds:
         self.assertEqual(data.wmax, 0.9)
 
         # Test bug fix for version 8
-        np.testing.assert_array_equal(data.parmin, [1.0, 2.0, 3.0, 4.0, 0.0, 0.0, 0.0, 0.0])
-        np.testing.assert_array_equal(data.parmax, [11.0, 12.0, 13.0, 14.0, 0.0, 0.0, 0.0, 0.0])
-        np.testing.assert_array_equal(data.flag_par, [True, True, True, True, False, False, False, False])
+        np.testing.assert_array_equal(data.parmin, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+        np.testing.assert_array_equal(data.parmax, [11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0])
+        np.testing.assert_array_equal(data.flag_par, [True, True, True, True, True, True, True, True])
 
     def test_read_Tseries(self):
         # Create a mock CommonData
