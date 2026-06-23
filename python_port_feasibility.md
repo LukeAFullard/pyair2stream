@@ -38,14 +38,14 @@ Most of the codebase translates very naturally to Python:
   **Modernization Detail:** The global `commondata` module can be elegantly replaced by a Python `dataclass`, a standard class, or a configuration dictionary. Numpy arrays (`np.ndarray`) will perfectly replace Fortran's `ALLOCATABLE` dynamic arrays, offering better memory management and vectorization capabilities without boilerplate allocation logic.
 
 - **File I/O and Text Parsing (`AIR2STREAM_READ.f90`)**:
-  **Verification Status:** *Verified.* The Fortran code reads space-separated values line-by-line and implements a custom `leap_year` subroutine for date calculations.
+  **Verification Status:** *Verified.* The Fortran code reads space-separated values line-by-line and uses a custom `leap_year` subroutine (defined in `AIR2STREAM_SUBROUTINES.f90`) for date calculations.
   **Modernization Detail:**
   - Reading text configurations line-by-line (`input.txt`, `parameters.txt`) is handled natively in Python with `with open(...)` and simple string splits.
   - The reading of time-series data can be massively simplified using `pandas.read_csv(..., sep='\s+')`.
   - Fortran's manual leap-year checking logic (`leap_year` subroutine) and manual day-of-year array population can be completely eliminated. Python's `pandas.to_datetime` or `numpy.datetime64` handles calendar logic intrinsically, reducing dozens of lines of error-prone date manipulation code to just a few robust function calls.
 
 - **System Calls / Dependencies (`USE ifport`)**:
-  **Verification Status:** *Verified.* A search confirms `USE ifport` is exclusively used in `AIR2STREAM_READ.f90` for the `makedirqq` function.
+  **Verification Status:** *Verified.* A search confirms `USE ifport` is exclusively used in `AIR2STREAM_READ.f90` (line 4) for the `makedirqq` function.
   **Modernization Detail:** This dependency is trivial to replace using `os.makedirs(folder, exist_ok=True)` or `pathlib.Path(folder).mkdir(parents=True, exist_ok=True)`. There are no other compiler-specific or non-standard dependencies.
 
 - **Objective Functions (`funcobj` in `AIR2STREAM_SUBROUTINES.f90`)**:
@@ -67,14 +67,30 @@ While entirely possible, the following aspects will require careful translation 
   **Action Required:** Because the state at step `t+1` depends strictly on `t`, the final temporal integration loop cannot be fully vectorized. However, inputs (like air temperature and discharge evaluations) and non-recursive terms can be pre-vectorized using `numpy`. The remaining sequential ODE step must be written clearly, prioritizing algorithmic correctness over premature vectorization attempts that might violate causality.
 
 - **Custom Optimization Algorithms (`AIR2STREAM_RUNMODE.f90`)**:
-  **Verification Status:** *Verified.* The project contains manual implementations of Particle Swarm Optimization (PSO) and Latin Hypercube (LH) sampling, allocating large matrices (e.g., `ALLOCATABLE :: x, v, pbest`).
+  **Verification Status:** *Verified.* The project contains manual implementations of Particle Swarm Optimization (PSO) and Latin Hypercube (LH) sampling (implemented in `SUBROUTINE PSO_mode` and `SUBROUTINE LH_mode`), allocating large matrices (e.g., `ALLOCATABLE :: x, v, pbest`).
   **Action Required:**
   - **Option A (Direct Port):** Porting the custom PSO and LH logic ensures identical search behavior. Numpy handles particle updates efficiently via large matrix operations instead of nested loops.
   - **Option B (SciPy/Library Replace):** Python ecosystem libraries like `scipy.optimize` could theoretically replace this, but it is highly recommended to perform a *direct port first* to ensure bit-for-bit algorithmic parity before attempting library substitution.
 
 ---
 
-## 3. What Cannot Be Ported
+## 3. Input and Output Data Formats
+
+Currently, the Fortran implementation relies on line-by-line reading of space-separated text files (`input.txt`, `parameters.txt`) which is extremely rigid and error-prone for users. It also generates output text files with basic extensions (like `.out`) which require custom scripts to parse.
+
+**Modernization Detail:**
+- **Configuration (Input):** The user-facing configuration (parameters, optimization bounds, station names, paths) should be completely overhauled from raw text files to a modern, structured format.
+  - **YAML or TOML:** These are highly recommended for the main configuration file. They support comments, are human-readable, and can easily map to Python dictionaries or `dataclasses` via standard libraries (e.g., `pyyaml` or `tomli`).
+  - **JSON:** A viable, widely-supported alternative, though slightly less human-readable than YAML/TOML for numerical config files.
+- **Time Series Data (Input):** Standardize time-series input to CSV files. `pandas.read_csv` makes parsing CSVs trivial, allowing the user to provide data with arbitrary column orders and explicit standard date formats (e.g., ISO 8601), replacing the fragile fixed-format space-separated approach.
+- **Results (Output):** The raw text `.out` files should be replaced with:
+  - **CSV:** For final time-series data (easy to load into Excel, R, or pandas).
+  - **JSON/YAML:** For final calibrated parameter sets and objective function scores.
+  - **NetCDF / Parquet (Optional):** If the optimization logs become massive (saving every particle's path across thousands of iterations), using a binary columnar format like Parquet or HDF5/NetCDF via pandas/xarray will drastically reduce file sizes and I/O time compared to raw text.
+
+---
+
+## 4. What Cannot Be Ported
 
 **Nothing.**
 **Verification Status:** *Verified.* There are no hardware-specific constraints, arcane Fortran-77 EQUIVALENCE memory hacks, or proprietary closed-source libraries that prevent a functional port to Python.
@@ -95,7 +111,7 @@ If the pure Python/NumPy implementation proves to be too slow due to the Python 
 
 ---
 
-## 4. Multithreading and Parallelization Potential
+## 5. Multithreading and Parallelization Potential
 
 Yes, the project can absolutely be parallelized, and doing so will yield massive performance improvements during the calibration phase.
 
@@ -144,5 +160,5 @@ To systematically port `air2stream` to Python while ensuring accuracy and correc
 3. **Generate Visualizations**: Utilize `matplotlib` and `pandas` to generate the parameter dotty plots and the calibration/validation time-series plots, replicating the exact style (e.g., color-blind palettes) and output formats (PDF/PNG) of the original MATLAB script.
 4. **Integration**: Unify the simulation and visualization into a single end-to-end Python script or CLI command.
 
-## Summary
+## 6. Summary
 The `air2stream` project is an excellent candidate for a Python port. The extensive use of standard arrays, basic ODE integration, and text I/O align perfectly with Python's scientific ecosystem. The critical steps involve meticulous management of the index shift, replacing manual loops with `numpy` and `pandas` vectorizations where appropriate, and leveraging `multiprocessing` to bypass the GIL for optimization performance.
