@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 
 from .config import CommonData
 from .model import call_model, detect_segments
+from .io import read_Tseries
 
 def sensitivity_analysis(data: CommonData):
     """
@@ -17,6 +18,10 @@ def sensitivity_analysis(data: CommonData):
 
     n_par = 8
     sensitivities = []
+
+    # Restore the calibration data
+    # (Since `forward` may have loaded validation data and altered `data.n_tot`)
+    read_Tseries(data, 'c')
 
     # Ensure baseline is run
     data.par[:] = data.par_best[:]
