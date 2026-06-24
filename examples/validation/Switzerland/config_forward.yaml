@@ -1,0 +1,14 @@
+project_name: "validation"
+station_name: "DAV"
+series: "c"
+time_resolution: "1d"
+version: 8
+Tice_cover: 0.0
+objective_function: "NSE"
+integrator: "RK4"
+run_mode: "FORWARD"
+parameters_forward: [3.164, 0.417, 0.829, 0.34, 1.343, 5.192, 0.574, 0.883]
+
+paths:
+  input_data: "examples/validation/Switzerland/DAV_2327_cc.csv"
+  output_dir: "examples/validation/Switzerland/output_forward"
