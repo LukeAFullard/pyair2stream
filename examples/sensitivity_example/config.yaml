@@ -1,0 +1,29 @@
+project_name: "Sensitivity_Example"
+station_name: "River_Beta"
+series: "c"
+time_resolution: "1d"
+version: 8
+Tice_cover: 0.0
+objective_function: "NSE"
+integrator: "RK4"
+run_mode: "PSO"
+
+paths:
+  input_data: "examples/sensitivity_example/synthetic_data.csv"
+  output_dir: "examples/sensitivity_example"
+
+optimization:
+  n_runs: 50
+  mineff_index: 0.0
+  n_particles: 20
+  c1: 2.0
+  c2: 2.0
+  wmax: 0.9
+  wmin: 0.4
+
+parameter_bounds:
+  min: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  max: [10.0, 1.0, 1.0, 1.0, 1.0, 10.0, 1.0, 1.0]
+
+sensitivity_analysis: true
+sensitivity_perturbations: [1.0, 2.0, 5.0]

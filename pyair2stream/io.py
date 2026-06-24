@@ -39,6 +39,10 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         data.Qmedia_user = float(qmedia_user)
     data.warmup_drop_days = int(config.get('warmup_drop_days', 15))
     data.min_segment_days = int(config.get('min_segment_days', 30))
+    data.sensitivity_analysis = config.get('sensitivity_analysis', False)
+
+    sens_pert = config.get('sensitivity_perturbations', [1.0])
+    data.sensitivity_perturbations = [float(x) for x in sens_pert] if isinstance(sens_pert, list) else [float(sens_pert)]
 
     # Paths mapping
     paths = config.get('paths', {})

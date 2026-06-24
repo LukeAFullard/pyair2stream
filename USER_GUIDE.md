@@ -60,6 +60,9 @@ gap_tolerant: true         # Enable gap-tolerant mode (default: false)
 Qmedia: 15.3               # User-supplied external Qmedia (optional)
 warmup_drop_days: 15       # Days dropped after restart (optional, default: 15)
 min_segment_days: 30       # Minimum length of segments (optional, default: 30)
+
+sensitivity_analysis: true # Enable One-At-A-Time local sensitivity analysis (optional, default: false)
+sensitivity_perturbations: [1.0, 2.0, 5.0] # List of percentage perturbations to apply to parameters (optional, default: [1.0])
 ```
 
 ## 3. Data Format (CSVs)
