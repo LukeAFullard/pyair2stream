@@ -1,0 +1,14 @@
+input for air2stream
+.
+DAV
+2327
+c
+1d
+8
+0.0
+NSE
+RK4
+PSO
+0.0
+2000
+0.0

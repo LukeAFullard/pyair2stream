@@ -1,7 +1,7 @@
 SUBROUTINE read_calibration
 
 USE commondata
-USE ifport                          ! necessary for makedirqq
+!USE ifport                          ! necessary for makedirqq
 
 IMPLICIT NONE
 INTEGER:: i, j, status
@@ -32,7 +32,7 @@ station=TRIM(air_station)//'_'//TRIM(water_station)
 WRITE(string,'(i1)' ) version
 
 folder = TRIM(name)//'/output_'//string//'/'
-result=makedirqq(folder)
+CALL EXECUTE_COMMAND_LINE('mkdir -p ' // TRIM(folder))
 WRITE(*,*) 'Objective function ',fun_obj
 
 IF (runmode .eq. 'FORWARD') THEN
@@ -90,8 +90,8 @@ IF (runmode .eq. 'PSO' .or. runmode .eq. 'LATHYP') THEN
     ! write parameters
     OPEN(unit=2,file=TRIM(folder)//'/parameters.txt',status='unknown',action='write')
     WRITE(2,'(I2,A)') n_par, '   !numero parametri'
-    WRITE(2,'(<n_par>(F10.5,1x))') (parmin(i),i=1,n_par)
-    WRITE(2,'(<n_par>(F10.5,1x))') (parmax(i),i=1,n_par)
+    WRITE(2,*)  (parmin(i),i=1,n_par)
+    WRITE(2,*)  (parmax(i),i=1,n_par)
     CLOSE(2)
 
 END IF

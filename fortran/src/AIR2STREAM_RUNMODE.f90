@@ -41,7 +41,7 @@ ALLOCATE (x(n_par,n_particles),v(n_par,n_particles),pbest(n_par,n_particles))
 ALLOCATE (r(2*n_par),gbest(n_par),fit(n_particles),fitbest(n_particles))
 
 ! open file for the writing of all parameter set + efficiency index
-OPEN(unit=10,file=TRIM(folder)//'/0_'//TRIM(runmode)//'_'//fun_obj//'_'//TRIM(station)//'_'//series//'_'//TRIM(time_res)//'.out',status='unknown',action='write',form='binary')
+OPEN(unit=10,file=TRIM(folder)//'/0_'//TRIM(runmode)//'_'//fun_obj//'_'//TRIM(station)//'_'//series//'_'//TRIM(time_res)//'.out',status='unknown',action='write',form='unformatted',access='stream')
 
 x=0; v=0;   
 r=0
@@ -191,7 +191,7 @@ ALLOCATE(gbest(n_par))
 foptim=-999
 
 ! open file for the writing of all parameter set + efficiency index
-OPEN(unit=10,file=TRIM(folder)//'/0_'//TRIM(runmode)//'_'//fun_obj//'_'//TRIM(station)//'_'//series//'_'//TRIM(time_res)//'.out',status='unknown',action='write',form='binary')
+OPEN(unit=10,file=TRIM(folder)//'/0_'//TRIM(runmode)//'_'//fun_obj//'_'//TRIM(station)//'_'//series//'_'//TRIM(time_res)//'.out',status='unknown',action='write',form='unformatted',access='stream')
 
 CALL random_seed()
 
