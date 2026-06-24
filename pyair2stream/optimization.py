@@ -52,7 +52,7 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
     pbest = np.zeros((n_par, n_particles), dtype=np.float64)
     gbest = np.zeros(n_par, dtype=np.float64)
     fit = np.zeros(n_particles, dtype=np.float64)
-    fitbest = np.zeros(n_particles, dtype=np.float64)
+    fitbest = np.full(n_particles, -1e30, dtype=np.float64)
 
     # We output history to CSV instead of binary
     output_filename = os.path.join(data.folder, f"0_{data.runmode}_{data.fun_obj}_{data.station}_{data.series}_{data.time_res}.csv")
@@ -76,13 +76,15 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
         for k in range(n_particles):
             eff_index = results[k]
-            fitbest[k] = eff_index
-            if eff_index >= data.mineff_index:
+            if not np.isnan(eff_index):
+                fitbest[k] = eff_index
+            if not np.isnan(eff_index) and eff_index >= data.mineff_index:
                 row = list(x[:, k]) + [eff_index]
                 history.append(row)
 
         # Fix: use fitbest to find initial global best instead of fit
-        best_idx = int(np.argmax(fitbest))
+        # Fix: use nanargmax to handle NaN efficiency values correctly
+        best_idx = int(np.nanargmax(fitbest))
         foptim = fitbest[best_idx]
         gbest[:] = x[:, best_idx]
 
@@ -121,17 +123,18 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
             for k in eval_indices:
                 eff_index = eval_results[idx]
                 fit[k] = eff_index
-                if eff_index >= data.mineff_index:
+                if not np.isnan(eff_index) and eff_index >= data.mineff_index:
                     row = list(x[:, k]) + [eff_index]
                     history.append(row)
                 idx += 1
 
             for k in range(n_particles):
-                if fit[k] > fitbest[k]:
+                # Fix: explicit check to ignore NaN efficiency values
+                if not np.isnan(fit[k]) and fit[k] > fitbest[k]:
                     fitbest[k] = fit[k]
                     pbest[:, k] = x[:, k]
 
-            best_idx = int(np.argmax(fitbest))
+            best_idx = int(np.nanargmax(fitbest))
             foptim = fitbest[best_idx]
             gbest[:] = pbest[:, best_idx]
 
@@ -201,7 +204,7 @@ def LH_mode(data: CommonData, seed: Optional[int] = None) -> None:
         eff_index = sub_1(data)
         fit = eff_index
 
-        if eff_index >= data.mineff_index:
+        if not np.isnan(eff_index) and eff_index >= data.mineff_index:
             row = list(data.par[:n_par]) + [eff_index]
             history.append(row)
 
