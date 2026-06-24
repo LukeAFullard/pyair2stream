@@ -10,6 +10,7 @@ from .model import call_model, aggregation, statis, funcobj
 from .optimization import forward_mode, PSO_mode, LH_mode
 from .config import CommonData
 from .post_processing import post_process
+from .sensitivity import sensitivity_analysis
 
 from .model import call_model, aggregation, statis, funcobj, detect_segments
 
@@ -209,6 +210,9 @@ def main():
     print('Starting post-processing visualizations...')
     post_process(data)
     print('Post-processing completed.')
+
+    if data.sensitivity_analysis:
+        sensitivity_analysis(data)
 
 if __name__ == '__main__':
     main()

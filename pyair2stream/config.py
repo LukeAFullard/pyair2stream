@@ -29,6 +29,8 @@ class CommonData:
     warmup_drop_days: int = 15
     min_segment_days: int = 30
     segments: Optional[list] = None
+    sensitivity_analysis: bool = False
+    sensitivity_perturbations: Optional[list] = None
 
     # Scalars - Floats (np.float64 to enforce 64-bit precision)
     Qmedia: np.float64 = np.float64(0.0)
