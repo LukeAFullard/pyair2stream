@@ -25,8 +25,20 @@ The `config.yaml` includes two key flags:
 
 ## Outputs
 
-After running, check the generated outputs:
-*   **`sensitivity_PSO_NSE_River_Beta.csv`**: A detailed report of the calculated sensitivity index for each parameter and perturbation step.
-*   **`sensitivity_PSO_NSE_River_Beta.png`**: A grouped bar chart visualizing the sensitivity index. Parameters with taller bars are those where a small change in their value causes a large change in the predicted water temperatures.
+After running, the model automatically generates standard calibration visualizations alongside the new sensitivity analysis outputs.
 
-This analysis is vital for understanding model identifiability—parameters with near-zero sensitivity are poorly constrained by the calibration data.
+### 1. Calibration Fit
+![Calibration Fit](calibration_PSO_NSE_River_Beta.png)
+This time-series plot compares the observed water temperatures (blue dots) against the simulated model predictions (orange dots), driven by air temperature (light blue) and river discharge (grey area).
+
+### 2. Parameter Dotty Plots
+![Dotty Plots](dottyplots_PSO_NSE_River_Beta.png)
+These plots show the parameter space explored by the PSO algorithm. The x-axis represents the parameter value, and the y-axis represents the NSE efficiency score. The global optimum is marked with a large orange dot.
+
+### 3. Sensitivity Analysis
+![Sensitivity Analysis](sensitivity_PSO_NSE_River_Beta.png)
+A grouped bar chart visualizing the sensitivity index for each active parameter at different perturbation levels (1%, 2%, and 5%).
+*   **Tall Bars:** Indicate parameters that are highly sensitive; a small change in their value causes a large change in the predicted water temperatures. These are well-constrained by the data.
+*   **Short/Missing Bars:** Indicate insensitive parameters (e.g., `par_3`, `par_4`, `par_5`, `par_7` in version 8 equations where bounds might fix them or the equation ignores them). These are poorly constrained by the calibration data.
+
+A detailed numerical breakdown is also exported to `sensitivity_PSO_NSE_River_Beta.csv`.

@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 
 from .config import CommonData
 from .model import call_model, detect_segments
+from .io import read_Tseries
 
 def sensitivity_analysis(data: CommonData):
     """
@@ -18,6 +19,10 @@ def sensitivity_analysis(data: CommonData):
     n_par = 8
     sensitivities = []
 
+    # Restore the calibration data
+    # (Since `forward` may have loaded validation data and altered `data.n_tot`)
+    read_Tseries(data, 'c')
+
     # Ensure baseline is run
     data.par[:] = data.par_best[:]
     if data.gap_tolerant and data.segments is None:
@@ -26,7 +31,15 @@ def sensitivity_analysis(data: CommonData):
 
     # Determine valid indices (to skip warmup)
     valid_mask = data.Twat_mod != -999.0
-    valid_mask[:365] = False  # Skip first year warmup
+
+    if data.gap_tolerant and data.segments is not None:
+        for start, end in data.segments:
+            # Drop warmup_drop_days from the beginning of each segment
+            drop_end = min(start + data.warmup_drop_days, end + 1)
+            valid_mask[start:drop_end] = False
+    else:
+        # Standard runs always prepend exactly 365 days of warmup data
+        valid_mask[:365] = False
 
     for delta_pct in perturbations:
         for j in range(n_par):
