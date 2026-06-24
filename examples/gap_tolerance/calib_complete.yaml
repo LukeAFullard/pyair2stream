@@ -1,0 +1,28 @@
+project_name: "gap_tolerance_experiment"
+station_name: "Complete"
+series: "c"
+time_resolution: "1d"
+version: 8
+Tice_cover: 0.0
+objective_function: "NSE"
+integrator: "RK4"
+run_mode: "PSO"
+
+gap_tolerant: false
+
+paths:
+  input_data: "data_complete.csv"
+  output_dir: "output_complete"
+
+optimization:
+  n_runs: 200
+  n_particles: 50
+  mineff_index: 0.0
+  c1: 2.0
+  c2: 2.0
+  wmax: 0.9
+  wmin: 0.4
+
+parameter_bounds:
+  min: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  max: [15.0, 1.0, 1.0, 1.0, 1.0, 15.0, 1.0, 1.0]

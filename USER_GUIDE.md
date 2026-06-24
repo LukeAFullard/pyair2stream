@@ -55,6 +55,11 @@ parameter_bounds:
   max: [10.0, 1.0, 1.0, 1.0, 1.0, 10.0, 1.0, 1.0]
 
 parameters_forward: [1.2, 0.3, 0.2, 0.5, 0.1, 1.5, 0.4, 0.1] # Used only for FORWARD mode
+
+gap_tolerant: true         # Enable gap-tolerant mode (default: false)
+Qmedia: 15.3               # User-supplied external Qmedia (optional)
+warmup_drop_days: 15       # Days dropped after restart (optional, default: 15)
+min_segment_days: 30       # Minimum length of segments (optional, default: 30)
 ```
 
 ## 3. Data Format (CSVs)
@@ -70,7 +75,18 @@ The standard required columns are:
 *   `Discharge`: River discharge (Q).
 
 **Handling Missing Data:**
-If data is missing for a specific day, you can either leave it blank (pandas will read as `NaN` and the code will interpret it correctly) or explicitly use the legacy `-999.0` sentinel value.
+If `T_water` is missing for a specific day, you can explicitly use the legacy `-999.0` sentinel value or leave it blank (pandas will read as `NaN`).
+
+### Gap-Tolerant Mode
+
+By default, the model requires `T_air` and `Discharge` (Q) time series to be completely gap-free.
+If your data has missing `T_air` or `Discharge` values, you can set `gap_tolerant: true` in your configuration file. In this mode, the model restarts integration at each contiguous block of valid data and pieces them together.
+
+**Limitations to consider when using gap-tolerant mode:**
+*   **MNAR (Missing Not At Random) Bias**: Gaps often correspond to extreme flood or freeze events. Calibrating on gapped data excludes these extremes, which reduces observed variance and **artificially inflates performance metrics** like NSE and KGE. Therefore, metrics obtained in gap-tolerant mode cannot be directly compared against continuous-record benchmarks. NSE and RMS are generally more robust than KGE under these conditions.
+*   **External Qmedia**: When large chunks of high-discharge periods are missing, the internally computed `Qmedia` will be biased low. It is highly recommended to supply an external, historical `Qmedia` value in your configuration file.
+*   **Excluded Observations**: Any valid `T_water` observations falling inside a forcing gap (`T_air` or `Q`) are excluded from calibration and evaluation.
+*   **Warm-up buffer (`warmup_drop_days`)**: Restarting integration segments relies on a Day-Of-Year (DOY) climatology for the initial condition. A buffer period (default 15 days) at the start of every segment is ignored during calibration to avoid penalizing the initial condition transient.
 
 ### Example CSV (`calibration_data.csv`)
 

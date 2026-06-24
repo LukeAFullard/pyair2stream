@@ -23,6 +23,13 @@ class CommonData:
     n_run: int = 0
     n_particles: int = 0
 
+    # Gap-tolerant mode fields
+    gap_tolerant: bool = False
+    Qmedia_user: Optional[float] = None
+    warmup_drop_days: int = 15
+    min_segment_days: int = 30
+    segments: Optional[list] = None
+
     # Scalars - Floats (np.float64 to enforce 64-bit precision)
     Qmedia: np.float64 = np.float64(0.0)
     theta_j: np.float64 = np.float64(0.0)
@@ -75,3 +82,5 @@ class CommonData:
 
     # Allocatable arrays - Logical (Bool)
     flag_par: Optional[npt.NDArray[np.bool_]] = None
+    eval_mask: Optional[npt.NDArray[np.bool_]] = None
+    doy_climatology: Optional[npt.NDArray[np.float64]] = None
