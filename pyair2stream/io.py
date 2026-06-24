@@ -37,7 +37,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
 
     opt_config = config.get('optimization', {})
     data.n_run = int(opt_config.get('n_runs', 100))
-    data.mineff_index = np.float64(opt_config.get('mineff_index', 0.0))
+    data.mineff_index = np.float64(config.get('mineff_index', 0.0))
 
     data.station = data.air_station
     if data.air_station != data.water_station:
