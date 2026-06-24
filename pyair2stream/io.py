@@ -32,6 +32,14 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data.runmode = config.get('run_mode', 'PSO')
     data.prc = np.float64(config.get('prc', 1.0))
 
+    # Gap-tolerant mode configuration
+    data.gap_tolerant = bool(config.get('gap_tolerant', False))
+    qmedia_user = config.get('Qmedia')
+    if qmedia_user is not None:
+        data.Qmedia_user = float(qmedia_user)
+    data.warmup_drop_days = int(config.get('warmup_drop_days', 15))
+    data.min_segment_days = int(config.get('min_segment_days', 30))
+
     # Paths mapping
     paths = config.get('paths', {})
 
@@ -141,25 +149,29 @@ def read_Tseries(data: CommonData, p: str) -> None:
     date_col = pd.to_datetime(df['Date'])
 
     # Validate Start Date
-    if len(date_col) > 0 and (date_col.iloc[0].month != 1 or date_col.iloc[0].day != 1):
+    if not data.gap_tolerant and len(date_col) > 0 and (date_col.iloc[0].month != 1 or date_col.iloc[0].day != 1):
         raise ValueError(f"The time series in {filename} must start on January 1st.")
 
     # Validate Daily Scale (no gaps)
     expected_dates = pd.date_range(start=date_col.iloc[0], end=date_col.iloc[-1], freq='D')
     if len(date_col) != len(expected_dates) or not date_col.equals(pd.Series(expected_dates)):
-        raise ValueError(f"The time series in {filename} must be continuous at a daily time scale with no gaps.")
+        raise ValueError(f"The time series in {filename} must be continuous at a daily time scale with no missing dates. Fill missing rows with NaN or -999.")
 
     # Validate completeness of T_air and Discharge
-    if 'T_air' not in df.columns or df['T_air'].isnull().any():
-        raise ValueError(f"The series of observed air temperature in {filename} must be complete. It cannot have gaps or missing data.")
+    if 'T_air' not in df.columns:
+        raise ValueError(f"Missing 'T_air' column in {filename}")
+    if 'Discharge' not in df.columns:
+        raise ValueError(f"Missing 'Discharge' column in {filename}")
 
-    if 'Discharge' not in df.columns or df['Discharge'].isnull().any():
-        raise ValueError(f"The series of discharge in {filename} must be complete. It cannot have gaps or missing data.")
+    if not data.gap_tolerant:
+        if df['T_air'].isnull().any():
+            raise ValueError(f"The series of observed air temperature in {filename} must be complete. It cannot have gaps or missing data.")
+        if df['Discharge'].isnull().any():
+            raise ValueError(f"The series of discharge in {filename} must be complete. It cannot have gaps or missing data.")
 
-    # T_water handles missing data via -999.0
-    Tair = df['T_air'].astype(np.float64).values
-    Q = df['Discharge'].astype(np.float64).values
-
+    # Handle missing data via -999.0
+    Tair = df['T_air'].fillna(-999.0).astype(np.float64).values
+    Q = df['Discharge'].fillna(-999.0).astype(np.float64).values
     Twat_obs = df.get('T_water', pd.Series(np.full(len(df), -999.0))).fillna(-999.0).astype(np.float64).values
 
     n_tot_raw = len(df)
@@ -176,12 +188,29 @@ def read_Tseries(data: CommonData, p: str) -> None:
 
     # Calculate Qmedia ignoring -999.0
     valid_Q_mask = Q != -999.0
+    computed_qmedia = np.float64(0.0)
     if np.any(valid_Q_mask):
-        data.Qmedia = np.float64(np.mean(Q[valid_Q_mask]))
+        computed_qmedia = np.float64(np.mean(Q[valid_Q_mask]))
         data.n_Q = np.sum(valid_Q_mask)
     else:
-        data.Qmedia = np.float64(0.0)
+        computed_qmedia = np.float64(0.0)
         data.n_Q = 0
+
+    if data.Qmedia_user is not None:
+        data.Qmedia = np.float64(data.Qmedia_user)
+        print(f"Using user-supplied Qmedia: {data.Qmedia:.5f} (computed was {computed_qmedia:.5f})")
+    else:
+        data.Qmedia = computed_qmedia
+
+    if data.gap_tolerant:
+        if data.Qmedia <= 0 and data.version not in [3, 5]:
+            raise ValueError("Qmedia is zero or negative. Please supply Qmedia in the configuration file if the data is mostly empty.")
+        if (data.n_Q / n_tot_raw) < 0.5 and data.Qmedia_user is None:
+            print("Warning: More than 50% of Discharge values are missing. Consider supplying Qmedia_user in the configuration file.")
+        if data.version in [3, 5]:
+            print(f"Info: Q gaps are ignored because version {data.version} does not use Discharge in the ODE.")
+        if data.Qmedia_user is not None and computed_qmedia > 0 and abs(computed_qmedia - data.Qmedia_user) / computed_qmedia > 0.3:
+            print(f"Warning: Computed Qmedia ({computed_qmedia:.5f}) differs from user-supplied Qmedia ({data.Qmedia_user:.5f}) by more than 30%.")
 
     # Allocate arrays
     data.date = np.zeros((n_tot, 3), dtype=np.int32)
@@ -209,29 +238,53 @@ def read_Tseries(data: CommonData, p: str) -> None:
     data.Twat_obs[0:365] = Twat_obs[:365]
     data.Q[0:365] = Q[:365]
 
-    # Check leap years and define tt
-    # The first 365 days (warm-up) are always non-leap in tt
+    # Rewrite tt calculation to use calendar dates.
+    # The first 365 days (warm-up) keep existing logic: 1..365 / 365.0
     for j in range(365):
         data.tt[j] = np.float64((j + 1) / 365.0)
 
-    k = 365
-    year_ini = data.date[365, 0]
-
-    for i in range(n_year):
-        year = year_ini + i
-        # Simple leap year logic like Fortran
+    for i in range(365, n_tot):
+        year = data.date[i, 0]
+        month = data.date[i, 1]
+        day = data.date[i, 2]
         is_leap = False
         if year % 4 == 0:
             if year % 100 != 0 or year % 400 == 0:
                 is_leap = True
-
         days_in_year = 366 if is_leap else 365
 
-        for j in range(days_in_year):
-            if k + j >= n_tot:
-                break
-            data.tt[k + j] = np.float64((j + 1) / float(days_in_year))
+        # Calculate day of year
+        doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days + 1
+        data.tt[i] = np.float64(doy / float(days_in_year))
 
-        k += days_in_year
-        if k >= n_tot:
-            break
+    # Calculate DOY climatology (calibration pass only)
+    if data.gap_tolerant and p == 'c':
+        data.doy_climatology = np.zeros(366, dtype=np.float64)
+        doy_sums = np.zeros(366, dtype=np.float64)
+        doy_counts = np.zeros(366, dtype=int)
+
+        for i in range(365, n_tot):
+            if data.Twat_obs[i] != -999.0:
+                year = data.date[i, 0]
+                month = data.date[i, 1]
+                day = data.date[i, 2]
+                doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
+                doy_sums[doy] += data.Twat_obs[i]
+                doy_counts[doy] += 1
+
+        if np.sum(doy_counts) == 0:
+            raise ValueError("Zero T_water observations found during calibration. Calibration is impossible.")
+
+        for i in range(366):
+            if doy_counts[i] > 0:
+                data.doy_climatology[i] = doy_sums[i] / doy_counts[i]
+            else:
+                data.doy_climatology[i] = np.nan
+
+        # Interpolate missing DOYs
+        if np.isnan(data.doy_climatology).any():
+            df_clim = pd.Series(data.doy_climatology)
+            # Duplicate to handle wrapping around year
+            df_clim_extended = pd.concat([df_clim, df_clim, df_clim]).reset_index(drop=True)
+            df_clim_extended = df_clim_extended.interpolate(method='linear')
+            data.doy_climatology = df_clim_extended.iloc[366:2*366].values

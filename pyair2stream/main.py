@@ -11,6 +11,8 @@ from .optimization import forward_mode, PSO_mode, LH_mode
 from .config import CommonData
 from .post_processing import post_process
 
+from .model import call_model, aggregation, statis, funcobj, detect_segments
+
 def forward(data: CommonData) -> None:
     """
     Replicates SUBROUTINE forward in AIR2STREAM_SUBROUTINES.f90
@@ -18,6 +20,10 @@ def forward(data: CommonData) -> None:
     """
     # 1. Forward run on calibration data
     data.par[:] = data.par_best[:]
+
+    if data.gap_tolerant and data.segments is None:
+        detect_segments(data)
+
     call_model(data)
 
     # Calculate objective function again to ensure consistency
@@ -37,10 +43,17 @@ def forward(data: CommonData) -> None:
         f.write(" ".join([f"{p:.6f}" for p in data.par_best]) + "\n")
         f.write(f"{ei_check:.6f}\n")
 
+    # Construct gap columns
+    tair_gap = np.where(data.Tair == -999.0, 1, 0)
+    q_gap = np.where(data.Q == -999.0, 1, 0)
+    segment_id = np.full(data.n_tot, -999)
+    if data.gap_tolerant and data.segments:
+        for idx, (start, end) in enumerate(data.segments):
+            segment_id[start:end+1] = idx
+
     # Output final simulated time series (calibration) as CSV instead of raw text
     out_cal_path = os.path.join(data.folder, f"2_{data.runmode}_{data.fun_obj}_{data.station}_{data.series}c_{data.time_res}.csv")
 
-    # Fortran format: date(i,1:3), Tair, Twat_obs, Twat_mod, Twat_obs_agg, Twat_mod_agg, Q
     cal_df = pd.DataFrame({
         'Year': data.date[:, 0],
         'Month': data.date[:, 1],
@@ -52,7 +65,44 @@ def forward(data: CommonData) -> None:
         'Twat_mod_agg': data.Twat_mod_agg,
         'Q': data.Q
     })
+
+    if data.gap_tolerant:
+        cal_df['Tair_gap'] = tair_gap
+        cal_df['Q_gap'] = q_gap
+        cal_df['segment_id'] = segment_id
+
     cal_df.to_csv(out_cal_path, index=False)
+
+    # Generate gaps_summary.txt
+    if data.gap_tolerant:
+        summary_path = os.path.join(data.folder, "gaps_summary.txt")
+        with open(summary_path, 'w') as f:
+            f.write("=== pyair2stream Gap Summary ===\n")
+            f.write(f"Qmedia source: {'User-supplied' if data.Qmedia_user is not None else 'Computed'}\n")
+            f.write(f"Qmedia value: {data.Qmedia:.5f}\n")
+
+            # Since index 0 to 364 are warmups we look from 365
+            n_data_points = data.n_tot - 365
+            tair_gap_count = np.sum(tair_gap[365:])
+            q_gap_count = np.sum(q_gap[365:])
+            f.write(f"T_air missing fraction: {tair_gap_count}/{n_data_points} ({tair_gap_count/n_data_points:.2%})\n")
+            f.write(f"Q missing fraction: {q_gap_count}/{n_data_points} ({q_gap_count/n_data_points:.2%})\n")
+
+            total_valid_days = 0
+            if data.segments:
+                f.write(f"Segments found: {len(data.segments)}\n")
+                for i, (start, end) in enumerate(data.segments):
+                    length = end - start + 1
+                    total_valid_days += length
+                    # Formatted dates
+                    start_date = f"{data.date[start, 0]:04d}-{data.date[start, 1]:02d}-{data.date[start, 2]:02d}"
+                    end_date = f"{data.date[end, 0]:04d}-{data.date[end, 1]:02d}-{data.date[end, 2]:02d}"
+                    f.write(f"  Segment {i}: {start_date} to {end_date} (length: {length} days)\n")
+            else:
+                f.write("Segments found: 0\n")
+
+            f.write(f"Total valid forcing days: {total_valid_days}\n")
+            f.write(f"T_water observations used in calibration: {data.n_dat}\n")
 
     # 2. Validation period
     read_Tseries(data, 'v')
@@ -60,6 +110,19 @@ def forward(data: CommonData) -> None:
     if data.n_tot < 365:
         ei = -999.0
         return
+
+    if data.gap_tolerant:
+        try:
+            detect_segments(data)
+        except ValueError as e:
+            print(f"Validation skipped: {e}")
+            data.n_tot = 0
+            return
+
+        if not data.segments:
+            print("Validation skipped: No valid segments found.")
+            data.n_tot = 0
+            return
 
     aggregation(data)
     statis(data)
@@ -73,6 +136,14 @@ def forward(data: CommonData) -> None:
         f.write(f"{ei:.6f}\n")
 
     out_val_path = os.path.join(data.folder, f"3_{data.runmode}_{data.fun_obj}_{data.station}_{data.series}v_{data.time_res}.csv")
+
+    val_tair_gap = np.where(data.Tair == -999.0, 1, 0)
+    val_q_gap = np.where(data.Q == -999.0, 1, 0)
+    val_segment_id = np.full(data.n_tot, -999)
+    if data.gap_tolerant and data.segments:
+        for idx, (start, end) in enumerate(data.segments):
+            val_segment_id[start:end+1] = idx
+
     val_df = pd.DataFrame({
         'Year': data.date[:, 0],
         'Month': data.date[:, 1],
@@ -84,6 +155,12 @@ def forward(data: CommonData) -> None:
         'Twat_mod_agg': data.Twat_mod_agg,
         'Q': data.Q
     })
+
+    if data.gap_tolerant:
+        val_df['Tair_gap'] = val_tair_gap
+        val_df['Q_gap'] = val_q_gap
+        val_df['segment_id'] = val_segment_id
+
     val_df.to_csv(out_val_path, index=False)
 
 

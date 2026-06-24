@@ -5,13 +5,15 @@ from typing import Optional
 import concurrent.futures
 
 from .config import CommonData
-from .model import call_model, funcobj
+from .model import call_model, funcobj, detect_segments
 
 def sub_1(data: CommonData) -> np.float64:
     """
     Helper function to call model and evaluate the objective function.
     Replicates SUBROUTINE sub_1
     """
+    if data.gap_tolerant and data.segments is None:
+        detect_segments(data)
     call_model(data)
     return np.float64(funcobj(data))
 

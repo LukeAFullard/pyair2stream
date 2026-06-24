@@ -1,0 +1,22 @@
+project_name: gap_tolerance_experiment
+station_name: 3Gaps_FWD
+series: c
+time_resolution: 1d
+version: 8
+Tice_cover: 0.0
+objective_function: NSE
+integrator: RK4
+run_mode: FORWARD
+gap_tolerant: false
+paths:
+  input_data: data_complete.csv
+  output_dir: output_forward_3gaps
+parameters_forward:
+- 3.194356
+- 0.252146
+- 0.579173
+- 0.029934
+- 0.745793
+- 2.569995
+- 0.616957
+- 0.120546
