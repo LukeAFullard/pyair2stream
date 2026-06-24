@@ -379,7 +379,7 @@ ELSE
 	WRITE(*,*) 'Controllo superato'
 END IF
 	
-WRITE(11,'(<n_par>(f10.6,1x))') (par_best(i),i=1,n_par)
+WRITE(11,*)  (par_best(i),i=1,n_par)
 WRITE(11,'(f10.6)') ei_check
 
 OPEN(UNIT=12,FILE=TRIM(folder)//'/2_'//TRIM(runmode)//'_'//fun_obj//'_'//TRIM(station)//'_'//series//'c_'//TRIM(time_res)//'.out',STATUS='unknown',ACTION='write')
