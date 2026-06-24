@@ -1,5 +1,6 @@
 import numpy as np
 import math
+import pandas as pd
 from .config import CommonData, PI, TTT
 
 def detect_segments(data: CommonData) -> None:
@@ -76,45 +77,144 @@ def detect_segments(data: CommonData) -> None:
 
 
 def _step(data: CommonData, j: int, p: np.ndarray) -> None:
-    """
-    Core ODE integration logic for a single timestep j -> j+1.
-    """
-    if data.mod_num == 'RK2':
-        K1 = RK4_air2stream(data, data.Tair[j], data.Q[j], data.Twat_mod[j], data.tt[j])
-        K2 = RK4_air2stream(data, data.Tair[j+1], data.Q[j+1], data.Twat_mod[j] + K1, data.tt[j] + TTT)
-    elif data.mod_num == 'RK4':
-        K1 = RK4_air2stream(data, data.Tair[j], data.Q[j], data.Twat_mod[j], data.tt[j])
-        K2 = RK4_air2stream(data, 0.5 * (data.Tair[j] + data.Tair[j+1]), 0.5 * (data.Q[j] + data.Q[j+1]), data.Twat_mod[j] + 0.5 * K1, data.tt[j] + 0.5 * TTT)
-        K3 = RK4_air2stream(data, 0.5 * (data.Tair[j] + data.Tair[j+1]), 0.5 * (data.Q[j] + data.Q[j+1]), data.Twat_mod[j] + 0.5 * K2, data.tt[j] + 0.5 * TTT)
-        K4 = RK4_air2stream(data, data.Tair[j+1], data.Q[j+1], data.Twat_mod[j] + K3, data.tt[j] + TTT)
-    elif data.mod_num == 'EUL':
-        K1 = RK4_air2stream(data, data.Tair[j+1], data.Q[j+1], data.Twat_mod[j], data.tt[j+1])
-    elif data.mod_num == 'CRN':
-        if data.version in [8, 7, 4]:
-            theta_j = data.Q[j] / data.Qmedia
-            theta_j1 = data.Q[j+1] / data.Qmedia
-            DD_j = theta_j ** p[4]
-            DD_j1 = theta_j1 ** p[4]
+    raise NotImplementedError("_step has been removed for performance reasons. Use _run_integration instead.")
 
-            data.Twat_mod[j+1] = (data.Twat_mod[j] + 0.5 / DD_j * (p[1] + p[2]*data.Tair[j] - p[3]*data.Twat_mod[j] + theta_j * (p[5] + p[6]*np.cos(2.0*PI*(data.tt[j] - p[7])) - p[8]*data.Twat_mod[j])) + \
-                                  0.5 / DD_j1 * (p[1] + p[2]*data.Tair[j+1] + theta_j1 * (p[5] + p[6]*np.cos(2.0*PI*(data.tt[j+1] - p[7]))))) / \
-                                 (1.0 + 0.5 * p[8] * theta_j1 / DD_j1 + 0.5 * p[3] / DD_j1)
+def _get_RK_func(version, Qmedia, p):
+    """
+    Returns a fast RK4_air2stream derivative function depending on version.
+    Avoids conditionals during ODE integration.
+    """
+    p1, p2, p3, p4, p5, p6, p7, p8 = p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]
+
+    if version == 3:
+        def RK(Ta, QQ, Tw, time):
+            return p1 + p2 * Ta - p3 * Tw
+
+    elif version == 5:
+        def RK(Ta, QQ, Tw, time):
+            return p1 + p2 * Ta - p3 * Tw + p6 * math.cos(2.0 * PI * (time - p7))
+
+    elif version in [8, 7]:
+        if version == 8:
+            def RK(Ta, QQ, Tw, time):
+                theta = QQ / Qmedia
+                DD = theta ** p4
+                return (p1 + p2 * Ta - p3 * Tw + theta * (p5 + p6 * math.cos(2.0 * PI * (time - p7)) - p8 * Tw)) / DD
+        else:
+            def RK(Ta, QQ, Tw, time):
+                theta = QQ / Qmedia
+                return p1 + p2 * Ta - p3 * Tw + theta * (p5 + p6 * math.cos(2.0 * PI * (time - p7)) - p8 * Tw)
+
+    elif version == 4:
+        def RK(Ta, QQ, Tw, time):
+            DD = (QQ / Qmedia) ** p4
+            return (p1 + p2 * Ta - p3 * Tw) / DD
+
+    else:
+        def RK(Ta, QQ, Tw, time):
+            return 0.0
+
+    return RK
+
+def _run_integration(data: CommonData, segments, p):
+    """
+    Core integration loop. Inlines _step and RK4_air2stream for maximum speed.
+    """
+    RK = _get_RK_func(data.version, data.Qmedia, p)
+    mod_num = data.mod_num
+
+    # Pre-extract arrays for speed
+    Tair = data.Tair
+    Q = data.Q
+    tt = data.tt
+    Twat_mod = data.Twat_mod
+    Tice_cover = data.Tice_cover
+
+    # Specific precomputations for CRN
+    if mod_num == 'CRN':
+        p1, p2, p3, p4, p5, p6, p7, p8 = p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]
+        if data.version in [8, 7, 4]:
+            theta = Q / data.Qmedia
+            DD = theta ** p4
+            denom_term = 1.0 + 0.5 * p8 * theta / DD + 0.5 * p3 / DD
+
+            for start, end in segments:
+                for j in range(start, end):
+                    Tw_j = Twat_mod[j]
+                    theta_j = theta[j]
+                    theta_j1 = theta[j+1]
+                    DD_j = DD[j]
+                    DD_j1 = DD[j+1]
+
+                    num1 = 0.5 / DD_j * (p1 + p2*Tair[j] - p3*Tw_j + theta_j * (p5 + p6*math.cos(2.0*PI*(tt[j] - p7)) - p8*Tw_j))
+                    num2 = 0.5 / DD_j1 * (p1 + p2*Tair[j+1] + theta_j1 * (p5 + p6*math.cos(2.0*PI*(tt[j+1] - p7))))
+                    Tw_j1 = (Tw_j + num1 + num2) / denom_term[j+1]
+                    if Tw_j1 < Tice_cover:
+                        Tw_j1 = Tice_cover
+                    Twat_mod[j+1] = Tw_j1
 
         elif data.version in [5, 3]:
-            data.Twat_mod[j+1] = (data.Twat_mod[j] * (1.0 - 0.5 * p[3]) + p[1] + 0.5 * p[2] * (data.Tair[j] + data.Tair[j+1]) + \
-                                  0.5 * p[6] * np.cos(2.0*PI*(data.tt[j] - p[7])) + 0.5 * p[6] * np.cos(2.0*PI*(data.tt[j+1] - p[7]))) / \
-                                 (1.0 + 0.5 * p[3])
+            denom = 1.0 + 0.5 * p3
+            mult = 1.0 - 0.5 * p3
+            for start, end in segments:
+                for j in range(start, end):
+                    Tw_j1 = (Twat_mod[j] * mult + p1 + 0.5 * p2 * (Tair[j] + Tair[j+1]) + \
+                             0.5 * p6 * math.cos(2.0*PI*(tt[j] - p7)) + 0.5 * p6 * math.cos(2.0*PI*(tt[j+1] - p7))) / denom
+                    if Tw_j1 < Tice_cover:
+                        Tw_j1 = Tice_cover
+                    Twat_mod[j+1] = Tw_j1
+        return
 
-    if data.mod_num == 'RK2':
-        data.Twat_mod[j+1] = data.Twat_mod[j] + 0.5 * (K1 + K2)
-    elif data.mod_num == 'RK4':
-        data.Twat_mod[j+1] = data.Twat_mod[j] + (1.0 / 6.0) * (K1 + 2.0*K2 + 2.0*K3 + K4)
-    elif data.mod_num == 'EUL':
-        data.Twat_mod[j+1] = data.Twat_mod[j] + K1
+    # Non-CRN integration methods
+    if mod_num == 'RK2':
+        for start, end in segments:
+            for j in range(start, end):
+                Ta_j = Tair[j]
+                Ta_j1 = Tair[j+1]
+                Q_j = Q[j]
+                Q_j1 = Q[j+1]
+                Tw_j = Twat_mod[j]
+                tt_j = tt[j]
 
-    data.Twat_mod[j+1] = max(data.Twat_mod[j+1], data.Tice_cover)
+                K1 = RK(Ta_j, Q_j, Tw_j, tt_j)
+                K2 = RK(Ta_j1, Q_j1, Tw_j + K1, tt_j + TTT)
+                Tw_j1 = Tw_j + 0.5 * (K1 + K2)
+                if Tw_j1 < Tice_cover:
+                    Tw_j1 = Tice_cover
+                Twat_mod[j+1] = Tw_j1
 
-import pandas as pd
+    elif mod_num == 'RK4':
+        for start, end in segments:
+            for j in range(start, end):
+                Ta_j = Tair[j]
+                Ta_j1 = Tair[j+1]
+                Q_j = Q[j]
+                Q_j1 = Q[j+1]
+                Tw_j = Twat_mod[j]
+                tt_j = tt[j]
+
+                Ta_mid = 0.5 * (Ta_j + Ta_j1)
+                Q_mid = 0.5 * (Q_j + Q_j1)
+                tt_mid = tt_j + 0.5 * TTT
+
+                K1 = RK(Ta_j, Q_j, Tw_j, tt_j)
+                K2 = RK(Ta_mid, Q_mid, Tw_j + 0.5 * K1, tt_mid)
+                K3 = RK(Ta_mid, Q_mid, Tw_j + 0.5 * K2, tt_mid)
+                K4 = RK(Ta_j1, Q_j1, Tw_j + K3, tt_j + TTT)
+
+                Tw_j1 = Tw_j + (1.0 / 6.0) * (K1 + 2.0*K2 + 2.0*K3 + K4)
+                if Tw_j1 < Tice_cover:
+                    Tw_j1 = Tice_cover
+                Twat_mod[j+1] = Tw_j1
+
+    elif mod_num == 'EUL':
+        for start, end in segments:
+            for j in range(start, end):
+                K1 = RK(Tair[j+1], Q[j+1], Twat_mod[j], tt[j+1])
+                Tw_j1 = Twat_mod[j] + K1
+                if Tw_j1 < Tice_cover:
+                    Tw_j1 = Tice_cover
+                Twat_mod[j+1] = Tw_j1
 
 def call_model_segmented(data: CommonData) -> None:
     """
@@ -137,8 +237,7 @@ def call_model_segmented(data: CommonData) -> None:
             doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
             data.Twat_mod[start] = data.doy_climatology[doy]
 
-        for j in range(start, end):
-            _step(data, j, p)
+    _run_integration(data, data.segments, p)
 
 def call_model(data: CommonData) -> None:
     """
@@ -155,45 +254,11 @@ def call_model(data: CommonData) -> None:
         data.Twat_mod[0] = data.Twat_obs[0]
 
     # Convert par from 0-indexed to 1-indexed for the formula to match Fortran
-    # We will just pad a 0 at index 0 for easy translation of par(1), par(2)...
-    # Since in python, arrays are 0 indexed, we can map par[0] to par(1), etc.
     p = np.zeros(9, dtype=np.float64)
     p[1:9] = data.par[0:8]
 
-    for j in range(data.n_tot - 1):
-        _step(data, j, p)
-
-
-def RK4_air2stream(data: CommonData, Ta: np.float64, QQ: np.float64, Tw: np.float64, time: np.float64) -> np.float64:
-    """
-    Subroutine RK4_air2stream from AIR2STREAM_SUBROUTINES.f90
-    """
-    p = np.zeros(9, dtype=np.float64)
-    p[1:9] = data.par[0:8]
-
-    if data.version in [8, 4]:
-        DD = (QQ / data.Qmedia) ** p[4]
-    elif data.version in [5, 3]:
-        DD = 0.0
-    else:
-        DD = 1.0
-
-    K = 0.0
-
-    if data.version == 3:
-        K = (p[1] + p[2]*Ta - p[3]*Tw)
-
-    if data.version == 5:
-        K = p[1] + p[2]*Ta - p[3]*Tw + p[6]*np.cos(2.0*PI*(time - p[7]))
-
-    if data.version in [8, 7]:
-        K = p[1] + p[2]*Ta - p[3]*Tw + (QQ / data.Qmedia) * (p[5] + p[6]*np.cos(2.0*PI*(time - p[7])) - p[8]*Tw)
-        K = K / DD
-
-    if data.version == 4:
-        K = (p[1] + p[2]*Ta - p[3]*Tw) / DD
-
-    return np.float64(K)
+    segments = [(0, data.n_tot - 1)]
+    _run_integration(data, segments, p)
 
 def aggregation(data: CommonData) -> None:
     """
@@ -345,55 +410,64 @@ def funcobj(data: CommonData) -> float:
     """
     data.Twat_mod_agg = np.full(data.n_tot, -999.0, dtype=np.float64)
 
-    # We may need to skip days according to eval_mask
-    valid_n_dat = 0
+    valid_mask = data.Twat_mod[data.I_pos] != -999.0
+    if data.eval_mask is not None:
+        valid_mask &= data.eval_mask[data.I_pos]
 
+    # Valid mask for I_pos length
+    pos_mask = np.zeros(len(data.I_pos), dtype=bool)
     for i in range(data.n_dat):
-        tmp = 0.0
-        start_idx = data.I_inf[i, 0]
-        end_idx = data.I_inf[i, 1]
+        start = data.I_inf[i, 0]
+        end = data.I_inf[i, 1]
+        pos_mask[start:end+1] = True
 
-        count = 0
-        for j in range(start_idx, end_idx + 1):
-            idx = data.I_pos[j]
-            if data.eval_mask is not None and not data.eval_mask[idx]:
-                continue
-            if data.Twat_mod[idx] != -999.0:
-                tmp += data.Twat_mod[idx]
-                count += 1
+    # The group_indices size must exactly match len(data.I_pos) to avoid IndexError
+    group_indices = np.full(len(data.I_pos), -1, dtype=np.int32)
 
-        if count > 0:
-            data.Twat_mod_agg[data.I_inf[i, 2]] = tmp / np.float64(count)
-            valid_n_dat += 1
+    starts = data.I_inf[:, 0]
+    ends = data.I_inf[:, 1]
+    for i in range(data.n_dat):
+        group_indices[starts[i]:ends[i]+1] = i
+
+    # Combine pos_mask and valid_mask
+    combined_mask = pos_mask & valid_mask
+
+    valid_group_indices = group_indices[combined_mask]
+    valid_mod_vals = data.Twat_mod[data.I_pos][combined_mask]
+
+    # Sum up valid elements per group
+    sums = np.bincount(valid_group_indices, weights=valid_mod_vals, minlength=data.n_dat)
+    counts = np.bincount(valid_group_indices, minlength=data.n_dat)
+
+    has_count = counts > 0
+    valid_n_dat = np.sum(has_count)
+
+    if valid_n_dat > 0:
+        agg_indices = data.I_inf[has_count, 2]
+        data.Twat_mod_agg[agg_indices] = sums[has_count] / counts[has_count]
 
     ind = 0.0
 
     if data.fun_obj == 'NSE':
-        TSS = 0.0
-        for i in range(data.n_dat):
-            if data.Twat_mod_agg[data.I_inf[i, 2]] != -999.0:
-                TSS += (data.Twat_mod_agg[data.I_inf[i, 2]] - data.Twat_obs_agg[data.I_inf[i, 2]]) ** 2
-        # Use data.TSS_obs. In a rigorous sense, if valid_n_dat < data.n_dat, TSS_obs should be recomputed,
-        # but to keep backwards compat exactly we stick to original formula structure.
-        ind = 1.0 - TSS / data.TSS_obs
+        if valid_n_dat > 0:
+            agg_mod = data.Twat_mod_agg[data.I_inf[has_count, 2]]
+            agg_obs = data.Twat_obs_agg[data.I_inf[has_count, 2]]
+            TSS = np.sum((agg_mod - agg_obs) ** 2)
+            ind = 1.0 - TSS / data.TSS_obs
+        else:
+            ind = -999.0
 
     elif data.fun_obj == 'KGE':
         if valid_n_dat < 2:
             print("Warning: KGE undefined for n_dat < 2. Returning -999.0")
             return -999.0
 
-        mean_mod = 0.0
-        for i in range(data.n_dat):
-            if data.Twat_mod_agg[data.I_inf[i, 2]] != -999.0:
-                mean_mod += data.Twat_mod_agg[data.I_inf[i, 2]]
-        mean_mod /= np.float64(valid_n_dat)
+        agg_mod = data.Twat_mod_agg[data.I_inf[has_count, 2]]
+        agg_obs = data.Twat_obs_agg[data.I_inf[has_count, 2]]
 
-        covar_mod = 0.0
-        TSS_mod = 0.0
-        for i in range(data.n_dat):
-            if data.Twat_mod_agg[data.I_inf[i, 2]] != -999.0:
-                TSS_mod += (data.Twat_mod_agg[data.I_inf[i, 2]] - mean_mod) ** 2
-                covar_mod += (data.Twat_mod_agg[data.I_inf[i, 2]] - mean_mod) * (data.Twat_obs_agg[data.I_inf[i, 2]] - data.mean_obs)
+        mean_mod = np.mean(agg_mod)
+        TSS_mod = np.sum((agg_mod - mean_mod) ** 2)
+        covar_mod = np.sum((agg_mod - mean_mod) * (agg_obs - data.mean_obs))
 
         std_mod = np.sqrt(TSS_mod / np.float64(valid_n_dat - 1))
         covar_mod /= np.float64(valid_n_dat - 1)
@@ -405,11 +479,10 @@ def funcobj(data: CommonData) -> float:
         ind = 1.0 - np.sqrt((std_mod / data.std_obs - 1.0)**2 + (mean_mod / data.mean_obs - 1.0)**2 + (covar_mod / (std_mod * data.std_obs) - 1.0)**2)
 
     elif data.fun_obj == 'RMS':
-        TSS = 0.0
-        for i in range(data.n_dat):
-            if data.Twat_mod_agg[data.I_inf[i, 2]] != -999.0:
-                TSS += (data.Twat_mod_agg[data.I_inf[i, 2]] - data.Twat_obs_agg[data.I_inf[i, 2]]) ** 2
         if valid_n_dat > 0:
+            agg_mod = data.Twat_mod_agg[data.I_inf[has_count, 2]]
+            agg_obs = data.Twat_obs_agg[data.I_inf[has_count, 2]]
+            TSS = np.sum((agg_mod - agg_obs) ** 2)
             ind = -np.sqrt(TSS / np.float64(valid_n_dat))
         else:
             ind = -999.0
@@ -417,4 +490,4 @@ def funcobj(data: CommonData) -> float:
     else:
         print("Errore nella scelta della f. obiettivo")
 
-    return ind
+    return np.float64(ind)

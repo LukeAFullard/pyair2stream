@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from pyair2stream.config import CommonData, PI, TTT
-from pyair2stream.model import call_model, RK4_air2stream, aggregation, statis, funcobj
+from pyair2stream.model import call_model, aggregation, statis, funcobj
 
 class TestModel(unittest.TestCase):
     def setUp(self):
