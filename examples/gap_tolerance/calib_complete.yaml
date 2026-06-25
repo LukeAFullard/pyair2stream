@@ -6,7 +6,7 @@ version: 8
 Tice_cover: 0.0
 objective_function: "NSE"
 integrator: "RK4"
-run_mode: "PSO"
+run_mode: "DE"
 
 gap_tolerant: false
 
@@ -15,8 +15,8 @@ paths:
   output_dir: "output_complete"
 
 optimization:
-  n_runs: 200
-  n_particles: 50
+  n_runs: 5000
+  n_particles: 100
   mineff_index: 0.0
   c1: 2.0
   c2: 2.0
