@@ -27,9 +27,9 @@ The Python solver was observed escaping the 0-gradient trap and arriving at iden
 - Parameters: `3.164, 0.417, 0.829, 0.340, 1.343, 5.192, 0.574, 0.883`
 - Efficiency Index (Calibration): `0.949829`
 
-**Python `pyair2stream`:**
-- Parameters: `4.294, 0.586, 1.246, 0.337, 0.652, 5.275, 0.579, 0.783`
-- Efficiency Index (Calibration): `0.954926`
+**Python `pyair2stream` (DE):**
+- Parameters: `4.794, 0.629, 1.410, 0.270, 0.000, 4.912, 0.582, 0.637`
+- Efficiency Index (Calibration): `0.955775`
 
 *(Note: Minor parameter variation is fully expected across standard non-convex stochastic algorithms like PSO without identical PRNG seeding, but the objective function efficiencies are mathematically consistent.)*
 

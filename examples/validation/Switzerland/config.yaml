@@ -6,7 +6,7 @@ version: 8
 Tice_cover: 0.0
 objective_function: "NSE"
 integrator: "RK4"
-run_mode: "PSO"
+run_mode: "DE"
 prc: 1.0
 mineff_index: -999.0
 
@@ -16,7 +16,7 @@ paths:
   output_dir: "examples/validation/Switzerland/output_8"
 
 optimization:
-  n_runs: 100
+  n_runs: 5000
   n_particles: 100
   c1: 2.0
   c2: 2.0
