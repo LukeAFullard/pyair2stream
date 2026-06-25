@@ -75,7 +75,7 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
         v[j, :] = v_rand[j, :] * dvmax
         pbest[j, :] = x[j, :]
 
-    with concurrent.futures.ProcessPoolExecutor() as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
         results = list(executor.map(eval_particle_worker, [(data, x[:, k], n_par) for k in range(n_particles)]))
 
         for k in range(n_particles):
@@ -368,7 +368,10 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
                 return -np.inf
 
         data.par[:n_par] = p_vals
-        eff_index = sub_1(data)
+        if data.gap_tolerant and data.segments is None:
+            detect_segments(data)
+        call_model(data)
+        eff_index = funcobj(data)
 
         if np.isnan(eff_index):
             return -np.inf

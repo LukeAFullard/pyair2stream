@@ -14,13 +14,15 @@ paths:
   output_dir: "examples/optimizer_comparison"
 
 optimization:
-  n_runs: 100
+  n_runs: 20
   mineff_index: -999.0
-  n_particles: 50
+  n_particles: 10
   c1: 2.0
   c2: 2.0
   wmax: 0.9
   wmin: 0.4
+  mcmc_walkers: 32
+  mcmc_steps: 100
 
 parameter_bounds:
   min: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
