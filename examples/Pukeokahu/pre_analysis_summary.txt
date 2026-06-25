@@ -1,0 +1,37 @@
+========================================
+      Timeseries Pre-Analysis Report
+========================================
+Total Range: 1999-03-18 to 2026-06-05 (9942 days)
+Gap Tolerant Mode: Enabled (Min Segment: 30 days)
+
+--- Missing Data ---
+T_air: 6464 days missing (65.0%)
+T_water: 224 days missing (2.3%)
+Discharge: 23 days missing (0.2%)
+
+--- Segments Analysis (Based on T_air and Discharge) ---
+Total Valid Segments: 11 (Totaling 3350 days)
+Segments Too Short (< 30 days): 7
+Gap Periods: 19
+
+--- Calibration Potential ---
+Total Valid T_water Observations in Valid Segments: 3342
+Data points per parameter for different model versions:
+  - Version 3 (3 parameters): 1114.0 pts/param
+  - Version 4 (4 parameters): 835.5 pts/param
+  - Version 5 (5 parameters): 668.4 pts/param
+  - Version 7 (7 parameters): 477.4 pts/param
+  - Version 8 (8 parameters): 417.8 pts/param
+
+Valid Segments List:
+  1. 2015-12-12 to 2017-07-26 (593 days)
+  2. 2017-07-28 to 2018-02-08 (196 days)
+  3. 2018-02-11 to 2018-04-17 (66 days)
+  4. 2018-07-07 to 2018-08-15 (40 days)
+  5. 2018-12-15 to 2019-02-18 (66 days)
+  6. 2019-03-24 to 2019-05-24 (62 days)
+  7. 2019-05-29 to 2023-03-23 (1395 days)
+  8. 2023-03-31 to 2024-01-10 (286 days)
+  9. 2024-03-08 to 2025-04-29 (418 days)
+  10. 2025-05-01 to 2025-06-10 (41 days)
+  11. 2025-06-12 to 2025-12-15 (187 days)
