@@ -110,6 +110,20 @@ class TestOptimization(unittest.TestCase):
         expected_csv = os.path.join(self.data.folder, f"0_LATHYP_RMS_test_station_test_series_1d.csv")
         self.assertTrue(os.path.exists(expected_csv))
 
+    def test_DE_mode(self):
+        from pyair2stream.optimization import DE_mode
+        self.data.n_particles = 3
+        self.data.n_run = 2
+        self.data.runmode = 'DE'
+
+        DE_mode(self.data, seed=42)
+
+        self.assertIsNotNone(self.data.finalfit)
+        self.assertEqual(len(self.data.par_best), 8)
+
+        expected_csv = os.path.join(self.data.folder, f"0_DE_RMS_test_station_test_series_1d.csv")
+        self.assertTrue(os.path.exists(expected_csv))
+
         df = pd.read_csv(expected_csv)
         self.assertTrue(len(df) > 0)
         self.assertTrue("eff_index" in df.columns)
