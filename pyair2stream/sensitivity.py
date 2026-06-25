@@ -63,7 +63,12 @@ def sensitivity_analysis(data: CommonData):
                 })
                 continue
 
-            delta = (delta_pct / 100.0) * param_range
+            # Use the actual parameter value to determine scale, with a fallback for exactly zero
+            base_scale = abs(data.par_best[j])
+            if base_scale < 1e-4:
+                base_scale = 1e-4
+
+            delta = (delta_pct / 100.0) * base_scale
 
             # Central difference bounded by parameter ranges
             p_plus = data.par_best[j] + delta
@@ -87,12 +92,14 @@ def sensitivity_analysis(data: CommonData):
             # Run plus
             data.par[:] = data.par_best[:]
             data.par[j] = p_plus
+            data.Twat_mod[:] = -999.0
             call_model(data)
             twat_plus = data.Twat_mod.copy()
 
             # Run minus
             data.par[:] = data.par_best[:]
             data.par[j] = p_minus
+            data.Twat_mod[:] = -999.0
             call_model(data)
             twat_minus = data.Twat_mod.copy()
 
@@ -100,7 +107,8 @@ def sensitivity_analysis(data: CommonData):
             diff = np.abs(twat_plus[valid_mask] - twat_minus[valid_mask])
             mean_diff = np.mean(diff)
 
-            sens_index = mean_diff / (actual_delta / param_range)
+            # Normalize sensitivity index based on the parameter's actual scale
+            sens_index = mean_diff / (actual_delta / base_scale)
 
             sensitivities.append({
                 "Parameter": f"par_{j+1}",
