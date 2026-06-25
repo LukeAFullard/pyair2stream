@@ -24,17 +24,17 @@ By passing the optimal DE solution into an MCMC sampler (using `emcee`), we can 
 Executing the configuration (`50 particles/popsize`, `100 runs/maxiter`) yields:
 
 ### Particle Swarm Optimization (PSO)
-* **Execution Time:** ~17.36 seconds
-* **Accuracy (NSE):** 0.961474
-* **Parameters Found:** `[4.61483, 0.37989, 0.61807, 0.28403, 0.08293, 3.1011, 0.54667, 0.26237]`
+* **Execution Time:** ~4.35 seconds (With Numba JIT)
+* **Accuracy (NSE):** 0.944925
+* **Parameters Found:** `[4.2938, 0.71777, 0.75862, 0.505, 0.42016, 3.33094, 0.48898, 0.5619]`
 
 ### Differential Evolution + L-BFGS-B (DE)
-* **Execution Time:** ~258.27 seconds (or similar depending on hardware)
-* **Accuracy (NSE):** **0.969964** (Substantial improvement)
-* **Parameters Found:** `[0.10000, 0.02667, 0.04163, 0.00269, 0.99981, 0.71131, 0.54188, 0.08516]`
+* **Execution Time:** ~2.75 seconds (With Numba JIT)
+* **Accuracy (NSE):** **0.969963** (Substantial improvement)
+* **Parameters Found:** `[0.1, 0.02657, 0.04147, 0.00045, 0.99793, 0.7115, 0.5417, 0.08505]`
 
 ### DE-MCMC (Uncertainty Analysis)
-* **Execution Time:** Extra time added for `32 walkers` and `300 steps`.
+* **Execution Time:** ~11.37 seconds (For `32 walkers` and `1000 steps` with Numba JIT).
 * **Accuracy:** Matches DE (as it seeds from the DE optimum).
 * **Benefit:** Produces parameter chains and a predictive 90% envelope.
 
