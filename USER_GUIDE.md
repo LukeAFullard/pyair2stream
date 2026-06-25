@@ -33,7 +33,7 @@ version: 8                 # 3, 4, 5, 7, or 8 parameters
 Tice_cover: 0.0            # Threshold temperature for ice formation
 objective_function: "NSE"  # KGE, NSE, RMS
 integrator: "RK4"          # RK4, EUL, RK2, CRN
-run_mode: "PSO"            # PSO, LATHYP, FORWARD, or DE
+run_mode: "DE-MCMC"        # PSO, LATHYP, FORWARD, DE, or DE-MCMC
 prc: 1.0                   # Minimum percentage of data in input: 0...1
 
 paths:
@@ -49,6 +49,8 @@ optimization:
   c2: 2.0                  # (PSO only)
   wmax: 0.9                # (PSO only)
   wmin: 0.4                # (PSO only)
+  mcmc_walkers: 32         # Number of walkers (DE-MCMC only)
+  mcmc_steps: 1000         # Number of MCMC steps (DE-MCMC only)
 
 parameter_bounds:
   min: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -114,8 +116,9 @@ python -m pyair2stream.main --config my_project_config.yaml
 ```
 
 **What Happens When You Run:**
-1.  **Calibration:** If `run_mode` is `PSO` or `LATHYP`, the model will optimize parameters based on your `input_data`.
-2.  **Forward/Validation:** It will evaluate the best parameters against the `validation_data` (if provided).
+1.  **Calibration:** If `run_mode` is `PSO`, `LATHYP`, `DE`, or `DE-MCMC`, the model will optimize parameters based on your `input_data`.
+2.  **Uncertainty Analysis:** If `run_mode` is `DE-MCMC`, an MCMC sampling stage runs after optimization. It produces a parameter chain and predictive uncertainty envelopes (saved as CSVs) for further analysis. Note: the MCMC currently uses the standard objective function as a pseudo-likelihood, and future iterations may implement a formal Gaussian log-likelihood.
+3.  **Forward/Validation:** It will evaluate the best parameters against the `validation_data` (if provided).
 3.  **Outputs:** Results are saved in standard CSV format in the designated output directory (e.g., `0_*.csv` for optimization history, `2_*.csv` for calibration time-series, `3_*.csv` for validation).
 4.  **Post-Processing:** Dotty plots (parameter exploration) and time-series plots (comparing observed vs. simulated temperatures) are automatically generated as high-quality PDFs and PNGs using a colorblind-friendly palette.
 
