@@ -1,0 +1,2 @@
+Vanilla Time: 251.8057s
+Vanilla NSE: -2.2551

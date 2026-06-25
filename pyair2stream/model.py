@@ -120,101 +120,24 @@ def _run_integration(data: CommonData, segments, p):
     """
     Core integration loop. Inlines _step and RK4_air2stream for maximum speed.
     """
-    RK = _get_RK_func(data.version, data.Qmedia, p)
+    from .model_numba import fast_run_integration
+
     mod_num = data.mod_num
+    mod_num_idx = -1
+    if mod_num == 'CRN': mod_num_idx = 0
+    elif mod_num == 'RK2': mod_num_idx = 1
+    elif mod_num == 'RK4': mod_num_idx = 2
+    elif mod_num == 'EUL': mod_num_idx = 3
+    else: raise ValueError(f"Unknown mod_num {mod_num}")
 
-    # Pre-extract arrays for speed
-    Tair = data.Tair
-    Q = data.Q
-    tt = data.tt
-    Twat_mod = data.Twat_mod
-    Tice_cover = data.Tice_cover
+    segments_arr = np.array(segments, dtype=np.int32)
 
-    # Specific precomputations for CRN
-    if mod_num == 'CRN':
-        p1, p2, p3, p4, p5, p6, p7, p8 = p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]
-        if data.version in [8, 7, 4]:
-            theta = Q / data.Qmedia
-            DD = theta ** p4
-            denom_term = 1.0 + 0.5 * p8 * theta / DD + 0.5 * p3 / DD
-
-            for start, end in segments:
-                for j in range(start, end):
-                    Tw_j = Twat_mod[j]
-                    theta_j = theta[j]
-                    theta_j1 = theta[j+1]
-                    DD_j = DD[j]
-                    DD_j1 = DD[j+1]
-
-                    num1 = 0.5 / DD_j * (p1 + p2*Tair[j] - p3*Tw_j + theta_j * (p5 + p6*math.cos(2.0*PI*(tt[j] - p7)) - p8*Tw_j))
-                    num2 = 0.5 / DD_j1 * (p1 + p2*Tair[j+1] + theta_j1 * (p5 + p6*math.cos(2.0*PI*(tt[j+1] - p7))))
-                    Tw_j1 = (Tw_j + num1 + num2) / denom_term[j+1]
-                    if Tw_j1 < Tice_cover:
-                        Tw_j1 = Tice_cover
-                    Twat_mod[j+1] = Tw_j1
-
-        elif data.version in [5, 3]:
-            denom = 1.0 + 0.5 * p3
-            mult = 1.0 - 0.5 * p3
-            for start, end in segments:
-                for j in range(start, end):
-                    Tw_j1 = (Twat_mod[j] * mult + p1 + 0.5 * p2 * (Tair[j] + Tair[j+1]) + \
-                             0.5 * p6 * math.cos(2.0*PI*(tt[j] - p7)) + 0.5 * p6 * math.cos(2.0*PI*(tt[j+1] - p7))) / denom
-                    if Tw_j1 < Tice_cover:
-                        Tw_j1 = Tice_cover
-                    Twat_mod[j+1] = Tw_j1
-        return
-
-    # Non-CRN integration methods
-    if mod_num == 'RK2':
-        for start, end in segments:
-            for j in range(start, end):
-                Ta_j = Tair[j]
-                Ta_j1 = Tair[j+1]
-                Q_j = Q[j]
-                Q_j1 = Q[j+1]
-                Tw_j = Twat_mod[j]
-                tt_j = tt[j]
-
-                K1 = RK(Ta_j, Q_j, Tw_j, tt_j)
-                K2 = RK(Ta_j1, Q_j1, Tw_j + K1, tt_j + TTT)
-                Tw_j1 = Tw_j + 0.5 * (K1 + K2)
-                if Tw_j1 < Tice_cover:
-                    Tw_j1 = Tice_cover
-                Twat_mod[j+1] = Tw_j1
-
-    elif mod_num == 'RK4':
-        for start, end in segments:
-            for j in range(start, end):
-                Ta_j = Tair[j]
-                Ta_j1 = Tair[j+1]
-                Q_j = Q[j]
-                Q_j1 = Q[j+1]
-                Tw_j = Twat_mod[j]
-                tt_j = tt[j]
-
-                Ta_mid = 0.5 * (Ta_j + Ta_j1)
-                Q_mid = 0.5 * (Q_j + Q_j1)
-                tt_mid = tt_j + 0.5 * TTT
-
-                K1 = RK(Ta_j, Q_j, Tw_j, tt_j)
-                K2 = RK(Ta_mid, Q_mid, Tw_j + 0.5 * K1, tt_mid)
-                K3 = RK(Ta_mid, Q_mid, Tw_j + 0.5 * K2, tt_mid)
-                K4 = RK(Ta_j1, Q_j1, Tw_j + K3, tt_j + TTT)
-
-                Tw_j1 = Tw_j + (1.0 / 6.0) * (K1 + 2.0*K2 + 2.0*K3 + K4)
-                if Tw_j1 < Tice_cover:
-                    Tw_j1 = Tice_cover
-                Twat_mod[j+1] = Tw_j1
-
-    elif mod_num == 'EUL':
-        for start, end in segments:
-            for j in range(start, end):
-                K1 = RK(Tair[j+1], Q[j+1], Twat_mod[j], tt[j+1])
-                Tw_j1 = Twat_mod[j] + K1
-                if Tw_j1 < Tice_cover:
-                    Tw_j1 = Tice_cover
-                Twat_mod[j+1] = Tw_j1
+    # Numba will mutate Twat_mod in place
+    fast_run_integration(
+        data.Tair, data.Q, data.tt, data.Twat_mod, data.Tice_cover, data.Qmedia,
+        data.version, mod_num_idx, segments_arr,
+        p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]
+    )
 
 def call_model_segmented(data: CommonData) -> None:
     """
@@ -408,86 +331,25 @@ def funcobj(data: CommonData) -> float:
     Calculation of the objective function.
     Returns the objective value.
     """
-    data.Twat_mod_agg = np.full(data.n_tot, -999.0, dtype=np.float64)
+    from .model_numba import fast_funcobj
 
-    valid_mask = data.Twat_mod[data.I_pos] != -999.0
-    if data.eval_mask is not None:
-        valid_mask &= data.eval_mask[data.I_pos]
+    fun_obj_type = -1
+    if data.fun_obj == 'NSE': fun_obj_type = 0
+    elif data.fun_obj == 'KGE': fun_obj_type = 1
+    elif data.fun_obj == 'RMS': fun_obj_type = 2
+    else: print("Errore nella scelta della f. obiettivo")
 
-    # Valid mask for I_pos length
-    pos_mask = np.zeros(len(data.I_pos), dtype=bool)
-    for i in range(data.n_dat):
-        start = data.I_inf[i, 0]
-        end = data.I_inf[i, 1]
-        pos_mask[start:end+1] = True
+    eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
 
-    # The group_indices size must exactly match len(data.I_pos) to avoid IndexError
-    group_indices = np.full(len(data.I_pos), -1, dtype=np.int32)
+    ind, Twat_mod_agg = fast_funcobj(
+        data.n_dat, data.n_tot, data.I_inf, data.I_pos, data.Twat_mod, data.Twat_obs_agg,
+        eval_mask, fun_obj_type, data.mean_obs, data.TSS_obs, data.std_obs
+    )
 
-    starts = data.I_inf[:, 0]
-    ends = data.I_inf[:, 1]
-    for i in range(data.n_dat):
-        group_indices[starts[i]:ends[i]+1] = i
+    data.Twat_mod_agg = Twat_mod_agg
 
-    # Combine pos_mask and valid_mask
-    combined_mask = pos_mask & valid_mask
-
-    valid_group_indices = group_indices[combined_mask]
-    valid_mod_vals = data.Twat_mod[data.I_pos][combined_mask]
-
-    # Sum up valid elements per group
-    sums = np.bincount(valid_group_indices, weights=valid_mod_vals, minlength=data.n_dat)
-    counts = np.bincount(valid_group_indices, minlength=data.n_dat)
-
-    has_count = counts > 0
-    valid_n_dat = np.sum(has_count)
-
-    if valid_n_dat > 0:
-        agg_indices = data.I_inf[has_count, 2]
-        data.Twat_mod_agg[agg_indices] = sums[has_count] / counts[has_count]
-
-    ind = 0.0
-
-    if data.fun_obj == 'NSE':
-        if valid_n_dat > 0:
-            agg_mod = data.Twat_mod_agg[data.I_inf[has_count, 2]]
-            agg_obs = data.Twat_obs_agg[data.I_inf[has_count, 2]]
-            TSS = np.sum((agg_mod - agg_obs) ** 2)
-            ind = 1.0 - TSS / data.TSS_obs
-        else:
-            ind = -999.0
-
-    elif data.fun_obj == 'KGE':
-        if valid_n_dat < 2:
-            print("Warning: KGE undefined for n_dat < 2. Returning -999.0")
-            return -999.0
-
-        agg_mod = data.Twat_mod_agg[data.I_inf[has_count, 2]]
-        agg_obs = data.Twat_obs_agg[data.I_inf[has_count, 2]]
-
-        mean_mod = np.mean(agg_mod)
-        TSS_mod = np.sum((agg_mod - mean_mod) ** 2)
-        covar_mod = np.sum((agg_mod - mean_mod) * (agg_obs - data.mean_obs))
-
-        std_mod = np.sqrt(TSS_mod / np.float64(valid_n_dat - 1))
-        covar_mod /= np.float64(valid_n_dat - 1)
-
-        if data.std_obs == 0 or std_mod == 0:
-            print("Warning: KGE undefined because std is zero. Returning -999.0")
-            return -999.0
-
-        ind = 1.0 - np.sqrt((std_mod / data.std_obs - 1.0)**2 + (mean_mod / data.mean_obs - 1.0)**2 + (covar_mod / (std_mod * data.std_obs) - 1.0)**2)
-
-    elif data.fun_obj == 'RMS':
-        if valid_n_dat > 0:
-            agg_mod = data.Twat_mod_agg[data.I_inf[has_count, 2]]
-            agg_obs = data.Twat_obs_agg[data.I_inf[has_count, 2]]
-            TSS = np.sum((agg_mod - agg_obs) ** 2)
-            ind = -np.sqrt(TSS / np.float64(valid_n_dat))
-        else:
-            ind = -999.0
-
-    else:
-        print("Errore nella scelta della f. obiettivo")
+    # Handle print warning consistency from original Python port
+    if ind == -999.0 and fun_obj_type == 1:
+        pass # The python version used to print "Warning: KGE undefined"
 
     return np.float64(ind)
