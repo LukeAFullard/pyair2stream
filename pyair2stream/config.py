@@ -23,6 +23,12 @@ class CommonData:
     n_run: int = 0
     n_particles: int = 0
 
+    # Differential Evolution Fields
+    maxiter: int = 1000
+    n_jobs: int = -1
+    polish: bool = True
+    seed: Optional[int] = None
+
     # Gap-tolerant mode fields
     gap_tolerant: bool = False
     Qmedia_user: Optional[float] = None

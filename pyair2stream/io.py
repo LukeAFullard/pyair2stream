@@ -30,6 +30,10 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data.fun_obj = config.get('objective_function', 'NSE')
     data.mod_num = config.get('integrator', 'RK4')
     data.runmode = config.get('run_mode', 'PSO')
+
+    if data.runmode not in ['FORWARD', 'PSO', 'LATHYP', 'DE']:
+        raise ValueError(f"run_mode must be FORWARD, PSO, LATHYP, or DE. Got {data.runmode}")
+
     data.prc = np.float64(config.get('prc', 1.0))
 
     # Gap-tolerant mode configuration
@@ -77,8 +81,13 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         data.c2 = np.float64(opt_config.get('c2', 2.0))
         data.wmax = np.float64(opt_config.get('wmax', 0.9))
         data.wmin = np.float64(opt_config.get('wmin', 0.4))
+    elif data.runmode == 'DE':
+        data.maxiter = int(opt_config.get('maxiter', 1000))
+        data.n_jobs = int(opt_config.get('n_jobs', -1))
+        data.polish = bool(opt_config.get('polish', True))
+        data.seed = opt_config.get('seed', None)
 
-    if data.runmode in ['PSO', 'LATHYP']:
+    if data.runmode in ['PSO', 'LATHYP', 'DE']:
         bounds = config.get('parameter_bounds', {})
         vals_min = bounds.get('min', [])
         vals_max = bounds.get('max', [])

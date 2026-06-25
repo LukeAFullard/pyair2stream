@@ -1,0 +1,25 @@
+project_name: "solver_comparison"
+station_name: "synthetic"
+series: "c"
+time_resolution: "1d"
+version: 8
+Tice_cover: 0.0
+objective_function: "RMSE"
+integrator: "RK4"
+prc: 1.0
+
+paths:
+  input_data: "synthetic_data.csv"
+  output_dir: "output"
+
+optimization:
+  n_runs: 50
+  n_particles: 50
+  maxiter: 50
+  n_jobs: -1
+  polish: true
+  seed: 42
+
+parameter_bounds:
+  min: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  max: [10.0, 1.0, 1.0, 1.0, 1.0, 10.0, 1.0, 1.0]

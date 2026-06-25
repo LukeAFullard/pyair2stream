@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from typing import Optional
 import concurrent.futures
+from scipy.optimize import differential_evolution
 
 from .config import CommonData
 from .model import call_model, funcobj, detect_segments
@@ -226,4 +227,82 @@ def LH_mode(data: CommonData, seed: Optional[int] = None) -> None:
     # Save to CSV
     # Fix: Pandas handles closing the file handle automatically via to_csv
     df = pd.DataFrame(history, columns=[f"par_{j+1}" for j in range(n_par)] + ["eff_index"])
+    df.to_csv(output_filename, index=False)
+
+
+def _scipy_objective_bridge(candidate_params, data: CommonData, shared_history) -> float:
+    """
+    Bridge function designed strictly for Scipy's C-backend.
+    Wraps `sub_1` and negates the score since `differential_evolution` minimizes.
+    """
+    n_par = len(candidate_params)
+    data.par[:n_par] = candidate_params
+
+    try:
+        eff_index = sub_1(data)
+
+        # Catch unstable mathematical explosions (NaNs / complex numbers)
+        if np.isnan(eff_index) or np.isinf(eff_index):
+            return np.inf
+
+        if eff_index >= data.mineff_index:
+            row = list(candidate_params) + [eff_index]
+            # shared_history.append(row)
+
+        # SciPy minimizes, but our objective function (NSE, KGE, RMS) is "higher is better"
+        # We negate it for the optimizer. E.g., NSE=0.9 becomes -0.9. RMS=-1.5 becomes 1.5.
+        return -float(eff_index)
+
+    except Exception:
+        # If the candidate parameters caused a math overflow inside the ODEs
+        return np.inf
+
+def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
+    """
+    Executes Differential Evolution calibration via SciPy.
+    """
+    print(f'N. run (maxiter) = {data.maxiter}, N. jobs = {data.n_jobs}')
+
+    n_par = 8
+    scipy_bounds = list(zip(data.parmin[:n_par], data.parmax[:n_par]))
+
+    output_filename = os.path.join(data.folder, f"0_{data.runmode}_{data.fun_obj}_{data.station}_{data.series}_{data.time_res}.csv")
+
+    # We use a multiprocessing Manager list to safely share history across processes
+    import multiprocessing
+    manager = multiprocessing.Manager()
+    shared_history = manager.list()
+
+    # Safely handle the multi-threading update trap
+    update_strategy = 'deferred' if (data.n_jobs != 1) else 'immediate'
+
+    result = differential_evolution(
+        func=_scipy_objective_bridge,
+        bounds=scipy_bounds,
+        args=(data, shared_history),
+        strategy='best1bin',
+        maxiter=data.maxiter,
+        popsize=15,             # 15 * 8 params = 120 population size
+        tol=0.005,              # Strict convergence tolerance
+        mutation=(0.5, 1.0),    # Dithering prevents premature local convergence
+        recombination=0.7,
+        polish=data.polish,     # The magic L-BFGS-B finishing touch
+        workers=data.n_jobs,    # Multi-core distribution
+        updating=update_strategy,
+        seed=data.seed if data.seed is not None else seed
+    )
+
+    if not result.success:
+        print(f"Warning: DE exited early. Reason: {result.message}")
+
+    # The true maximum efficiency is the negated objective score
+    data.par_best = result.x.copy()
+    data.finalfit = -result.fun
+
+    print(f'Efficiency Index in calibration {data.finalfit}')
+    print(f'Iterations used: {result.nit}, Total model runs: {result.nfev}')
+
+    # Save to CSV
+    history_list = list(shared_history)
+    df = pd.DataFrame(history_list, columns=[f"par_{j+1}" for j in range(n_par)] + ["eff_index"])
     df.to_csv(output_filename, index=False)
