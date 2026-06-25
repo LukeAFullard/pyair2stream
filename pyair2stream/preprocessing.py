@@ -72,7 +72,17 @@ def merge_timeseries(file_configs, output_file=None):
 
     # Sort by date
     if merged_df is not None:
+        merged_df['Date'] = pd.to_datetime(merged_df['Date'])
         merged_df = merged_df.sort_values('Date')
+
+        # Reindex to a complete daily calendar to expose completely missing days as NaN rows
+        min_date = merged_df['Date'].min()
+        max_date = merged_df['Date'].max()
+        full_date_range = pd.date_range(start=min_date, end=max_date, freq='D')
+
+        merged_df = merged_df.set_index('Date').reindex(full_date_range).reset_index()
+        merged_df = merged_df.rename(columns={'index': 'Date'})
+        merged_df['Date'] = merged_df['Date'].dt.strftime('%Y-%m-%d')
 
         # Ensure standard column order if all 3 are present
         standard_cols = ['Date', 'T_air', 'T_water', 'Discharge']

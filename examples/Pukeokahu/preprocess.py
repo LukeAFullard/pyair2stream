@@ -1,5 +1,6 @@
 import os
 from pyair2stream.preprocessing import merge_timeseries
+from pyair2stream.pre_analysis import analyze_timeseries
 
 def main():
     base_dir = 'examples/Pukeokahu'
@@ -33,6 +34,23 @@ def main():
     merged_df = merge_timeseries(configs, output_file=output_path)
 
     print(f"Merged data saved to {output_path}")
+
+    # Run Pre-Analysis
+    print("\nRunning pre-analysis...")
+    plot_path = os.path.join(base_dir, 'pre_analysis_report.png')
+    summary_path = os.path.join(base_dir, 'pre_analysis_summary.txt')
+
+    summary, report_text = analyze_timeseries(
+        merged_df,
+        output_plot_path=plot_path,
+        output_summary_path=summary_path,
+        gap_tolerant=True,
+        min_segment_days=30
+    )
+
+    print(report_text)
+    print(f"\nPre-analysis plot saved to {plot_path}")
+    print(f"Pre-analysis summary saved to {summary_path}")
 
 if __name__ == '__main__':
     main()
