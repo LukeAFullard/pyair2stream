@@ -32,7 +32,7 @@ class CommonData:
     sensitivity_analysis: bool = False
     sensitivity_perturbations: Optional[list] = None
     mcmc_walkers: int = 32
-    mcmc_steps: int = 1000
+    mcmc_steps: int = 2000
 
     # Scalars - Floats (np.float64 to enforce 64-bit precision)
     Qmedia: np.float64 = np.float64(0.0)
