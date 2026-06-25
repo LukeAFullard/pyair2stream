@@ -396,18 +396,21 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     print(f"Running MCMC for {nsteps} steps with {nwalkers} walkers...")
     sampler.run_mcmc(p0, nsteps, progress=True)
 
-    # Save raw MCMC chain
-    chain = sampler.get_chain(flat=True)
+    # Discard the first 30% of steps as burn-in to ensure envelopes are drawn from fully converged distributions
+    burnin = int(nsteps * 0.3)
+
+    # Save raw MCMC chain (flattened, removing burnin)
+    chain = sampler.get_chain(discard=burnin, flat=True)
     chain_df = pd.DataFrame(chain, columns=[f"par_{j+1}" for j in active_params])
 
     chain_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}.csv")
     chain_df.to_csv(chain_filename, index=False)
-    print(f"Saved MCMC chain to {chain_filename}")
+    print(f"Saved MCMC chain (discarded {burnin} burn-in steps) to {chain_filename}")
 
     # Step 5: Compute Predictive Uncertainty Envelopes
     print("Generating Predictive Uncertainty Envelopes...")
-    # Take 100 random samples from the flattened chain
-    n_samples = min(100, len(chain))
+    # Take 200 random samples from the flattened converged chain to make a dense, tight envelope
+    n_samples = min(200, len(chain))
     sample_indices = np.random.choice(len(chain), size=n_samples, replace=False)
     samples = chain[sample_indices]
 
