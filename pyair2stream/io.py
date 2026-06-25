@@ -47,6 +47,8 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     # Paths mapping
     paths = config.get('paths', {})
 
+    data.forward_options = config.get('forward_options', {})
+
     opt_config = config.get('optimization', {})
     data.n_run = int(opt_config.get('n_runs', 100))
     data.mineff_index = np.float64(config.get('mineff_index', 0.0))

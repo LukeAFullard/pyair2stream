@@ -138,6 +138,18 @@ def post_process(data: CommonData, toll: float = None):
         # We can also backfill/overlay Twat_mod for dates where aggregation failed but raw model ran
         mod_series = mod_series.combine_first(df['Twat_mod'])
 
+
+        # Check if Forward Prediction Envelopes exist
+        env_file = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+        l_env = []
+        if os.path.exists(env_file):
+            env_df = pd.read_csv(env_file)
+            if len(env_df) > 365:
+                env_df = env_df.iloc[365:].copy()
+            # Only fill if lengths match
+            if len(env_df) == len(dates):
+                l_env = [ax.fill_between(dates, env_df['Twat_mod_p5'], env_df['Twat_mod_p95'], color='green', alpha=0.3, label='90% Prediction Interval')]
+
         l3 = ax.plot(dates, mod_series, '.', color=orange, label='Simulated water temperature', markersize=2)
 
         ax.set_xlabel('Time')
@@ -151,6 +163,12 @@ def post_process(data: CommonData, toll: float = None):
 
         # Combine legends
         lines = l1 + l2 + l3 + l4
+        if l_env:
+            # We add a proxy artist for the fill_between to show up nicely in the legend
+            import matplotlib.patches as mpatches
+            proxy = mpatches.Patch(color='green', alpha=0.3, label='90% Prediction Interval')
+            lines.append(proxy)
+
         labels = [l.get_label() for l in lines]
         ax.legend(lines, labels, loc='lower right')
 
@@ -164,5 +182,69 @@ def post_process(data: CommonData, toll: float = None):
         plt.savefig(png_path, dpi=300)
         plt.close()
 
-    plot_series(file_cal, "Calibration", "calibration")
-    plot_series(file_val, "Validation", "validation")
+    if data.runmode == 'FORWARD':
+        # We plot directly from the arrays since FORWARD mode might not save a CSV by default
+        fig, ax = plt.subplots(figsize=(18/2.54, 10/2.54))
+
+        # When pure FORWARD, dates might be full of zeros from initialized array
+        # Let's clip to actual data.n_tot if needed, though they should be filled by IO
+        df_dates = pd.DataFrame({'year': data.date[:, 0], 'month': data.date[:, 1], 'day': data.date[:, 2]})
+        # Filter out bad dates (year == 0) caused by padding
+        valid_dates_mask = df_dates['year'] > 0
+        df_dates = df_dates[valid_dates_mask]
+        dates = pd.to_datetime(df_dates)
+
+        # Clip arrays
+        if len(dates) > 365:
+            Tair = data.Tair[valid_dates_mask][365:]
+            Twat_mod = data.Twat_mod[valid_dates_mask][365:]
+            Q = data.Q[valid_dates_mask][365:]
+            dates = dates[365:]
+        else:
+            Tair = data.Tair[valid_dates_mask]
+            Twat_mod = data.Twat_mod[valid_dates_mask]
+            Q = data.Q[valid_dates_mask]
+
+
+
+        ax.set_title("Forward Projection with 90% Prediction Interval")
+        l1 = ax.plot(dates, Tair, '.', color=light_blue, label='Air temperature', markersize=2)
+
+        l_env = []
+        env_file = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+        if os.path.exists(env_file):
+            env_df = pd.read_csv(env_file)
+            # the env_df has the same initial padding mapping
+            env_df = env_df[valid_dates_mask]
+            if len(env_df) > 365:
+                env_df = env_df.iloc[365:].copy()
+            if len(env_df) == len(dates):
+                l_env = [ax.fill_between(dates, env_df['Twat_mod_p5'], env_df['Twat_mod_p95'], color='green', alpha=0.3, label='90% Prediction Interval')]
+
+        l3 = ax.plot(dates, Twat_mod, '-', color=orange, label='Simulated median water temp.', linewidth=1.5)
+
+        ax.set_xlabel('Time')
+        ax.set_ylabel('Temperature [°C]')
+
+        ax2 = ax.twinx()
+        l4 = ax2.plot(dates, Q, '-', color='grey', alpha=0.3, label='Discharge (Q)', linewidth=1)
+        ax2.set_ylabel('Discharge')
+        ax2.set_ylim(bottom=0)
+
+        lines = l1 + l3 + l4
+        if l_env:
+            import matplotlib.patches as mpatches
+            proxy = mpatches.Patch(color='green', alpha=0.3, label='90% Prediction Interval')
+            lines.append(proxy)
+
+        labels = [l.get_label() for l in lines]
+        ax.legend(lines, labels, loc='lower right')
+
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b-%y'))
+        fig.autofmt_xdate()
+        plt.tight_layout()
+        plt.savefig(os.path.join(data.folder, "forward_projection.png"), dpi=300)
+        plt.close()
+    else:
+        plot_series(file_cal, "Calibration", "calibration")
+        plot_series(file_val, "Validation", "validation")

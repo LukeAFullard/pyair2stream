@@ -32,11 +32,104 @@ def eval_particle_worker(args):
 def forward_mode(data: CommonData) -> None:
     """
     Replicates SUBROUTINE forward_mode
+    Adds optional probabilistic Prediction Intervals based on MCMC chains.
     """
-    ei = sub_1(data)
+    # We must aggregate the data so I_inf / I_pos are created for funcobj to work without throwing NoneType exceptions
+    # But ONLY if Twat_obs is not entirely -999.0, else n_dat becomes 0 which we should skip or mock.
+    has_obs = False
+    for val in data.Twat_obs:
+        if val != -999.0:
+            has_obs = True
+            break
+
+    if has_obs:
+        ei = sub_1(data)
+    else:
+        # It's a pure projection, we skip the objective evaluation.
+        from pyair2stream.model import call_model, detect_segments
+        if data.gap_tolerant and data.segments is None:
+            detect_segments(data)
+        call_model(data)
+        ei = -999.0
+
     data.par_best = data.par.copy()
     data.finalfit = ei
     print(f'Efficiency Index in calibration {data.finalfit}')
+
+    # Optional Probabilistic Forward Envelope
+    if data.forward_options and data.forward_options.get('enable_prediction_intervals', False):
+        chain_path = data.forward_options.get('mcmc_chain_path')
+        if not chain_path or not os.path.exists(chain_path):
+            print(f"Warning: Cannot generate prediction intervals. MCMC chain not found at {chain_path}")
+            return
+
+        print(f"Generating Forward Prediction Intervals from {chain_path}...")
+
+        seed = data.forward_options.get('random_seed', None)
+        if seed is not None:
+            np.random.seed(seed)
+
+        import pandas as pd
+        chain_df = pd.read_csv(chain_path)
+        chain = chain_df.values
+
+        n_samples = data.forward_options.get('n_samples', 1000)
+        n_samples = min(n_samples, len(chain))
+
+        sample_indices = np.random.choice(len(chain), size=n_samples, replace=False)
+        samples = chain[sample_indices]
+
+        sigma = float(data.forward_options.get('residual_sigma', 0.0))
+        if sigma <= 0.0:
+            print("Warning: residual_sigma is 0.0. Prediction interval will only reflect parameter uncertainty, not observation error.")
+
+        ensemble_simulations = []
+        n_par = 8
+
+        # Determine active params from dataframe columns
+        active_cols = chain_df.columns
+        active_params = [int(c.split('_')[1])-1 for c in active_cols]
+
+        best_params_deterministic = data.par_best.copy()
+
+        for i, theta in enumerate(samples):
+            p_vals = best_params_deterministic.copy()
+            for idx, j in enumerate(active_params):
+                p_vals[j] = theta[idx]
+
+            data.par[:n_par] = p_vals
+
+            if data.gap_tolerant and data.segments is None:
+                detect_segments(data)
+
+            call_model(data)
+
+            noise = np.random.normal(0, sigma, data.n_tot)
+            noisy_simulation = data.Twat_mod + noise
+            ensemble_simulations.append(noisy_simulation)
+
+        ensemble_simulations = np.array(ensemble_simulations)
+
+        perc_5 = np.percentile(ensemble_simulations, 5, axis=0)
+        perc_50 = np.percentile(ensemble_simulations, 50, axis=0)
+        perc_95 = np.percentile(ensemble_simulations, 95, axis=0)
+
+        env_df = pd.DataFrame({
+            'Year': data.date[:, 0],
+            'Month': data.date[:, 1],
+            'Day': data.date[:, 2],
+            'Twat_mod_p5': perc_5,
+            'Twat_mod_p50': perc_50,
+            'Twat_mod_p95': perc_95
+        })
+
+        env_filename = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+        env_df.to_csv(env_filename, index=False)
+        print(f"Saved forward prediction uncertainty envelopes to {env_filename}")
+
+        # Restore deterministic parameters
+        data.par[:n_par] = best_params_deterministic
+        call_model(data)
 
 def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
     """
