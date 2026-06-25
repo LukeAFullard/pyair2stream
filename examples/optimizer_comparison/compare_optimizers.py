@@ -32,6 +32,9 @@ def run_calibration(config_path, mode):
     print(f"Running Sensitivity Analysis for {mode}...")
     sensitivity_analysis(data)
 
+    # Determine history file path
+    history_file = os.path.join(data.folder, f"0_{mode}_{data.fun_obj}_{data.station}_{data.series}_{data.time_res}.csv")
+
     return {
         'time': end_time - start_time,
         'objective': data.finalfit,
@@ -39,11 +42,12 @@ def run_calibration(config_path, mode):
         'mod_temp': data.Twat_mod.copy(),
         'obs_temp': data.Twat_obs.copy(),
         'date': data.date.copy(),
-        'folder': data.folder
+        'folder': data.folder,
+        'history_file': history_file
     }
 
 def main():
-    config_path = "examples/synthetic_example/config.yaml"
+    config_path = "examples/optimizer_comparison/config.yaml"
 
     print("Running PSO Calibration...")
     pso_results = run_calibration(config_path, 'PSO')
@@ -86,6 +90,29 @@ def main():
     plt.tight_layout()
     plt.savefig('examples/optimizer_comparison/comparison_plot.png', dpi=300)
     print("\nSaved comparison plot to examples/optimizer_comparison/comparison_plot.png")
+
+    # Convergence Plot
+    plt.figure(figsize=(10, 5))
+
+    if os.path.exists(pso_results['history_file']):
+        df_pso = pd.read_csv(pso_results['history_file'])
+        pso_eff = df_pso['eff_index'].cummax()
+        plt.plot(range(1, len(pso_eff) + 1), pso_eff, label='PSO Cumulative Best NSE', color='orange')
+
+    if os.path.exists(de_results['history_file']):
+        df_de = pd.read_csv(de_results['history_file'])
+        # The history includes phase 1 (DE) and phase 2 (L-BFGS-B).
+        de_eff = df_de['eff_index'].cummax()
+        plt.plot(range(1, len(de_eff) + 1), de_eff, label='Hybrid DE Cumulative Best NSE', color='green')
+
+    plt.title('Optimization Convergence (NSE over Evaluations)')
+    plt.xlabel('Number of Objective Function Evaluations')
+    plt.ylabel('Best Objective Value (NSE)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig('examples/optimizer_comparison/convergence_plot.png', dpi=300)
+    print("Saved convergence plot to examples/optimizer_comparison/convergence_plot.png")
 
     # We copy them locally for the README
     import shutil

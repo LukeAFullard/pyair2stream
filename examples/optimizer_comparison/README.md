@@ -12,17 +12,21 @@ For an 8-parameter problem, **Differential Evolution (DE)** explores the paramet
 
 ## Results
 
-Executing the identical configuration (`20 particles/popsize`, `20 runs/maxiter`) yields:
+Executing the identical extended configuration (`50 particles/popsize`, `100 runs/maxiter`) to ensure full saturation yields:
 
 ### Particle Swarm Optimization (PSO)
-* **Execution Time:** ~1.0 seconds
-* **Accuracy (NSE):** 0.9359
-* **Parameters Found:** `[3.26029, 0.55622, 0.55670, 0.23998, 0.90010, 2.78396, 0.58988, 0.44186]`
+* **Execution Time:** ~17.36 seconds
+* **Accuracy (NSE):** 0.961474
+* **Parameters Found:** `[4.61483, 0.37989, 0.61807, 0.28403, 0.08293, 3.1011, 0.54667, 0.26237]`
 
 ### Differential Evolution + L-BFGS-B (DE)
-* **Execution Time:** ~103.5 seconds
-* **Accuracy (NSE):** **0.9699** (Substantial improvement)
-* **Parameters Found:** `[0.10000, 0.02659, 0.04182, 0.00650, 0.99961, 0.71166, 0.54245, 0.08484]`
+* **Execution Time:** ~258.27 seconds
+* **Accuracy (NSE):** **0.969964** (Substantial improvement)
+* **Parameters Found:** `[0.10000, 0.02667, 0.04163, 0.00269, 0.99981, 0.71131, 0.54188, 0.08516]`
+
+### Convergence Tracking
+![Convergence Plot](convergence_plot.png)
+By tracking the cumulative best `NSE` over every evaluation iteration, we see how DE's initial global search rapidly finds a superior basin to PSO, and then the vertical "snap" (the perfectly straight line at the end of the green curve) represents the L-BFGS-B gradient polishing finding the exact local minimum instantly.
 
 ### Visual Fit Comparison
 
