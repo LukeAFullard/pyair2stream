@@ -37,25 +37,25 @@ You will see output summarizing the calibration efficiency and the true predicti
 EXPERIMENT RESULTS
 ==================================================
 Scenario  Calibration_NSE (Apparent)  True_NSE (Complete Data)
-Complete                      0.9754                    0.9754
-    1Gap                      0.9757                    0.9753
-   2Gaps                      0.9760                    0.9723
-   3Gaps                      0.9766                    0.9719
+Complete                      0.9895                    0.9895
+    1Gap                      0.9902                    0.9896
+   2Gaps                      0.9905                    0.9896
+   3Gaps                      0.9905                    0.9895
 ==================================================
 ```
 
 **Fitted Parameters:**
 
-The 8-parameter `air2stream` equation parameters identified by PSO for each scenario are as follows:
+The 8-parameter `air2stream` equation parameters identified by DE for each scenario are as follows:
 
 | Scenario | p1 | p2 | p3 | p4 | p5 | p6 | p7 | p8 |
 |---|---|---|---|---|---|---|---|---|
-| Complete | 6.962 | 0.339 | 0.937 | 0.914 | 0.999 | 5.526 | 0.594 | 0.286 |
-| 1Gap | 5.718 | 0.402 | 0.890 | 0.941 | 0.997 | 4.561 | 0.609 | 0.273 |
-| 2Gaps | 4.585 | 0.276 | 0.655 | 0.858 | 0.753 | 3.627 | 0.599 | 0.218 |
-| 3Gaps | 3.194 | 0.252 | 0.579 | 0.030 | 0.746 | 2.570 | 0.617 | 0.121 |
+| Complete | 0.100 | 0.013 | 0.022 | 0.330 | 0.996 | 0.771 | 0.561 | 0.104 |
+| 1Gap | 0.100 | 0.009 | 0.016 | 0.554 | 1.000 | 0.782 | 0.557 | 0.106 |
+| 2Gaps | 0.100 | 0.009 | 0.016 | 0.565 | 1.000 | 0.782 | 0.557 | 0.106 |
+| 3Gaps | 0.109 | 0.000 | 0.000 | 0.996 | 1.000 | 0.811 | 0.549 | 0.112 |
 
-*Even after significantly increasing the intensity of the Particle Swarm Optimization (`n_particles: 50`, `n_runs: 200`), the parameters still vary significantly between scenarios (e.g. `p4` dropping from 0.914 to 0.030). This demonstrates that equifinality in conceptual hydrological models cannot always be "brute-forced" away simply by running longer calibrations, as different data gaps fundamentally shift the mathematical constraints available to the optimizer.*
+*Even after significantly increasing the intensity of the Differential Evolution Optimization (`n_particles: 100`, `n_runs: 5000`), the parameters still vary between scenarios (e.g. `p4` increasing from 0.330 to 0.996). This demonstrates that equifinality in conceptual hydrological models cannot always be "brute-forced" away simply by running longer calibrations, as different data gaps fundamentally shift the mathematical constraints available to the optimizer.*
 
 **Key Takeaways:**
 *   **Gap-Tolerant Calibration Works**: The model successfully calibrates parameters that generalize extremely well to the missing periods (True NSE remains > 0.95).
@@ -67,13 +67,13 @@ The 8-parameter `air2stream` equation parameters identified by PSO for each scen
 Below are the simulated vs observed time series calibration plots automatically generated during the runs. Notice that the modeled temperature gracefully skips and restarts across the gaps.
 
 ### 1. Complete
-![Complete Data Fit](plots/calibration_PSO_NSE_Complete.png)
+![Complete Data Fit](plots/calibration_DE_NSE_Complete.png)
 
 ### 2. 1-Gap
-![1-Gap Fit](plots/calibration_PSO_NSE_1Gap.png)
+![1-Gap Fit](plots/calibration_DE_NSE_1Gap.png)
 
 ### 3. 2-Gaps
-![2-Gaps Fit](plots/calibration_PSO_NSE_2Gaps.png)
+![2-Gaps Fit](plots/calibration_DE_NSE_2Gaps.png)
 
 ### 4. 3-Gaps
-![3-Gaps Fit](plots/calibration_PSO_NSE_3Gaps.png)
+![3-Gaps Fit](plots/calibration_DE_NSE_3Gaps.png)

@@ -19,8 +19,8 @@ def run_calibration(config_file):
     subprocess.run(["python", "-m", "pyair2stream.main", "--config", config_file], env={**os.environ, "PYTHONPATH": "../../"}, check=True)
 
 def extract_best_parameters(output_dir, station_name):
-    # Output file: 1_PSO_NSE_{station_name}_c_1d.out
-    pattern = os.path.join(output_dir, f"1_PSO_NSE_{station_name}_c_1d.out")
+    # Output file: 1_DE_NSE_{station_name}_c_1d.out
+    pattern = os.path.join(output_dir, f"1_DE_NSE_{station_name}_c_1d.out")
     files = glob.glob(pattern)
     if not files:
         raise FileNotFoundError(f"Could not find parameter file {pattern}")
