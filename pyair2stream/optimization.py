@@ -75,7 +75,7 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
         v[j, :] = v_rand[j, :] * dvmax
         pbest[j, :] = x[j, :]
 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+    with concurrent.futures.ProcessPoolExecutor() as executor:
         results = list(executor.map(eval_particle_worker, [(data, x[:, k], n_par) for k in range(n_particles)]))
 
         for k in range(n_particles):
