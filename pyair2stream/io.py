@@ -80,8 +80,12 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     elif data.runmode == 'DE':
         data.n_particles = int(opt_config.get('n_particles', 50)) # Using n_particles as population size
         # c1, c2, wmax, wmin not used for DE
+    elif data.runmode == 'DE-MCMC':
+        data.n_particles = int(opt_config.get('n_particles', 50)) # Using n_particles as population size for initial DE
+        data.mcmc_walkers = int(opt_config.get('mcmc_walkers', 32))
+        data.mcmc_steps = int(opt_config.get('mcmc_steps', 1000))
 
-    if data.runmode in ['PSO', 'LATHYP', 'DE']:
+    if data.runmode in ['PSO', 'LATHYP', 'DE', 'DE-MCMC']:
         bounds = config.get('parameter_bounds', {})
         vals_min = bounds.get('min', [])
         vals_max = bounds.get('max', [])

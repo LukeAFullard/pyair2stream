@@ -3,7 +3,7 @@ import time
 import matplotlib.pyplot as plt
 from pyair2stream.io import read_calibration, read_Tseries
 from pyair2stream.model import aggregation, statis, detect_segments, call_model, funcobj
-from pyair2stream.optimization import PSO_mode, DE_mode
+from pyair2stream.optimization import PSO_mode, DE_mode, DE_MCMC_mode
 from pyair2stream.sensitivity import sensitivity_analysis
 
 def run_calibration(config_path, mode):
@@ -20,6 +20,8 @@ def run_calibration(config_path, mode):
         PSO_mode(data)
     elif mode == 'DE':
         DE_mode(data)
+    elif mode == 'DE-MCMC':
+        DE_MCMC_mode(data)
     end_time = time.time()
 
     # Forward run
@@ -35,7 +37,7 @@ def run_calibration(config_path, mode):
     # Determine history file path
     history_file = os.path.join(data.folder, f"0_{mode}_{data.fun_obj}_{data.station}_{data.series}_{data.time_res}.csv")
 
-    return {
+    res = {
         'time': end_time - start_time,
         'objective': data.finalfit,
         'params': data.par_best.copy(),
@@ -46,6 +48,12 @@ def run_calibration(config_path, mode):
         'history_file': history_file
     }
 
+    if mode == 'DE-MCMC':
+        env_file = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+        res['env_file'] = env_file
+
+    return res
+
 def main():
     config_path = "examples/optimizer_comparison/config.yaml"
 
@@ -55,6 +63,9 @@ def main():
     print("\nRunning DE Calibration...")
     de_results = run_calibration(config_path, 'DE')
 
+    print("\nRunning DE-MCMC Calibration...")
+    demcmc_results = run_calibration(config_path, 'DE-MCMC')
+
     print("\n--- Results ---")
     print("PSO Time: {:.2f} seconds".format(pso_results['time']))
     print("PSO Objective: {:.6f}".format(pso_results['objective']))
@@ -63,6 +74,10 @@ def main():
     print("\nDE Time: {:.2f} seconds".format(de_results['time']))
     print("DE Objective: {:.6f}".format(de_results['objective']))
     print("DE Parameters:", [float(f"{p:.5f}") for p in de_results['params']])
+
+    print("\nDE-MCMC Time: {:.2f} seconds".format(demcmc_results['time']))
+    print("DE-MCMC Best Objective: {:.6f}".format(demcmc_results['objective']))
+    print("DE-MCMC Best Parameters:", [float(f"{p:.5f}") for p in demcmc_results['params']])
 
     # Plotting
     import pandas as pd
@@ -81,10 +96,18 @@ def main():
 
     plt.figure(figsize=(12, 6))
     plt.plot(dates, pso_results['obs_temp'][valid_mask], 'k.', label='Observed T_water', alpha=0.5)
+
+    if os.path.exists(demcmc_results['env_file']):
+        env_df = pd.read_csv(demcmc_results['env_file'])
+        # Extract valid envelope data matching valid_mask
+        # (the length should match the model array since it is printed row-for-row)
+        if len(env_df) == len(valid_mask):
+            plt.fill_between(dates, env_df['Twat_mod_p5'][valid_mask], env_df['Twat_mod_p95'][valid_mask], color='green', alpha=0.2, label='DE-MCMC 90% Envelope')
+
     plt.plot(dates, pso_results['mod_temp'][valid_mask], label='PSO Mod (NSE={:.3f})'.format(pso_results['objective']), alpha=0.7)
     plt.plot(dates, de_results['mod_temp'][valid_mask], '--', label='DE Mod (NSE={:.3f})'.format(de_results['objective']), alpha=0.7)
 
-    plt.title('pyair2stream Calibration: PSO vs Hybrid DE')
+    plt.title('pyair2stream Calibration: PSO vs Hybrid DE vs DE-MCMC')
     plt.ylabel('Water Temperature (°C)')
     plt.legend()
     plt.tight_layout()
@@ -104,6 +127,11 @@ def main():
         # The history includes phase 1 (DE) and phase 2 (L-BFGS-B).
         de_eff = df_de['eff_index'].cummax()
         plt.plot(range(1, len(de_eff) + 1), de_eff, label='Hybrid DE Cumulative Best NSE', color='green')
+
+    if os.path.exists(demcmc_results['history_file']):
+        df_demcmc = pd.read_csv(demcmc_results['history_file'])
+        demcmc_eff = df_demcmc['eff_index'].cummax()
+        plt.plot(range(1, len(demcmc_eff) + 1), demcmc_eff, label='DE-MCMC Cumulative Best NSE', color='blue', linestyle=':')
 
     plt.title('Optimization Convergence (NSE over Evaluations)')
     plt.xlabel('Number of Objective Function Evaluations')

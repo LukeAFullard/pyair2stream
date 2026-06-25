@@ -4,6 +4,7 @@ import pandas as pd
 from typing import Optional
 import concurrent.futures
 from scipy.optimize import differential_evolution, minimize
+import emcee
 
 from .config import CommonData
 from .model import call_model, funcobj, detect_segments
@@ -322,3 +323,134 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
     # Save history to CSV
     df = pd.DataFrame(history, columns=[f"par_{j+1}" for j in range(n_par)] + ["eff_index"])
     df.to_csv(output_filename, index=False)
+
+def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
+    """
+    Differential Evolution + L-BFGS-B followed by MCMC for uncertainty quantification.
+    """
+    print("Starting DE-MCMC Calibration Mode")
+    print("Phase 1 & 2: Finding best parameters using DE + L-BFGS-B")
+
+    # Run the standard DE mode first to find best parameters
+    # DE_mode sets data.par_best and data.finalfit
+    DE_mode(data, seed)
+
+    print("Phase 3: MCMC Uncertainty Analysis")
+    n_par = 8
+    nwalkers = data.mcmc_walkers
+    nsteps = data.mcmc_steps
+
+    if seed is not None:
+        np.random.seed(seed)
+
+    best_params = data.par_best[:n_par].copy()
+
+    # Determine which parameters are actively varying
+    active_params = []
+    for j in range(n_par):
+        if data.flag_par[j] and data.parmin[j] != data.parmax[j]:
+            active_params.append(j)
+
+    ndim = len(active_params)
+    if ndim == 0:
+        print("Warning: No active parameters for MCMC. Skipping MCMC phase.")
+        return
+
+    # Define log_probability function for emcee
+    def log_probability(theta):
+        # theta contains only the active parameters
+        p_vals = best_params.copy()
+        for idx, j in enumerate(active_params):
+            p_vals[j] = theta[idx]
+
+            # Check bounds
+            if p_vals[j] < data.parmin[j] or p_vals[j] > data.parmax[j]:
+                return -np.inf
+
+        data.par[:n_par] = p_vals
+        if data.gap_tolerant and data.segments is None:
+            detect_segments(data)
+        call_model(data)
+        eff_index = funcobj(data)
+
+        if np.isnan(eff_index):
+            return -np.inf
+
+        # Using raw objective function as pseudo-likelihood
+        # Higher is better for NSE/KGE/negated-RMS
+        # We don't divide by temperature here, it's just the raw value.
+        # Future enhancement: formal Gaussian log-likelihood
+        return eff_index
+
+    # Initialize walkers around best parameters
+    initial = np.array([best_params[j] for j in active_params])
+    p0 = initial + 1e-4 * np.random.randn(nwalkers, ndim)
+
+    # Ensure initial positions are within bounds
+    for i in range(nwalkers):
+        for idx, j in enumerate(active_params):
+            p0[i, idx] = np.clip(p0[i, idx], data.parmin[j], data.parmax[j])
+
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability)
+
+    print(f"Running MCMC for {nsteps} steps with {nwalkers} walkers...")
+    sampler.run_mcmc(p0, nsteps, progress=True)
+
+    # Save raw MCMC chain
+    chain = sampler.get_chain(flat=True)
+    chain_df = pd.DataFrame(chain, columns=[f"par_{j+1}" for j in active_params])
+
+    chain_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}.csv")
+    chain_df.to_csv(chain_filename, index=False)
+    print(f"Saved MCMC chain to {chain_filename}")
+
+    # Step 5: Compute Predictive Uncertainty Envelopes
+    print("Generating Predictive Uncertainty Envelopes...")
+    # Take 100 random samples from the flattened chain
+    n_samples = min(100, len(chain))
+    sample_indices = np.random.choice(len(chain), size=n_samples, replace=False)
+    samples = chain[sample_indices]
+
+    # Store simulated time series
+    ensemble_simulations = []
+
+    for i, theta in enumerate(samples):
+        p_vals = best_params.copy()
+        for idx, j in enumerate(active_params):
+            p_vals[j] = theta[idx]
+
+        data.par[:n_par] = p_vals
+
+        if data.gap_tolerant and data.segments is None:
+            detect_segments(data)
+
+        call_model(data)
+
+        # We only care about valid days for plotting/analysis (skipping warmup/gaps)
+        valid_mask = data.eval_mask
+        ensemble_simulations.append(data.Twat_mod.copy())
+
+    ensemble_simulations = np.array(ensemble_simulations)
+
+    # Calculate percentiles at each time step
+    perc_5 = np.percentile(ensemble_simulations, 5, axis=0)
+    perc_50 = np.percentile(ensemble_simulations, 50, axis=0)
+    perc_95 = np.percentile(ensemble_simulations, 95, axis=0)
+
+    # Export envelopes
+    env_df = pd.DataFrame({
+        'Year': data.date[:, 0],
+        'Month': data.date[:, 1],
+        'Day': data.date[:, 2],
+        'Twat_mod_p5': perc_5,
+        'Twat_mod_p50': perc_50,
+        'Twat_mod_p95': perc_95
+    })
+
+    env_filename = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+    env_df.to_csv(env_filename, index=False)
+    print(f"Saved predictive uncertainty envelopes to {env_filename}")
+
+    # Restore best parameters for forward pass
+    data.par[:n_par] = best_params.copy()
+    call_model(data)
