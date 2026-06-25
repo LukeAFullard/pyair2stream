@@ -375,12 +375,20 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
         if np.isnan(eff_index):
             return -np.inf
-
-        # Using raw objective function as pseudo-likelihood
-        # Higher is better for NSE/KGE/negated-RMS
-        # We don't divide by temperature here, it's just the raw value.
-        # Future enhancement: formal Gaussian log-likelihood
-        return eff_index
+        # Formal Concentrated Gaussian Log-Likelihood
+        valid_mask = (data.Twat_obs != -999.0)
+        if data.eval_mask is not None:
+            valid_mask &= data.eval_mask
+        mod_valid = data.Twat_mod[valid_mask]
+        obs_valid = data.Twat_obs[valid_mask]
+        N = len(obs_valid)
+        if N == 0:
+            return -np.inf
+        SSE = np.sum((mod_valid - obs_valid)**2)
+        if SSE == 0:
+            return np.inf
+        log_L = -0.5 * N * np.log(SSE / N)
+        return log_L
 
     # Initialize walkers around best parameters
     initial = np.array([best_params[j] for j in active_params])
@@ -409,8 +417,8 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
     # Step 5: Compute Predictive Uncertainty Envelopes
     print("Generating Predictive Uncertainty Envelopes...")
-    # Take 200 random samples from the flattened converged chain to make a dense, tight envelope
-    n_samples = min(200, len(chain))
+    # Take 1000 random samples from the flattened converged chain to make a robust envelope
+    n_samples = min(1000, len(chain))
     sample_indices = np.random.choice(len(chain), size=n_samples, replace=False)
     samples = chain[sample_indices]
 
@@ -429,9 +437,29 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
         call_model(data)
 
-        # We only care about valid days for plotting/analysis (skipping warmup/gaps)
-        valid_mask = data.eval_mask
-        ensemble_simulations.append(data.Twat_mod.copy())
+        # To build a true Prediction Interval (as opposed to just parameter confidence),
+        # we must add the observation error variance back into the simulations.
+        # We estimate sigma from the residuals of this specific parameter set.
+
+        valid_mask = (data.Twat_obs != -999.0)
+        if data.eval_mask is not None:
+            valid_mask &= data.eval_mask
+
+        mod_valid = data.Twat_mod[valid_mask]
+        obs_valid = data.Twat_obs[valid_mask]
+
+        N = len(obs_valid)
+        if N > 0:
+            SSE = np.sum((mod_valid - obs_valid)**2)
+            sigma = np.sqrt(SSE / N)
+        else:
+            sigma = 0.0
+
+        # Add random noise N(0, sigma) to simulate the full prediction uncertainty
+        noise = np.random.normal(0, sigma, data.n_tot)
+        noisy_simulation = data.Twat_mod + noise
+
+        ensemble_simulations.append(noisy_simulation)
 
     ensemble_simulations = np.array(ensemble_simulations)
 
