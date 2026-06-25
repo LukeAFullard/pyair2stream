@@ -1,0 +1,29 @@
+project_name: "calibration"
+station_name: "Alpha"
+series: "historical"
+time_resolution: "1d"
+version: 8
+Tice_cover: 0.0
+objective_function: "NSE"
+integrator: "RK4"
+run_mode: "DE-MCMC"
+prc: 1.0
+
+paths:
+  input_data: "examples/forward_prediction_intervals/historical_data.csv"
+  output_dir: "examples/forward_prediction_intervals"
+
+optimization:
+  n_runs: 50
+  mineff_index: -999.0
+  n_particles: 10
+  c1: 2.0
+  c2: 2.0
+  wmax: 0.9
+  wmin: 0.4
+  mcmc_walkers: 32
+  mcmc_steps: 1000
+
+parameter_bounds:
+  min: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  max: [5.0, 1.0, 1.0, 1.0, 5.0, 5.0, 1.0, 1.0]
