@@ -77,8 +77,11 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         data.c2 = np.float64(opt_config.get('c2', 2.0))
         data.wmax = np.float64(opt_config.get('wmax', 0.9))
         data.wmin = np.float64(opt_config.get('wmin', 0.4))
+    elif data.runmode == 'DE':
+        data.n_particles = int(opt_config.get('n_particles', 50)) # Using n_particles as population size
+        # c1, c2, wmax, wmin not used for DE
 
-    if data.runmode in ['PSO', 'LATHYP']:
+    if data.runmode in ['PSO', 'LATHYP', 'DE']:
         bounds = config.get('parameter_bounds', {})
         vals_min = bounds.get('min', [])
         vals_max = bounds.get('max', [])

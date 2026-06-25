@@ -33,7 +33,7 @@ version: 8                 # 3, 4, 5, 7, or 8 parameters
 Tice_cover: 0.0            # Threshold temperature for ice formation
 objective_function: "NSE"  # KGE, NSE, RMS
 integrator: "RK4"          # RK4, EUL, RK2, CRN
-run_mode: "PSO"            # PSO, LATHYP, or FORWARD
+run_mode: "PSO"            # PSO, LATHYP, FORWARD, or DE
 prc: 1.0                   # Minimum percentage of data in input: 0...1
 
 paths:

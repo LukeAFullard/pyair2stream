@@ -7,7 +7,7 @@ import pandas as pd
 
 from .io import read_calibration, read_Tseries
 from .model import call_model, aggregation, statis, funcobj
-from .optimization import forward_mode, PSO_mode, LH_mode
+from .optimization import forward_mode, PSO_mode, LH_mode, DE_mode
 from .config import CommonData
 from .post_processing import post_process
 from .sensitivity import sensitivity_analysis
@@ -200,6 +200,8 @@ def main():
         PSO_mode(data)
     elif data.runmode == 'LATHYP':
         LH_mode(data)
+    elif data.runmode == 'DE':
+        DE_mode(data)
 
     forward(data)
 
