@@ -117,6 +117,14 @@ def post_process(data: CommonData, toll: float = None):
         # Create datetime index
         dates = pd.to_datetime(df[['Year', 'Month', 'Day']])
 
+        # Filter down the plotting range to the span of available observation data
+        obs_valid_indices = np.where(df['Twat_obs_agg'].notna())[0]
+        if len(obs_valid_indices) > 0:
+            start_idx = obs_valid_indices[0]
+            end_idx = obs_valid_indices[-1]
+            df = df.iloc[start_idx:end_idx+1].copy()
+            dates = dates.iloc[start_idx:end_idx+1].copy()
+
         # Calculate RMSE
         # df has columns: 'Year', 'Month', 'Day', 'Tair', 'Twat_obs', 'Twat_mod', 'Twat_obs_agg', 'Twat_mod_agg', 'Q'
         valid_mask = df['Twat_obs_agg'].notna() & df['Twat_mod_agg'].notna()
@@ -125,8 +133,17 @@ def post_process(data: CommonData, toll: float = None):
         else:
             rmse = np.nan
 
-        fig, ax = plt.subplots(figsize=(18/2.54, 10/2.54))
-        ax.set_title(f"{title_prefix}, RMSE={rmse:.4f}\u00B0C")
+        fig, (ax, ax_res) = plt.subplots(2, 1, figsize=(18/2.54, 14/2.54), gridspec_kw={'height_ratios': [3, 1]}, sharex=True)
+
+        # Check if Forward Prediction or MCMC Envelopes exist
+        env_file_fwd = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+        env_file_mcmc = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+        env_file = env_file_mcmc if os.path.exists(env_file_mcmc) else env_file_fwd
+
+        if os.path.exists(env_file_mcmc):
+            ax.set_title(f"Historical Calibration with 90% Prediction Interval, RMSE={rmse:.4f}\u00B0C")
+        else:
+            ax.set_title(f"Forward Projection with 90% Prediction Interval, RMSE={rmse:.4f}\u00B0C" if len(env_file_fwd) else f"{title_prefix}, RMSE={rmse:.4f}\u00B0C")
 
         # Plot temperatures on primary y-axis
         l1 = ax.plot(dates, df['Tair'], '.', color=light_blue, label='Air temperature', markersize=2)
@@ -139,24 +156,9 @@ def post_process(data: CommonData, toll: float = None):
         mod_series = mod_series.combine_first(df['Twat_mod'])
 
 
-        # Check if Forward Prediction or MCMC Envelopes exist
-        env_file_fwd = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
-        env_file_mcmc = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
-
-        env_file = env_file_mcmc if os.path.exists(env_file_mcmc) else env_file_fwd
-
-        l_env = []
-        if os.path.exists(env_file):
-            env_df = pd.read_csv(env_file)
-            if len(env_df) > 365:
-                env_df = env_df.iloc[365:].copy()
-            # Only fill if lengths match
-            if len(env_df) == len(dates):
-                l_env = [ax.fill_between(dates, env_df['Twat_mod_p5'], env_df['Twat_mod_p95'], color='green', alpha=0.3, label='90% Prediction Interval')]
 
         l3 = ax.plot(dates, mod_series, '.', color=orange, label='Simulated water temperature', markersize=2)
 
-        ax.set_xlabel('Time')
         ax.set_ylabel('Temperature [\u00B0C]')
 
         # Plot discharge on secondary y-axis
@@ -166,6 +168,18 @@ def post_process(data: CommonData, toll: float = None):
         ax2.set_ylim(bottom=0) # Discharge shouldn't be negative
 
         # Combine legends
+        l_env = []
+        if os.path.exists(env_file):
+            env_df = pd.read_csv(env_file)
+            # Clip MCMC dataframe to match the visual slice
+            if len(env_df) > 365:
+                env_df = env_df.iloc[365:].copy()
+            if 'start_idx' in locals() and len(env_df) > end_idx:
+                env_df = env_df.iloc[start_idx:end_idx+1].copy()
+
+            if len(env_df) == len(dates):
+                l_env = [ax.fill_between(dates, env_df['Twat_mod_p5'], env_df['Twat_mod_p95'], color='green', alpha=0.3, label='90% Prediction Interval')]
+
         lines = l1 + l2 + l3 + l4
         if l_env:
             # We add a proxy artist for the fill_between to show up nicely in the legend
@@ -176,7 +190,15 @@ def post_process(data: CommonData, toll: float = None):
         labels = [l.get_label() for l in lines]
         ax.legend(lines, labels, loc='lower right')
 
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b-%y'))
+        # Residuals plot
+        residuals = mod_series - df['Twat_obs_agg']
+        ax_res.plot(dates, residuals, '.', color='purple', markersize=2, label='Residuals')
+        ax_res.axhline(0, color='black', linewidth=1, linestyle='--')
+        ax_res.set_ylabel('Residuals [\u00B0C]')
+        ax_res.grid(True, alpha=0.3)
+
+        ax_res.set_xlabel('Time')
+        ax_res.xaxis.set_major_formatter(mdates.DateFormatter('%b-%y'))
         fig.autofmt_xdate()
 
         plt.tight_layout()
