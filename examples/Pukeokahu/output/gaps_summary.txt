@@ -1,19 +1,20 @@
 === pyair2stream Gap Summary ===
 Qmedia source: Computed
-Qmedia value: 2089079.17517
+Qmedia value: 2090554.51357
 T_air missing fraction: 6464/9942 (65.02%)
 Q missing fraction: 23/9942 (0.23%)
-Segments found: 11
-  Segment 0: 2015-12-12 to 2017-07-26 (length: 593 days)
-  Segment 1: 2017-07-28 to 2018-02-08 (length: 196 days)
-  Segment 2: 2018-02-11 to 2018-04-17 (length: 66 days)
-  Segment 3: 2018-07-07 to 2018-08-15 (length: 40 days)
-  Segment 4: 2018-12-15 to 2019-02-18 (length: 66 days)
-  Segment 5: 2019-03-24 to 2019-05-24 (length: 62 days)
-  Segment 6: 2019-05-29 to 2023-03-23 (length: 1395 days)
-  Segment 7: 2023-03-31 to 2024-01-10 (length: 286 days)
-  Segment 8: 2024-03-08 to 2025-04-29 (length: 418 days)
-  Segment 9: 2025-05-01 to 2025-06-10 (length: 41 days)
-  Segment 10: 2025-06-12 to 2025-12-15 (length: 187 days)
-Total valid forcing days: 3350
+Segments found: 12
+  Segment 0: 2015-12-12 to 2017-05-12 (length: 518 days)
+  Segment 1: 2017-05-14 to 2017-07-26 (length: 74 days)
+  Segment 2: 2017-07-28 to 2018-02-08 (length: 196 days)
+  Segment 3: 2018-02-11 to 2018-04-17 (length: 66 days)
+  Segment 4: 2018-07-07 to 2018-08-15 (length: 40 days)
+  Segment 5: 2018-12-15 to 2019-02-18 (length: 66 days)
+  Segment 6: 2019-03-24 to 2019-05-24 (length: 62 days)
+  Segment 7: 2019-05-29 to 2023-03-23 (length: 1395 days)
+  Segment 8: 2023-03-31 to 2024-01-10 (length: 286 days)
+  Segment 9: 2024-03-08 to 2025-04-29 (length: 418 days)
+  Segment 10: 2025-05-01 to 2025-06-05 (length: 36 days)
+  Segment 11: 2025-06-12 to 2025-12-15 (length: 187 days)
+Total valid forcing days: 3344
 T_water observations used in calibration: 9718

@@ -29,6 +29,9 @@ def analyze_timeseries(df, output_plot_path=None, output_summary_path=None, gap_
     for col in ['T_air', 'T_water', 'Discharge']:
         if col in df.columns:
             df.loc[df[col] == -999.0, col] = np.nan
+            if col == 'Discharge':
+                # Treat zero or negative discharge as missing data to prevent mathematical errors in the ODE
+                df.loc[df[col] <= 0.0, col] = np.nan
 
     # Calculate missing percentages
     total_days = len(df)
