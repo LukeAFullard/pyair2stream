@@ -139,8 +139,12 @@ def post_process(data: CommonData, toll: float = None):
         mod_series = mod_series.combine_first(df['Twat_mod'])
 
 
-        # Check if Forward Prediction Envelopes exist
-        env_file = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+        # Check if Forward Prediction or MCMC Envelopes exist
+        env_file_fwd = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+        env_file_mcmc = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+
+        env_file = env_file_mcmc if os.path.exists(env_file_mcmc) else env_file_fwd
+
         l_env = []
         if os.path.exists(env_file):
             env_df = pd.read_csv(env_file)

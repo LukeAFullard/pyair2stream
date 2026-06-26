@@ -6,7 +6,7 @@ version: 8
 Tice_cover: 0.0
 objective_function: "NSE"
 integrator: "RK4"
-run_mode: "DE-MCMC"
+run_mode: "FORWARD"
 prc: 1.0
 
 paths:
@@ -27,5 +27,10 @@ optimization:
 parameter_bounds:
   min: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
   max: [10.0, 1.0, 1.0, 1.0, 1.0, 10.0, 1.0, 1.0]
+
+parameters_forward: [8.638296776461837, 0.4062832845022306, 0.9976326979021999, 0.5834581905081173, 0.7973646705360472, 9.705910560421763, 0.3475933033747837, 0.8028015532075821]
+
+sensitivity_analysis: true
+sensitivity_perturbations: [1.0, 5.0, 10.0]
 
 gap_tolerant: true

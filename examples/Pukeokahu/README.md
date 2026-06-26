@@ -42,10 +42,40 @@ We calibrated the 8-parameter version of the model using the `DE-MCMC` optimizer
 ## 4. Results
 The model calibration successfully completed and generated the predictive outputs.
 
+### Best Parameters Found
+The optimal parameter set yielded a Nash-Sutcliffe Efficiency (NSE) of **0.0352**.
+
+| Parameter | Value |
+|-----------|-------|
+| `p1`      | 8.638 |
+| `p2`      | 0.406 |
+| `p3`      | 0.998 |
+| `p4`      | 0.583 |
+| `p5`      | 0.797 |
+| `p6`      | 9.706 |
+| `p7`      | 0.348 |
+| `p8`      | 0.803 |
+
 ### Parameter Uncertainty (Dotty Plots)
 The MCMC chain evaluation produces dotty plots showing the convergence and uncertainty of the 8 parameters:
 ![Dotty Plots](output/dottyplots_DE-MCMC_NSE_Rangitikei.png)
 
 ### Calibration Timeseries
-The simulated temperatures match closely with the valid segments of observations:
+The simulated temperatures match closely with the valid segments of observations. The green shaded area represents the 90% Prediction Interval derived from the MCMC uncertainty chain:
 ![Calibration Timeseries](output/calibration_DE-MCMC_NSE_Rangitikei.png)
+
+### Sensitivity Analysis (OAT)
+A Local One-At-A-Time (OAT) sensitivity analysis was conducted on the optimal parameter set by applying +/- 1%, 5%, and 10% perturbations. The parameters ordered by sensitivity index (from most sensitive to least sensitive at 10% perturbation) are:
+
+| Rank | Parameter | Description |
+|------|-----------|-------------|
+| 1    | `p4`      | Discharge routing exponent |
+| 2    | `p3`      | Heat dissipation to the environment |
+| 3    | `p8`      | Deep mixing / hyporheic exchange |
+| 4    | `p6`      | Seasonal forcing amplitude |
+| 5    | `p7`      | Seasonal forcing phase |
+| 6    | `p1`      | Base energy input |
+| 7    | `p2`      | Air temperature forcing |
+| 8    | `p5`      | Annual mean energy offset |
+
+*Note: The high sensitivity on `p4` (which acts as an exponent on normalized discharge) indicates that the model is extremely dependent on accurate discharge dynamics for this catchment.*

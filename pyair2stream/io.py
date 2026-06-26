@@ -87,16 +87,16 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         data.mcmc_walkers = int(opt_config.get('mcmc_walkers', 32))
         data.mcmc_steps = int(opt_config.get('mcmc_steps', 1000))
 
-    if data.runmode in ['PSO', 'LATHYP', 'DE', 'DE-MCMC']:
-        bounds = config.get('parameter_bounds', {})
-        vals_min = bounds.get('min', [])
-        vals_max = bounds.get('max', [])
+    bounds = config.get('parameter_bounds', {})
+    vals_min = bounds.get('min', [])
+    vals_max = bounds.get('max', [])
 
-        if len(vals_min) > 0:
-            data.parmin[:min(len(vals_min), n_par)] = [np.float64(x) for x in vals_min[:min(len(vals_min), n_par)]]
-        if len(vals_max) > 0:
-            data.parmax[:min(len(vals_max), n_par)] = [np.float64(x) for x in vals_max[:min(len(vals_max), n_par)]]
+    if len(vals_min) > 0:
+        data.parmin[:min(len(vals_min), n_par)] = [np.float64(x) for x in vals_min[:min(len(vals_min), n_par)]]
+    if len(vals_max) > 0:
+        data.parmax[:min(len(vals_max), n_par)] = [np.float64(x) for x in vals_max[:min(len(vals_max), n_par)]]
 
+    if data.runmode in ['PSO', 'LATHYP', 'DE', 'DE-MCMC', 'FORWARD']:
         # NOTE: 0-indexed in Python vs 1-indexed in Fortran
         # Fortran: parmin(4)=0 -> Python: parmin[3]=0
 
