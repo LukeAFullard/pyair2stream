@@ -42,6 +42,20 @@ We calibrated the 8-parameter version of the model using the `DE-MCMC` optimizer
 ## 4. Results
 The model calibration successfully completed and generated the predictive outputs.
 
+### Best Parameters Found
+The optimal parameter set yielded a Nash-Sutcliffe Efficiency (NSE) of **0.0352**.
+
+| Parameter | Value |
+|-----------|-------|
+| `p1`      | 8.638 |
+| `p2`      | 0.406 |
+| `p3`      | 0.998 |
+| `p4`      | 0.583 |
+| `p5`      | 0.797 |
+| `p6`      | 9.706 |
+| `p7`      | 0.348 |
+| `p8`      | 0.803 |
+
 ### Parameter Uncertainty (Dotty Plots)
 The MCMC chain evaluation produces dotty plots showing the convergence and uncertainty of the 8 parameters:
 ![Dotty Plots](output/dottyplots_DE-MCMC_NSE_Rangitikei.png)
