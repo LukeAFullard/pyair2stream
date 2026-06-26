@@ -77,7 +77,9 @@ The parameters ordered by sensitivity index (from most sensitive to least sensit
 | 2    | `p7`      | Seasonal forcing phase |
 | 3    | `p1`      | Base energy input |
 | 4    | `p8`      | Deep mixing / hyporheic exchange |
-| 5    | `p2`      | Air temperature forcing |
+| 5    | `p4`      | Discharge routing exponent |
 | 6    | `p6`      | Seasonal forcing amplitude |
-| 7    | `p5`      | Annual mean energy offset |
-| 8    | `p4`      | Discharge routing exponent |
+| 7    | `p2`      | Air temperature forcing |
+| 8    | `p5`      | Annual mean energy offset |
+
+*(Note: During OAT sensitivity analysis, modifying parameter `p4` across very long segments with low discharge can trigger numerical instability loops in the Runge-Kutta solver. The sensitivity calculation explicitly ignores these physically impossible numerical explosions to capture the true base sensitivity).*
