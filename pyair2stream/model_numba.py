@@ -95,13 +95,20 @@ def fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, Tw, time, Q
         return p1 + p2 * Ta - p3 * Tw + p6 * math.cos(2.0 * PI * (time - p7))
     elif version == 8:
         theta = QQ / Qmedia
-        DD = theta ** p4
+        if theta <= 0.0:
+            DD = 1e-10
+        else:
+            DD = theta ** p4
         return (p1 + p2 * Ta - p3 * Tw + theta * (p5 + p6 * math.cos(2.0 * PI * (time - p7)) - p8 * Tw)) / DD
     elif version == 7:
         theta = QQ / Qmedia
         return p1 + p2 * Ta - p3 * Tw + theta * (p5 + p6 * math.cos(2.0 * PI * (time - p7)) - p8 * Tw)
     elif version == 4:
-        DD = (QQ / Qmedia) ** p4
+        theta = QQ / Qmedia
+        if theta <= 0.0:
+            DD = 1e-10
+        else:
+            DD = theta ** p4
         return (p1 + p2 * Ta - p3 * Tw) / DD
     else:
         return 0.0
@@ -113,7 +120,12 @@ def fast_run_integration(Tair, Q, tt, Twat_mod, Tice_cover, Qmedia, version, mod
     if mod_num_idx == 0: # CRN
         if version in (8, 7, 4):
             theta = Q / Qmedia
-            DD = theta ** p4
+            DD = np.empty_like(theta)
+            for i in range(len(theta)):
+                if theta[i] <= 0.0:
+                    DD[i] = 1e-10
+                else:
+                    DD[i] = theta[i] ** p4
             denom_term = 1.0 + 0.5 * p8 * theta / DD + 0.5 * p3 / DD
 
             for s in range(len(segments)):
