@@ -27,7 +27,7 @@ def detect_segments(data: CommonData) -> None:
         is_valid = True
         if data.Tair[i] == -999.0:
             is_valid = False
-        if data.version not in [3, 5] and data.Q[i] == -999.0:
+        if data.version not in [3, 5] and (data.Q[i] == -999.0 or data.Q[i] <= 0.0):
             is_valid = False
 
         if is_valid:

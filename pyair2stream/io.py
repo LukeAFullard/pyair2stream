@@ -199,8 +199,8 @@ def read_Tseries(data: CommonData, p: str) -> None:
     data.n_tot = n_tot
     data.n_dat = n_tot  # Based on other parts of codebase, usually n_dat starts as n_tot. Aggregation changes n_dat.
 
-    # Calculate Qmedia ignoring -999.0
-    valid_Q_mask = Q != -999.0
+    # Calculate Qmedia ignoring -999.0 and <= 0.0
+    valid_Q_mask = (Q != -999.0) & (Q > 0.0)
     computed_qmedia = np.float64(0.0)
     if np.any(valid_Q_mask):
         computed_qmedia = np.float64(np.mean(Q[valid_Q_mask]))

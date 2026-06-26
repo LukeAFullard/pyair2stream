@@ -211,11 +211,19 @@ def post_process(data: CommonData, toll: float = None):
 
 
 
-        ax.set_title("Forward Projection with 90% Prediction Interval")
         l1 = ax.plot(dates, Tair, '.', color=light_blue, label='Air temperature', markersize=2)
 
         l_env = []
-        env_file = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+        env_file_fwd = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+        env_file_mcmc = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+
+        env_file = env_file_mcmc if os.path.exists(env_file_mcmc) else env_file_fwd
+
+        if os.path.exists(env_file_mcmc):
+            ax.set_title("Historical Calibration with 90% Prediction Interval")
+        else:
+            ax.set_title("Forward Projection with 90% Prediction Interval")
+
         if os.path.exists(env_file):
             env_df = pd.read_csv(env_file)
             # the env_df has the same initial padding mapping
