@@ -143,7 +143,7 @@ def post_process(data: CommonData, toll: float = None):
         if os.path.exists(env_file_mcmc):
             ax.set_title(f"Historical Calibration with 90% Prediction Interval, RMSE={rmse:.4f}\u00B0C")
         else:
-            ax.set_title(f"Forward Projection with 90% Prediction Interval, RMSE={rmse:.4f}\u00B0C" if len(env_file_fwd) else f"{title_prefix}, RMSE={rmse:.4f}\u00B0C")
+            ax.set_title(f"Forward Projection with 90% Prediction Interval, RMSE={rmse:.4f}\u00B0C" if os.path.exists(env_file_fwd) else f"{title_prefix}, RMSE={rmse:.4f}\u00B0C")
 
         # Plot temperatures on primary y-axis
         l1 = ax.plot(dates, df['Tair'], '.', color=light_blue, label='Air temperature', markersize=2)
@@ -231,7 +231,10 @@ def post_process(data: CommonData, toll: float = None):
             Twat_mod = data.Twat_mod[valid_dates_mask]
             Q = data.Q[valid_dates_mask]
 
-
+        # Replace sentinel values with NaN so they break the plot line rather than dropping to -999.0
+        Tair = np.where(Tair == -999.0, np.nan, Tair)
+        Twat_mod = np.where(Twat_mod == -999.0, np.nan, Twat_mod)
+        Q = np.where((Q == -999.0) | (Q <= 0.0), np.nan, Q)
 
         l1 = ax.plot(dates, Tair, '.', color=light_blue, label='Air temperature', markersize=2)
 

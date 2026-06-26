@@ -29,8 +29,9 @@ def sensitivity_analysis(data: CommonData):
         detect_segments(data)
     call_model(data)
 
-    # Determine valid indices (to skip warmup)
-    valid_mask = data.Twat_mod != -999.0
+    # Determine valid indices based on where we actually have reliable water temperature
+    # observations AND where the model was validly evaluated.
+    valid_mask = data.eval_mask & (data.Twat_obs != -999.0)
 
     if data.gap_tolerant and data.segments is not None:
         for start, end in data.segments:
@@ -104,11 +105,17 @@ def sensitivity_analysis(data: CommonData):
             twat_minus = data.Twat_mod.copy()
 
             # Compute mean absolute difference in the time series per unit change in normalized parameter
-            diff = np.abs(twat_plus[valid_mask] - twat_minus[valid_mask])
-            mean_diff = np.mean(diff)
+            # We filter out physically impossible temperatures (> 50C) that occur when RK4 numerical instability explodes
+            # due to perturbed parameter scaling terms (like p4) crossing an instability threshold.
+            stable_mask = valid_mask & (twat_plus < 50.0) & (twat_minus < 50.0)
 
-            # Normalize sensitivity index based on the parameter's actual scale
-            sens_index = mean_diff / (actual_delta / base_scale)
+            if stable_mask.sum() > 0:
+                diff = np.abs(twat_plus[stable_mask] - twat_minus[stable_mask])
+                mean_diff = np.mean(diff)
+                # Normalize sensitivity index based on the parameter's actual scale
+                sens_index = mean_diff / (actual_delta / base_scale)
+            else:
+                sens_index = np.nan
 
             sensitivities.append({
                 "Parameter": f"par_{j+1}",
