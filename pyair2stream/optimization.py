@@ -106,6 +106,7 @@ def forward_mode(data: CommonData) -> None:
 
             noise = np.random.normal(0, sigma, data.n_tot)
             noisy_simulation = data.Twat_mod + noise
+
             ensemble_simulations.append(noisy_simulation)
 
         ensemble_simulations = np.array(ensemble_simulations)
@@ -113,6 +114,11 @@ def forward_mode(data: CommonData) -> None:
         perc_5 = np.percentile(ensemble_simulations, 5, axis=0)
         perc_50 = np.percentile(ensemble_simulations, 50, axis=0)
         perc_95 = np.percentile(ensemble_simulations, 95, axis=0)
+
+        # Replace calculated percentiles with NaN where the base model has missing data gaps
+        perc_5 = np.where(data.Twat_mod == -999.0, np.nan, perc_5)
+        perc_50 = np.where(data.Twat_mod == -999.0, np.nan, perc_50)
+        perc_95 = np.where(data.Twat_mod == -999.0, np.nan, perc_95)
 
         env_df = pd.DataFrame({
             'Year': data.date[:, 0],
@@ -560,6 +566,11 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     perc_5 = np.percentile(ensemble_simulations, 5, axis=0)
     perc_50 = np.percentile(ensemble_simulations, 50, axis=0)
     perc_95 = np.percentile(ensemble_simulations, 95, axis=0)
+
+    # Replace calculated percentiles with NaN where the base model has missing data gaps
+    perc_5 = np.where(data.Twat_mod == -999.0, np.nan, perc_5)
+    perc_50 = np.where(data.Twat_mod == -999.0, np.nan, perc_50)
+    perc_95 = np.where(data.Twat_mod == -999.0, np.nan, perc_95)
 
     # Export envelopes
     env_df = pd.DataFrame({

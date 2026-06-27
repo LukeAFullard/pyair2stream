@@ -125,13 +125,23 @@ def post_process(data: CommonData, toll: float = None):
             df = df.iloc[start_idx:end_idx+1].copy()
             dates = dates.iloc[start_idx:end_idx+1].copy()
 
-        # Calculate RMSE
+        # Calculate goodness of fit metrics
         # df has columns: 'Year', 'Month', 'Day', 'Tair', 'Twat_obs', 'Twat_mod', 'Twat_obs_agg', 'Twat_mod_agg', 'Q'
         valid_mask = df['Twat_obs_agg'].notna() & df['Twat_mod_agg'].notna()
         if valid_mask.sum() > 0:
-            rmse = np.sqrt(np.mean((df.loc[valid_mask, 'Twat_obs_agg'] - df.loc[valid_mask, 'Twat_mod_agg'])**2))
+            obs = df.loc[valid_mask, 'Twat_obs_agg']
+            mod = df.loc[valid_mask, 'Twat_mod_agg']
+            rmse = np.sqrt(np.mean((obs - mod)**2))
+            mae = np.mean(np.abs(obs - mod))
+
+            # R2 calculation
+            ss_res = np.sum((obs - mod)**2)
+            ss_tot = np.sum((obs - np.mean(obs))**2)
+            r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else np.nan
         else:
             rmse = np.nan
+            mae = np.nan
+            r2 = np.nan
 
         fig, (ax, ax_res) = plt.subplots(2, 1, figsize=(18/2.54, 14/2.54), gridspec_kw={'height_ratios': [3, 1]}, sharex=True)
 
@@ -140,10 +150,13 @@ def post_process(data: CommonData, toll: float = None):
         env_file_mcmc = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
         env_file = env_file_mcmc if os.path.exists(env_file_mcmc) else env_file_fwd
 
+        metrics_str = f"R²={r2:.3f}, RMSE={rmse:.2f}\u00B0C, MAE={mae:.2f}\u00B0C"
+
         if os.path.exists(env_file_mcmc):
-            ax.set_title(f"Historical Calibration with 90% Prediction Interval, RMSE={rmse:.4f}\u00B0C")
+            ax.set_title(f"Historical Calibration with 90% Prediction Interval\n{metrics_str}")
         else:
-            ax.set_title(f"Forward Projection with 90% Prediction Interval, RMSE={rmse:.4f}\u00B0C" if os.path.exists(env_file_fwd) else f"{title_prefix}, RMSE={rmse:.4f}\u00B0C")
+            title_text = "Forward Projection with 90% Prediction Interval" if os.path.exists(env_file_fwd) else title_prefix
+            ax.set_title(f"{title_text}\n{metrics_str}")
 
         # Plot temperatures on primary y-axis
         l1 = ax.plot(dates, df['Tair'], '.', color=light_blue, label='Air temperature', markersize=2)
@@ -178,6 +191,10 @@ def post_process(data: CommonData, toll: float = None):
                 env_df = env_df.iloc[start_idx:end_idx+1].copy()
 
             if len(env_df) == len(dates):
+                # Ensure backward compatibility with legacy MCMC files containing -999.0
+                env_df['Twat_mod_p5'] = np.where(env_df['Twat_mod_p5'] == -999.0, np.nan, env_df['Twat_mod_p5'])
+                env_df['Twat_mod_p95'] = np.where(env_df['Twat_mod_p95'] == -999.0, np.nan, env_df['Twat_mod_p95'])
+
                 l_env = [ax.fill_between(dates, env_df['Twat_mod_p5'], env_df['Twat_mod_p95'], color='green', alpha=0.3, label='90% Prediction Interval')]
 
         lines = l1 + l2 + l3 + l4
@@ -256,6 +273,10 @@ def post_process(data: CommonData, toll: float = None):
             if len(env_df) > 365:
                 env_df = env_df.iloc[365:].copy()
             if len(env_df) == len(dates):
+                # Ensure backward compatibility with legacy MCMC files containing -999.0
+                env_df['Twat_mod_p5'] = np.where(env_df['Twat_mod_p5'] == -999.0, np.nan, env_df['Twat_mod_p5'])
+                env_df['Twat_mod_p95'] = np.where(env_df['Twat_mod_p95'] == -999.0, np.nan, env_df['Twat_mod_p95'])
+
                 l_env = [ax.fill_between(dates, env_df['Twat_mod_p5'], env_df['Twat_mod_p95'], color='green', alpha=0.3, label='90% Prediction Interval')]
 
         l3 = ax.plot(dates, Twat_mod, '-', color=orange, label='Simulated median water temp.', linewidth=1.5)
