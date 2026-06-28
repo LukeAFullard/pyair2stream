@@ -223,9 +223,22 @@ def post_process(data: CommonData, toll: float = None):
         # Calculate goodness of fit metrics
         # df has columns: 'Year', 'Month', 'Day', 'Tair', 'Twat_obs', 'Twat_mod', 'Twat_obs_agg', 'Twat_mod_agg', 'Q'
         valid_mask = df['Twat_obs_agg'].notna() & df['Twat_mod_agg'].notna()
+
+        # Calculate number of active parameters (k)
+        k = 0
+        if data.flag_par is not None and data.parmin is not None and data.parmax is not None:
+            for j in range(len(data.flag_par)):
+                if data.flag_par[j] and data.parmin[j] != data.parmax[j]:
+                    k += 1
+
+        aic = np.nan
+        bic = np.nan
+
         if valid_mask.sum() > 0:
             obs = df.loc[valid_mask, 'Twat_obs_agg']
             mod = df.loc[valid_mask, 'Twat_mod_agg']
+            n = len(obs)
+
             rmse = np.sqrt(np.mean((obs - mod)**2))
             mae = np.mean(np.abs(obs - mod))
 
@@ -233,6 +246,20 @@ def post_process(data: CommonData, toll: float = None):
             ss_res = np.sum((obs - mod)**2)
             ss_tot = np.sum((obs - np.mean(obs))**2)
             r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else np.nan
+
+            # AIC and BIC calculation
+            if n > 0 and ss_res > 0:
+                aic = n * np.log(ss_res / n) + 2 * k
+                bic = n * np.log(ss_res / n) + k * np.log(n)
+
+            # Export Metrics Summary
+            metrics_df = pd.DataFrame({
+                'Metric': ['R2', 'RMSE', 'MAE', 'AIC', 'BIC'],
+                'Value': [r2, rmse, mae, aic, bic]
+            })
+            metrics_csv = os.path.join(data.folder, f"goodness_of_fit_{output_name}_{data.runmode}_{data.fun_obj}_{data.station}.csv")
+            metrics_df.to_csv(metrics_csv, index=False)
+
         else:
             rmse = np.nan
             mae = np.nan
@@ -245,7 +272,7 @@ def post_process(data: CommonData, toll: float = None):
         env_file_mcmc = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
         env_file = env_file_mcmc if os.path.exists(env_file_mcmc) else env_file_fwd
 
-        metrics_str = f"R²={r2:.3f}, RMSE={rmse:.2f}\u00B0C, MAE={mae:.2f}\u00B0C"
+        metrics_str = f"R²={r2:.3f}, RMSE={rmse:.2f}°C, MAE={mae:.2f}°C\nAIC={aic:.1f}, BIC={bic:.1f}"
 
         if os.path.exists(env_file_mcmc):
             ax.set_title(f"Historical Calibration with 90% Prediction Interval\n{metrics_str}")
