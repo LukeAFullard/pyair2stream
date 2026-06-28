@@ -6,7 +6,7 @@ version: 8
 Tice_cover: 0.0
 objective_function: "NSE"
 integrator: "RK4"
-run_mode: "FORWARD"
+run_mode: "DE-MCMC"
 prc: 1.0
 
 paths:
@@ -15,7 +15,7 @@ paths:
 
 optimization:
   n_runs: 2000
-  mineff_index: 0.0
+  mineff_index: -999.0
   n_particles: 100
   c1: 2.0
   c2: 2.0
@@ -25,10 +25,8 @@ optimization:
   mcmc_steps: 1000
 
 parameter_bounds:
-  min: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  max: [10.0, 1.0, 1.0, 1.0, 1.0, 10.0, 1.0, 1.0]
-
-parameters_forward: [8.638296776461837, 0.4062832845022306, 0.9976326979021999, 0.5834581905081173, 0.7973646705360472, 9.705910560421763, 0.3475933033747837, 0.8028015532075821]
+  min: [-20.0, 0.0, 0.0, 0.0, -20.0, 0.0, 0.0, 0.0]
+  max: [20.0, 2.0, 5.0, 1.0, 20.0, 20.0, 1.0, 5.0]
 
 sensitivity_analysis: true
 sensitivity_perturbations: [1.0, 5.0, 10.0]
