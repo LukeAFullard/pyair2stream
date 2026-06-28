@@ -18,3 +18,7 @@ def convert(txt_file, csv_file):
 
 convert('examples/validation/Switzerland/DAV_2327_cc.txt', 'examples/validation/Switzerland/DAV_2327_cc.csv')
 convert('examples/validation/Switzerland/DAV_2327_cv.txt', 'examples/validation/Switzerland/DAV_2327_cv.csv')
+convert('examples/validation/Switzerland/MAH_2369_cc.txt', 'examples/validation/Switzerland/MAH_2369_cc.csv')
+convert('examples/validation/Switzerland/MAH_2369_cv.txt', 'examples/validation/Switzerland/MAH_2369_cv.csv')
+convert('examples/validation/Switzerland/SIO_2011_cc.txt', 'examples/validation/Switzerland/SIO_2011_cc.csv')
+convert('examples/validation/Switzerland/SIO_2011_cv.txt', 'examples/validation/Switzerland/SIO_2011_cv.csv')

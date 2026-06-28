@@ -6,10 +6,18 @@ version: 8
 Tice_cover: 0.0
 objective_function: "NSE"
 integrator: "RK4"
-run_mode: "FORWARD"
-parameters_forward: [4.794, 0.629, 1.41, 0.27, 0.0, 4.912, 0.582, 0.637]
+run_mode: "DE"
+mineff_index: -999.0
 
 paths:
   input_data: "examples/validation/Switzerland/DAV_2327_cc.csv"
   validation_data: "examples/validation/Switzerland/DAV_2327_cv.csv"
-  output_dir: "examples/validation/Switzerland/output_forward"
+  output_dir: "examples/validation/Switzerland/output_8"
+
+optimization:
+  n_runs: 3000
+  n_particles: 100
+
+parameter_bounds:
+  min: [-5.0, -5.0, -5.0, -1.0, 0.0, 0.0, 0.0, -1.0]
+  max: [15.0, 1.5, 5.0, 1.0, 20.0, 10.0, 1.0, 5.0]
