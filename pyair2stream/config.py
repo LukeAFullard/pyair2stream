@@ -74,6 +74,11 @@ class CommonData:
     I_inf: Optional[npt.NDArray[np.int32]] = None
     date: Optional[npt.NDArray[np.int32]] = None
 
+    # Tracking metrics across evaluations
+    current_nse: np.float64 = np.float64(-999.0)
+    current_r2: np.float64 = np.float64(-999.0)
+    current_mae: np.float64 = np.float64(-999.0)
+
     # Allocatable arrays - Float (np.float64)
     tt: Optional[npt.NDArray[np.float64]] = None
     Tair: Optional[npt.NDArray[np.float64]] = None
