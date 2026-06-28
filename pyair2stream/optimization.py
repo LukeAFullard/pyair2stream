@@ -269,7 +269,7 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
     print(f'Efficiency Index in calibration {data.finalfit}')
 
     # Save to CSV
-    df = pd.DataFrame(history, columns=[f"par_{j+1}" for j in range(n_par)] + ["eff_index"])
+    df = pd.DataFrame(history, columns=[f"par_{j+1}" for j in range(n_par)] + ["eff_index", "NSE", "R2", "MAE"])
     df.to_csv(output_filename, index=False)
 
 
@@ -326,7 +326,7 @@ def LH_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
     # Save to CSV
     # Fix: Pandas handles closing the file handle automatically via to_csv
-    df = pd.DataFrame(history, columns=[f"par_{j+1}" for j in range(n_par)] + ["eff_index"])
+    df = pd.DataFrame(history, columns=[f"par_{j+1}" for j in range(n_par)] + ["eff_index", "NSE", "R2", "MAE"])
     df.to_csv(output_filename, index=False)
 
 
@@ -359,7 +359,7 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
         # Record history if valid
         if not np.isnan(eff_index) and eff_index >= data.mineff_index:
-            row = list(p_vals) + [eff_index]
+            row = list(p_vals) + [eff_index, data.current_nse, data.current_r2, data.current_mae]
             history.append(row)
 
         # Return negated efficiency so scipy minimizes
@@ -420,7 +420,7 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
     print(f'Efficiency Index in calibration {data.finalfit}')
 
     # Save history to CSV
-    df = pd.DataFrame(history, columns=[f"par_{j+1}" for j in range(n_par)] + ["eff_index"])
+    df = pd.DataFrame(history, columns=[f"par_{j+1}" for j in range(n_par)] + ["eff_index", "NSE", "R2", "MAE"])
     df.to_csv(output_filename, index=False)
 
 def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:

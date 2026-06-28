@@ -37,7 +37,47 @@ def post_process(data: CommonData, toll: float = None):
     file_cal = os.path.join(data.folder, f"2_{data.runmode}_{data.fun_obj}_{data.station}_{data.series}c_{data.time_res}.csv")
     file_val = os.path.join(data.folder, f"3_{data.runmode}_{data.fun_obj}_{data.station}_{data.series}v_{data.time_res}.csv")
 
-    # 1. Dotty plots
+    # 1a. Convergence Plots
+    if os.path.exists(file_0):
+        df_opt = pd.read_csv(file_0)
+
+        if 'NSE' in df_opt.columns and 'R2' in df_opt.columns and 'MAE' in df_opt.columns:
+            fig, axes = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
+
+            # Cumulative best for NSE and R2 (maximize)
+            df_opt['cummax_nse'] = df_opt['NSE'].cummax()
+            df_opt['cummax_r2'] = df_opt['R2'].cummax()
+
+            # Cumulative best for MAE (minimize)
+            df_opt['cummin_mae'] = df_opt['MAE'].cummin()
+
+            x_vals = range(1, len(df_opt) + 1)
+
+            axes[0].plot(x_vals, df_opt['NSE'], '.', color='lightgray', alpha=0.5, label='Evaluation NSE')
+            axes[0].plot(x_vals, df_opt['cummax_nse'], '-', color='blue', linewidth=2, label='Cumulative Best NSE')
+            axes[0].set_ylabel('NSE')
+            axes[0].set_title('Optimization Convergence')
+            axes[0].legend()
+
+            axes[1].plot(x_vals, df_opt['R2'], '.', color='lightgray', alpha=0.5, label='Evaluation R2')
+            axes[1].plot(x_vals, df_opt['cummax_r2'], '-', color='green', linewidth=2, label='Cumulative Best R2')
+            axes[1].set_ylabel('R2')
+            axes[1].legend()
+
+            axes[2].plot(x_vals, df_opt['MAE'], '.', color='lightgray', alpha=0.5, label='Evaluation MAE')
+            axes[2].plot(x_vals, df_opt['cummin_mae'], '-', color='red', linewidth=2, label='Cumulative Best MAE')
+            axes[2].set_ylabel('MAE [°C]')
+            axes[2].set_xlabel('Evaluation Number')
+            axes[2].legend()
+
+            plt.tight_layout()
+            conv_pdf = os.path.join(data.folder, f"convergence_{data.runmode}_{data.fun_obj}_{data.station}.pdf")
+            conv_png = os.path.join(data.folder, f"convergence_{data.runmode}_{data.fun_obj}_{data.station}.png")
+            plt.savefig(conv_pdf, dpi=300)
+            plt.savefig(conv_png, dpi=300)
+            plt.close()
+
+    # 1b. Dotty plots
     if os.path.exists(file_0):
         # Read the parameter tracking CSV
         df_0 = pd.read_csv(file_0)
@@ -98,6 +138,61 @@ def post_process(data: CommonData, toll: float = None):
         dotty_png = os.path.join(data.folder, f"dottyplots_{data.runmode}_{data.fun_obj}_{data.station}.png")
         plt.savefig(dotty_pdf, dpi=300)
         plt.savefig(dotty_png, dpi=300)
+        plt.close()
+
+    # 1c. MCMC Parameter Significance & Correlation
+    env_file_mcmc = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+    chain_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}.csv")
+    if os.path.exists(chain_filename):
+        chain_df = pd.read_csv(chain_filename)
+
+        # Calculate statistics
+        stats = []
+        for col in chain_df.columns:
+            mean_val = chain_df[col].mean()
+            std_val = chain_df[col].std()
+            ci_lower = chain_df[col].quantile(0.025)
+            ci_upper = chain_df[col].quantile(0.975)
+            # A simple significance check: if 0 is not in the 95% CI
+            significant = not (ci_lower <= 0 <= ci_upper)
+            stats.append({
+                'Parameter': col,
+                'Mean': mean_val,
+                'StdDev': std_val,
+                '95%_CI_Lower': ci_lower,
+                '95%_CI_Upper': ci_upper,
+                'Significantly_Diff_From_Zero': significant
+            })
+
+        stats_df = pd.DataFrame(stats)
+        sig_file = os.path.join(data.folder, f"parameter_significance_{data.runmode}_{data.station}.csv")
+        stats_df.to_csv(sig_file, index=False)
+        print(f"Saved parameter significance report to {sig_file}")
+
+        # Parameter Correlation Matrix
+        corr_matrix = chain_df.corr()
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        cax = ax.matshow(corr_matrix, cmap='coolwarm', vmin=-1, vmax=1)
+        fig.colorbar(cax)
+
+        # Formatting
+        ax.set_xticks(range(len(corr_matrix.columns)))
+        ax.set_yticks(range(len(corr_matrix.columns)))
+        ax.set_xticklabels(corr_matrix.columns, rotation=45)
+        ax.set_yticklabels(corr_matrix.columns)
+
+        # Add text annotations
+        for i in range(len(corr_matrix.columns)):
+            for j in range(len(corr_matrix.columns)):
+                ax.text(j, i, f"{corr_matrix.iloc[i, j]:.2f}", ha='center', va='center', color='black' if abs(corr_matrix.iloc[i, j]) < 0.5 else 'white')
+
+        ax.set_title("Parameter Correlation Matrix (MCMC Chain)", pad=20)
+        plt.tight_layout()
+        corr_pdf = os.path.join(data.folder, f"parameter_correlation_{data.runmode}_{data.station}.pdf")
+        corr_png = os.path.join(data.folder, f"parameter_correlation_{data.runmode}_{data.station}.png")
+        plt.savefig(corr_pdf, dpi=300)
+        plt.savefig(corr_png, dpi=300)
         plt.close()
 
     # 2. Time-Series Plots
@@ -224,6 +319,35 @@ def post_process(data: CommonData, toll: float = None):
         plt.savefig(pdf_path, dpi=300)
         plt.savefig(png_path, dpi=300)
         plt.close()
+
+        # Generate Residual Diagnostics Plot
+        # Drop NaNs from residuals
+        res_clean = residuals.dropna()
+        if len(res_clean) > 0:
+            fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+            # Histogram
+            axes[0].hist(res_clean, bins=30, edgecolor='black', alpha=0.7)
+            axes[0].set_title(f'Residuals Histogram ({output_name})')
+            axes[0].set_xlabel('Residual [°C]')
+            axes[0].set_ylabel('Frequency')
+
+            # Q-Q plot
+            import scipy.stats as stats
+            stats.probplot(res_clean, dist="norm", plot=axes[1])
+            axes[1].set_title(f'Normal Q-Q Plot ({output_name})')
+
+            # Autocorrelation (ACF)
+            pd.plotting.autocorrelation_plot(res_clean, ax=axes[2])
+            axes[2].set_title(f'Autocorrelation ({output_name})')
+            axes[2].set_xlim([0, min(50, len(res_clean))]) # Limit x-axis to first 50 lags for readability
+
+            plt.tight_layout()
+            diag_pdf = os.path.join(data.folder, f"residual_diagnostics_{output_name}_{data.runmode}_{data.fun_obj}_{data.station}.pdf")
+            diag_png = os.path.join(data.folder, f"residual_diagnostics_{output_name}_{data.runmode}_{data.fun_obj}_{data.station}.png")
+            plt.savefig(diag_pdf, dpi=300)
+            plt.savefig(diag_png, dpi=300)
+            plt.close()
 
     if data.runmode == 'FORWARD':
         # We plot directly from the arrays since FORWARD mode might not save a CSV by default
