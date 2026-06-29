@@ -14,9 +14,9 @@ paths:
   output_dir: "examples/Hopelands/output"
 
 optimization:
-  n_runs: 2000
+  n_runs: 5000
   mineff_index: -999.0
-  n_particles: 100
+  n_particles: 200
   c1: 2.0
   c2: 2.0
   wmax: 0.9
