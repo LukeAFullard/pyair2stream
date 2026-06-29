@@ -14,4 +14,4 @@ Segments found: 9
   Segment 7: 2020-07-15 to 2023-04-10 (length: 1000 days)
   Segment 8: 2023-04-13 to 2024-04-01 (length: 355 days)
 Total valid forcing days: 12416
-T_water observations used in calibration: 9727
+T_water observations used in calibration: 9703

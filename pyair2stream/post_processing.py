@@ -196,7 +196,7 @@ def post_process(data: CommonData, toll: float = None):
         plt.close()
 
     # 2. Time-Series Plots
-    def plot_series(file_path, title_prefix, output_name):
+    def plot_series(file_path, title_prefix, output_name, filter_to_obs=True):
         if not os.path.exists(file_path):
             return
 
@@ -212,13 +212,14 @@ def post_process(data: CommonData, toll: float = None):
         # Create datetime index
         dates = pd.to_datetime(df[['Year', 'Month', 'Day']])
 
-        # Filter down the plotting range to the span of available observation data
-        obs_valid_indices = np.where(df['Twat_obs_agg'].notna())[0]
-        if len(obs_valid_indices) > 0:
-            start_idx = obs_valid_indices[0]
-            end_idx = obs_valid_indices[-1]
-            df = df.iloc[start_idx:end_idx+1].copy()
-            dates = dates.iloc[start_idx:end_idx+1].copy()
+        if filter_to_obs:
+            # Filter down the plotting range to the span of available observation data
+            obs_valid_indices = np.where(df['Twat_obs_agg'].notna())[0]
+            if len(obs_valid_indices) > 0:
+                start_idx = obs_valid_indices[0]
+                end_idx = obs_valid_indices[-1]
+                df = df.iloc[start_idx:end_idx+1].copy()
+                dates = dates.iloc[start_idx:end_idx+1].copy()
 
         # Calculate goodness of fit metrics
         # df has columns: 'Year', 'Month', 'Day', 'Tair', 'Twat_obs', 'Twat_mod', 'Twat_obs_agg', 'Twat_mod_agg', 'Q'
@@ -280,6 +281,9 @@ def post_process(data: CommonData, toll: float = None):
             title_text = "Forward Projection with 90% Prediction Interval" if os.path.exists(env_file_fwd) else title_prefix
             ax.set_title(f"{title_text}\n{metrics_str}")
 
+        if not filter_to_obs:
+            ax.set_title(f"Full Simulation Timeline (with all forcing data)\n{metrics_str}")
+
         # Plot temperatures on primary y-axis
         l1 = ax.plot(dates, df['Tair'], '.', color=light_blue, label='Air temperature', markersize=2)
         l2 = ax.plot(dates, df['Twat_obs_agg'], '.', color=blue, label='Observed water temperature', markersize=2)
@@ -309,7 +313,7 @@ def post_process(data: CommonData, toll: float = None):
             # Clip MCMC dataframe to match the visual slice
             if len(env_df) > 365:
                 env_df = env_df.iloc[365:].copy()
-            if 'start_idx' in locals() and len(env_df) > end_idx:
+            if filter_to_obs and 'start_idx' in locals() and len(env_df) > end_idx:
                 env_df = env_df.iloc[start_idx:end_idx+1].copy()
 
             if len(env_df) == len(dates):
@@ -456,4 +460,5 @@ def post_process(data: CommonData, toll: float = None):
         plt.close()
     else:
         plot_series(file_cal, "Calibration", "calibration")
+        plot_series(file_cal, "Full Simulation", "full_simulation", filter_to_obs=False)
         plot_series(file_val, "Validation", "validation")

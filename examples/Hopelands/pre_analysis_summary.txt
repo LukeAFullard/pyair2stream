@@ -6,7 +6,7 @@ Gap Tolerant Mode: Enabled (Min Segment: 30 days)
 
 --- Missing Data ---
 T_air: 674 days missing (3.4%)
-T_water: 10153 days missing (51.1%)
+T_water: 10177 days missing (51.2%)
 Discharge: 7344 days missing (36.9%)
 
 --- Segments Analysis (Based on T_air and Discharge) ---
@@ -15,13 +15,13 @@ Segments Too Short (< 30 days): 9
 Gap Periods: 19
 
 --- Calibration Potential ---
-Total Valid T_water Observations in Valid Segments: 8964
+Total Valid T_water Observations in Valid Segments: 8943
 Data points per parameter for different model versions:
-  - Version 3 (3 parameters): 2988.0 pts/param
-  - Version 4 (4 parameters): 2241.0 pts/param
-  - Version 5 (5 parameters): 1792.8 pts/param
-  - Version 7 (7 parameters): 1280.6 pts/param
-  - Version 8 (8 parameters): 1120.5 pts/param
+  - Version 3 (3 parameters): 2981.0 pts/param
+  - Version 4 (4 parameters): 2235.8 pts/param
+  - Version 5 (5 parameters): 1788.6 pts/param
+  - Version 7 (7 parameters): 1277.6 pts/param
+  - Version 8 (8 parameters): 1117.9 pts/param
 
 Valid Segments List:
   1. 1989-07-06 to 1992-07-24 (1115 days)
