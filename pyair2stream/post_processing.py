@@ -331,7 +331,7 @@ def post_process(data: CommonData, toll: float = None):
             lines.append(proxy)
 
         labels = [l.get_label() for l in lines]
-        ax.legend(lines, labels, loc='lower right')
+        ax.legend(lines, labels, loc='lower left', fontsize='small')
 
         # Residuals plot
         residuals = mod_series - df['Twat_obs_agg']
@@ -451,7 +451,7 @@ def post_process(data: CommonData, toll: float = None):
             lines.append(proxy)
 
         labels = [l.get_label() for l in lines]
-        ax.legend(lines, labels, loc='lower right')
+        ax.legend(lines, labels, loc='lower left', fontsize='small')
 
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%b-%y'))
         fig.autofmt_xdate()

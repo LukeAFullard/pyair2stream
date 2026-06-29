@@ -44,14 +44,14 @@ The model was calibrated using a hybrid Differential Evolution (DE) and L-BFGS-B
 ### 3.3. Parameter Significance and Uncertainty
 | Parameter | Mean | 95% CI Lower | 95% CI Upper | Significant |
 |-----------|------|--------------|--------------|-------------|
-| par_1 | 0.1398 | 0.0885 | 0.1946 | True |
-| par_2 | 0.2760 | 0.2668 | 0.2844 | True |
-| par_3 | 0.2304 | 0.2211 | 0.2390 | True |
-| par_4 | 0.3494 | 0.3310 | 0.3686 | True |
-| par_5 | 4.8216 | 4.5581 | 5.1017 | True |
-| par_6 | 1.6600 | 1.5668 | 1.7608 | True |
-| par_7 | 0.0368 | 0.0346 | 0.0389 | True |
-| par_8 | 0.3775 | 0.3577 | 0.3989 | True |
+| par_1 | 0.1343 | 0.0812 | 0.1892 | True |
+| par_2 | 0.2756 | 0.2667 | 0.2843 | True |
+| par_3 | 0.2297 | 0.2209 | 0.2384 | True |
+| par_4 | 0.3503 | 0.3318 | 0.3695 | True |
+| par_5 | 4.8358 | 4.5760 | 5.0990 | True |
+| par_6 | 1.6635 | 1.5713 | 1.7582 | True |
+| par_7 | 0.0369 | 0.0348 | 0.0390 | True |
+| par_8 | 0.3784 | 0.3587 | 0.3980 | True |
 
 
 ![Dotty Plots](output/dottyplots_DE-MCMC_NSE_Hopelands.png)
