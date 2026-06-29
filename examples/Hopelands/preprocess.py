@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import numpy as np
 from pyair2stream.preprocessing import merge_timeseries
 from pyair2stream.pre_analysis import analyze_timeseries
 
@@ -14,6 +15,16 @@ def main():
     air_temp_processed = os.path.join(base_dir, 'daily_temperature_celsius.csv')
     df_air.to_csv(air_temp_processed, index=False)
 
+    # Pre-process water temperature to exclude outliers close to zero
+    water_temp_raw = os.path.join(base_dir, 'WT_Mean_Hopelands.csv')
+    print(f"Excluding water temperature outliers (< 0.1°C) in {water_temp_raw}...")
+    df_water = pd.read_csv(water_temp_raw)
+    wt_col = 'Water Temperature Daily Mean'
+    # Set outliers to NaN
+    df_water.loc[df_water[wt_col] < 0.1, wt_col] = np.nan
+    water_temp_processed = os.path.join(base_dir, 'WT_Mean_Hopelands_processed.csv')
+    df_water.to_csv(water_temp_processed, index=False)
+
     configs = [
         {
             'file_path': air_temp_processed,
@@ -22,7 +33,7 @@ def main():
             'standard_col_name': 'T_air'
         },
         {
-            'file_path': os.path.join(base_dir, 'WT_Mean_Hopelands.csv'),
+            'file_path': water_temp_processed,
             'date_col': 'Time',
             'value_col': 'Water Temperature Daily Mean',
             'standard_col_name': 'T_water',
@@ -59,9 +70,11 @@ def main():
     print(f"\nPre-analysis plot saved to {plot_path}")
     print(f"Pre-analysis summary saved to {summary_path}")
 
-    # Clean up temporary file
+    # Clean up temporary files
     if os.path.exists(air_temp_processed):
         os.remove(air_temp_processed)
+    if os.path.exists(water_temp_processed):
+        os.remove(water_temp_processed)
 
 if __name__ == '__main__':
     main()

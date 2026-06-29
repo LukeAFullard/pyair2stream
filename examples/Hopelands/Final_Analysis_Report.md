@@ -1,7 +1,7 @@
 # Hopelands Water Temperature Analysis Report
 
 ## 1. Executive Summary
-A full analysis was performed on the Hopelands dataset to calibrate the `pyair2stream` water temperature model. The model achieved a high level of accuracy with a Nash-Sutcliffe Efficiency (NSE) of **0.9336**, indicating a strong fit between observed and simulated water temperatures.
+A full analysis was performed on the Hopelands dataset to calibrate the `pyair2stream` water temperature model. The model achieved a high level of accuracy with a Nash-Sutcliffe Efficiency (NSE) of **0.956218**, indicating a strong fit between observed and simulated water temperatures.
 
 ## 2. Dataset and Preprocessing
 The analysis integrated three primary data sources:
@@ -30,16 +30,26 @@ The model was calibrated using a hybrid Differential Evolution (DE) and L-BFGS-B
 ### 3.2. Performance Metrics
 | Metric | Value |
 |--------|-------|
-| NSE    | 0.9336 |
-| R²     | 0.9257 |
-| RMSE   | 1.140  |
-| MAE    | 0.738  |
+| NSE    | 0.956218 |
+| R²     | 0.9513 |
+| RMSE   | 0.914  |
+| MAE    | 0.705  |
 
 ![Calibration Results](output/calibration_DE-MCMC_NSE_Hopelands.png)
 *Figure 3: Observed vs. Modeled water temperature for the calibration period, including 90% prediction intervals.*
 
 ### 3.3. Parameter Significance and Uncertainty
-All 8 parameters were found to be significantly different from zero.
+
+| Parameter | Mean | 95% CI Lower | 95% CI Upper | Significant |
+|-----------|------|--------------|--------------|-------------|
+| par_1 | 0.1376 | 0.0838 | 0.1912 | True |
+| par_2 | 0.2759 | 0.2672 | 0.2849 | True |
+| par_3 | 0.2301 | 0.2215 | 0.2387 | True |
+| par_4 | 0.3503 | 0.3324 | 0.3690 | True |
+| par_5 | 4.8290 | 4.5600 | 5.1021 | True |
+| par_6 | 1.6628 | 1.5692 | 1.7586 | True |
+| par_7 | 0.0368 | 0.0347 | 0.0389 | True |
+| par_8 | 0.3779 | 0.3577 | 0.3982 | True |
 
 ![Dotty Plots](output/dottyplots_DE-MCMC_NSE_Hopelands.png)
 *Figure 4: Dotty plots showing the distribution of parameter sets sampled during MCMC.*

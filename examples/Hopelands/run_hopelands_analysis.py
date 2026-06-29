@@ -17,6 +17,9 @@ def main():
     # 2. Main Analysis
     run_command("python -m pyair2stream.main --config examples/Hopelands/config.yaml", "Model Calibration and Analysis")
 
+    # 3. Report Update and Synthetic Data Export
+    run_command("PYTHONPATH=. python examples/Hopelands/update_report.py", "Updating Analysis Report and Exporting Synthetic Data")
+
     print("\nAnalysis complete. Results are in examples/Hopelands/output/")
     print("Final report can be found at examples/Hopelands/Final_Analysis_Report.md")
 
