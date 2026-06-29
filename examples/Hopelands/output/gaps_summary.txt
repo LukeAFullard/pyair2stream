@@ -1,0 +1,17 @@
+=== pyair2stream Gap Summary ===
+Qmedia source: Computed
+Qmedia value: 26.32047
+T_air missing fraction: 674/19880 (3.39%)
+Q missing fraction: 7344/19880 (36.94%)
+Segments found: 9
+  Segment 0: 1989-07-06 to 1992-07-24 (length: 1115 days)
+  Segment 1: 1992-11-10 to 2017-12-01 (length: 9153 days)
+  Segment 2: 2017-12-13 to 2018-10-07 (length: 299 days)
+  Segment 3: 2018-10-11 to 2018-12-06 (length: 57 days)
+  Segment 4: 2019-01-22 to 2019-06-20 (length: 150 days)
+  Segment 5: 2019-08-30 to 2020-01-31 (length: 155 days)
+  Segment 6: 2020-02-05 to 2020-06-15 (length: 132 days)
+  Segment 7: 2020-07-15 to 2023-04-10 (length: 1000 days)
+  Segment 8: 2023-04-13 to 2024-04-01 (length: 355 days)
+Total valid forcing days: 12416
+T_water observations used in calibration: 9727
