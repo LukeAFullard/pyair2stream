@@ -7,3 +7,10 @@ __pycache__/
 demo_output/
 test_opt_output/
 test_pp_output/
+
+# Allow results and plots for Hopelands example
+!examples/Hopelands/**/*.png
+!examples/Hopelands/**/*.out
+!examples/Hopelands/**/*.pdf
+# Explicitly keep CSVs ignored in Hopelands
+examples/Hopelands/**/*.csv
