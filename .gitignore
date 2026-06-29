@@ -10,6 +10,7 @@ test_pp_output/
 
 # Allow results and plots for Hopelands example
 !examples/Hopelands/**/*.png
-!examples/Hopelands/**/*.csv
 !examples/Hopelands/**/*.out
 !examples/Hopelands/**/*.pdf
+# Explicitly keep CSVs ignored in Hopelands
+examples/Hopelands/**/*.csv
