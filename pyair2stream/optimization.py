@@ -182,7 +182,7 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
             if not np.isnan(eff_index):
                 fitbest[k] = eff_index
             if not np.isnan(eff_index) and eff_index >= data.mineff_index:
-                row = list(x[:, k]) + [eff_index]
+                row = list(x[:, k]) + [eff_index, data.current_nse, data.current_r2, data.current_mae]
                 history.append(row)
 
         # Fix: use fitbest to find initial global best instead of fit
@@ -227,7 +227,7 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
                 eff_index = eval_results[idx]
                 fit[k] = eff_index
                 if not np.isnan(eff_index) and eff_index >= data.mineff_index:
-                    row = list(x[:, k]) + [eff_index]
+                    row = list(x[:, k]) + [eff_index, data.current_nse, data.current_r2, data.current_mae]
                     history.append(row)
                 idx += 1
 
@@ -308,7 +308,7 @@ def LH_mode(data: CommonData, seed: Optional[int] = None) -> None:
         fit = eff_index
 
         if not np.isnan(eff_index) and eff_index >= data.mineff_index:
-            row = list(data.par[:n_par]) + [eff_index]
+            row = list(data.par[:n_par]) + [eff_index, data.current_nse, data.current_r2, data.current_mae]
             history.append(row)
 
         if fit > foptim:

@@ -11,6 +11,7 @@ from .optimization import forward_mode, PSO_mode, LH_mode, DE_mode, DE_MCMC_mode
 from .config import CommonData
 from .post_processing import post_process
 from .sensitivity import sensitivity_analysis
+from . import __version__
 
 from .model import call_model, aggregation, statis, funcobj, detect_segments
 
@@ -176,7 +177,7 @@ def main():
     print(r' / __ \|  ||  | \/       \  \___ \  |  |  |  | \/\  ___/ / __ \|  Y Y  \ ')
     print(r'(____  /__||__|  \_______ \/____  > |__|  |__|    \___  >____  /__|_|  / ')
     print(r'     \/                  \/     \/                    \/     \/      \/  ')
-    print('pyair2stream Version 1.0.0 (Python Port)')
+    print(f'pyair2stream Version {__version__} (Python Port)')
     print('')
 
     t1 = time.time()
