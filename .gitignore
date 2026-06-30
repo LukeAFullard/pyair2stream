@@ -13,3 +13,5 @@ test_pp_output/
 !examples/Hopelands/**/*.out
 # Explicitly keep CSVs ignored in Hopelands
 examples/Hopelands/**/*.csv
+venv/
+*.egg-info/
