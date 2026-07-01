@@ -1,131 +1,321 @@
 # pyair2stream User Guide
 
-Welcome to **pyair2stream**, the modernized Python port of the `air2stream` model for predicting river water temperature. This guide will help you install dependencies, configure your model, and run calibrations or forward simulations.
+This guide walks a first-time user through installing `pyair2stream`, running the bundled example, preparing your own data, writing a configuration file, and reading the results. If you just need a quick reference to config options, jump to [6. Configuration reference](#6-configuration-reference). If something goes wrong, jump to [9. Troubleshooting](#9-troubleshooting).
 
-## 1. Project Setup
+## Contents
 
-**Prerequisites:**
-You will need Python 3.8+ installed on your system.
+1. [What you're running](#1-what-youre-running)
+2. [Install](#2-install)
+3. [Your first run: the bundled example](#3-your-first-run-the-bundled-example)
+4. [Choosing a model version and integrator](#4-choosing-a-model-version-and-integrator)
+5. [Preparing your own data](#5-preparing-your-own-data)
+6. [Configuration reference](#6-configuration-reference)
+7. [Running the model](#7-running-the-model)
+8. [Understanding the output files](#8-understanding-the-output-files)
+9. [Troubleshooting](#9-troubleshooting)
+10. [Gap-tolerant mode](#10-gap-tolerant-mode)
+11. [Sensitivity analysis and uncertainty (DE-MCMC)](#11-sensitivity-analysis-and-uncertainty-de-mcmc)
+12. [Where to go next](#12-where-to-go-next)
 
-**Install Dependencies:**
-The project dependencies are managed via `requirements.txt`. Install them using:
+## 1. What you're running
+
+`pyair2stream` fits a small ordinary differential equation (ODE) to your river's water temperature, using daily air temperature (and optionally discharge) as inputs. It does this in two steps every time you run it:
+
+1. **Calibrate**: search for the 3–8 model parameters that best reproduce your *observed* water temperature.
+2. **Simulate**: run the calibrated model forward and (if you provided one) evaluate it against a separate validation period.
+
+You'll interact with it through a single YAML configuration file and CSV data files — no Fortran, no compiling.
+
+## 2. Install
+
+Requires Python 3.9+.
+
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/LukeAFullard/pyair2stream.git
+cd pyair2stream
+pip install .
 ```
 
-This will install the necessary scientific packages, including `numpy`, `pandas`, `matplotlib`, `scipy`, and `pyyaml`.
+Check it installed correctly:
 
-## 2. Configuration (`config.yaml`)
-
-pyair2stream uses a structured YAML configuration file, replacing the legacy `input.txt` and `parameters.txt` space-separated text files. This modern format is less error-prone and easier to read.
-
-By default, pyair2stream looks for `config.yaml` in the current directory. You can specify a different path via the `--config` command-line argument.
-
-### Example `config.yaml`
-
-```yaml
-project_name: "my_river_project"
-station_name: "Station_A"
-water_station: "Station_B" # Optional, defaults to station_name if not provided
-series: "c"                # c = continuous, m = mean year
-time_resolution: "1d"      # 1d = daily, nw = n weeks, 1m = monthly
-version: 8                 # 3, 4, 5, 7, or 8 parameters
-Tice_cover: 0.0            # Threshold temperature for ice formation
-objective_function: "NSE"  # KGE, NSE, RMS
-integrator: "RK4"          # RK4, EUL, RK2, CRN
-run_mode: "DE-MCMC"        # PSO, LATHYP, FORWARD, DE, or DE-MCMC
-prc: 1.0                   # Minimum percentage of data in input: 0...1
-
-paths:
-  input_data: "data/calibration_data.csv"
-  validation_data: "data/validation_data.csv" # Optional, skipped if not found
-  output_dir: "output"     # Optional, defaults to {project_name}/output_{version}
-
-optimization:
-  n_runs: 100              # Number of iterations
-  mineff_index: 0.0        # Minimum efficiency code memorizes
-  n_particles: 50          # Number of particles (PSO only)
-  c1: 2.0                  # (PSO only)
-  c2: 2.0                  # (PSO only)
-  wmax: 0.9                # (PSO only)
-  wmin: 0.4                # (PSO only)
-  mcmc_walkers: 32         # Number of walkers (DE-MCMC only)
-  mcmc_steps: 1000         # Number of MCMC steps (DE-MCMC only)
-
-parameter_bounds:
-  min: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  max: [10.0, 1.0, 1.0, 1.0, 1.0, 10.0, 1.0, 1.0]
-
-parameters_forward: [1.2, 0.3, 0.2, 0.5, 0.1, 1.5, 0.4, 0.1] # Used only for FORWARD mode
-
-gap_tolerant: true         # Enable gap-tolerant mode (default: false)
-Qmedia: 15.3               # User-supplied external Qmedia (optional)
-warmup_drop_days: 15       # Days dropped after restart (optional, default: 15)
-min_segment_days: 30       # Minimum length of segments (optional, default: 30)
-
-sensitivity_analysis: true # Enable One-At-A-Time local sensitivity analysis (optional, default: false)
-sensitivity_perturbations: [1.0, 2.0, 5.0] # List of percentage perturbations to apply to parameters (optional, default: [1.0])
+```bash
+pyair2stream --help
 ```
 
-## 3. Data Format (CSVs)
+If you plan to run the test suite later, also install `pytest` and (optionally) `gfortran` — see the main [README](README.md#testing).
 
-pyair2stream now reads time-series inputs from standard CSV files with headers. This replaces the rigid space-separated formats in the original Fortran version.
+## 3. Your first run: the bundled example
 
-Your input CSV files (`input_data` and `validation_data`) **must** contain a `Date` column (parseable by pandas, e.g., `YYYY-MM-DD`).
+Before touching your own data, run the included synthetic example so you know what a successful run looks like. **Run this from the root of the cloned repository** — the example's config uses paths relative to that directory (see the [working-directory note](#71-run-from-the-right-directory) below).
 
-The standard required columns are:
-*   `Date`: The timestamp (e.g., `2020-01-01`).
-*   `T_air`: Air temperature.
-*   `T_water`: Observed water temperature.
-*   `Discharge`: River discharge (Q).
+```bash
+pyair2stream --config examples/synthetic_example/config.yaml
+```
 
-**Handling Missing Data:**
-If `T_water` is missing for a specific day, you can explicitly use the legacy `-999.0` sentinel value or leave it blank (pandas will read as `NaN`).
+You should see something like:
 
-### Gap-Tolerant Mode
+```
+pyair2stream Version 1.0.0 (Python Port)
 
-By default, the model requires `T_air` and `Discharge` (Q) time series to be completely gap-free.
-If your data has missing `T_air` or `Discharge` values, you can set `gap_tolerant: true` in your configuration file. In this mode, the model restarts integration at each contiguous block of valid data and pieces them together.
+mean, TSS and standard deviation (calibration)
+11.96998 58932.21020 5.73146
+N. particles = 20, N. run = 20
+Calcolo al 50.0 %
+...
+Calcolo al 100.0 %
+Efficiency Index in calibration 0.9289082253857379
+Controllo superato
+Validation file not found --> validation is skipped
+Computation time was 13.77 seconds.
+Starting post-processing visualizations...
+Post-processing completed.
+```
 
-**Limitations to consider when using gap-tolerant mode:**
-*   **MNAR (Missing Not At Random) Bias**: Gaps often correspond to extreme flood or freeze events. Calibrating on gapped data excludes these extremes, which reduces observed variance and **artificially inflates performance metrics** like NSE and KGE. Therefore, metrics obtained in gap-tolerant mode cannot be directly compared against continuous-record benchmarks. NSE and RMS are generally more robust than KGE under these conditions.
-*   **External Qmedia**: When large chunks of high-discharge periods are missing, the internally computed `Qmedia` will be biased low. It is highly recommended to supply an external, historical `Qmedia` value in your configuration file.
-*   **Excluded Observations**: Any valid `T_water` observations falling inside a forcing gap (`T_air` or `Q`) are excluded from calibration and evaluation.
-*   **Warm-up buffer (`warmup_drop_days`)**: Restarting integration segments relies on a Day-Of-Year (DOY) climatology for the initial condition. A buffer period (default 15 days) at the start of every segment is ignored during calibration to avoid penalizing the initial condition transient.
+("Calcolo al X%" / "Controllo superato" are progress and self-check messages carried over from the original Italian-authored model — they're informational, not errors.)
 
-### Example CSV (`calibration_data.csv`)
+Open `examples/synthetic_example/calibration_PSO_NSE_River_Alpha.png` to see simulated vs. observed water temperature. An efficiency index (here, NSE ≈ 0.93) close to 1.0 indicates a good fit. Once this runs cleanly for you, move on to your own data.
+
+## 4. Choosing a model version and integrator
+
+### Model version
+
+Set via `version` in the config. Pick the simplest version your data supports:
+
+| Version | Parameters | Needs discharge? | Has a seasonal term? | Use when... |
+|:-------:|:----------:|:-----------------:|:----------------------:|--------------|
+| 3 | 3 | No | No | You only have air temperature and want a quick baseline |
+| 4 | 4 | Yes | No | Discharge matters but seasonality is already explained by air temperature |
+| 5 | 5 | No | Yes | No reliable discharge data, but there's a seasonal signal air temperature doesn't fully capture (e.g. groundwater influence) |
+| 7 | 7 | Yes | Yes | Full model, without the discharge-attenuation exponent |
+| 8 | 8 | Yes | Yes | Full model — the usual starting point if you have good discharge data |
+
+If you're unsure, start with **version 8**, then compare against version 7 (equivalent but without the discharge exponent `a4`) or version 5 (if discharge data is unreliable) using the same objective function and check which one calibrates better *and* validates better — a version that only fits the calibration period well may be overfit.
+
+### Integrator
+
+Set via `integrator`. **`RK4`** (4th-order Runge-Kutta) is the default and recommended choice for accuracy. `CRN` (Crank-Nicolson) is more numerically stable for stiff parameter combinations; `RK2` and `EUL` are simpler/faster but less accurate — mainly useful for quick tests.
+
+## 5. Preparing your own data
+
+Your calibration and (optional) validation CSVs need these columns:
+
+| Column | Always required? | Notes |
+|---|---|---|
+| `Date` | Yes | Any format `pandas.to_datetime` understands, e.g. `YYYY-MM-DD` |
+| `T_air` | Yes | Air temperature (°C) |
+| `T_water` | Yes | Observed water temperature (°C). May contain gaps. |
+| `Discharge` | **Yes, even for versions 3 and 5** | The column must exist in the file for the file to load, even though versions 3 and 5 don't use it in the model equation. If you don't have discharge, fill the column with a placeholder (e.g. `1.0`) for those versions. |
+
+A few hard requirements the reader will enforce, taken from the original model's data conventions:
+
+- **One row per calendar day, with no missing dates.** This applies even in [gap-tolerant mode](#10-gap-tolerant-mode) — gaps must appear as `NaN`/`-999.0` *values* in an existing row, not as a skipped date.
+- **The series must start on 1 January** (unless `gap_tolerant: true`). If your real record starts later in the year, back-fill `T_air` (reconstructed if necessary) and mark `T_water` as missing for the lead-in days.
+- **`T_air` and `Discharge` must be gap-free** (unless `gap_tolerant: true`). Only `T_water` is allowed to have missing values in the default mode.
+- Missing values can be left blank (pandas reads them as `NaN`) or written explicitly as the legacy sentinel `-999.0`.
+
+Example:
 
 ```csv
 Date,T_air,T_water,Discharge
 2020-01-01,5.2,4.1,12.5
 2020-01-02,4.8,4.0,11.8
-2020-01-03,6.1,-999.0,10.2
-...
+2020-01-03,6.1,,10.2
+2020-01-04,5.9,3.9,9.7
 ```
 
-## 4. Running the Model
+You need at least a full year of data, and ideally several years — the model always discards its first simulated year as a warm-up (see [§8](#8-understanding-the-output-files)), so a one-year file leaves nothing left to evaluate.
 
-To run the model, use the `main.py` entry point. It will automatically load the configuration, run the calibration or forward simulation, and generate visualization plots.
+## 6. Configuration reference
+
+Create a `config.yaml` (any filename is fine; pass it with `--config`). Every field below is optional unless marked **required**, and defaults are as shown.
+
+```yaml
+# --- Identity & labelling (used to name output files/folders) ---
+project_name: "my_river_project"     # default: "pyair2stream_project"
+station_name: "Station_A"            # default: "AirStation"
+water_station: "Station_B"           # default: same as station_name
+series: "c"                          # free-text label only — see note below
+
+# --- Model setup ---
+version: 8                # required in practice: 3, 4, 5, 7, or 8 — see §4
+integrator: "RK4"          # RK4 (default), EUL, RK2, CRN
+Tice_cover: 0.0            # water temperature floor (°C); simulated Tw is clamped at this value
+time_resolution: "1d"      # 1d = daily; "Nw" = N weeks (e.g. "2w"); "Nm" = N months (e.g. "1m")
+prc: 1.0                   # for time_resolution other than 1d: minimum fraction (0-1) of days
+                            # that must have valid T_water within a period for that period's
+                            # aggregate to be used in calibration
+
+# --- Calibration ---
+objective_function: "NSE"  # NSE, KGE, or RMS (all reported as "higher is better" internally)
+run_mode: "DE"              # DE (recommended default), PSO, LATHYP, FORWARD, DE-MCMC — see below
+mineff_index: 0.0           # only parameter sets scoring >= this are kept in the "0_*.csv" history.
+                             # Must be a TOP-LEVEL key (see callout below the table) — not nested
+                             # under `optimization:`, despite what the bundled example configs show.
+
+paths:
+  input_data: "data/calibration_data.csv"        # required
+  validation_data: "data/validation_data.csv"    # optional — validation is skipped if absent
+  output_dir: "output"                            # default: "{project_name}/output_{version}"
+
+parameter_bounds:           # required for DE/PSO/LATHYP/DE-MCMC; 8 values each (unused
+  min: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # parameters for your chosen version are ignored)
+  max: [10.0, 1.0, 1.0, 1.0, 1.0, 10.0, 1.0, 1.0]
+
+parameters_forward: [1.2, 0.3, 0.2, 0.5, 0.1, 1.5, 0.4, 0.1]  # only used when run_mode: FORWARD
+
+optimization:
+  n_runs: 100          # DE: max generations. PSO/LATHYP: max iterations.
+  n_particles: 50      # DE: population size. PSO: swarm size.
+  # PSO-only:
+  c1: 2.0               # cognitive (personal-best) weight
+  c2: 2.0               # social (global-best) weight
+  wmax: 0.9             # initial inertia weight
+  wmin: 0.4             # final inertia weight
+  # DE-MCMC-only:
+  mcmc_walkers: 32       # number of emcee walkers
+  mcmc_steps: 1000       # steps per walker (30% discarded as burn-in automatically)
+
+# --- Gap-tolerant mode (see §10) ---
+gap_tolerant: false
+Qmedia: 15.3               # optional: supply a known long-term mean discharge instead of
+                            # computing it from (possibly gappy) data
+warmup_drop_days: 15
+min_segment_days: 30
+
+# --- Optional analyses ---
+sensitivity_analysis: false
+sensitivity_perturbations: [1.0, 2.0, 5.0]   # % perturbations for one-at-a-time sensitivity
+```
+
+**Note on `series`**: in the original Fortran model this switched between a continuous daily series (`c`) and a repeated "mean year" climatology (`m`). This Python port only implements the continuous-series behaviour; `series` here is used solely as a text label in output filenames, whatever value you set.
+
+> **Heads-up on `mineff_index`**: the code reads this as a top-level config key (`config.get('mineff_index', ...)`), but every bundled example config in `examples/` nests it under `optimization:` instead. Nested that way, it's silently ignored and the default of `0.0` is used regardless of what you set — which matters if you were relying on a very low threshold (e.g. `-999.0`, as several examples set it) to capture every parameter set tried, including poor ones, in the `0_*.csv` history. Until this is resolved upstream, put `mineff_index` at the top level of your config as shown above, and double check your `0_*.csv` history file actually contains the range of scores you expect.
+
+### Parameter meaning (`a1`–`a8`)
+
+The 8 parameters correspond to physical terms in the governing equation (Toffolon & Piccolroaz, 2015):
+
+| Parameter | Role |
+|---|---|
+| `a1` | Constant offset |
+| `a2` | Sensitivity of water temperature to air temperature |
+| `a3` | Linear heat-loss coefficient (damps water temperature back toward equilibrium) |
+| `a4` | Exponent linking discharge to the river's effective thermal capacity (rating-curve exponent) |
+| `a5` | Constant offset, scaled by relative discharge |
+| `a6` | Amplitude of an additional seasonal (annual) cycle not explained by air temperature |
+| `a7` | Phase of that seasonal cycle (as a fraction of the year, 0–1) |
+| `a8` | Discharge-scaled heat-loss coefficient |
+
+Only the subset relevant to your chosen `version` is actually calibrated (see the table in [§4](#4-choosing-a-model-version-and-integrator)); the rest are fixed at zero automatically. As a starting point for `parameter_bounds`, the original model's own example datasets used:
+
+```yaml
+parameter_bounds:
+  min: [-5, -5, -5, -1, 0,  0,  0, -1]
+  max: [15, 1.5, 5,  1, 20, 10, 1,  5]
+```
+
+Treat these as a wide starting range, not universal defaults — narrow them once you've looked at your dotty plots (see [§8](#8-understanding-the-output-files)) and confirmed the calibrated values sit well inside the bounds, not pinned against an edge.
+
+### Calibration modes (`run_mode`)
+
+| Mode | What it does | When to use it |
+|---|---|---|
+| `DE` | Differential Evolution (global search) followed by L-BFGS-B polishing | Recommended default — robust and fast for most cases |
+| `PSO` | Particle Swarm Optimization | Legacy-compatible alternative to DE; tune `c1`/`c2`/`wmax`/`wmin` if used |
+| `LATHYP` | Latin Hypercube sampling (no optimization, just space-filling exploration) | Exploring the response surface / a cheap uncertainty screen |
+| `DE-MCMC` | Runs `DE` to find the best fit, then samples the posterior with MCMC (`emcee`) | You want calibration *and* parameter/prediction uncertainty envelopes |
+| `FORWARD` | Runs the model once with a fixed parameter set (`parameters_forward`), no calibration | You already know the parameters (e.g. from a previous calibration) and just want to simulate |
+
+## 7. Running the model
 
 ```bash
-# Run with the default config.yaml
-python -m pyair2stream.main
-
-# Run with a specific configuration file
-python -m pyair2stream.main --config my_project_config.yaml
+pyair2stream --config path/to/config.yaml
 ```
 
-**What Happens When You Run:**
-1.  **Calibration:** If `run_mode` is `PSO`, `LATHYP`, `DE`, or `DE-MCMC`, the model will optimize parameters based on your `input_data`.
-2.  **Uncertainty Analysis:** If `run_mode` is `DE-MCMC`, an MCMC sampling stage runs after optimization. It produces a parameter chain and predictive uncertainty envelopes (saved as CSVs) for further analysis. Note: the MCMC currently uses the standard objective function as a pseudo-likelihood, and future iterations may implement a formal Gaussian log-likelihood.
-3.  **Forward/Validation:** It will evaluate the best parameters against the `validation_data` (if provided).
-3.  **Outputs:** Results are saved in standard CSV format in the designated output directory (e.g., `0_*.csv` for optimization history, `2_*.csv` for calibration time-series, `3_*.csv` for validation).
-4.  **Post-Processing:** Dotty plots (parameter exploration) and time-series plots (comparing observed vs. simulated temperatures) are automatically generated as high-quality PDFs and PNGs using a colorblind-friendly palette.
+### 7.1 Run from the right directory
 
-## 5. Migrating from Fortran
+Paths under `paths:` in the config (`input_data`, `validation_data`, `output_dir`) are resolved **relative to the directory you run the command from**, not relative to the config file's location. If you run `pyair2stream` from somewhere other than where your data/config live, either:
 
-If you are accustomed to the Fortran `air2stream`, note these key improvements:
-*   **No Recompilation:** Change equations or routines directly in Python; no need to compile `.f90` files.
-*   **Multiprocessing:** Optimization routines (`PSO`) use multiprocessing out-of-the-box, dramatically speeding up calibration.
-*   **Direct Visuals:** No need for MATLAB (`post_processing.m`); Python generates the plots automatically at the end of the run.
-*   **Bug Fixes:** Known legacy bugs (like dead PSO convergence checks and incorrect version 8 parameter initializations) have been fixed.
+- use absolute paths in `paths:`, or
+- `cd` into the directory containing your config and data before running.
+
+### 7.2 From Python
+
+You can also drive individual stages directly, e.g. to script batch runs or inspect intermediate results:
+
+```python
+from pyair2stream.io import read_calibration, read_Tseries
+from pyair2stream.model import aggregation, statis
+from pyair2stream.optimization import DE_mode
+
+data = read_calibration(config_file="config.yaml")
+read_Tseries(data, "c")
+aggregation(data)
+statis(data)
+
+DE_mode(data)                      # populates data.par_best and data.finalfit
+print(data.par_best, data.finalfit)
+```
+
+## 8. Understanding the output files
+
+Everything is written to `output_dir` (or `{project_name}/output_{version}` by default):
+
+| File | Contents |
+|---|---|
+| `parameters.txt` | The parameter bounds actually used (after fixing version-inactive parameters to 0) |
+| `0_*.csv` | Every parameter set tried during optimization, with its objective score — the raw material for dotty plots |
+| `1_*.out` | Best-fit parameters, plus the final efficiency index (calibration, then validation if run) |
+| `2_*.csv` | Full simulated vs. observed time series for the **calibration** period |
+| `3_*.csv` | Same, for the **validation** period (only created if validation data was supplied) |
+| `goodness_of_fit_*.csv` | R², RMSE, MAE, AIC, BIC summary |
+| `calibration_*.png` / `.pdf` | Time-series plot: observed vs. simulated water temperature, restricted to periods with observations |
+| `full_simulation_*.png` / `.pdf` | Same, but plotted over the entire simulated record (including where there's no observation to compare against) |
+| `convergence_*.png` / `.pdf` | Objective-function value vs. optimizer iteration — check this flattens out rather than still trending upward at the end |
+| `dottyplots_*.png` / `.pdf` | Parameter value vs. objective score, one panel per parameter — use this to check your bounds (see [§6](#parameter-meaning-a1a8)) |
+| `residual_diagnostics_*.png` / `.pdf` | Residual plots (errors vs. time, distribution, etc.) |
+| `sensitivity_*.csv` / `.png` / `.pdf` | Only if `sensitivity_analysis: true` — see [§11](#11-sensitivity-analysis-and-uncertainty-de-mcmc) |
+| `MCMC_chain_*.csv`, `MCMC_envelopes_*.csv` | Only for `run_mode: DE-MCMC` |
+| `gaps_summary.txt` | Only for `gap_tolerant: true` — segment/gap diagnostics |
+
+### ⚠️ The first 365 rows of `2_*.csv` / `3_*.csv` are not real data
+
+Every run internally prepends a duplicate of the first simulated year as a numerical warm-up, to reduce sensitivity to the initial condition. In the output CSVs, these warm-up rows are easy to spot: **`Year`, `Month`, and `Day` are all `-999`**. Ignore/filter out any row where `Year == -999` before analysing results — the real, evaluated time series starts at the first row with a genuine date.
+
+## 9. Troubleshooting
+
+| Message | Cause | Fix |
+|---|---|---|
+| `Configuration file not found: ...` | Wrong `--config` path, or wrong working directory | Check the path; see [§7.1](#71-run-from-the-right-directory) |
+| `Missing required calibration data file: ...` | `paths.input_data` doesn't resolve to an existing file | Check the path is correct relative to your working directory |
+| `The time series in ... must start on January 1st.` | Non-gap-tolerant mode requires the record to start Jan 1 | Back-fill `T_air`/`Discharge` and mark `T_water` as missing for the lead-in period, or set `gap_tolerant: true` |
+| `The time series in ... must be continuous at a daily time scale with no missing dates.` | A calendar day is missing from the CSV | Insert a row for every date in range, even if values are blank/`-999` |
+| `The series of observed air temperature in ... must be complete.` / same for discharge | `T_air` or `Discharge` has gaps outside gap-tolerant mode | Fill the gaps, or set `gap_tolerant: true` (see [§10](#10-gap-tolerant-mode)) |
+| `Missing 'Discharge' column in ...` | The `Discharge` column is absent, even for a version that doesn't use it | Add the column (dummy values are fine for versions 3/5) |
+| `No valid segments found after gap detection and filtering.` | Gap-tolerant mode couldn't find any block of valid forcing data long enough (`min_segment_days`) | Loosen `min_segment_days`, or check your gap pattern |
+| `Qmedia is zero or negative. Please supply Qmedia...` | Discharge is effectively all missing/invalid in gap-tolerant mode | Supply `Qmedia:` explicitly in the config |
+| `n_dat is 0 after aggregation. No T_water observations survived.` | No usable `T_water` observations after filtering (e.g. `prc` too strict, or all observations fall in gaps) | Lower `prc`, check for excessive missing `T_water`, or check for a `gap_tolerant` misconfiguration |
+| Results look implausible (e.g. temperatures diverging or oscillating wildly) | Parameter bounds too wide for `EUL`/`RK2`, or version/integrator mismatch | Switch to `RK4` or `CRN`; tighten `parameter_bounds` |
+
+## 10. Gap-tolerant mode
+
+By default `pyair2stream` requires `T_air` (and `Discharge`, if your version uses it) to be complete for the whole record. Setting `gap_tolerant: true` lets the model split the record into contiguous valid segments and calibrate across all of them together.
+
+Before relying on it:
+
+- **Gaps bias performance metrics upward.** Missing data often coincides with floods or freeze events. Removing those extremes from the fitted record tends to inflate NSE/KGE relative to what you'd get on a continuous record — so gap-tolerant metrics aren't directly comparable to continuous-record ones. NSE and RMS degrade more gracefully than KGE here.
+- **Supply `Qmedia` explicitly if high-flow periods are missing.** The internally computed mean discharge will be biased low otherwise.
+- **`T_water` observations inside a forcing gap are dropped**, not interpolated.
+- Each segment discards its first `warmup_drop_days` (default 15) from evaluation, since a segment restarts from a day-of-year climatology rather than a true initial condition.
+- A segment shorter than `min_segment_days` (default 30) is discarded entirely — check the console warnings and `gaps_summary.txt` for what was dropped.
+
+## 11. Sensitivity analysis and uncertainty (DE-MCMC)
+
+- Set `sensitivity_analysis: true` to get a one-at-a-time local sensitivity analysis around your best-fit parameters: each parameter is perturbed by ±`sensitivity_perturbations`% of its own value (bounded by `parameter_bounds`), and the mean absolute change in simulated water temperature is reported per parameter. This tells you which parameters the fit is most sensitive to — useful for deciding which bounds are worth tightening.
+- Set `run_mode: DE-MCMC` to get full parameter and predictive uncertainty: it runs `DE` to find the best fit, then samples the posterior around it with `emcee`, producing an MCMC chain (`MCMC_chain_*.csv`) and 5th/50th/95th percentile prediction envelopes (`MCMC_envelopes_*.csv`). This is more expensive than `DE` alone — expect it to take noticeably longer, scaling with `mcmc_walkers × mcmc_steps`.
+
+## 12. Where to go next
+
+- Browse `examples/` for runnable configs covering gap-tolerant mode, sensitivity analysis, optimizer comparisons, and real river case studies.
+- See the main [README.md](README.md) for the model-version equations, testing instructions, and how to cite the original model.
+- The original model is described in Toffolon, M. and Piccolroaz, S. (2015), *A hybrid model for river water temperature as a function of air temperature and discharge*, Environmental Research Letters, 10(11), 114011, https://doi.org/10.1088/1748-9326/10/11/114011 — worth reading before calibrating a real river, particularly for guidance on choosing parameter bounds and interpreting dotty plots.
