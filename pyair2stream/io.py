@@ -69,6 +69,9 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
 
     opt_config = config.get('optimization', {})
     data.n_run = int(opt_config.get('n_runs', 100))
+    # mineff_index is read from the config root, NOT nested under `optimization:`
+    # — this matches USER_GUIDE.md. An earlier version incorrectly looked for it
+    # under opt_config, which meant it silently always fell back to its default.
     data.mineff_index = np.float64(config.get('mineff_index', 0.0))
 
     data.station = data.air_station
@@ -132,9 +135,13 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
             data.parmin[7] = 0.0; data.parmax[7] = 0.0; data.flag_par[7] = False
         elif data.version == 7:
             data.parmin[3] = 0.0; data.parmax[3] = 0.0; data.flag_par[3] = False
-        # Bug fix: Fortran had 'IF (version == 4)' twice.
-        # The second one was clearly meant for version 8, but version 8 uses all 8 parameters.
-        # We do not zero out any parameters for version 8.
+        # Bug fix (see d78fe17 / README "Known deviations"): the legacy Fortran
+        # source had 'IF (version == 4)' duplicated, with the second block
+        # apparently intended for version == 8. That block zeroed parmin/parmax
+        # for parameters 5-8, which would silently disable the seasonal and
+        # discharge-attenuation terms for the full 8-parameter model.
+        # Version 8 is defined as using all 8 free parameters, so we
+        # intentionally do NOT reproduce that zeroing here.
 
         out_param_path = os.path.join(data.folder, 'parameters.txt')
         with open(out_param_path, 'w') as f:

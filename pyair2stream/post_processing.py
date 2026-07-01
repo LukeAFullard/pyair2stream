@@ -12,6 +12,13 @@ def post_process(data: CommonData, toll: float = None):
     Replicates post_processing.m
     """
     if toll is None:
+        # Acceptability threshold for the dotty-plot "good parameter set" region.
+        # RMS is an unbounded error metric (lower = better), so `eff <= toll` with
+        # toll=2.0 is a sensible absolute cutoff. NSE/KGE are bounded above by 1.0
+        # (higher = better), so a shared toll=2.0 would require eff >= 2.0, which
+        # is impossible and silently produced an empty "acceptable" region for
+        # every NSE/KGE calibration. 0.5 follows the common Moriasi et al.
+        # "satisfactory" NSE/KGE threshold used in hydrology.
         if data.fun_obj == 'RMS':
             toll = 2.0
         elif data.fun_obj == 'NSE':
