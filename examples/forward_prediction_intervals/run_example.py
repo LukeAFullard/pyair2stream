@@ -80,7 +80,7 @@ def compare_plots():
     env_iid = pd.read_csv("examples/forward_prediction_intervals/Forward_Prediction_Envelopes_iid.csv")
     env_ar1 = pd.read_csv("examples/forward_prediction_intervals/Forward_Prediction_Envelopes_ar1.csv")
 
-    fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True, sharey=True)
+    fig, axes = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
 
     # Plot IID
     ax = axes[0]
@@ -95,9 +95,49 @@ def compare_plots():
     ax.fill_between(env_ar1.index, env_ar1['Twat_mod_p5'], env_ar1['Twat_mod_p95'], color='blue', alpha=0.3, label='90% PI (AR1)')
     ax.plot(env_ar1.index, env_ar1['Twat_mod_p50'], color='black', label='Median (AR1)')
     ax.set_title("Forward Projection - AR(1) Noise")
-    ax.set_xlabel("Days into Future")
     ax.set_ylabel("Water Temp (°C)")
     ax.legend(loc='lower left', fontsize='small')
+
+    # Plot Individual Trajectories
+    ax = axes[2]
+
+    # We will simulate 3 individual noisy trajectories manually to plot them.
+    # To do this correctly, we need the deterministic base projection.
+    base_projection = env_iid['Twat_mod_p50'].values # Approximation of base model
+
+    # Need to generate AR1 and IID noise manually for demonstration
+    import numpy as np
+    import scipy.signal
+
+    np.random.seed(42)
+    n_days = len(base_projection)
+
+    with open("examples/forward_prediction_intervals/MCMC_chain_Alpha_historical_1d_meta.json", 'r') as f:
+        import json
+        sidecar_data = json.load(f)
+        sigma = sidecar_data['sigma']
+        rho = sidecar_data['rho']
+
+    for i in range(3):
+        # IID noise
+        noise_iid = np.random.normal(0, sigma, n_days)
+
+        # AR1 noise
+        eps = np.random.standard_normal(n_days)
+        epsilon = np.empty(n_days)
+        epsilon[0] = sigma * eps[0]
+        epsilon[1:] = sigma * np.sqrt(1 - rho**2) * eps[1:]
+        noise_ar1 = scipy.signal.lfilter([1.0], [1.0, -rho], epsilon)
+
+        ax.plot(env_iid.index, base_projection + noise_iid, color='green', alpha=0.4,
+                label='IID Trajectory' if i == 0 else "")
+        ax.plot(env_ar1.index, base_projection + noise_ar1, color='blue', alpha=0.6,
+                label='AR(1) Trajectory' if i == 0 else "")
+
+    ax.set_title("Sample Individual Trajectories (IID vs AR(1))")
+    ax.set_xlabel("Days into Future")
+    ax.set_ylabel("Water Temp (°C)")
+    ax.legend(loc='upper right', fontsize='small')
 
     plt.tight_layout()
     plt.savefig("examples/forward_prediction_intervals/comparison_iid_vs_ar1.png", dpi=150)

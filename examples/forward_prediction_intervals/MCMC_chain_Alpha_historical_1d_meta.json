@@ -1,6 +1,6 @@
 {
-    "rho": 0.5910352780379821,
-    "sigma": 0.8185143085969949,
+    "rho": 0.5910330745187136,
+    "sigma": 0.8185145704861377,
     "n_valid_pairs": 1460,
     "noise_model_used_for_this_run": "iid",
     "mcmc_walkers": 32,
