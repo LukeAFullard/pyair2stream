@@ -151,6 +151,6 @@ with open(report_path, 'w') as f:
     f.write("\n## Pre-analysis Timelines\n\n")
     for s in scenarios:
         f.write(f"### {s}\n")
-        f.write(f"![{s} Pre-analysis]({OUT_DIR}/{s}_pre_analysis.png)\n\n")
+        f.write(f"![{s} Pre-analysis](output/{s}_pre_analysis.png)\n\n")
 
 print(f"\nDone! Report written to {report_path}")
