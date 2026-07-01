@@ -3,6 +3,7 @@ import numpy as np
 import subprocess
 import os
 import concurrent.futures
+from pyair2stream.pre_analysis import analyze_timeseries
 
 # Configuration
 BASELINE_DATA = 'examples/validation/Switzerland/DAV_2327_cc.csv'
@@ -64,7 +65,7 @@ def apply_gaps(df, scenario):
             start = np.random.randint(0, n - 30)
             df_new.loc[start:start+29, 'T_air'] = np.nan
     elif scenario == 'random':
-        drop_indices = np.random.choice(df_new.index, size=int(0.2 * n), replace=False)
+        drop_indices = np.random.choice(df_new.index, size=int(0.05 * n), replace=False)
         df_new.loc[drop_indices, 'T_air'] = np.nan
     return df_new
 
@@ -94,7 +95,17 @@ def run_scenario(scenario):
 
     config_file = create_de_config(scenario, scenario_file, VAL_DATA)
 
+
+    # Run pre-analysis
+    pre_plot_path = f'{OUT_DIR}/{scenario}_pre_analysis.png'
+    analyze_timeseries(
+        df_scenario,
+        output_plot_path=pre_plot_path,
+        gap_tolerant=True
+    )
+
     # Run pyair2stream
+
     subprocess.run(['python', '-m', 'pyair2stream.main', '--config', config_file], check=True, capture_output=True)
 
     params, nse, r2 = get_results(scenario)
@@ -135,5 +146,11 @@ with open(report_path, 'w') as f:
         r = results[s]
         p_str = " | ".join([f"{x:.3f}" for x in r['params']])
         f.write(f"| **{s}** | {r['missing_pct']:.2f}% | {r['nse']:.4f} | {r['r2']:.4f} | {p_str} |\n")
+
+
+    f.write("\n## Pre-analysis Timelines\n\n")
+    for s in scenarios:
+        f.write(f"### {s}\n")
+        f.write(f"![{s} Pre-analysis]({OUT_DIR}/{s}_pre_analysis.png)\n\n")
 
 print(f"\nDone! Report written to {report_path}")
