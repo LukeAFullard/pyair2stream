@@ -198,13 +198,73 @@ The `examples/` directory contains runnable end-to-end examples, including:
 
 ## Relationship to the original Fortran code
 
-`pyair2stream` reproduces the governing equations, numerical integrators, and objective functions of the original Fortran `air2stream` model, with a small number of intentional corrections to bugs identified in the legacy code (documented inline in the source, e.g. in `optimization.py` and `io.py`). It is not officially maintained by the original authors — if you need the reference implementation, see the original air2stream repository.
+`pyair2stream` reproduces the governing equations, numerical integrators, and objective functions of the original Fortran `air2stream` model. It is not officially maintained by the original authors — if you need the reference implementation, see the original air2stream repository.
+
+### Known deviations from the Fortran reference
+
+These are the known, intentional behavioral differences from the original
+Fortran, found during porting and fixed with test coverage:
+
+- **Version 8 parameter zeroing (fixed in `io.py`)**: the original Fortran had
+  a duplicated `IF (version == 4)` block where the second occurrence appears
+  to have been intended for `version == 8`, causing parameters 5–8 to be
+  incorrectly zeroed in Version 8 mode. `pyair2stream` does not reproduce this
+  bug — Version 8 uses all 8 parameters. See commit `d78fe17`.
+- **PSO initialization/NaN handling (fixed in `optimization.py`)**: the initial
+  Python port initialized `fitbest` to zero and did not guard against NaN
+  objective values from solver overflow, causing PSO to silently return
+  all-zero parameters on some datasets. Fixed by initializing to `-1e30` and
+  using NaN-safe comparisons/argmax. See PR #21 and
+  `examples/validation/Switzerland/report.md`.
+- **`mineff_index` config location (fixed in `io.py`)**: corrected to read
+  from the config root rather than nested under `optimization:`, matching
+  `USER_GUIDE.md`.
+- **Dotty-plot tolerance defaults (fixed in `post_processing.py`)**: the
+  default acceptability threshold for highlighting "good" parameter sets in
+  diagnostic plots is now objective-function-aware (0.5 for NSE/KGE, 2.0 for
+  RMS) instead of a single hardcoded value, which previously produced an
+  empty acceptable-parameter region for NSE/KGE calibrations.
+
+None of these affect the core forward-simulation physics (governing equations,
+integrators) validated by the golden Fortran tests — they affect calibration
+robustness and diagnostic plotting.
+
+## Validation against published literature
+
+Beyond the Fortran golden tests, `pyair2stream` has been validated against the
+three Swiss river datasets and literature parameter sets published in the
+supplementary material of Piccolroaz et al. (2016), using the `FORWARD` run
+mode with literature-derived parameters, and independently re-calibrated with
+Differential Evolution:
+
+| River (station) | Flow regime | Literature NSE | pyair2stream NSE (DE) |
+|---|---|---|---|
+| Mentue (MAH-2369) | Natural | 0.989 | 0.9886 |
+| Rhône (SIO-2011) | Regulated | 0.923 | 0.9242 |
+| Dischmabach (DAV-2327) | Snow-fed | 0.950 | 0.9558 |
+
+Full methodology, parameter tables, and plots: [`examples/validation/Switzerland/report.md`](examples/validation/Switzerland/report.md).
+
+> **Note on optimizer choice**: this study found that PSO can converge to
+> different parameter sets than DE due to equifinality (multiple parameter
+> combinations giving similarly good NSE), particularly for versions with 8
+> free parameters. DE and DE-MCMC matched literature parameters far more
+> closely than PSO in these tests. **For scientific/publication use, prefer
+> `DE` or `DE-MCMC` over `PSO`** unless you've independently confirmed PSO
+> convergence for your dataset.
 
 ## Citing
 
 If you use this software in published work, please cite the original model paper:
 
 > Toffolon, M. and Piccolroaz, S. (2015). A hybrid model for river water temperature as a function of air temperature and discharge. *Environmental Research Letters*, 10(11), 114011. https://doi.org/10.1088/1748-9326/10/11/114011
+
+Because `pyair2stream` is not yet distributed via PyPI and does not currently
+tag releases, please also record the exact git commit hash used for your
+study (`git rev-parse HEAD`) so your results are reproducible, e.g.:
+
+> Water temperature simulations were produced using pyair2stream
+> (https://github.com/LukeAFullard/pyair2stream, commit `<sha>`).
 
 ## License
 

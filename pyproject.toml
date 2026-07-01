@@ -2,10 +2,10 @@
 name = "pyair2stream"
 version = "1.0.0"
 description = "Python port of the air2stream hybrid model for river water temperature."
-authors = ["pyair2stream authors <author@example.com>"]
+authors = ["pyair2stream authors <LukeAFullard@users.noreply.github.com>"]
 readme = "README.md"
 license = "MIT"
-repository = "https://github.com/example/pyair2stream"
+repository = "https://github.com/LukeAFullard/pyair2stream"
 packages = [
     { include = "pyair2stream" }
 ]

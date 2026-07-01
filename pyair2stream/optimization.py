@@ -192,6 +192,10 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
     pbest = np.zeros((n_par, n_particles), dtype=np.float64)
     gbest = np.zeros(n_par, dtype=np.float64)
     fit = np.zeros(n_particles, dtype=np.float64)
+    # fitbest must NOT be initialized to zero: the objective function (e.g. NSE)
+    # can be strongly negative for poor initial random parameter draws, so a
+    # zero-initialized fitbest is never beaten and PSO silently returns the
+    # all-zero initial parameters (see examples/validation/Switzerland/report.md).
     fitbest = np.full(n_particles, -1e30, dtype=np.float64)
 
     # We output history to CSV instead of binary
@@ -269,7 +273,10 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
                 idx += 1
 
             for k in range(n_particles):
-                # Fix: explicit check to ignore NaN efficiency values
+                # Extreme initial parameter draws can cause solver arithmetic overflow,
+                # producing NaN objective values. np.argmax over an array containing NaN
+                # returns a NaN-adjacent/undefined index, so both the per-particle update
+                # and the global-best lookup must explicitly exclude NaNs.
                 if not np.isnan(fit[k]) and fit[k] > fitbest[k]:
                     fitbest[k] = fit[k]
                     pbest[:, k] = x[:, k]
