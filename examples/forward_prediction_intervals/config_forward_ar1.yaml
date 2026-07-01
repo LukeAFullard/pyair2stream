@@ -4,7 +4,7 @@ forward_options:
   mcmc_chain_path: examples/forward_prediction_intervals/MCMC_chain_Alpha_historical_1d.csv
   n_samples: 500
   random_seed: 42
-  residual_sigma: 0.8185145704861377
+  residual_sigma: 0.8217528451409142
 integrator: RK4
 objective_function: NSE
 parameter_bounds:
@@ -27,14 +27,14 @@ parameter_bounds:
   - 0.0
   - 0.0
 parameters_forward:
-- 0.40342371400228644
-- 0.0431858124641161
-- 0.06042137587713686
-- 0.4622045682934903
-- 1.146579624496155
-- 0.7570200559428322
-- 0.5008452153730192
-- 0.11920913767263766
+- 0.36228690142163905
+- 0.044849652583495624
+- 0.057504755067705075
+- 0.410017442097312
+- 2.032503152653831
+- 1.2204373183015116
+- 0.50991029706049
+- 0.19169513077083503
 paths:
   input_data: examples/forward_prediction_intervals/future_data.csv
   output_dir: examples/forward_prediction_intervals

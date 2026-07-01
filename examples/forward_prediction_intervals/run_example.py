@@ -80,7 +80,7 @@ def compare_plots():
     env_iid = pd.read_csv("examples/forward_prediction_intervals/Forward_Prediction_Envelopes_iid.csv")
     env_ar1 = pd.read_csv("examples/forward_prediction_intervals/Forward_Prediction_Envelopes_ar1.csv")
 
-    fig, axes = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
+    fig, axes = plt.subplots(4, 1, figsize=(10, 13), sharex=True)
 
     # Plot IID
     ax = axes[0]
@@ -101,7 +101,7 @@ def compare_plots():
     # Plot Individual Trajectories
     ax = axes[2]
 
-    # We will simulate 3 individual noisy trajectories manually to plot them.
+    # We will simulate individual noisy trajectories manually to plot them.
     # To do this correctly, we need the deterministic base projection.
     base_projection = env_iid['Twat_mod_p50'].values # Approximation of base model
 
@@ -118,7 +118,11 @@ def compare_plots():
         sigma = sidecar_data['sigma']
         rho = sidecar_data['rho']
 
-    for i in range(3):
+    n_samples_for_plot = 100
+    all_iid_trajectories = []
+    all_ar1_trajectories = []
+
+    for i in range(n_samples_for_plot):
         # IID noise
         noise_iid = np.random.normal(0, sigma, n_days)
 
@@ -129,15 +133,53 @@ def compare_plots():
         epsilon[1:] = sigma * np.sqrt(1 - rho**2) * eps[1:]
         noise_ar1 = scipy.signal.lfilter([1.0], [1.0, -rho], epsilon)
 
-        ax.plot(env_iid.index, base_projection + noise_iid, color='green', alpha=0.4,
-                label='IID Trajectory' if i == 0 else "")
-        ax.plot(env_ar1.index, base_projection + noise_ar1, color='blue', alpha=0.6,
-                label='AR(1) Trajectory' if i == 0 else "")
+        all_iid_trajectories.append(base_projection + noise_iid)
+        all_ar1_trajectories.append(base_projection + noise_ar1)
+
+        if i < 3: # Plot first 3 trajectories
+            ax.plot(env_iid.index, all_iid_trajectories[-1], color='green', alpha=0.4,
+                    label='IID Trajectory' if i == 0 else "")
+            ax.plot(env_ar1.index, all_ar1_trajectories[-1], color='blue', alpha=0.6,
+                    label='AR(1) Trajectory' if i == 0 else "")
 
     ax.set_title("Sample Individual Trajectories (IID vs AR(1))")
-    ax.set_xlabel("Days into Future")
     ax.set_ylabel("Water Temp (°C)")
     ax.legend(loc='upper right', fontsize='small')
+
+    # Plot 7-day Rolling Average Envelope
+    ax = axes[3]
+
+    # Calculate rolling averages for each sample
+    rolling_window = 7
+    all_iid_trajectories = np.array(all_iid_trajectories)
+    all_ar1_trajectories = np.array(all_ar1_trajectories)
+
+    # Convert to pandas dataframe to use rolling mean
+    iid_df = pd.DataFrame(all_iid_trajectories.T)
+    ar1_df = pd.DataFrame(all_ar1_trajectories.T)
+
+    iid_rolling = iid_df.rolling(window=rolling_window, min_periods=1).mean()
+    ar1_rolling = ar1_df.rolling(window=rolling_window, min_periods=1).mean()
+
+    # Calculate 5th and 95th percentiles of the rolling averages
+    iid_rolling_p5 = iid_rolling.quantile(0.05, axis=1)
+    iid_rolling_p95 = iid_rolling.quantile(0.95, axis=1)
+    iid_rolling_p50 = iid_rolling.quantile(0.50, axis=1)
+
+    ar1_rolling_p5 = ar1_rolling.quantile(0.05, axis=1)
+    ar1_rolling_p95 = ar1_rolling.quantile(0.95, axis=1)
+    ar1_rolling_p50 = ar1_rolling.quantile(0.50, axis=1)
+
+    ax.fill_between(env_iid.index, iid_rolling_p5, iid_rolling_p95, color='green', alpha=0.3, label=f'90% PI (IID) - {rolling_window}d rolling')
+    ax.plot(env_iid.index, iid_rolling_p50, color='green', linestyle='--', label=f'Median (IID)')
+
+    ax.fill_between(env_ar1.index, ar1_rolling_p5, ar1_rolling_p95, color='blue', alpha=0.3, label=f'90% PI (AR1) - {rolling_window}d rolling')
+    ax.plot(env_ar1.index, ar1_rolling_p50, color='blue', linestyle='--', label=f'Median (AR1)')
+
+    ax.set_title(f"{rolling_window}-Day Rolling Average Prediction Interval")
+    ax.set_xlabel("Days into Future")
+    ax.set_ylabel("Water Temp (°C)")
+    ax.legend(loc='lower left', fontsize='small')
 
     plt.tight_layout()
     plt.savefig("examples/forward_prediction_intervals/comparison_iid_vs_ar1.png", dpi=150)
