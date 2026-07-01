@@ -22,3 +22,10 @@ dist/
 !examples/gap_experiment/**/*.out
 # Keep CSVs ignored in Gap experiment
 examples/gap_experiment/**/*.csv
+
+# Allow results and plots for forward prediction interval example
+!examples/forward_prediction_intervals/**/*.png
+!examples/forward_prediction_intervals/**/*.out
+!examples/forward_prediction_intervals/**/*.json
+# Keep CSVs ignored
+examples/forward_prediction_intervals/**/*.csv

@@ -49,6 +49,24 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
 
     data.forward_options = config.get('forward_options', {})
 
+    # Parse uncertainty_options
+    uncertainty_options = config.get('uncertainty_options', {})
+    noise_model = uncertainty_options.get('noise_model', 'iid')
+    ar1_rho = uncertainty_options.get('ar1_rho', None)
+
+    if noise_model not in ["iid", "ar1"]:
+        raise ValueError(f"Invalid noise_model: '{noise_model}'. Must be 'iid' or 'ar1'.")
+
+    if ar1_rho is not None:
+        if not (-1.0 < float(ar1_rho) < 1.0):
+            raise ValueError(f"ar1_rho must be strictly between -1.0 and 1.0, got {ar1_rho}")
+        ar1_rho = float(ar1_rho)
+
+    data.uncertainty_options = {
+        "noise_model": noise_model,
+        "ar1_rho": ar1_rho
+    }
+
     opt_config = config.get('optimization', {})
     data.n_run = int(opt_config.get('n_runs', 100))
     data.mineff_index = np.float64(config.get('mineff_index', 0.0))

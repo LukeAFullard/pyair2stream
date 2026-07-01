@@ -81,6 +81,82 @@ class TestOptimization(unittest.TestCase):
         self.assertIsNotNone(self.data.finalfit)
         np.testing.assert_array_equal(self.data.par_best, self.data.par)
 
+    def test_DE_MCMC_sidecar_and_ar1(self):
+        from pyair2stream.optimization import DE_MCMC_mode
+        self.data.n_particles = 2
+        self.data.n_run = 1
+        self.data.mcmc_walkers = 16 # Need at least 2 * 8 = 16
+        self.data.mcmc_steps = 10
+        self.data.runmode = 'DE-MCMC'
+
+        # Test default iid first
+        self.data.uncertainty_options = {"noise_model": "iid", "ar1_rho": None}
+        DE_MCMC_mode(self.data, seed=42)
+
+        chain_path = os.path.join(self.data.folder, f"MCMC_chain_test_station_test_series_1d.csv")
+        sidecar_path = os.path.join(self.data.folder, f"MCMC_chain_test_station_test_series_1d_meta.json")
+        env_path = os.path.join(self.data.folder, f"MCMC_envelopes_test_station_test_series_1d.csv")
+
+        self.assertTrue(os.path.exists(sidecar_path))
+        import json
+        with open(sidecar_path, 'r') as f:
+            sidecar_data = json.load(f)
+
+        self.assertEqual(sidecar_data['noise_model_used_for_this_run'], 'iid')
+        self.assertEqual(sidecar_data['mcmc_seed'], 42)
+        self.assertTrue('rho' in sidecar_data)
+
+        env_iid = pd.read_csv(env_path)
+
+        # Now test ar1
+        self.data.uncertainty_options = {"noise_model": "ar1", "ar1_rho": None}
+        DE_MCMC_mode(self.data, seed=42)
+
+        with open(sidecar_path, 'r') as f:
+            sidecar_data = json.load(f)
+        self.assertEqual(sidecar_data['noise_model_used_for_this_run'], 'ar1')
+
+        env_ar1 = pd.read_csv(env_path)
+        # AR(1) will have a different width, typically wider or more structured, we just ensure it generated successfully
+        self.assertTrue(len(env_ar1) > 0)
+
+    def test_forward_mode_rho_priority(self):
+        # We need a dummy chain to test forward_mode envelopes
+        chain_path = os.path.join(self.data.folder, "dummy_chain.csv")
+        pd.DataFrame(np.random.rand(10, 8), columns=[f"par_{i+1}" for i in range(8)]).to_csv(chain_path, index=False)
+
+        self.data.forward_options = {
+            'enable_prediction_intervals': True,
+            'mcmc_chain_path': chain_path,
+            'residual_sigma': 1.0,
+            'n_samples': 5,
+            'random_seed': 42
+        }
+
+        # Branch 1: Explicit override
+        self.data.uncertainty_options = {"noise_model": "ar1", "ar1_rho": 0.8}
+        forward_mode(self.data)
+        # We check stdout or assume it passes if no crash.
+
+        # Branch 2: Own residuals
+        self.data.uncertainty_options = {"noise_model": "ar1", "ar1_rho": None}
+        # has_obs is true by default in setUp
+        forward_mode(self.data)
+
+        # Branch 3: Sidecar
+        # Remove observations
+        self.data.Twat_obs[:] = -999.0
+        # Create dummy sidecar
+        sidecar_path = chain_path.replace('.csv', '_meta.json')
+        import json
+        with open(sidecar_path, 'w') as f:
+            json.dump({"rho": 0.5}, f)
+        forward_mode(self.data)
+
+        # Branch 4: Fallback
+        os.remove(sidecar_path)
+        forward_mode(self.data)
+
     def test_PSO_mode(self):
         self.data.n_particles = 10
         self.data.n_run = 5

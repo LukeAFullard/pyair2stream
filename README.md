@@ -15,6 +15,7 @@ Original model: Toffolon, M. and Piccolroaz, S. (2015). *A hybrid model for rive
 - **Modern calibration algorithms**: Differential Evolution + L-BFGS-B (default), PSO, Latin Hypercube, and DE + MCMC (via [`emcee`](https://emcee.readthedocs.io/)) for uncertainty quantification
 - **Automatic post-processing**: calibration/validation plots and parameter dotty-plots
 - **One-at-a-time sensitivity analysis** and forward prediction intervals
+- **Autoregressive AR(1) Prediction Intervals**: An opt-in noise model for MCMC prediction intervals to account for residual serial correlation, yielding more realistic uncertainty bounds.
 - A test suite that validates the Python/Numba integration against the original compiled Fortran source (see [Testing](#testing))
 
 > **Status**: this is a community Python port, not the official model release. See [Relationship to the original Fortran code](#relationship-to-the-original-fortran-code) below.

@@ -55,9 +55,17 @@ def create_synthetic_data(years, out_file, is_future=False):
 
     T_water = RK4_air2stream(T_air, Q, p_true, n_days)
 
-    # Add noise to historical data, missing values for future
+    # Add autocorrelated noise to historical data to showcase AR(1) benefit
     if not is_future:
-        T_water += np.random.normal(0, 0.8, n_days)
+        sigma = 0.8
+        rho = 0.6
+        eps = np.random.standard_normal(n_days)
+        epsilon = np.empty(n_days)
+        epsilon[0] = sigma * eps[0]
+        epsilon[1:] = sigma * np.sqrt(1 - rho**2) * eps[1:]
+        import scipy.signal
+        noise = scipy.signal.lfilter([1.0], [1.0, -rho], epsilon)
+        T_water += noise
     else:
         T_water[:] = -999.0 # We don't know the future!
 
