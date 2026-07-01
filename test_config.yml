@@ -1,0 +1,8 @@
+
+station: test
+series: c
+version: 4
+run_mode: FORWARD
+paths: {}
+uncertainty_options:
+    noise_model: iid

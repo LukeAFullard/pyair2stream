@@ -1,0 +1,49 @@
+Tice_cover: 0.0
+forward_options:
+  enable_prediction_intervals: true
+  mcmc_chain_path: examples/forward_prediction_intervals/MCMC_chain_Alpha_historical_1d.csv
+  n_samples: 500
+  random_seed: 42
+  residual_sigma: 0.8185143085969949
+integrator: RK4
+objective_function: NSE
+parameter_bounds:
+  max:
+  - 5.0
+  - 1.0
+  - 1.0
+  - 1.0
+  - 5.0
+  - 5.0
+  - 1.0
+  - 1.0
+  min:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+parameters_forward:
+- 0.4033171580340578
+- 0.043200134465329595
+- 0.06042703645452249
+- 0.4619156092411715
+- 1.1474687788066573
+- 0.7574371032308584
+- 0.5008619574782364
+- 0.11928174596339765
+paths:
+  input_data: examples/forward_prediction_intervals/future_data.csv
+  output_dir: examples/forward_prediction_intervals
+prc: 1.0
+project_name: projection
+run_mode: FORWARD
+series: future
+station_name: Alpha
+time_resolution: 1d
+uncertainty_options:
+  noise_model: iid
+version: 8

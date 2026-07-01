@@ -314,7 +314,45 @@ Before relying on it:
 - Set `sensitivity_analysis: true` to get a one-at-a-time local sensitivity analysis around your best-fit parameters: each parameter is perturbed by ±`sensitivity_perturbations`% of its own value (bounded by `parameter_bounds`), and the mean absolute change in simulated water temperature is reported per parameter. This tells you which parameters the fit is most sensitive to — useful for deciding which bounds are worth tightening.
 - Set `run_mode: DE-MCMC` to get full parameter and predictive uncertainty: it runs `DE` to find the best fit, then samples the posterior around it with `emcee`, producing an MCMC chain (`MCMC_chain_*.csv`) and 5th/50th/95th percentile prediction envelopes (`MCMC_envelopes_*.csv`). This is more expensive than `DE` alone — expect it to take noticeably longer, scaling with `mcmc_walkers × mcmc_steps`.
 
-## 12. Where to go next
+## 12. Forward prediction intervals
+
+When running the model in `FORWARD` mode using a previously generated MCMC parameter chain (e.g., from a `DE-MCMC` calibration run), you can opt to generate probabilistic prediction envelopes around the forward simulation.
+
+### Prediction Interval Options
+
+To enable forward prediction intervals, configure the `forward_options` block in your YAML file:
+
+```yaml
+forward_options:
+  enable_prediction_intervals: true
+  mcmc_chain_path: "output_v4/MCMC_chain_test_station_c_1d.csv"
+  residual_sigma: 1.0  # Observation error variance (optional)
+  n_samples: 1000      # Number of parameter sets to sample
+  random_seed: 42      # Seed for reproducibility
+```
+
+### Noise Models
+
+By default, the noise applied to generate the prediction envelopes assumes independent and identically distributed (i.i.d.) residuals. However, river water temperature residuals typically exhibit significant serial correlation. To generate more realistic uncertainty bounds, you can opt into an Autoregressive AR(1) noise model via the `uncertainty_options` block:
+
+```yaml
+uncertainty_options:
+  noise_model: "ar1"  # "iid" (default) or "ar1"
+  ar1_rho: null       # optional override, between -1 and 1
+```
+
+If `noise_model: "ar1"` is selected, `pyair2stream` will resolve the lag-1 autocorrelation coefficient (`rho`) using the following priority order:
+1. **Explicit Override:** If `ar1_rho` is explicitly provided in the config, it is used directly.
+2. **Own Observations:** If the forward run dataset includes actual water temperature observations, `rho` is estimated from the forward run's own daily residuals.
+3. **Sidecar Carry-forward:** If a `_meta.json` sidecar file exists next to your `mcmc_chain_path` (generated automatically during `DE-MCMC` calibration), `rho` is read from that file.
+4. **Fallback:** If none of the above are available, it falls back to `rho = 0.0` (equivalent to `iid`) and logs a warning.
+
+**Important Caveats:**
+- Uncertainty (`rho` and `sigma`) is quantified on daily residuals, even if the calibration objective function used aggregated (e.g., weekly) data.
+- Both the `iid` and `ar1` methods add noise *after* the physical integration. This means lower prediction bounds might dip below the physical ice-cover floor (`Tice_cover`).
+- The `rho` value used for the AR(1) interval is fixed and is not jointly calibrated with the physical parameters.
+
+## 13. Where to go next
 
 - Browse `examples/` for runnable configs covering gap-tolerant mode, sensitivity analysis, optimizer comparisons, and real river case studies.
 - See the main [README.md](README.md) for the model-version equations, testing instructions, and how to cite the original model.

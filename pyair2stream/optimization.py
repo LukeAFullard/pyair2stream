@@ -6,8 +6,10 @@ import concurrent.futures
 from scipy.optimize import differential_evolution, minimize
 import emcee
 
+import json
 from .config import CommonData
 from .model import call_model, funcobj, detect_segments
+from .uncertainty import estimate_ar1_rho, generate_ar1_noise
 
 def sub_1(data: CommonData) -> np.float64:
     """
@@ -46,7 +48,6 @@ def forward_mode(data: CommonData) -> None:
         ei = sub_1(data)
     else:
         # It's a pure projection, we skip the objective evaluation.
-        from pyair2stream.model import call_model, detect_segments
         if data.gap_tolerant and data.segments is None:
             detect_segments(data)
         call_model(data)
@@ -83,6 +84,37 @@ def forward_mode(data: CommonData) -> None:
         if sigma <= 0.0:
             print("Warning: residual_sigma is 0.0. Prediction interval will only reflect parameter uncertainty, not observation error.")
 
+        noise_model = getattr(data, 'uncertainty_options', {}).get('noise_model', 'iid')
+        rho_used = 0.0
+
+        if noise_model == 'ar1':
+            ar1_rho_override = data.uncertainty_options.get('ar1_rho')
+            sidecar_path = chain_path.replace('.csv', '_meta.json')
+
+            if ar1_rho_override is not None:
+                rho_used = ar1_rho_override
+                print(f"Using explicit ar1_rho override: {rho_used}")
+            elif has_obs:
+                eval_mask_for_rho = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=bool)
+                segments_for_rho = data.segments if data.gap_tolerant else [(0, data.n_tot - 1)]
+                rho_used = estimate_ar1_rho(data.Twat_mod, data.Twat_obs, eval_mask_for_rho, segments_for_rho)
+                print(f"Using rho={rho_used:.4f} estimated directly from this run's own residuals.")
+            elif os.path.exists(sidecar_path):
+                import json
+                try:
+                    with open(sidecar_path, 'r') as f:
+                        sidecar_data = json.load(f)
+                    rho_used = sidecar_data.get('rho', 0.0)
+                    print(f"Using rho={rho_used:.4f} carried from calibration run {sidecar_path}")
+                except Exception as e:
+                    print(f"Warning: Failed to read sidecar {sidecar_path} ({e}). Falling back to rho=0.0.")
+                    rho_used = 0.0
+            else:
+                print("Warning: No residuals available to estimate rho; falling back to rho=0.0 (equivalent to iid)")
+                rho_used = 0.0
+
+            rng = np.random.default_rng(seed)
+
         ensemble_simulations = []
         n_par = 8
 
@@ -91,6 +123,7 @@ def forward_mode(data: CommonData) -> None:
         active_params = [int(c.split('_')[1])-1 for c in active_cols]
 
         best_params_deterministic = data.par_best.copy()
+        segments_for_noise = data.segments if data.gap_tolerant else [(0, data.n_tot - 1)]
 
         for i, theta in enumerate(samples):
             p_vals = best_params_deterministic.copy()
@@ -104,7 +137,11 @@ def forward_mode(data: CommonData) -> None:
 
             call_model(data)
 
-            noise = np.random.normal(0, sigma, data.n_tot)
+            if noise_model == 'ar1':
+                noise = generate_ar1_noise(data.n_tot, sigma, rho_used, segments_for_noise, rng)
+            else:
+                noise = np.random.normal(0, sigma, data.n_tot)
+
             noisy_simulation = data.Twat_mod + noise
 
             ensemble_simulations.append(noisy_simulation)
@@ -514,7 +551,49 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     chain_df.to_csv(chain_filename, index=False)
     print(f"Saved MCMC chain (discarded {burnin} burn-in steps) to {chain_filename}")
 
-    # Step 5: Compute Predictive Uncertainty Envelopes
+    # Step 5: Calculate properties for sidecar file from best_params
+    print("Writing metadata sidecar...")
+    data.par[:n_par] = best_params.copy()
+    if data.gap_tolerant and data.segments is None:
+        detect_segments(data)
+    call_model(data)
+
+    valid_mask = (data.Twat_obs != -999.0)
+    if data.eval_mask is not None:
+        valid_mask &= data.eval_mask
+
+    mod_valid = data.Twat_mod[valid_mask]
+    obs_valid = data.Twat_obs[valid_mask]
+
+    N = len(obs_valid)
+    if N > 0:
+        SSE = np.sum((mod_valid - obs_valid)**2)
+        best_sigma = float(np.sqrt(SSE / N))
+    else:
+        best_sigma = 0.0
+
+    eval_mask_for_rho = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=bool)
+    segments_for_rho = data.segments if data.gap_tolerant else [(0, data.n_tot - 1)]
+    best_rho = estimate_ar1_rho(data.Twat_mod, data.Twat_obs, eval_mask_for_rho, segments_for_rho)
+
+    noise_model = getattr(data, 'uncertainty_options', {}).get('noise_model', 'iid')
+
+    sidecar_data = {
+        "rho": best_rho,
+        "sigma": best_sigma,
+        "n_valid_pairs": N,  # N valid points used for variance, proxy for pairs
+        "noise_model_used_for_this_run": noise_model,
+        "mcmc_walkers": nwalkers,
+        "mcmc_steps": nsteps,
+        "mcmc_seed": seed
+    }
+
+    sidecar_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}_meta.json")
+    with open(sidecar_filename, 'w') as f:
+        json.dump(sidecar_data, f, indent=4)
+    print(f"Saved MCMC metadata sidecar to {sidecar_filename}")
+
+    # Step 6: Compute Predictive Uncertainty Envelopes
     print("Generating Predictive Uncertainty Envelopes...")
     # Take 1000 random samples from the flattened converged chain to make a robust envelope
     n_samples = min(1000, len(chain))
@@ -523,6 +602,9 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
     # Store simulated time series
     ensemble_simulations = []
+
+    if noise_model == 'ar1':
+        rng = np.random.default_rng(seed)
 
     for i, theta in enumerate(samples):
         p_vals = best_params.copy()
@@ -540,22 +622,25 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
         # we must add the observation error variance back into the simulations.
         # We estimate sigma from the residuals of this specific parameter set.
 
-        valid_mask = (data.Twat_obs != -999.0)
+        valid_mask_iter = (data.Twat_obs != -999.0)
         if data.eval_mask is not None:
-            valid_mask &= data.eval_mask
+            valid_mask_iter &= data.eval_mask
 
-        mod_valid = data.Twat_mod[valid_mask]
-        obs_valid = data.Twat_obs[valid_mask]
+        mod_valid_iter = data.Twat_mod[valid_mask_iter]
+        obs_valid_iter = data.Twat_obs[valid_mask_iter]
 
-        N = len(obs_valid)
-        if N > 0:
-            SSE = np.sum((mod_valid - obs_valid)**2)
-            sigma = np.sqrt(SSE / N)
+        N_iter = len(obs_valid_iter)
+        if N_iter > 0:
+            SSE_iter = np.sum((mod_valid_iter - obs_valid_iter)**2)
+            sigma = np.sqrt(SSE_iter / N_iter)
         else:
             sigma = 0.0
 
-        # Add random noise N(0, sigma) to simulate the full prediction uncertainty
-        noise = np.random.normal(0, sigma, data.n_tot)
+        if noise_model == 'ar1':
+            noise = generate_ar1_noise(data.n_tot, sigma, best_rho, segments_for_rho, rng)
+        else:
+            noise = np.random.normal(0, sigma, data.n_tot)
+
         noisy_simulation = data.Twat_mod + noise
 
         ensemble_simulations.append(noisy_simulation)
