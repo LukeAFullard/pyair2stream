@@ -16,3 +16,9 @@ examples/Hopelands/**/*.csv
 venv/
 *.egg-info/
 dist/
+
+# Allow results and plots for Gap experiment
+!examples/gap_experiment/**/*.png
+!examples/gap_experiment/**/*.out
+# Keep CSVs ignored in Gap experiment
+examples/gap_experiment/**/*.csv
