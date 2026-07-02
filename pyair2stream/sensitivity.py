@@ -31,7 +31,11 @@ def sensitivity_analysis(data: CommonData):
 
     # Determine valid indices based on where we actually have reliable water temperature
     # observations AND where the model was validly evaluated.
-    valid_mask = data.eval_mask & (data.Twat_obs != -999.0)
+    obs_mask = (data.Twat_obs != -999.0)
+    if data.eval_mask is not None:
+        valid_mask = data.eval_mask & obs_mask
+    else:
+        valid_mask = obs_mask
 
     if data.gap_tolerant and data.segments is not None:
         for start, end in data.segments:
