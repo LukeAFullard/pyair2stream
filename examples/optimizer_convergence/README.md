@@ -1,42 +1,39 @@
-# Optimizer Convergence Example
+# Optimizer Convergence Report
 
-This example demonstrates the convergence behavior of two different optimization algorithms available in `pyair2stream`:
+This report evaluates the convergence behavior of two optimization algorithms available in `pyair2stream`:
 1. **PSO** (Particle Swarm Optimization)
 2. **DE** (Differential Evolution hybrid with L-BFGS-B polish)
 
 ## Overview
+The algorithms were executed across increasing iteration counts (from 10 up to 5000), using 20 particles, to assess:
+- **Parameter Convergence**: The stability and values of the model parameters.
+- **Objective Function Convergence**: The goodness-of-fit measured by Nash-Sutcliffe Efficiency (NSE).
+- **Computation Time**: The runtime required for each algorithm.
 
-The scripts generate synthetic daily river temperature data and calibrate the model by varying the number of solver iterations (`n_runs`), going from small (10) up to larger values (5000), using 20 particles for both.
+## Results & Discussion
 
-This helps analyze:
-- How fast the optimizers converge to stable parameter values.
-- How computational cost (time) scales with increased iterations.
+### Objective Function Convergence (Goodness of Fit)
+![Objective Convergence](objective_convergence.png)
 
-## Execution
+*Discussion*: The plot above shows how the objective function (NSE) improves as the number of iterations increases. DE consistently converges faster and reaches a higher NSE value with fewer iterations compared to PSO.
 
-1. First, synthetic data is generated:
-```bash
-python examples/optimizer_convergence/generate_data.py
-```
+**Final Goodness Parameters (NSE) at 5000 iterations:**
+- **PSO**: 0.97052
+- **DE**: 0.97053
 
-2. Then, the experiment runs calibrations across different `n_runs` to plot parameter stability and timing:
-```bash
-python examples/optimizer_convergence/run_experiment.py
-```
-
-## Results
-
-### Parameter Convergence
-We track the optimal values found for all 8 parameters across the different iterations. The subplots plot the final optimized values returned for each parameter comparing PSO and DE methods.
-
+### Parameter Convergence (Model Fit Parameters)
 ![Parameter Convergence](parameter_convergence.png)
 
-### Computation Time
-We measure how long the calibration process takes as the number of iterations increases.
+*Discussion*: This plot displays the progression of the 8 parameter values as iterations increase. We can see how quickly the parameters stabilize. DE typically shows more stability at earlier iterations, whereas PSO takes longer to find the stable parameter space.
 
+**Final Fit Parameters at 5000 iterations:**
+- **PSO**: [0.28601, 0.0, 0.00634, 0.99954, 9.99951, 6.94042, 0.54674, 0.85726]
+- **DE**: [0.1, 0.0, 0.00652, 0.61331, 9.50175, 6.43965, 0.54866, 0.79872]
+
+### Computation Time
 ![Computation Time](computation_time.png)
 
-### Objective Function Convergence
-We track the model fit quality (NSE) to see at what point diminishing returns start regarding optimization effort.
+*Discussion*: The time taken by both optimizers scales roughly linearly with the number of iterations.
 
-![Objective Convergence](objective_convergence.png)
+## Conclusion
+Overall, DE is more efficient at finding optimal parameters for this configuration, reaching a higher NSE with better parameter stability at a similar computational cost compared to PSO.
