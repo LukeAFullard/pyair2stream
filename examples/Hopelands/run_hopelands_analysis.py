@@ -21,7 +21,7 @@ def main():
     run_command("PYTHONPATH=. python examples/Hopelands/update_report.py", "Updating Analysis Report and Exporting Synthetic Data")
 
     print("\nAnalysis complete. Results are in examples/Hopelands/output/")
-    print("Final report can be found at examples/Hopelands/Final_Analysis_Report.md")
+    print("Final report can be found at examples/Hopelands/README.md")
 
 if __name__ == '__main__':
     main()

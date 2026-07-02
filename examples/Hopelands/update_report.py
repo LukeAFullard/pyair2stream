@@ -4,7 +4,7 @@ import glob
 
 def main():
     output_dir = 'examples/Hopelands/output'
-    report_path = 'examples/Hopelands/Final_Analysis_Report.md'
+    report_path = 'examples/Hopelands/README.md'
 
     # 1. Get Metrics
     metrics_file = os.path.join(output_dir, 'goodness_of_fit_calibration_DE-MCMC_NSE_Hopelands.csv')
@@ -85,8 +85,11 @@ The model was calibrated using a hybrid Differential Evolution (DE) and L-BFGS-B
 *Figure 6: Correlation matrix between the 8 model parameters.*
 
 ### 3.4. Residual Diagnostics
-![Residual Diagnostics](output/residual_diagnostics_calibration_DE-MCMC_NSE_Hopelands.png)
-*Figure 7: Q-Q plot and Autocorrelation Function (ACF) of the model residuals.*
+![Residual Diagnostics (Calibration)](output/residual_diagnostics_calibration_DE-MCMC_NSE_Hopelands.png)
+*Figure 7: Q-Q plot and Autocorrelation Function (ACF) of the model residuals for the calibration period.*
+
+![Residual Diagnostics (Full Simulation)](output/residual_diagnostics_full_simulation_DE-MCMC_NSE_Hopelands.png)
+*Figure 7b: Q-Q plot and Autocorrelation Function (ACF) of the model residuals for the full simulation period.*
 
 ## 4. Sensitivity Analysis
 A local One-At-A-Time (OAT) sensitivity analysis was performed to evaluate the impact of each parameter on the simulated water temperature.
@@ -102,7 +105,7 @@ The `pyair2stream` model is well-suited for the Hopelands station, providing a r
 """
     with open(report_path, 'w') as f:
         f.write(report)
-    print("Updated Final_Analysis_Report.md")
+    print("Updated README.md")
 
     # 4. Export Synthetic Data
     sim_files = glob.glob(os.path.join(output_dir, '2_DE-MCMC_NSE_Hopelands_*c_1d.csv'))
