@@ -40,3 +40,40 @@ The generated plot features four panels that illustrate the practical difference
 2. **Forward Projection - AR(1) Noise**: Shows the 90% Prediction Interval using autoregressive noise. Note that at a daily scale, the overall width of the interval is mathematically identical to the IID interval, because both models are calibrated to the exact same marginal variance ($\sigma^2$).
 3. **Sample Individual Trajectories**: Overlays individual simulation traces. Here the structural difference becomes visible: the IID trace (green) oscillates rapidly day-to-day around the median, while the AR(1) trace (blue) exhibits realistic "memory", wandering away from the median for several days at a time (e.g., simulating a multi-day heatwave or cold snap).
 4. **7-Day Rolling Average Prediction Interval**: This is the most crucial panel for understanding the real-world impact. When we calculate a 7-day rolling average of the envelopes, the rapid daily oscillations of the IID white noise cancel each other out, causing the green uncertainty bounds to shrink drastically. In contrast, because the AR(1) errors are temporally correlated, they do not perfectly cancel out over a week. The blue AR(1) bounds remain much wider, correctly preserving the uncertainty for time-averaged metrics (e.g., weekly compliance thresholds) which IID models dangerously underestimate.
+
+
+## Additional Goodness of fit and model fit parameters
+- Sigma: 0.8185108685637652
+- Rho: 0.5910357316648412
+- Best NSE: 0.9727516010328746
+- Best R2: 0.9727516041586916
+- Best MAE: 0.6463062429471895
+
+### Best Parameters:
+- par_1: 0.4021291550566604
+- par_2: 0.0431781983923235
+- par_3: 0.0603445120378626
+- par_4: 0.4619397898649217
+- par_5: 1.1496073864321397
+- par_6: 0.7581240017948266
+- par_7: 0.5008910497421541
+- par_8: 0.1194132072963056
+
+
+
+### Discussion of Results
+The historical calibration run successfully quantified the parameter uncertainty and estimated the intrinsic observation noise.
+- **Model Fit Parameters**: The calibration achieved excellent goodness-of-fit metrics, with an NSE of nearly 0.97 and an R² of 0.97. The Mean Absolute Error (MAE) is approx 0.65°C.
+- **Error Structure**: The estimated residual standard deviation ($\sigma$) is ~0.82°C, closely matching our injected synthetic noise. The autocorrelation coefficient ($\rho$) is ~0.59, indicating significant daily memory in the water temperature residuals.
+
+#### Visual Diagnostics
+1. **Comparison Plot (`comparison_iid_vs_ar1.png`)**: This plot contrasts the prediction bounds produced using standard white noise vs. autoregressive noise. The AR(1) bounds realistically widen over multi-day periods when rolled/averaged, providing safer estimates for medium-term temperature thresholds.
+2. **Convergence Plot (`convergence_DE-MCMC_NSE_Alpha.png`)**: Illustrates the MCMC chains converging on the posterior distributions for the 8 model parameters over 1000 steps.
+3. **Dotty Plots (`dottyplots_DE-MCMC_NSE_Alpha.png`)**: Shows the objective function space across each parameter dimension, confirming which parameters are well-identified and highlighting equifinality.
+4. **Parameter Correlation (`parameter_correlation_DE-MCMC_Alpha.png`)**: A pair-plot showing the posterior distributions of the parameters and their trade-offs.
+
+
+![Comparison Plot](comparison_iid_vs_ar1.png)
+![Convergence Plot](convergence_DE-MCMC_NSE_Alpha.png)
+![Dotty Plots](dottyplots_DE-MCMC_NSE_Alpha.png)
+![Parameter Correlation](parameter_correlation_DE-MCMC_Alpha.png)
