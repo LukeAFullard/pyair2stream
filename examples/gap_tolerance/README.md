@@ -37,10 +37,10 @@ You will see output summarizing the calibration efficiency and the true predicti
 EXPERIMENT RESULTS
 ==================================================
 Scenario  Calibration_NSE (Apparent)  True_NSE (Complete Data)
-Complete                      0.9895                    0.9895
-    1Gap                      0.9902                    0.9896
-   2Gaps                      0.9905                    0.9896
-   3Gaps                      0.9905                    0.9895
+Complete                      0.9896                    0.9896
+    1Gap                      0.9903                    0.9896
+   2Gaps                      0.9893                    0.9884
+   3Gaps                      0.9905                    0.9896
 ==================================================
 ```
 
@@ -50,12 +50,12 @@ The 8-parameter `air2stream` equation parameters identified by DE for each scena
 
 | Scenario | p1 | p2 | p3 | p4 | p5 | p6 | p7 | p8 |
 |---|---|---|---|---|---|---|---|---|
-| Complete | 0.100 | 0.013 | 0.022 | 0.330 | 0.996 | 0.771 | 0.561 | 0.104 |
-| 1Gap | 0.100 | 0.009 | 0.016 | 0.554 | 1.000 | 0.782 | 0.557 | 0.106 |
-| 2Gaps | 0.100 | 0.009 | 0.016 | 0.565 | 1.000 | 0.782 | 0.557 | 0.106 |
-| 3Gaps | 0.109 | 0.000 | 0.000 | 0.996 | 1.000 | 0.811 | 0.549 | 0.112 |
+| Complete | 0.100 | 0.008 | 0.014 | 0.707 | 0.999 | 0.781 | 0.557 | 0.106 |
+| 1Gap | 0.100 | 0.006 | 0.012 | 0.747 | 1.000 | 0.786 | 0.555 | 0.107 |
+| 2Gaps | 0.214 | 0.048 | 0.060 | 0.933 | 1.000 | 0.811 | 0.580 | 0.119 |
+| 3Gaps | 0.100 | 0.008 | 0.014 | 0.690 | 0.999 | 0.782 | 0.557 | 0.107 |
 
-*Even after significantly increasing the intensity of the Differential Evolution Optimization (`n_particles: 100`, `n_runs: 5000`), the parameters still vary between scenarios (e.g. `p4` increasing from 0.330 to 0.996). This demonstrates that equifinality in conceptual hydrological models cannot always be "brute-forced" away simply by running longer calibrations, as different data gaps fundamentally shift the mathematical constraints available to the optimizer.*
+*Even after significantly increasing the intensity of the Differential Evolution Optimization (`n_particles: 100`, `n_runs: 5000`), the parameters still vary between scenarios (e.g. `p4` varying between 0.690 and 0.933). This demonstrates that equifinality in conceptual hydrological models cannot always be "brute-forced" away simply by running longer calibrations, as different data gaps fundamentally shift the mathematical constraints available to the optimizer.*
 
 **Key Takeaways:**
 *   **Gap-Tolerant Calibration Works**: The model successfully calibrates parameters that generalize extremely well to the missing periods (True NSE remains > 0.95).
