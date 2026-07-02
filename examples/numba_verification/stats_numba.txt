@@ -1,2 +1,0 @@
-Numba Time: 10.1992s
-Numba NSE: -2.2551
