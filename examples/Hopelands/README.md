@@ -1,7 +1,7 @@
 # Hopelands Water Temperature Analysis Report
 
 ## 1. Executive Summary
-A full analysis was performed on the Hopelands dataset to calibrate the `pyair2stream` water temperature model. The model achieved a high level of accuracy with a Nash-Sutcliffe Efficiency (NSE) of **0.956218**, indicating a strong fit between observed and simulated water temperatures.
+A full analysis was performed on the Hopelands dataset to calibrate the `pyair2stream` water temperature model. The model achieved a high level of accuracy with a Nash-Sutcliffe Efficiency (NSE) of **0.956214**, indicating a strong fit between observed and simulated water temperatures.
 
 ## 2. Dataset and Preprocessing
 The analysis integrated three primary data sources:
@@ -30,7 +30,7 @@ The model was calibrated using a hybrid Differential Evolution (DE) and L-BFGS-B
 ### 3.2. Performance Metrics
 | Metric | Value |
 |--------|-------|
-| NSE    | 0.956218 |
+| NSE    | 0.956214 |
 | R²     | 0.9513 |
 | RMSE   | 0.914  |
 | MAE    | 0.705  |
@@ -44,14 +44,14 @@ The model was calibrated using a hybrid Differential Evolution (DE) and L-BFGS-B
 ### 3.3. Parameter Significance and Uncertainty
 | Parameter | Mean | 95% CI Lower | 95% CI Upper | Significant |
 |-----------|------|--------------|--------------|-------------|
-| par_1 | 0.1343 | 0.0812 | 0.1892 | True |
-| par_2 | 0.2756 | 0.2667 | 0.2843 | True |
-| par_3 | 0.2297 | 0.2209 | 0.2384 | True |
-| par_4 | 0.3503 | 0.3318 | 0.3695 | True |
-| par_5 | 4.8358 | 4.5760 | 5.0990 | True |
-| par_6 | 1.6635 | 1.5713 | 1.7582 | True |
-| par_7 | 0.0369 | 0.0348 | 0.0390 | True |
-| par_8 | 0.3784 | 0.3587 | 0.3980 | True |
+| par_1 | 0.1355 | 0.0844 | 0.1882 | True |
+| par_2 | 0.2763 | 0.2669 | 0.2856 | True |
+| par_3 | 0.2304 | 0.2212 | 0.2395 | True |
+| par_4 | 0.3497 | 0.3306 | 0.3700 | True |
+| par_5 | 4.8198 | 4.5544 | 5.0985 | True |
+| par_6 | 1.6575 | 1.5638 | 1.7553 | True |
+| par_7 | 0.0369 | 0.0347 | 0.0389 | True |
+| par_8 | 0.3772 | 0.3573 | 0.3983 | True |
 
 
 ![Dotty Plots](output/dottyplots_DE-MCMC_NSE_Hopelands.png)
@@ -61,8 +61,11 @@ The model was calibrated using a hybrid Differential Evolution (DE) and L-BFGS-B
 *Figure 6: Correlation matrix between the 8 model parameters.*
 
 ### 3.4. Residual Diagnostics
-![Residual Diagnostics](output/residual_diagnostics_calibration_DE-MCMC_NSE_Hopelands.png)
-*Figure 7: Q-Q plot and Autocorrelation Function (ACF) of the model residuals.*
+![Residual Diagnostics (Calibration)](output/residual_diagnostics_calibration_DE-MCMC_NSE_Hopelands.png)
+*Figure 7: Q-Q plot and Autocorrelation Function (ACF) of the model residuals for the calibration period.*
+
+![Residual Diagnostics (Full Simulation)](output/residual_diagnostics_full_simulation_DE-MCMC_NSE_Hopelands.png)
+*Figure 7b: Q-Q plot and Autocorrelation Function (ACF) of the model residuals for the full simulation period.*
 
 ## 4. Sensitivity Analysis
 A local One-At-A-Time (OAT) sensitivity analysis was performed to evaluate the impact of each parameter on the simulated water temperature.
