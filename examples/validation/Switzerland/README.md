@@ -111,3 +111,53 @@ Following the initial evaluation, a high-intensity Differential Evolution pass (
 | **Literature** | 0.9558 | 4.794 | 0.629 | 1.410 | 0.270 | 0.000 | 4.912 | 0.582 | 0.637 |
 | **Python PSO** | 0.9393 | 3.050 | 0.659 | 1.435 | 0.298 | 2.531 | 2.624 | 0.660 | 0.573 |
 | **Python DE**  | 0.9558 | 4.794 | 0.629 | 1.410 | 0.270 | 0.000 | 4.910 | 0.582 | 0.637 |
+
+
+## Extended Analysis: Optimizer, Integrator, and Bound Constraints
+
+A fully extended evaluation was run on all three Swiss stations utilizing high-intensity search settings (100 particles, 3000 runs). For each station, 8 evaluations were conducted: comparing PSO vs DE, CRN vs RK4 integrators, and testing both standard parameter bounds (`a4` in `[-1.0, 1.0]`) and restricted parameter bounds (`a4` in `[0.0, 1.0]`).
+
+### MAH Results
+
+| Run | NSE | R2 | p1 | p2 | p3 | p4 | p5 | p6 | p7 | p8 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| Literature | N/A | N/A | 0.889 | 0.649 | 0.765 | 0.129 | 2.318 | 1.536 | 0.603 | 0.241 |
+| MAH_PSO_CRN_orig |  0.9872 |  0.9872 | 1.141 | 0.996 | 1.155 | -0.210 | 5.244 | 3.438 | 0.597 | 0.540 |
+| MAH_DE_CRN_orig |  0.9879 |  0.9879 | 0.889 | 0.654 | 0.769 | 0.067 | 2.550 | 1.694 | 0.601 | 0.266 |
+| MAH_PSO_RK4_orig |  0.9886 |  0.9886 | 0.890 | 0.649 | 0.766 | 0.129 | 2.321 | 1.538 | 0.603 | 0.241 |
+| MAH_DE_RK4_orig |  0.9886 |  0.9886 | 0.890 | 0.649 | 0.766 | 0.129 | 2.323 | 1.539 | 0.603 | 0.241 |
+| MAH_PSO_CRN_restr |  0.9877 |  0.9877 | 1.014 | 0.796 | 0.931 | 0.000 | 3.593 | 2.372 | 0.599 | 0.373 |
+| MAH_DE_CRN_restr |  0.9879 |  0.9879 | 0.889 | 0.654 | 0.770 | 0.066 | 2.551 | 1.695 | 0.601 | 0.266 |
+| MAH_PSO_RK4_restr |  0.9886 |  0.9886 | 0.884 | 0.658 | 0.775 | 0.132 | 2.402 | 1.585 | 0.603 | 0.249 |
+| MAH_DE_RK4_restr |  0.9886 |  0.9886 | 0.890 | 0.650 | 0.766 | 0.129 | 2.323 | 1.539 | 0.603 | 0.241 |
+
+### SIO Results
+
+| Run | NSE | R2 | p1 | p2 | p3 | p4 | p5 | p6 | p7 | p8 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| Literature | N/A | N/A | 0.346 | 0.219 | 0.178 | 0.718 | 7.773 | 2.217 | 0.529 | 1.280 |
+| SIO_PSO_CRN_orig |  0.9247 |  0.9247 | 0.516 | 0.503 | 0.366 | -0.167 | 19.119 | 5.387 | 0.530 | 3.117 |
+| SIO_DE_CRN_orig |  0.9251 |  0.9251 | 0.464 | 0.316 | 0.251 | 0.326 | 11.551 | 3.301 | 0.529 | 1.896 |
+| SIO_PSO_RK4_orig |  0.9241 |  0.9241 | 0.556 | 0.215 | 0.209 | 0.681 | 6.889 | 2.017 | 0.528 | 1.151 |
+| SIO_DE_RK4_orig |  0.9242 |  0.9242 | 0.342 | 0.217 | 0.176 | 0.724 | 7.715 | 2.201 | 0.529 | 1.270 |
+| SIO_PSO_CRN_restr |  0.9249 |  0.9249 | 0.500 | 0.425 | 0.316 | 0.007 | 15.998 | 4.552 | 0.530 | 2.617 |
+| SIO_DE_CRN_restr |  0.9251 |  0.9251 | 0.465 | 0.316 | 0.251 | 0.326 | 11.545 | 3.300 | 0.529 | 1.895 |
+| SIO_PSO_RK4_restr |  0.9241 |  0.9241 | 0.454 | 0.204 | 0.187 | 0.762 | 6.824 | 1.979 | 0.529 | 1.134 |
+| SIO_DE_RK4_restr |  0.9242 |  0.9242 | 0.341 | 0.217 | 0.176 | 0.723 | 7.716 | 2.200 | 0.529 | 1.270 |
+
+### DAV Results
+
+| Run | NSE | R2 | p1 | p2 | p3 | p4 | p5 | p6 | p7 | p8 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| Literature | N/A | N/A | 4.794 | 0.629 | 1.410 | 0.270 | 0.000 | 4.912 | 0.582 | 0.637 |
+| DAV_PSO_CRN_orig |  0.9519 |  0.9519 | 9.441 | 1.158 | 2.657 | -0.530 | 0.000 | 10.000 | 0.582 | 1.305 |
+| DAV_DE_CRN_orig |  0.9519 |  0.9519 | 9.442 | 1.159 | 2.657 | -0.530 | 0.000 | 10.000 | 0.582 | 1.305 |
+| DAV_PSO_RK4_orig |  0.9558 |  0.9558 | 4.792 | 0.629 | 1.408 | 0.270 | 0.000 | 4.920 | 0.582 | 0.638 |
+| DAV_DE_RK4_orig |  0.9558 |  0.9558 | 4.794 | 0.629 | 1.411 | 0.269 | 0.000 | 4.904 | 0.582 | 0.636 |
+| DAV_PSO_CRN_restr |  0.9514 |  0.9514 | 9.109 | 1.107 | 2.552 | 0.000 | 0.000 | 10.000 | 0.582 | 1.295 |
+| DAV_DE_CRN_restr |  0.9514 |  0.9514 | 9.109 | 1.108 | 2.552 | 0.000 | 0.000 | 10.000 | 0.582 | 1.295 |
+| DAV_PSO_RK4_restr |  0.9558 |  0.9558 | 4.794 | 0.629 | 1.410 | 0.270 | 0.000 | 4.912 | 0.582 | 0.637 |
+| DAV_DE_RK4_restr |  0.9558 |  0.9558 | 4.793 | 0.629 | 1.410 | 0.270 | 0.000 | 4.911 | 0.582 | 0.637 |
+
+### Discussion
+The analysis confirms that restricting `a4` strictly bounds the optimizer to non-negative domains for that variable. In cases like MAH where the global minimum uses a positive `a4`, restricting the bounds yielded effectively identical performance. However, for stations whose optimal `a4` lies below `0.0`, the restricted optimizer reliably bottoms out at `a4=0.000` and compensates via corresponding adjustments in other parameters, yielding marginally lower NSE outcomes compared to the true global minima reached in the unbounded configurations.
