@@ -1,28 +1,28 @@
 # pyair2stream Optimizer Comparison
 
-This example demonstrates the calibration of the `pyair2stream` model on the "River Alpha" dataset using three different optimization strategies provided by the package:
+This example demonstrates the calibration of the `pyair2stream` model on the "Switzerland (DAV)" dataset using three different optimization strategies provided by the package:
 
 1. **PSO (Particle Swarm Optimization)**
 2. **Hybrid DE (Differential Evolution + L-BFGS-B)**
 3. **DE-MCMC (Differential Evolution + L-BFGS-B + Markov Chain Monte Carlo)**
 
-The goal is to evaluate their relative performance in terms of model fit (Nash-Sutcliffe Efficiency, NSE), parameter convergence, parameter sensitivity, and computational time.
+The goal is to evaluate their relative performance in terms of model fit (Nash-Sutcliffe Efficiency, NSE), parameter convergence, parameter sensitivity, and computational time. Note that for this comparison, the PSO configuration was dynamically adjusted to use a highly intensive 500 particles and 500 runs to give it a fair chance to converge. Additionally, a random seed (`np.random.seed(42)`) was set prior to running each optimizer to ensure that the stochastic phases of Hybrid DE and DE-MCMC start from the exact same initial state for a perfect one-to-one comparison.
 
 ## Results Overview
 
 | Optimizer | Time (s) | Best Objective (NSE) | Best Parameters |
 | :--- | :--- | :--- | :--- |
-| **PSO** | 5.60 | 0.954511 | `[4.8163, 0.68967, 0.75623, 0.76665, 0.82578, 3.76439, 0.52318, 0.58135]` |
-| **Hybrid DE** | 3.39 | 0.969867 | `[0.1, 0.03215, 0.04535, 0.00068, 0.99965, 0.70268, 0.54158, 0.08808]` |
-| **DE-MCMC** | 31.98 | 0.969623 | `[0.23799, 0.03243, 0.04941, 0.0, 0.99988, 0.82649, 0.53614, 0.09717]` |
+| **PSO** | 147.99 | 0.952547 | `[3.69036, 0.4683, 1.0, 0.42137, 0.08943, 4.46763, 0.57736, 0.62088]` |
+| **Hybrid DE** | 2.88 | 0.952547 | `[3.69022, 0.46831, 1.0, 0.4214, 0.08905, 4.46646, 0.57736, 0.6207]` |
+| **DE-MCMC** | 35.73 | 0.952547 | `[3.69022, 0.46831, 1.0, 0.4214, 0.08905, 4.46646, 0.57736, 0.6207]` |
 
 *Note: Execution times may vary slightly based on hardware and current load.*
 
 ### Observations
 
-*   **Hybrid DE** achieved the best goodness of fit (NSE = ~0.970) and did so in the shortest amount of time. It effectively utilizes a global search (Differential Evolution) followed by local refinement (L-BFGS-B).
-*   **PSO** found a good solution (NSE = ~0.955) but took slightly longer than Hybrid DE and fell short of finding the global optimum for this specific run.
-*   **DE-MCMC** performs the same initial optimization phase as Hybrid DE (finding a similarly optimal NSE of ~0.970) but then takes significantly longer (31.98s) because it additionally runs 2000 MCMC steps across 32 walkers to estimate parameter uncertainty envelopes.
+*   **Hybrid DE** achieved the best goodness of fit (NSE = ~0.953) and did so in an incredibly short amount of time. It effectively utilizes a global search (Differential Evolution) followed by local refinement (L-BFGS-B).
+*   **PSO**, despite the massive increase to 500 particles and 500 runs (resulting in 250,000 evaluations), found a solution (NSE = ~0.953) that is essentially tied with Hybrid DE. However, it took nearly 2.5 minutes to achieve this result, demonstrating the relative inefficiency of PSO compared to the DE-based methods for this problem structure.
+*   **DE-MCMC** performs the exact same initial optimization phase as Hybrid DE. Because they now share the same random seed, they find the exact same Best Objective and Best Parameters. DE-MCMC takes longer overall (35.73s) because it additionally runs 2000 MCMC steps across 32 walkers to estimate parameter uncertainty envelopes.
 
 ## Model Fit Comparison
 
@@ -36,7 +36,7 @@ This plot illustrates how quickly each optimization algorithm converges toward a
 
 ![Convergence Plot](convergence_plot.png)
 
-As seen in the plot, Hybrid DE quickly achieves a near-optimal score and refines it, while PSO explores the parameter space differently and takes more evaluations to reach its final, slightly lower optimum.
+Because Hybrid DE and DE-MCMC start with the exact same seed, their convergence trajectories (green and blue) overlap perfectly. Hybrid DE quickly achieves a near-optimal score and refines it. PSO explores a vastly wider parameter space early on (due to the 500 particles) but takes many more evaluations to reach its plateau.
 
 ## Parameter Sensitivity Analysis
 

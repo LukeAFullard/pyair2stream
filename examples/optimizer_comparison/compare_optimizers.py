@@ -15,8 +15,13 @@ def run_calibration(config_path, mode):
     aggregation(data)
     statis(data)
 
+    import numpy as np
+    np.random.seed(42)
+
     start_time = time.time()
     if mode == 'PSO':
+        data.n_particles = 500
+        data.n_run = 500
         PSO_mode(data)
     elif mode == 'DE':
         DE_mode(data)
@@ -144,8 +149,8 @@ def main():
 
     # We copy them locally for the README
     import shutil
-    shutil.copyfile(f"{pso_results['folder']}/sensitivity_PSO_NSE_River_Alpha.png", "examples/optimizer_comparison/sensitivity_PSO.png")
-    shutil.copyfile(f"{de_results['folder']}/sensitivity_DE_NSE_River_Alpha.png", "examples/optimizer_comparison/sensitivity_DE.png")
+    shutil.copyfile(f"{pso_results['folder']}/sensitivity_PSO_NSE_DAV.png", "examples/optimizer_comparison/sensitivity_PSO.png")
+    shutil.copyfile(f"{de_results['folder']}/sensitivity_DE_NSE_DAV.png", "examples/optimizer_comparison/sensitivity_DE.png")
     print("Sensitivity plots copied to examples/optimizer_comparison/sensitivity_PSO.png and sensitivity_DE.png")
 
 if __name__ == "__main__":
