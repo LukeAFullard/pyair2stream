@@ -99,5 +99,8 @@ class TestPostProcessing(unittest.TestCase):
             file_path = os.path.join(self.data.folder, file)
             self.assertTrue(os.path.exists(file_path), f"Expected file {file} was not generated.")
 
+        qq_file = f"predicted_vs_measured_calibration_{self.data.runmode}_{self.data.fun_obj}_{self.data.station}.png"
+        self.assertTrue(os.path.exists(os.path.join(self.data.folder, qq_file)), f"Expected QQ file {qq_file} was not generated.")
+
 if __name__ == '__main__':
     unittest.main()

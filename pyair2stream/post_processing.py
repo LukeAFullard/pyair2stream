@@ -387,6 +387,35 @@ def post_process(data: CommonData, toll: float = None):
             plt.savefig(diag_png, dpi=300)
             plt.close()
 
+        # Generate Predicted vs Measured (Q-Q type plot)
+        obs = df['Twat_obs_agg']
+        mod = mod_series
+        mask = obs.notna() & mod.notna()
+        if mask.sum() > 0:
+            obs_clean = obs[mask]
+            mod_clean = mod[mask]
+
+            fig, ax = plt.subplots(figsize=(6, 6))
+            ax.scatter(obs_clean, mod_clean, c='blue', s=5, alpha=0.5, label='Predicted vs Measured')
+
+            # 1:1 line
+            min_val = min(obs_clean.min(), mod_clean.min())
+            max_val = max(obs_clean.max(), mod_clean.max())
+            ax.plot([min_val, max_val], [min_val, max_val], 'k--', label='1:1 line')
+
+            ax.set_xlabel('Measured Temperature [\u00B0C]')
+            ax.set_ylabel('Predicted Temperature [\u00B0C]')
+            ax.set_title(f'Predicted vs Measured ({output_name})')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+
+            plt.tight_layout()
+            qq_pdf = os.path.join(data.folder, f"predicted_vs_measured_{output_name}_{data.runmode}_{data.fun_obj}_{data.station}.pdf")
+            qq_png = os.path.join(data.folder, f"predicted_vs_measured_{output_name}_{data.runmode}_{data.fun_obj}_{data.station}.png")
+            plt.savefig(qq_pdf, dpi=300)
+            plt.savefig(qq_png, dpi=300)
+            plt.close()
+
     if data.runmode == 'FORWARD':
         # We plot directly from the arrays since FORWARD mode might not save a CSV by default
         fig, ax = plt.subplots(figsize=(18/2.54, 10/2.54))
