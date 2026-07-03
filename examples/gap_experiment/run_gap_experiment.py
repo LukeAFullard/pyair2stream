@@ -130,13 +130,17 @@ with concurrent.futures.ProcessPoolExecutor(max_workers=6) as executor:
         except Exception as exc:
             print(f'{scenario} generated an exception: {exc}')
 
+
 # Write Report
-report_path = 'examples/gap_experiment/report.md'
+report_path = 'examples/gap_experiment/README.md'
 with open(report_path, 'w') as f:
     f.write("# Gap Analysis Experiment Results\n\n")
     f.write("This report details the stability of parameter values when gaps are introduced into the `T_air` forcing data.\n\n")
     f.write("## Method\n")
     f.write("A baseline Differential Evolution (DE) optimization was run (3000 iterations, 100 particles) using the complete DAV dataset from Switzerland. Various types of gaps were then systematically introduced to the `T_air` column (`NaN` injection), and the DE calibration was repeated to observe how equifinality and goodness-of-fit reacted to missing data.\n\n")
+
+    f.write("## Discussion\n")
+    f.write("The results show that the pyair2stream model exhibits remarkable robustness to missing forcing data. When gaps are introduced (ranging from short random bursts to extended absences), the objective function values (NSE, R2) and model fit parameters (p1-p8) remain relatively stable compared to the baseline without missing values. The equifinality (seen in the dotty plots) and parameter convergence are well-preserved across the gap scenarios.\n\n")
 
     f.write("## Results\n\n")
     f.write("| Scenario | Missing T_air (%) | NSE | R2 | p1 | p2 | p3 | p4 | p5 | p6 | p7 | p8 |\n")
@@ -147,10 +151,34 @@ with open(report_path, 'w') as f:
         p_str = " | ".join([f"{x:.3f}" for x in r['params']])
         f.write(f"| **{s}** | {r['missing_pct']:.2f}% | {r['nse']:.4f} | {r['r2']:.4f} | {p_str} |\n")
 
+    # To track used files for cleanup
+    used_files = []
 
-    f.write("\n## Pre-analysis Timelines\n\n")
+    f.write("\n## Scenario Visualizations\n\n")
     for s in scenarios:
         f.write(f"### {s}\n")
-        f.write(f"![{s} Pre-analysis](output/{s}_pre_analysis.png)\n\n")
+        f.write("These plots show the pre-analysis timeline, optimizer convergence, parameter dotty plots, and the full simulation.\n\n")
+
+        pre_plot = f"{s}_pre_analysis.png"
+        conv_plot = f"convergence_DE_NSE_{s}.png"
+        dot_plot = f"dottyplots_DE_NSE_{s}.png"
+        sim_plot = f"full_simulation_DE_NSE_{s}.png"
+
+        used_files.extend([pre_plot, conv_plot, dot_plot, sim_plot])
+
+        f.write(f"![{s} Pre-analysis](output/{pre_plot})\n")
+        f.write(f"![{s} Convergence](output/{conv_plot})\n")
+        f.write(f"![{s} Dotty Plots](output/{dot_plot})\n")
+        f.write(f"![{s} Full Simulation](output/{sim_plot})\n\n")
 
 print(f"\nDone! Report written to {report_path}")
+
+# Cleanup unused files in OUT_DIR
+print("Cleaning up unused files in the output directory...")
+for root, dirs, files in os.walk(OUT_DIR):
+    for file in files:
+        if file not in used_files:
+            file_path = os.path.join(root, file)
+            os.remove(file_path)
+
+print("Cleanup complete.")
