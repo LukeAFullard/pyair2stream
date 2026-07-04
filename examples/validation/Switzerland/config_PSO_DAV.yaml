@@ -16,7 +16,7 @@ paths:
   output_dir: "examples/validation/Switzerland/output_8"
 
 optimization:
-  n_runs: 100
+  n_runs: 3000
   n_particles: 100
   c1: 2.0
   c2: 2.0
