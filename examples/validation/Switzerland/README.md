@@ -89,7 +89,7 @@ The table below compares the parameters extracted from the literature (Table 1) 
 
 
 ### Extended Evaluation: Differential Evolution (DE) vs PSO vs Literature
-Following the initial evaluation, a high-intensity Differential Evolution pass (100 particles, 3000 runs) was executed to ascertain whether a stronger global search bounds the parameters closer to literature values, and to evaluate absolute convergence limits of the model equifinality.
+Following the initial evaluation, a high-intensity Differential Evolution pass (200 particles, 3000 runs) was executed to ascertain whether a stronger global search bounds the parameters closer to literature values, and to evaluate absolute convergence limits of the model equifinality.
 
 **MAH Dataset:**
 | Source | NSE | p1 | p2 | p3 | p4 | p5 | p6 | p7 | p8 |
@@ -115,7 +115,7 @@ Following the initial evaluation, a high-intensity Differential Evolution pass (
 
 ## Extended Analysis: Optimizer, Integrator, and Bound Constraints
 
-A fully extended evaluation was run on all three Swiss stations utilizing high-intensity search settings (100 particles, 3000 runs). For each station, 8 evaluations were conducted: comparing PSO vs DE, CRN vs RK4 integrators, and testing both standard parameter bounds (`a4` in `[-1.0, 1.0]`) and restricted parameter bounds (`a4` in `[0.0, 1.0]`).
+A fully extended evaluation was run on all three Swiss stations utilizing high-intensity search settings (200 particles, 3000 runs). For each station, 8 evaluations were conducted: comparing PSO vs DE, CRN vs RK4 integrators, and testing both standard parameter bounds (`a4` in `[-1.0, 1.0]`) and restricted parameter bounds (`a4` in `[0.0, 1.0]`).
 
 ### MAH Results
 
@@ -163,9 +163,11 @@ A fully extended evaluation was run on all three Swiss stations utilizing high-i
 The analysis confirms that restricting `a4` strictly bounds the optimizer to non-negative domains for that variable. In cases like MAH where the global minimum uses a positive `a4`, restricting the bounds yielded effectively identical performance. However, for stations whose optimal `a4` lies below `0.0`, the restricted optimizer reliably bottoms out at `a4=0.000` and compensates via corresponding adjustments in other parameters, yielding marginally lower NSE outcomes compared to the true global minima reached in the unbounded configurations.
 
 
+
+
 ## Extended Analysis: Fortran PSO vs Python PSO at 3000 iterations
 
-To evaluate the poor PSO performance from the initial run, a higher intensity search space (100 particles, 3000 iterations) was evaluated across both the original Fortran codebase and `pyair2stream`.
+To evaluate the poor PSO performance from the initial run, a higher intensity search space (200 particles, 3000 iterations) was evaluated across both the original Fortran codebase and `pyair2stream`.
 
 | Station | Source | NSE | p1 | p2 | p3 | p4 | p5 | p6 | p7 | p8 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
