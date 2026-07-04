@@ -17,7 +17,7 @@ paths:
 
 optimization:
   n_runs: 3000
-  n_particles: 100
+  n_particles: 200
   c1: 2.0
   c2: 2.0
   wmax: 0.9
