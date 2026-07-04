@@ -161,3 +161,17 @@ A fully extended evaluation was run on all three Swiss stations utilizing high-i
 
 ### Discussion
 The analysis confirms that restricting `a4` strictly bounds the optimizer to non-negative domains for that variable. In cases like MAH where the global minimum uses a positive `a4`, restricting the bounds yielded effectively identical performance. However, for stations whose optimal `a4` lies below `0.0`, the restricted optimizer reliably bottoms out at `a4=0.000` and compensates via corresponding adjustments in other parameters, yielding marginally lower NSE outcomes compared to the true global minima reached in the unbounded configurations.
+
+
+## Extended Analysis: Fortran PSO vs Python PSO at 3000 iterations
+
+To evaluate the poor PSO performance from the initial run, a higher intensity search space (100 particles, 3000 iterations) was evaluated across both the original Fortran codebase and `pyair2stream`.
+
+| Station | Source | NSE | p1 | p2 | p3 | p4 | p5 | p6 | p7 | p8 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| MAH | **Fortran PSO** | 0.9886 | 0.899 | 0.664 | 0.783 | 0.133 | 2.413 | 1.595 | 0.603 | 0.250 |
+| MAH | **Python PSO** | 0.9886 | 0.904 | 0.671 | 0.790 | 0.135 | 2.506 | 1.658 | 0.603 | 0.260 |
+| SIO | **Fortran PSO** | 0.9228 | 1.161 | 0.234 | 0.315 | 0.619 | 5.572 | 1.794 | 0.526 | 0.978 |
+| SIO | **Python PSO** | 0.9241 | 0.556 | 0.215 | 0.209 | 0.681 | 6.889 | 2.017 | 0.528 | 1.151 |
+| DAV | **Fortran PSO** | 0.9556 | 4.660 | 0.609 | 1.337 | 0.293 | 0.077 | 5.133 | 0.580 | 0.687 |
+| DAV | **Python PSO** | 0.9558 | 4.794 | 0.629 | 1.410 | 0.270 | 0.000 | 4.912 | 0.582 | 0.637 |
