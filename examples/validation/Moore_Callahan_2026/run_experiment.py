@@ -77,7 +77,7 @@ with concurrent.futures.ThreadPoolExecutor() as executor:
 # 4. Generate report
 results = []
 
-def run_fortran_pso(df_calib):
+def run_fortran_pso(df_calib, integrator='CRN'):
     with tempfile.TemporaryDirectory() as tmpdir:
         fortran_bin = os.path.join(tmpdir, "air2stream")
         src_dir = os.path.abspath("fortran/src")
@@ -99,7 +99,7 @@ c
 8
 0.0
 NSE
-CRN
+{integrator}
 PSO
 0.0
 3000
@@ -140,7 +140,7 @@ PSO
             nse = float(lines[1].strip())
 
         return {
-            'Run': 'Fortran_PSO_CRN_orig',
+            'Run': f'Fortran_PSO_{integrator}_orig',
             'NSE': nse,
             'R2': np.nan,
             'p1': params[0], 'p2': params[1], 'p3': params[2], 'p4': params[3],
@@ -180,7 +180,8 @@ for cfg in configs:
     results.append(extract_results(cfg))
 
 # 5. Run Fortran
-results.append(run_fortran_pso(df_calib))
+results.append(run_fortran_pso(df_calib, integrator='CRN'))
+results.append(run_fortran_pso(df_calib, integrator='RK4'))
 
 report = "# Validation Analysis: Moore & Callahan 2026\n\n"
 report += "## Station 07EA004\n\n"
