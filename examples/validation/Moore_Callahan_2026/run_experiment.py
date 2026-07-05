@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import subprocess
 import shutil
+import concurrent.futures
 
 # 1. Generate data
 df = pd.read_excel('examples/validation/Moore_Callahan_2026/ts_all_58_simplified.xlsx', sheet_name='ts_all_58')
@@ -36,6 +37,7 @@ configs = {
 }
 
 for name, opts in configs.items():
+    n_particles = 500 if opts['run_mode'] == 'PSO' else 100
     with open(f'examples/validation/Moore_Callahan_2026/configs/{name}.yaml', 'w') as f:
         f.write(f"""project_name: "Moore_Callahan_2026"
 station_name: "{name}"
@@ -54,7 +56,7 @@ paths:
 
 optimization:
   n_runs: 3000
-  n_particles: 100
+  n_particles: {n_particles}
 
 parameter_bounds:
   min: [-5.0, -5.0, -5.0, {opts['a4_min']}, 0.0, 0.0, 0.0, -1.0]
@@ -62,10 +64,13 @@ parameter_bounds:
 """)
 
 # 3. Run models
-for name in configs:
+def run_model(name):
     path = f'examples/validation/Moore_Callahan_2026/configs/{name}.yaml'
     print(f"Running {path}")
     subprocess.run(['python', '-m', 'pyair2stream.main', '--config', path], check=True)
+
+with concurrent.futures.ThreadPoolExecutor() as executor:
+    list(executor.map(run_model, configs.keys()))
 
 # 4. Generate report
 results = []
@@ -104,7 +109,7 @@ for cfg in configs:
 
 report = "# Validation Analysis: Moore & Callahan 2026\n\n"
 report += "## Station 07EA004\n\n"
-report += "This report compares the pyair2stream model (both PSO and DE optimizers, and CRN and RK4 integrators) against the published literature parameters for station 07EA004. This pass used high-intensity search settings (100 particles, 3000 runs) to ensure absolute convergence limits.\n\n"
+report += "This report compares the pyair2stream model (both PSO and DE optimizers, and CRN and RK4 integrators) against the published literature parameters for station 07EA004. This pass used high-intensity search settings (500 particles for PSO, 100 particles for DE, 3000 runs) to ensure absolute convergence limits.\n\n"
 report += "Two sets of tests were run: the 'orig' tests used the full default bounds (where `a4` can range from `[-1.0, 1.0]`), while the 'restr' tests forced parameter `a4` to be restricted within `[0.0, 1.0]` to observe differences in performance and parameter identifiability.\n\n"
 
 report += "### Parameters & Performance\n\n"
