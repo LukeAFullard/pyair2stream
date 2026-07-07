@@ -15,7 +15,8 @@ This guide walks a first-time user through installing `pyair2stream`, running th
 9. [Troubleshooting](#9-troubleshooting)
 10. [Gap-tolerant mode](#10-gap-tolerant-mode)
 11. [Sensitivity analysis and uncertainty (DE-MCMC)](#11-sensitivity-analysis-and-uncertainty-de-mcmc)
-12. [Where to go next](#12-where-to-go-next)
+12. [Cross-validation](#12-cross-validation)
+13. [Where to go next](#13-where-to-go-next)
 
 ## 1. What you're running
 
@@ -357,3 +358,40 @@ If `noise_model: "ar1"` is selected, `pyair2stream` will resolve the lag-1 autoc
 - Browse `examples/` for runnable configs covering gap-tolerant mode, sensitivity analysis, optimizer comparisons, and real river case studies.
 - See the main [README.md](README.md) for the model-version equations, testing instructions, and how to cite the original model.
 - The original model is described in Toffolon, M. and Piccolroaz, S. (2015), *A hybrid model for river water temperature as a function of air temperature and discharge*, Environmental Research Letters, 10(11), 114011, https://doi.org/10.1088/1748-9326/10/11/114011 — worth reading before calibrating a real river, particularly for guidance on choosing parameter bounds and interpreting dotty plots.
+
+## 12. Cross-validation
+
+`pyair2stream` supports date-based leave-one-year-out (or leave-N-years-out) cross-validation. This repeatedly holds out an entire seasonal block of `T_water` observations, recalibrates on the remaining years, and scores the held-out block.
+
+Unlike traditional point-wise leave-one-out cross validation (LOOCV), which is poorly suited for stateful ODE integrators and suffers from autocorrelation leakage, the grouped block scheme robustly tests parameter generalization across different types of years.
+
+To enable cross-validation, add the `cross_validation` block to your YAML file:
+
+```yaml
+cross_validation:
+  enabled: true
+  unit: year                  # Either 'year' or 'n_years'
+  n_years_per_fold: 1         # The number of years to hold out per fold
+  water_year_start_month: 1   # Start of the seasonal block (1 = calendar year)
+  min_train_years: 1          # Skip the first N eligible years for spin up
+  skip_first_year: true       # First calendar/water year is skipped (warm-up only)
+  optimizer_overrides:
+    n_run: 20                 # Optional: Reduced iterations for CV folds to save time
+```
+
+### When to use `water_year_start_month != 1`
+
+The seasonal cyclic term (phase-locked) is best grouped such that a fold boundary lands on a seasonal trough (a "water year") rather than splitting a seasonal cycle mid-winter/mid-summer. Adjust this month based on where your river's seasonal cycle is quietest.
+
+### Performance considerations
+
+Since cross-validation runs a full calibration process for every fold, N folds take N× a single production calibration's time. You can use `optimizer_overrides` to provide a cheaper configuration for cross-validation runs compared to your production run (e.g. smaller `n_run`, `n_particles`).
+
+### Output
+
+When enabled, the normal `forward()` validation and single post-processing steps are skipped. Instead, a `cv_results.csv` file will be generated in your output directory containing one row per fold with metrics (NSE, KGE, RMSE) and the calibrated parameters `p1`..`pN`.
+
+## 13. Where to go next
+
+- If you want to use pyair2stream with missing gaps in data, read [10. Gap-tolerant mode](#10-gap-tolerant-mode).
+- Compare different optimization algorithms (`PSO` vs `DE`) for your dataset.

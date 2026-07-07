@@ -15,6 +15,20 @@ from . import __version__
 
 from .model import call_model, aggregation, statis, funcobj, detect_segments
 
+def run_optimizer(data: CommonData) -> None:
+    """Dispatches to the correct optimizer based on data.runmode."""
+    if data.runmode == 'FORWARD':
+        forward_mode(data)
+    elif data.runmode == 'PSO':
+        PSO_mode(data)
+    elif data.runmode == 'LATHYP':
+        LH_mode(data)
+    elif data.runmode == 'DE':
+        DE_mode(data)
+    elif data.runmode == 'DE-MCMC':
+        DE_MCMC_mode(data)
+
+
 def forward(data: CommonData) -> None:
     """
     Replicates SUBROUTINE forward in AIR2STREAM_SUBROUTINES.f90
@@ -195,16 +209,19 @@ def main():
     print('mean, TSS and standard deviation (calibration)')
     print(f"{data.mean_obs:.5f} {data.TSS_obs:.5f} {data.std_obs:.5f}")
 
-    if data.runmode == 'FORWARD':
-        forward_mode(data)
-    elif data.runmode == 'PSO':
-        PSO_mode(data)
-    elif data.runmode == 'LATHYP':
-        LH_mode(data)
-    elif data.runmode == 'DE':
-        DE_mode(data)
-    elif data.runmode == 'DE-MCMC':
-        DE_MCMC_mode(data)
+    if getattr(data, 'cross_validation', None):
+        from .cross_validation import run_leave_one_year_out_cv, summarize
+        results = run_leave_one_year_out_cv(data, data.cross_validation, data.runmode)
+        df = summarize(results)
+        df.to_csv(os.path.join(data.folder, "cv_results.csv"), index=False)
+        print("Cross-validation completed.")
+        print(df)
+
+        t2 = time.time()
+        print(f"Computation time was {t2 - t1:.4f} seconds.")
+        return  # skip the normal single calibration + forward() + post_process()
+
+    run_optimizer(data)
 
     forward(data)
 

@@ -67,6 +67,18 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         "ar1_rho": ar1_rho
     }
 
+    cv_config_dict = config.get('cross_validation', {})
+    if cv_config_dict and cv_config_dict.get('enabled', False):
+        from .cross_validation import CVConfig
+        data.cross_validation = CVConfig(
+            unit=cv_config_dict.get('unit', 'year'),
+            n_years_per_fold=int(cv_config_dict.get('n_years_per_fold', 1)),
+            water_year_start_month=int(cv_config_dict.get('water_year_start_month', 1)),
+            min_train_years=int(cv_config_dict.get('min_train_years', 1)),
+            skip_first_year=bool(cv_config_dict.get('skip_first_year', True)),
+            optimizer_overrides=cv_config_dict.get('optimizer_overrides', None)
+        )
+
     opt_config = config.get('optimization', {})
     data.n_run = int(opt_config.get('n_runs', 100))
     # mineff_index is read from the config root, NOT nested under `optimization:`
