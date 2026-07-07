@@ -1,6 +1,6 @@
 # Leave-One-Year-Out Cross-Validation Example
 
-This example demonstrates how to use the `cross_validation` block in the configuration to perform Leave-One-Year-Out (LOYO) cross-validation on the DAV dataset using the Differential Evolution (DE) optimizer.
+This example demonstrates how to use the `cross_validation` block in the configuration to perform Leave-One-Year-Out (LOYO) cross-validation on the DAV dataset.
 
 The configuration instructs pyair2stream to withhold one year of water temperature observations at a time, calibrate the model on the remaining data, and calculate metrics (NSE, KGE, RMSE) on the withheld year. Each fold completely excludes the specified year from the optimization target. For instance, in fold `2004`, the parameters are trained purely on the data from 2005-2009, and the predictions made for 2004 are scored to see how well the parameters generalized.
 
@@ -8,12 +8,12 @@ The configuration instructs pyair2stream to withhold one year of water temperatu
 
 fold|NSE|RMSE
 ---|---|---
-2004|0.933655954909922|0.6915232473464565
-2005|0.9621314551612068|0.5790648210487357
-2006|0.960421676702384|0.6035588153755265
-2007|0.9476399255921248|0.6652652834769742
-2008|0.8689869772214177|0.9835643176756004
-2009|0.9540314682955008|0.6266621671393195
+2004|0.9336491285576962|0.6915588229571206
+2005|0.9615500625381984|0.5834930562537592
+2006|0.9604867759984554|0.603062237693296
+2007|0.9475876906500637|0.6655970384590799
+2008|0.8689642775301348|0.983649521569402
+2009|0.9540290962984816|0.6266783349563297
 
 
 ## Parameter Stability
@@ -22,7 +22,7 @@ Because the dataset is split and the model is recalibrated for each fold, each f
 
 The following plot shows the distribution of the calibrated parameters across all the folds. This can be used as a diagnostic for parameter stability and equifinality.
 
-*Observation:* The parameters show reasonable boundaries indicating structural physical fits thanks to the use of DE optimization. The evaluation metrics hold up exceptionally well across all cross-validation segments, showing strong parameter generalization.
+*Observation:* As seen in the table and plot below, the calibrated parameters fluctuate significantly between folds. This high variance is a classic sign of **equifinality**. Because we are using the 8-parameter version of the model on a relatively short timeframe (only ~5 years of training data per fold), the model is likely overparameterized. The optimizer finds different local minima that fit the training subset well, but the parameter sets themselves aren't uniquely defined.
 
 ![Parameter Stability](cv_parameter_stability.png)
 
@@ -30,9 +30,9 @@ The following plot shows the distribution of the calibrated parameters across al
 
 fold|p1|p2|p3|p4|p5|p6|p7|p8
 ---|---|---|---|---|---|---|---|---
-2004|4.7963185200996685|0.6104239726232604|1.3961051365119506|0.2743704157616137|0.0|5.177479626048406|0.5786114968877842|0.6455133769912197
-2005|4.73116090614145|0.6313918370847693|1.4064208309606108|0.2665056912874637|0.0085538696487975|4.834720688535748|0.5828028280184135|0.629764859066892
-2006|4.959135045374892|0.6427954140919834|1.4460536713500742|0.2683933763752523|0.0|4.817568990144423|0.5817073437419762|0.6275138620665713
-2007|4.7654877651975225|0.592995055107803|1.366435272992103|0.2834596411021868|0.0|5.105641179198693|0.5834957845802132|0.6632742545856458
-2008|4.940139303859178|0.6360850600067309|1.4553734482427378|0.2621323243531477|0.0|5.28916653098493|0.5788231327749641|0.659727363439466
-2009|4.767851489258859|0.6279343674125554|1.3973851450081167|0.2670455133614397|0.0|4.884926597130369|0.5819576182064718|0.6353175846403092
+2004|4.7958523977860885|0.6103479611837682|1.3958257484593206|0.2744671872251145|0.0|5.179072569289614|0.5786109787420093|0.6457128018315996
+2005|4.7718609535049925|0.643682404943059|1.433242381418153|0.2560701591024434|0.0|4.656294544073869|0.5846050617894614|0.6081346659152119
+2006|4.949758179454187|0.6406186641045637|1.4395742025206777|0.2705589586334236|0.0|4.849900988956806|0.5814428698162843|0.6321911158363488
+2007|4.762628972069144|0.5917231136432277|1.3630092415928032|0.284879656384202|0.0|5.1285566871910415|0.5833572324094461|0.6663350281002528
+2008|4.940499543230454|0.6361035821691058|1.4555088681857369|0.2620861473338876|0.0|5.288886462241186|0.5788315201743873|0.659637454730465
+2009|4.767699229231186|0.62796119906357|1.397220596012217|0.2671147798900077|0.0|4.885621972059985|0.5819419863007271|0.6354759780254924
