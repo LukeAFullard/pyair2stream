@@ -54,7 +54,6 @@ def test_build_folds_n_years(dummy_data):
 def test_run_leave_one_year_out_cv(dummy_data):
     dummy_data.gap_tolerant = False
     dummy_data.n_run = 10
-    dummy_data.mineff_index = -999.0
     dummy_data.version = 5
     n_tot = dummy_data.n_tot
     dummy_data.Tair = np.sin(np.linspace(0, 4 * np.pi, n_tot)) + 10
