@@ -37,6 +37,9 @@ class CommonData:
     # Forward options
     forward_options: Optional[dict] = None
 
+    # Cross Validation
+    cross_validation: Optional['CVConfig'] = None  # Expected to be Optional[CVConfig]
+
     # Scalars - Floats (np.float64 to enforce 64-bit precision)
     Qmedia: np.float64 = np.float64(0.0)
     theta_j: np.float64 = np.float64(0.0)
