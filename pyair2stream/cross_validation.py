@@ -139,12 +139,18 @@ def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarra
     values (for scoring + restoration). By masking the forcing data as well, gap_tolerant
     mode will correctly segment the ODE integration, preventing catastrophic state drift
     over long missing target windows.
+
+    Note: In default whole-series mode (gap_tolerant=False), a held-out year is properly
+    excluded from the objective (Twat_obs = -999.0), but the ODE still free-integrates
+    through the held-out window using actual forcing data with no restart. This is generally
+    fine as the model is fairly mean-reverting, but represents an asymmetry compared to
+    the segmented restart behavior of gap-tolerant mode.
     """
     orig_twat = data.Twat_obs[idx].copy()
     orig_tair = data.Tair[idx].copy()
     orig_q = data.Q[idx].copy()
 
-    data.Twat_obs[idx] = data.mineff_index
+    data.Twat_obs[idx] = -999.0
 
     if data.gap_tolerant:
         data.Tair[idx] = -999.0
@@ -277,7 +283,7 @@ def run_leave_one_year_out_cv(
             call_model(data)
 
             sim = data.Twat_mod
-            nse, kge, rmse = _compute_fold_metrics(orig_twat, sim[idx], data.mineff_index)
+            nse, kge, rmse = _compute_fold_metrics(orig_twat, sim[idx], -999.0)
 
             start_date = pd.Timestamp(*data.date[idx[0]])
             end_date = pd.Timestamp(*data.date[idx[-1]])
@@ -287,7 +293,7 @@ def run_leave_one_year_out_cv(
                 label=label,
                 held_out_start=start_date,
                 held_out_end=end_date,
-                n_obs_held_out=int(np.sum(orig_twat != data.mineff_index)),
+                n_obs_held_out=int(np.sum(orig_twat != -999.0)),
                 par_best=data.par_best.copy(),
                 nse=nse,
                 kge=kge,
