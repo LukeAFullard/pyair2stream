@@ -133,19 +133,30 @@ def build_folds(data: CommonData, cv_config: CVConfig) -> list[tuple[str, np.nda
 # Masking helpers
 # --------------------------------------------------------------------------
 
-def _mask_fold(data: CommonData, idx: np.ndarray) -> np.ndarray:
+def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Set Twat_obs to the configured missing value for the given rows and return the original
-    values (for scoring + restoration). T_air/Q are never touched, so the
-    ODE state integrates continuously through this window.
+    Set Twat_obs, Tair, and Q to the configured missing value for the given rows and return the original
+    values (for scoring + restoration). By masking the forcing data as well, gap_tolerant
+    mode will correctly segment the ODE integration, preventing catastrophic state drift
+    over long missing target windows.
     """
-    original = data.Twat_obs[idx].copy()
+    orig_twat = data.Twat_obs[idx].copy()
+    orig_tair = data.Tair[idx].copy()
+    orig_q = data.Q[idx].copy()
+
     data.Twat_obs[idx] = data.mineff_index
-    return original
+
+    if data.gap_tolerant:
+        data.Tair[idx] = -999.0
+        data.Q[idx] = -999.0
+
+    return orig_twat, orig_tair, orig_q
 
 
-def _restore_fold(data: CommonData, idx: np.ndarray, original: np.ndarray) -> None:
-    data.Twat_obs[idx] = original
+def _restore_fold(data: CommonData, idx: np.ndarray, orig_twat: np.ndarray, orig_tair: np.ndarray, orig_q: np.ndarray) -> None:
+    data.Twat_obs[idx] = orig_twat
+    data.Tair[idx] = orig_tair
+    data.Q[idx] = orig_q
 
 
 # --------------------------------------------------------------------------
@@ -237,7 +248,7 @@ def run_leave_one_year_out_cv(
     results: list[FoldResult] = []
 
     for label, idx in folds:
-        original_obs = _mask_fold(data, idx)
+        orig_twat, orig_tair, orig_q = _mask_fold(data, idx)
         try:
             aggregation(data)
             statis(data)
@@ -248,10 +259,25 @@ def run_leave_one_year_out_cv(
 
             _run_optimizer(data, run_mode, cv_config.optimizer_overrides)
             data.par[:] = data.par_best[:]
+
+            # Restore forcing variables (Tair, Q) before forward simulation
+            # so the model integrates through the held-out window properly
+            data.Tair[idx] = orig_tair
+            data.Q[idx] = orig_q
+
+            if data.gap_tolerant:
+                data.segments = None
+                detect_segments(data)
+
+            # Re-aggregate and statis now that forcing data is restored to allow
+            # potential evaluation at non-daily time-scales
+            aggregation(data)
+            statis(data)
+
             call_model(data)
 
             sim = data.Twat_mod
-            nse, kge, rmse = _compute_fold_metrics(original_obs, sim[idx], data.mineff_index)
+            nse, kge, rmse = _compute_fold_metrics(orig_twat, sim[idx], data.mineff_index)
 
             start_date = pd.Timestamp(*data.date[idx[0]])
             end_date = pd.Timestamp(*data.date[idx[-1]])
@@ -261,14 +287,14 @@ def run_leave_one_year_out_cv(
                 label=label,
                 held_out_start=start_date,
                 held_out_end=end_date,
-                n_obs_held_out=int(np.sum(original_obs != data.mineff_index)),
+                n_obs_held_out=int(np.sum(orig_twat != data.mineff_index)),
                 par_best=data.par_best.copy(),
                 nse=nse,
                 kge=kge,
                 rmse=rmse,
             ))
         finally:
-            _restore_fold(data, idx, original_obs)
+            _restore_fold(data, idx, orig_twat, orig_tair, orig_q)
 
     return results
 

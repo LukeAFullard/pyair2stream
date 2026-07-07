@@ -5,15 +5,15 @@ time_resolution: "1d"
 version: 8
 objective_function: "NSE"
 integrator: "RK4"
-run_mode: "PSO"
+run_mode: "DE"
 prc: 1.0
 
 # Using gap-tolerant mode since we might have missing T_water
 gap_tolerant: true
 
 optimization:
-  n_runs: 50
-  n_particles: 20
+  n_runs: 3000
+  n_particles: 200
 
 parameter_bounds:
   min: [-5.0, -5.0, -5.0, -1.0, 0.0, 0.0, 0.0, -1.0]
@@ -27,8 +27,8 @@ cross_validation:
   min_train_years: 1
   skip_first_year: true
   optimizer_overrides:
-    n_run: 500
-    n_particles: 100
+    n_run: 3000
+    n_particles: 200
 
 paths:
   input_data: "../validation/Switzerland/DAV_2327_cc.csv"
