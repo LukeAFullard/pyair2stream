@@ -8,6 +8,7 @@ import numpy.typing as npt
 N_PAR: int = 8
 PI: np.float64 = np.float64(math.pi) # ACOS(0.d0)*2.d0 is math.pi
 TTT: np.float64 = np.float64(1.0 / 365.0)
+MISSING_DATA_SENTINEL: np.float64 = np.float64(-999.0)
 
 @dataclass
 class CommonData:

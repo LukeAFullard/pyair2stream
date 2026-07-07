@@ -365,6 +365,10 @@ If `noise_model: "ar1"` is selected, `pyair2stream` will resolve the lag-1 autoc
 
 Unlike traditional point-wise leave-one-out cross validation (LOOCV), which is poorly suited for stateful ODE integrators and suffers from autocorrelation leakage, the grouped block scheme robustly tests parameter generalization across different types of years.
 
+**Note on Integrator State during Cross Validation:**
+* If `gap_tolerant: true` is configured, cross-validation safely handles the held-out target window by invoking the model's segmented restart and climatology mechanisms.
+* If `gap_tolerant: false`, the ODE free-integrates right through the held-out window using actual forcing data. There is no equivalent restart protection against state drift during the held-out window. This asymmetry is acceptable for most applications because the model is structurally mean-reverting, but users should be aware of the difference.
+
 To enable cross-validation, add the `cross_validation` block to your YAML file:
 
 ```yaml

@@ -25,7 +25,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from .config import CommonData
+from .config import CommonData, MISSING_DATA_SENTINEL
 from .model import aggregation, statis, call_model, detect_segments
 
 
@@ -42,9 +42,10 @@ class CVConfig:
     unit: str = "year"                  # "year" or "n_years"
     n_years_per_fold: int = 1           # only used if unit == "n_years"
     water_year_start_month: int = 1     # 1 = calendar year; e.g. 10 = Oct-Sep water year
-    min_train_years: int = 1            # extra full years (beyond the mandatory
-                                         # spin-up year) required before a fold
-                                         # is eligible to be held out
+    min_train_years: int = 1            # Skip the first N eligible years (beyond the mandatory
+                                         # spin-up year) to ensure they are always used for
+                                         # training. This ONLY gates the start of the fold
+                                         # sequence, it is NOT an ongoing per-fold minimum.
     skip_first_year: bool = True        # first calendar/water year is spin-up-only,
                                          # never a candidate fold (nothing precedes
                                          # it to spin up from)
@@ -65,6 +66,10 @@ class FoldResult:
     nse: float
     kge: float
     rmse: float
+
+    # Raw validation arrays, used for computing the pooled out-of-sample metrics
+    obs_held_out: np.ndarray = field(repr=False)
+    sim_held_out: np.ndarray = field(repr=False)
 
 
 # --------------------------------------------------------------------------
@@ -150,11 +155,11 @@ def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarra
     orig_tair = data.Tair[idx].copy()
     orig_q = data.Q[idx].copy()
 
-    data.Twat_obs[idx] = -999.0
+    data.Twat_obs[idx] = MISSING_DATA_SENTINEL
 
     if data.gap_tolerant:
-        data.Tair[idx] = -999.0
-        data.Q[idx] = -999.0
+        data.Tair[idx] = MISSING_DATA_SENTINEL
+        data.Q[idx] = MISSING_DATA_SENTINEL
 
     return orig_twat, orig_tair, orig_q
 
@@ -283,7 +288,7 @@ def run_leave_one_year_out_cv(
             call_model(data)
 
             sim = data.Twat_mod
-            nse, kge, rmse = _compute_fold_metrics(orig_twat, sim[idx], -999.0)
+            nse, kge, rmse = _compute_fold_metrics(orig_twat, sim[idx], MISSING_DATA_SENTINEL)
 
             start_date = pd.Timestamp(*data.date[idx[0]])
             end_date = pd.Timestamp(*data.date[idx[-1]])
@@ -293,11 +298,13 @@ def run_leave_one_year_out_cv(
                 label=label,
                 held_out_start=start_date,
                 held_out_end=end_date,
-                n_obs_held_out=int(np.sum(orig_twat != -999.0)),
+                n_obs_held_out=int(np.sum(orig_twat != MISSING_DATA_SENTINEL)),
                 par_best=data.par_best.copy(),
                 nse=nse,
                 kge=kge,
                 rmse=rmse,
+                obs_held_out=orig_twat.copy(),
+                sim_held_out=sim[idx].copy(),
             ))
         finally:
             _restore_fold(data, idx, orig_twat, orig_tair, orig_q)
@@ -311,6 +318,10 @@ def summarize(results: list[FoldResult]) -> pd.DataFrame:
     easy mean/std reporting and for checking whether par_best is stable
     across folds -- a useful equifinality diagnostic alongside the
     DE-vs-PSO comparison already discussed in the README.
+
+    The final rows include 'mean', 'std', and 'pooled' (which computes
+    NSE/KGE/RMSE on the concatenated held-out predictions from all folds,
+    weighting all out-of-sample days equally).
     """
     rows = []
     for r in results:
@@ -325,4 +336,54 @@ def summarize(results: list[FoldResult]) -> pd.DataFrame:
         }
         row.update({f"p{i + 1}": v for i, v in enumerate(r.par_best)})
         rows.append(row)
-    return pd.DataFrame(rows)
+
+    df = pd.DataFrame(rows)
+
+    if not df.empty:
+        # Calculate mean/std of metrics across folds
+        mean_row = {
+            "fold": "mean",
+            "held_out_start": "",
+            "held_out_end": "",
+            "n_obs_held_out": df["n_obs_held_out"].sum(),
+            "NSE": df["NSE"].mean(),
+            "KGE": df["KGE"].mean(),
+            "RMSE": df["RMSE"].mean(),
+        }
+        std_row = {
+            "fold": "std",
+            "held_out_start": "",
+            "held_out_end": "",
+            "n_obs_held_out": "",
+            "NSE": df["NSE"].std(ddof=1) if len(df) > 1 else 0.0,
+            "KGE": df["KGE"].std(ddof=1) if len(df) > 1 else 0.0,
+            "RMSE": df["RMSE"].std(ddof=1) if len(df) > 1 else 0.0,
+        }
+
+        # Calculate pooled metrics using the raw arrays
+        pooled_obs = np.concatenate([r.obs_held_out for r in results])
+        pooled_sim = np.concatenate([r.sim_held_out for r in results])
+        p_nse, p_kge, p_rmse = _compute_fold_metrics(pooled_obs, pooled_sim, MISSING_DATA_SENTINEL)
+
+        pooled_row = {
+            "fold": "pooled",
+            "held_out_start": "",
+            "held_out_end": "",
+            "n_obs_held_out": len(pooled_obs[pooled_obs != MISSING_DATA_SENTINEL]),
+            "NSE": p_nse,
+            "KGE": p_kge,
+            "RMSE": p_rmse,
+        }
+
+        # Parameter means/stds
+        for col in df.columns:
+            if col.startswith('p'):
+                mean_row[col] = df[col].mean()
+                std_row[col] = df[col].std(ddof=1) if len(df) > 1 else 0.0
+                pooled_row[col] = float('nan') # not applicable for pooled metric row
+
+        # Append summary rows
+        summary_df = pd.DataFrame([mean_row, std_row, pooled_row])
+        df = pd.concat([df, summary_df], ignore_index=True)
+
+    return df

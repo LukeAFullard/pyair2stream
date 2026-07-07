@@ -51,7 +51,67 @@ def test_build_folds_n_years(dummy_data):
     assert len(folds) == 1
     assert folds[0][0] == "2011-2012"
 
+def test_cross_validation_leak_prevention(dummy_data):
+    """
+    Regression test ensuring that held-out observations are masked using the hardcoded
+    MISSING_DATA_SENTINEL, regardless of the user's `mineff_index` setting.
+    """
+    from pyair2stream.cross_validation import _mask_fold
+    from pyair2stream.model import aggregation, statis
+
+    # Set mineff_index to a plausible but non-sentinel value (e.g. 0.5)
+    dummy_data.mineff_index = 0.5
+    dummy_data.gap_tolerant = False
+
+    n_tot = dummy_data.n_tot
+    dummy_data.Tair = np.ones(n_tot) * 10
+    dummy_data.Twat_obs = np.ones(n_tot) * 10  # Genuinely 10 everywhere
+    dummy_data.Q = np.ones(n_tot) * 10
+    dummy_data.tt = np.linspace(0, 4, n_tot)
+
+    dummy_data.Twat_mod_agg = np.zeros(n_tot)
+    dummy_data.Twat_obs_agg = np.zeros(n_tot)
+    dummy_data.I_pos = np.zeros(n_tot, dtype=np.int32)
+    dummy_data.I_inf = np.zeros(n_tot, dtype=np.int32)
+    dummy_data.time_res = "1d"
+
+    # Define a mock fold targeting the second half of the data
+    fold_idx = np.arange(n_tot // 2, n_tot)
+
+    # 1. Base case: no masking, everything is valid
+    # Since time_res is "1d", statis will set eval_mask to true and populates I_inf
+    dummy_data.eval_mask = np.ones(n_tot, dtype=bool)
+    aggregation(dummy_data)
+    statis(dummy_data)
+    n_dat_unmasked = dummy_data.n_dat
+
+    # aggregation skips the first 365 days of warm-up padding when counting n_dat
+    assert n_dat_unmasked == n_tot - 365
+
+    # 2. Mask the fold
+    orig_twat, orig_tair, orig_q = _mask_fold(dummy_data, fold_idx)
+
+    # Verify the masking used the codebase sentinel, NOT mineff_index
+    assert np.all(dummy_data.Twat_obs[fold_idx] == -999.0)
+
+    # 3. Re-aggregate to rebuild I_inf and I_pos mapping
+    aggregation(dummy_data)
+    statis(dummy_data)
+    n_dat_masked = dummy_data.n_dat
+
+    # The masked rows should be fully excluded from the calibration objective size (n_dat)
+    assert n_dat_masked == n_dat_unmasked - len(fold_idx)
+
+    # The valid objective indices (I_inf) must not contain any indices from fold_idx
+    for valid_agg_idx in range(n_dat_masked):
+        # I_inf[:, 2] stores the original row index matching the target array
+        original_row_idx = dummy_data.I_inf[valid_agg_idx, 2]
+        assert original_row_idx not in fold_idx, "Data leak: held-out row entered calibration objective"
+
 def test_run_leave_one_year_out_cv(dummy_data):
+    # Seed numpy random to de-flake the stochastic optimizers with tiny particle/run counts
+    np.random.seed(42)
+
     dummy_data.gap_tolerant = False
     dummy_data.n_run = 10
     dummy_data.version = 5
