@@ -1,3 +1,10 @@
+"""
+Input/output operations for pyair2stream.
+
+This module handles parsing user YAML configurations, allocating internal arrays,
+and reading/validating the input CSV time series data (forcing and observations).
+"""
+
 import os
 import yaml
 import numpy as np

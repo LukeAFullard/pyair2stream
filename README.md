@@ -215,7 +215,7 @@ Fortran, found during porting and fixed with test coverage:
   objective values from solver overflow, causing PSO to silently return
   all-zero parameters on some datasets. Fixed by initializing to `-1e30` and
   using NaN-safe comparisons/argmax. See PR #21 and
-  `examples/validation/Switzerland/report.md`.
+  `examples/validation/Switzerland/README.md`.
 - **`mineff_index` config location (fixed in `io.py`)**: corrected to read
   from the config root rather than nested under `optimization:`, matching
   `USER_GUIDE.md`.
@@ -243,7 +243,7 @@ Differential Evolution:
 | Rhône (SIO-2011) | Regulated | 0.923 | 0.9242 |
 | Dischmabach (DAV-2327) | Snow-fed | 0.950 | 0.9558 |
 
-Full methodology, parameter tables, and plots: [`examples/validation/Switzerland/report.md`](examples/validation/Switzerland/report.md).
+Full methodology, parameter tables, and plots: [`examples/validation/Switzerland/README.md`](examples/validation/Switzerland/README.md).
 
 > **Note on optimizer choice**: this study found that PSO can converge to
 > different parameter sets than DE due to equifinality (multiple parameter

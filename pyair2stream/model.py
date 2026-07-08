@@ -1,3 +1,11 @@
+"""
+High-level ODE integration and simulation orchestration for air2stream.
+
+This module provides the main entry points for running the air2stream model,
+including handling missing data segments (gap-tolerant mode) and delegating
+the heavy numeric lifting to the Numba-compiled functions.
+"""
+
 import numpy as np
 import math
 import pandas as pd
@@ -77,12 +85,46 @@ def detect_segments(data: CommonData) -> None:
 
 
 def _step(data: CommonData, j: int, p: np.ndarray) -> None:
+    """
+    Execute a single time step of the ODE integration (deprecated).
+
+    Parameters
+    ----------
+    data : CommonData
+        The common data object.
+    j : int
+        The time step index.
+    p : ndarray
+        The parameters array.
+
+    Raises
+    ------
+    NotImplementedError
+        Always raises, as `_step` has been removed and replaced by Numba-compiled functions.
+    """
     raise NotImplementedError("_step has been removed for performance reasons. Use _run_integration instead.")
 
 def _get_RK_func(version, Qmedia, p):
     """
-    Returns a fast RK4_air2stream derivative function depending on version.
-    Avoids conditionals during ODE integration.
+    Construct a fast derivative function closure for the chosen model version.
+
+    This returns a pure Python function tailored to the specific model version
+    to avoid conditional checks inside the integration loop.
+    Note: This is mostly unused in the fast Numba path but retained for legacy/reference.
+
+    Parameters
+    ----------
+    version : int
+        The model version (3, 4, 5, 7, or 8).
+    Qmedia : float
+        Mean discharge used for normalization.
+    p : ndarray
+        Array of model parameters (1-indexed mapping to p1..p8).
+
+    Returns
+    -------
+    callable
+        A function `RK(Ta, QQ, Tw, time)` that computes the derivative dT_w/dt.
     """
     p1, p2, p3, p4, p5, p6, p7, p8 = p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]
 
@@ -118,7 +160,24 @@ def _get_RK_func(version, Qmedia, p):
 
 def _run_integration(data: CommonData, segments, p):
     """
-    Core integration loop. Inlines _step and RK4_air2stream for maximum speed.
+    Orchestrate the core numerical integration loop over specified segments.
+
+    Delegates the actual computation to the Numba-compiled `fast_run_integration`
+    function to maximize performance.
+
+    Parameters
+    ----------
+    data : CommonData
+        The common data object containing forcing data (Tair, Q), time arrays,
+        and settings. The `Twat_mod` array will be mutated in-place.
+    segments : list of tuple
+        A list of (start_idx, end_idx) tuples defining contiguous blocks of valid data.
+    p : ndarray
+        Array containing the 8 model parameters (1-indexed: p[1] to p[8]).
+
+    Returns
+    -------
+    None
     """
     from .model_numba import fast_run_integration
 

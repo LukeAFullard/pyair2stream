@@ -1,3 +1,11 @@
+"""
+Post-processing, reporting, and visualization for pyair2stream.
+
+This module generates diagnostic plots (time series comparisons, dotty plots
+of parameter convergence) and exports calibration performance metrics and
+simulated series to CSV format.
+"""
+
 import os
 import numpy as np
 import pandas as pd
