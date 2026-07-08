@@ -29,3 +29,6 @@ examples/gap_experiment/**/*.csv
 !examples/forward_prediction_intervals/**/*.json
 # Keep CSVs ignored
 examples/forward_prediction_intervals/**/*.csv
+
+# Allow specific quickstart inputs
+!examples/quickstart/data/*.csv
