@@ -1,3 +1,11 @@
+"""
+Command-line interface and execution dispatch for pyair2stream.
+
+This module provides the main entry point for the CLI, parsing arguments,
+loading the configuration, executing the specified operational mode (calibration,
+forward simulation, cross-validation), and generating final output reports.
+"""
+
 import os
 import sys
 import time
@@ -181,6 +189,13 @@ def forward(data: CommonData) -> None:
 
 
 def main():
+    """
+    Command-line interface entry point.
+
+    Parses the `--config` argument to locate the YAML configuration file, reads the
+    settings, loads the input datasets, executes cross-validation or calibration
+    (PSO, DE, MCMC, etc.), and triggers post-processing to generate outputs.
+    """
     parser = argparse.ArgumentParser(description="pyair2stream - Python Port of air2stream")
     parser.add_argument("--config", type=str, default="config.yaml", help="Path to the configuration YAML file.")
     args = parser.parse_args()

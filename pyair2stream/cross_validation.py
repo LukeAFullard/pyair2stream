@@ -60,6 +60,20 @@ class CVConfig:
 
 @dataclass
 class FoldResult:
+    """
+    Data container for the outcome of a single cross-validation fold.
+
+    Fields:
+    - fold_id: Integer index of the fold.
+    - label: Human-readable string identifier for the held-out period (e.g. "2014" or "2014-2016").
+    - held_out_start: The first date of the held-out window.
+    - held_out_end: The final date of the held-out window.
+    - n_obs_held_out: Count of *actual* (non-missing) T_water observations in the held-out window.
+    - par_best: The optimized parameters (1-indexed numpy array) calibrated on the remaining data.
+    - nse, kge, rmse: Goodness-of-fit metrics evaluated strictly on the held-out block.
+    - obs_held_out: Array of true T_water values inside the block (includes missing sentinels).
+    - sim_held_out: Array of simulated T_water values for the corresponding dates.
+    """
     fold_id: int
     label: str                          # e.g. "2014" or "2014-2016"
     held_out_start: pd.Timestamp
@@ -169,6 +183,13 @@ def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarra
 
 
 def _restore_fold(data: CommonData, idx: np.ndarray, orig_twat: np.ndarray, orig_tair: np.ndarray, orig_q: np.ndarray) -> None:
+    """
+    Restore the original forcing data and observations to the global CommonData
+    arrays after a cross-validation fold has finished.
+
+    This ensures subsequent folds start with a clean slate without reloading
+    the datasets from disk.
+    """
     data.Twat_obs[idx] = orig_twat
     data.Tair[idx] = orig_tair
     data.Q[idx] = orig_q
