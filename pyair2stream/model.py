@@ -130,30 +130,36 @@ def _get_RK_func(version, Qmedia, p):
 
     if version == 3:
         def RK(Ta, QQ, Tw, time):
+            """Version 3: Uses air temperature and water temperature (no discharge, no seasonality)."""
             return p1 + p2 * Ta - p3 * Tw
 
     elif version == 5:
         def RK(Ta, QQ, Tw, time):
+            """Version 5: Uses air temp, water temp, and seasonal cosine term (no discharge)."""
             return p1 + p2 * Ta - p3 * Tw + p6 * math.cos(2.0 * PI * (time - p7))
 
     elif version in [8, 7]:
         if version == 8:
             def RK(Ta, QQ, Tw, time):
+                """Version 8: Full equation. Uses air temp, water temp, discharge, and seasonal term."""
                 theta = QQ / Qmedia
                 DD = theta ** p4
                 return (p1 + p2 * Ta - p3 * Tw + theta * (p5 + p6 * math.cos(2.0 * PI * (time - p7)) - p8 * Tw)) / DD
         else:
             def RK(Ta, QQ, Tw, time):
+                """Version 7: Similar to v8, but discharge only affects the numerator terms, not the denominator thermal volume."""
                 theta = QQ / Qmedia
                 return p1 + p2 * Ta - p3 * Tw + theta * (p5 + p6 * math.cos(2.0 * PI * (time - p7)) - p8 * Tw)
 
     elif version == 4:
         def RK(Ta, QQ, Tw, time):
+            """Version 4: Uses air temp, water temp, and discharge (no seasonal term)."""
             DD = (QQ / Qmedia) ** p4
             return (p1 + p2 * Ta - p3 * Tw) / DD
 
     else:
         def RK(Ta, QQ, Tw, time):
+            """Fallback: Returns zero derivative."""
             return 0.0
 
     return RK

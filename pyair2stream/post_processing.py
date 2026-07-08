@@ -212,6 +212,23 @@ def post_process(data: CommonData, toll: float = None):
 
     # 2. Time-Series Plots
     def plot_series(file_path, title_prefix, output_name, filter_to_obs=True):
+        """
+        Helper to plot modeled vs. observed water temperatures from a CSV.
+
+        Produces an overlaid time-series graph with a secondary axis for air
+        temperature (if present), saving it as a PNG and PDF.
+
+        Parameters
+        ----------
+        file_path : str
+            Path to the output CSV containing the simulation data.
+        title_prefix : str
+            Prefix for the plot title (e.g., 'Calibration' or 'Validation').
+        output_name : str
+            Base name for the saved plot files (e.g., 'calibration_plot').
+        filter_to_obs : bool, optional
+            If True, only plot ranges where actual observations exist (defaults to True).
+        """
         if not os.path.exists(file_path):
             return
 
