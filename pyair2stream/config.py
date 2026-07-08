@@ -1,3 +1,11 @@
+"""
+Configuration and central data structures for pyair2stream.
+
+This module defines the primary data transfer object (`CommonData`) that
+carries model configuration, physical boundaries, forcing arrays, and state
+variables throughout the calibration and simulation processes.
+"""
+
 import math
 from dataclasses import dataclass
 from typing import Optional

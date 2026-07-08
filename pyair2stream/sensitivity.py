@@ -1,3 +1,10 @@
+"""
+Sensitivity analysis for pyair2stream.
+
+This module implements One-At-A-Time (OAT) local sensitivity analysis to evaluate
+how perturbations in individual parameters affect the simulated water temperatures.
+"""
+
 import numpy as np
 import pandas as pd
 import os

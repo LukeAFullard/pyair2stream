@@ -1,3 +1,11 @@
+"""
+Core numerical methods for the air2stream model, compiled with Numba for performance.
+
+This module contains the heavy-lifting functions for the objective calculation
+and the ODE integrators. They are decorated with @njit and thus must remain
+free of Python objects and dynamic typing.
+"""
+
 import numpy as np
 import math
 from numba import njit
@@ -7,7 +15,54 @@ TTT = 1.0 / 365.0
 
 @njit
 def fast_funcobj(n_dat, n_tot, I_inf, I_pos, Twat_mod, Twat_obs_agg, eval_mask, fun_obj_type, mean_obs, TSS_obs, std_obs):
-    # fun_obj_type: 0 for NSE, 1 for KGE, 2 for RMS
+    """
+    Compute the calibration objective function from simulated vs
+    observed water temperature.
+
+    Aggregates the daily simulated series onto the observation time
+    resolution defined by I_inf/I_pos, then evaluates the objective
+    function selected by fun_obj_type against Twat_obs_agg.
+
+    Parameters
+    ----------
+    n_dat : int
+        Number of data points (after aggregation) used for evaluation.
+    n_tot : int
+        Total number of simulation days.
+    I_inf : ndarray
+        Integer array of shape (n_dat, 3) defining aggregation windows.
+    I_pos : ndarray
+        Integer array mapping indices to actual valid observation days.
+    Twat_mod : ndarray
+        Array of daily simulated water temperatures.
+    Twat_obs_agg : ndarray
+        Array of observed water temperatures (aggregated).
+    eval_mask : ndarray
+        Boolean mask array indicating which days are valid for evaluation.
+    fun_obj_type : int
+        The objective function to calculate: 0 = NSE, 1 = KGE, 2 = RMS.
+    mean_obs : float
+        Mean of the aggregated observations.
+    TSS_obs : float
+        Total sum of squares for the aggregated observations.
+    std_obs : float
+        Standard deviation of the aggregated observations.
+
+    Returns
+    -------
+    tuple
+        A tuple containing:
+        - The calculated objective value (NSE, KGE, or RMS).
+        - Twat_mod_agg (ndarray): The aggregated simulated temperatures.
+        - nse (float): Nash-Sutcliffe Efficiency.
+        - r2 (float): Coefficient of Determination (R^2).
+        - mae (float): Mean Absolute Error.
+
+    Notes
+    -----
+    This function is @njit-compiled, so it must stay free of
+    Python objects and dynamic typing.
+    """
 
     Twat_mod_agg = np.full(n_tot, -999.0, dtype=np.float64)
 
@@ -115,6 +170,32 @@ def fast_funcobj(n_dat, n_tot, I_inf, I_pos, Twat_mod, Twat_obs_agg, eval_mask, 
 
 @njit
 def fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, Tw, time, Qmedia):
+    """
+    Evaluate the right-hand side of the air2stream ODE for a specific model version.
+
+    Parameters
+    ----------
+    version : int
+        The model version (3, 4, 5, 7, or 8) determining the equation form.
+    p1, p2, p3, p4, p5, p6, p7, p8 : float
+        The eight model parameters. Unused parameters for a given version
+        will be ignored.
+    Ta : float
+        Air temperature at the current time step.
+    QQ : float
+        River discharge at the current time step.
+    Tw : float
+        Water temperature at the current time step.
+    time : float
+        Current time represented as a fraction of the year (DOY / days_in_year).
+    Qmedia : float
+        Mean discharge used to normalize QQ (creates dimensionless term theta).
+
+    Returns
+    -------
+    float
+        The computed derivative (rate of change of water temperature) dT_w/dt.
+    """
     if version == 3:
         return p1 + p2 * Ta - p3 * Tw
     elif version == 5:
@@ -134,7 +215,40 @@ def fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, Tw, time, Q
 
 @njit
 def fast_run_integration(Tair, Q, tt, Twat_mod, Tice_cover, Qmedia, version, mod_num_idx, segments, p1, p2, p3, p4, p5, p6, p7, p8):
-    # mod_num_idx: 0=CRN, 1=RK2, 2=RK4, 3=EUL
+    """
+    Execute the numerical integration of the air2stream ODE over given segments.
+
+    Parameters
+    ----------
+    Tair : ndarray
+        Array of daily air temperatures.
+    Q : ndarray
+        Array of daily river discharges.
+    tt : ndarray
+        Array of fractional times of the year corresponding to each day.
+    Twat_mod : ndarray
+        Array to store the simulated water temperatures. This array is
+        updated in-place. Initial conditions should be set at segment start indices.
+    Tice_cover : float
+        Minimum allowable water temperature (ice cover threshold).
+    Qmedia : float
+        Mean historical discharge used for normalization.
+    version : int
+        The model version (3, 4, 5, 7, or 8) determining the governing ODE.
+    mod_num_idx : int
+        The integrator to use: 0 = Crank-Nicolson (CRN), 1 = Heun/RK2,
+        2 = Runge-Kutta 4 (RK4), 3 = Explicit Euler (EUL).
+    segments : ndarray
+        Integer array of shape (N, 2) defining start and end indices of
+        contiguous valid data segments to integrate over.
+    p1, p2, p3, p4, p5, p6, p7, p8 : float
+        The eight model parameters to use during integration.
+
+    Returns
+    -------
+    None
+        Results are written directly into the `Twat_mod` array.
+    """
 
     if mod_num_idx == 0: # CRN
         if version in (8, 7, 4):

@@ -1,3 +1,11 @@
+"""
+Uncertainty quantification and noise modeling for pyair2stream.
+
+This module provides tools for estimating autoregressive (AR1) properties
+from model residuals and generating structurally consistent noise envelopes
+for probabilistic forward predictions.
+"""
+
 import numpy as np
 import scipy.signal
 import logging

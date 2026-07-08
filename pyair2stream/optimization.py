@@ -1,3 +1,11 @@
+"""
+Optimization and calibration routines for pyair2stream.
+
+This module implements the calibration algorithms (PSO, DE, LATHYP)
+used to fit the air2stream model to observed data, as well as the
+MCMC sampling routines for uncertainty quantification.
+"""
+
 import os
 import numpy as np
 import pandas as pd
@@ -395,6 +403,20 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
     # To avoid multiprocessing pickling issues with local functions, we run single-threaded (workers=1)
     # The performance is still very fast because scipy DE converges quickly.
     def objective_wrapper(p_vals):
+        """
+        Evaluate the objective function for a given parameter set during DE optimization.
+
+        Parameters
+        ----------
+        p_vals : ndarray
+            Array of length `n_par` containing the parameter values to evaluate.
+
+        Returns
+        -------
+        float
+            The negated objective value (since scipy minimizes). Returns a large
+            positive penalty if the parameters lead to invalid or NaN metric values.
+        """
         # Update parameters (only the first n_par)
         data.par[:n_par] = p_vals
 
@@ -501,6 +523,24 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
     # Define log_probability function for emcee
     def log_probability(theta):
+        """
+        Compute the log-probability of a parameter set for MCMC sampling.
+
+        Calculates a formal concentrated Gaussian log-likelihood, assuming normally
+        distributed observation errors.
+
+        Parameters
+        ----------
+        theta : ndarray
+            Array containing only the actively varying parameters (those not
+            fixed by bounds).
+
+        Returns
+        -------
+        float
+            The log-likelihood of the parameter set, or -np.inf if the parameters
+            fall outside the defined prior boundaries or cause simulation failure.
+        """
         # theta contains only the active parameters
         p_vals = best_params.copy()
         for idx, j in enumerate(active_params):

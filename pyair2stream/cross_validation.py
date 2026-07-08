@@ -1,6 +1,10 @@
 """
 Leave-one-year-out (and leave-N-years-out) cross-validation for pyair2stream.
 
+This module implements the block cross-validation routines used to evaluate
+the out-of-sample parameter stability and predictive performance of the
+calibrated air2stream models.
+
 See CROSS_VALIDATION_PLAN.md for full rationale. Summary of the design:
 
 - Folds are built from *calendar dates* (data.date), never row counts, so

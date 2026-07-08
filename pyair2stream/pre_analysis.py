@@ -1,3 +1,11 @@
+"""
+Pre-calibration data diagnostics and timeseries analysis.
+
+This module provides tools for analyzing input datasets, detecting missing
+values, identifying contiguous usable segments, and generating summary plots
+and reports prior to running the air2stream model.
+"""
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt

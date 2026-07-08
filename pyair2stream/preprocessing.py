@@ -1,3 +1,11 @@
+"""
+Data preprocessing utilities for pyair2stream.
+
+This module provides helper functions to read, resample, and align raw,
+high-frequency observational data into the daily, uniformly-formatted CSVs
+required by the air2stream core.
+"""
+
 import pandas as pd
 
 def read_and_resample(file_path, date_col, value_col, standard_col_name, date_format=None):
