@@ -25,12 +25,16 @@ def main():
         sys.exit(1)
 
     df = pd.read_csv(results_path)
+    SUMMARY_LABELS = {"mean", "std", "pooled"}
+    df_folds = df[~df["fold"].isin(SUMMARY_LABELS)].reset_index(drop=True)
+    df_summary = df[df["fold"].isin(SUMMARY_LABELS)].reset_index(drop=True)
+
     print("\nCross-Validation Results:")
-    print(df[['fold', 'NSE', 'RMSE', 'n_obs_held_out']])
+    print(df_folds[['fold', 'NSE', 'RMSE', 'n_obs_held_out']])
 
     # Generate a parameter stability boxplot
     params = [f'p{i}' for i in range(1, 9)]
-    param_data = df[params]
+    param_data = df_folds[params]
 
     plt.figure(figsize=(10, 6))
     param_data.boxplot()
@@ -53,7 +57,12 @@ def main():
         f.write("The configuration instructs pyair2stream to withhold one year of water temperature observations at a time, calibrate the model on the remaining data, and calculate metrics (NSE, KGE, RMSE) on the withheld year. Each fold completely excludes the specified year from the optimization target. For instance, in fold `2004`, the parameters are trained purely on the data from 2005-2009, and the predictions made for 2004 are scored to see how well the parameters generalized.\n\n")
 
         f.write("## Results\n\n")
-        f.write(df_to_markdown(df[['fold', 'NSE', 'RMSE']]))
+        f.write(df_to_markdown(df_folds[['fold', 'NSE', 'RMSE']]))
+        f.write("\n\n")
+
+        f.write("### Summary across folds\n\n")
+        f.write("The table below shows the summary across all folds. `mean` and `std` represent the macro-average and standard deviation across the individual per-fold metrics. `pooled` represents the micro-average computed over all held-out days pooled together.\n\n")
+        f.write(df_to_markdown(df_summary[['fold', 'NSE', 'RMSE']]))
         f.write("\n\n")
 
         f.write("## Parameter Stability\n\n")
@@ -66,7 +75,11 @@ def main():
 
         f.write("### Calibrated Parameters per Fold\n\n")
         param_cols = ['fold'] + [col for col in df.columns if col.startswith('p')]
-        f.write(df_to_markdown(df[param_cols]))
+        f.write(df_to_markdown(df_folds[param_cols]))
+        f.write("\n\n")
+
+        f.write("### Parameter Summary Across Folds\n\n")
+        f.write(df_to_markdown(df_summary[param_cols]))
         f.write("\n")
 
     # Clean up output artifacts (keep README.md, PNG, script, and config)
