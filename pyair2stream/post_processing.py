@@ -103,43 +103,52 @@ def post_process(data: CommonData, toll: float = None):
         parset = df_0.iloc[:, :-1].values
         eff = df_0.iloc[:, -1].values
 
-        if data.fun_obj == 'RMS':
-            eff = -eff
-            valid_indices = np.where(eff <= toll)[0]
-            if len(valid_indices) > 0:
-                parset = parset[valid_indices]
-                eff = eff[valid_indices]
-                best_eff = np.min(eff)
-                i_best = np.argmin(eff)
-                plot_limits = [best_eff * 0.9, toll]
+        plot_data = False
+        if len(eff) > 0:
+            if data.fun_obj == 'RMS':
+                eff = -eff
+                valid_indices = np.where(eff <= toll)[0]
+                if len(valid_indices) > 0:
+                    parset = parset[valid_indices]
+                    eff = eff[valid_indices]
+                    plot_data = True
+
+                if plot_data or len(eff) > 0:
+                    best_eff = np.min(eff)
+                    i_best = np.argmin(eff)
+                    if plot_data:
+                        plot_limits = [best_eff * 0.9, toll]
+                    else:
+                        plot_limits = [best_eff * 0.9, np.max(eff)]
+                    plot_data = True # enable plotting even if fallback to all points
             else:
-                best_eff = np.min(eff)
-                i_best = np.argmin(eff)
-                plot_limits = [best_eff * 0.9, np.max(eff)]
-        else:
-            valid_indices = np.where(eff >= toll)[0]
-            if len(valid_indices) > 0:
-                parset = parset[valid_indices]
-                eff = eff[valid_indices]
-                best_eff = np.max(eff)
-                i_best = np.argmax(eff)
-                plot_limits = [toll, best_eff * 1.1]
-            else:
-                best_eff = np.max(eff)
-                i_best = np.argmax(eff)
-                plot_limits = [np.min(eff), best_eff * 1.1]
+                valid_indices = np.where(eff >= toll)[0]
+                if len(valid_indices) > 0:
+                    parset = parset[valid_indices]
+                    eff = eff[valid_indices]
+                    plot_data = True
 
-        fig, axes = plt.subplots(2, 4, figsize=(18/2.54, 10/2.54))
-        axes = axes.flatten()
+                if plot_data or len(eff) > 0:
+                    best_eff = np.max(eff)
+                    i_best = np.argmax(eff)
+                    if plot_data:
+                        plot_limits = [toll, best_eff * 1.1]
+                    else:
+                        plot_limits = [np.min(eff), best_eff * 1.1]
+                    plot_data = True
 
-        for i in range(8):
-            if i < n_par:
-                axes[i].plot(parset[:, i], eff, '.k', markersize=2)
-                if len(parset) > 0:
-                    axes[i].plot(parset[i_best, i], best_eff, '.', color=orange, markersize=10)
+        if plot_data:
+            fig, axes = plt.subplots(2, 4, figsize=(18/2.54, 10/2.54))
+            axes = axes.flatten()
 
-                axes[i].set_ylim(plot_limits)
-                axes[i].set_xlabel(f'par{i+1}')
+            for i in range(8):
+                if i < n_par:
+                    axes[i].plot(parset[:, i], eff, '.k', markersize=2)
+                    if len(parset) > 0:
+                        axes[i].plot(parset[i_best, i], best_eff, '.', color=orange, markersize=10)
+
+                    axes[i].set_ylim(plot_limits)
+                    axes[i].set_xlabel(f'par{i+1}')
 
                 if data.fun_obj == 'RMS':
                     axes[i].set_ylabel(f"{data.fun_obj} [\u00B0C]")
@@ -148,12 +157,12 @@ def post_process(data: CommonData, toll: float = None):
             else:
                 axes[i].axis('off')
 
-        plt.tight_layout()
-        dotty_pdf = os.path.join(data.folder, f"dottyplots_{data.runmode}_{data.fun_obj}_{data.station}.pdf")
-        dotty_png = os.path.join(data.folder, f"dottyplots_{data.runmode}_{data.fun_obj}_{data.station}.png")
-        plt.savefig(dotty_pdf, dpi=300)
-        plt.savefig(dotty_png, dpi=300)
-        plt.close()
+            plt.tight_layout()
+            dotty_pdf = os.path.join(data.folder, f"dottyplots_{data.runmode}_{data.fun_obj}_{data.station}.pdf")
+            dotty_png = os.path.join(data.folder, f"dottyplots_{data.runmode}_{data.fun_obj}_{data.station}.png")
+            plt.savefig(dotty_pdf, dpi=300)
+            plt.savefig(dotty_png, dpi=300)
+            plt.close()
 
     # 1c. MCMC Parameter Significance & Correlation
     env_file_mcmc = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")

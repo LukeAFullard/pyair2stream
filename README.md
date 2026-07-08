@@ -33,6 +33,7 @@ Original model: Toffolon, M. and Piccolroaz, S. (2015). *A hybrid model for rive
 - [Testing](#testing)
 - [Examples](#examples)
 - [Relationship to the original Fortran code](#relationship-to-the-original-fortran-code)
+- [Validation against published literature](#validation-against-published-literature)
 - [Citing](#citing)
 - [License](#license)
 
@@ -60,7 +61,7 @@ cd pyair2stream
 pip install .
 ```
 
-This installs `pyair2stream` and its dependencies (`numpy`, `pandas`, `matplotlib`, `scipy`, `pyyaml`, `numba`, `emcee`), plus the `pyair2stream` command-line entry point.
+This installs `pyair2stream` and its dependencies (`numpy`, `pandas`, `matplotlib`, `scipy`, `pyyaml`, `numba`, `emcee`, `openpyxl`), plus the `pyair2stream` command-line entry point.
 
 For development (running tests, editing the source):
 
@@ -73,6 +74,19 @@ pip install pytest
 
 ## Quick start
 
+The fastest way to see `pyair2stream` work end-to-end is the bundled quick-start example, which uses a small synthetic dataset so it runs in a few seconds:
+
+```bash
+git clone https://github.com/LukeAFullard/pyair2stream.git
+cd pyair2stream
+pip install .
+pyair2stream --config examples/quickstart/config.yaml
+```
+
+This calibrates the model, validates it against a held-out year, writes results to `examples/quickstart/output/`, and generates diagnostic plots automatically. See the [User Guide's walkthrough](USER_GUIDE.md#3-your-first-run-the-bundled-example) for what the output should look like and how to interpret it.
+
+Once that runs cleanly, point `pyair2stream` at your own data:
+
 1. Prepare a CSV of daily data with `Date`, `T_air`, `T_water`, and (optionally) `Discharge` columns — see [Input data format](#input-data-format).
 2. Create a `config.yaml` (a minimal example is below; see [Configuration](#configuration) for the full reference).
 3. Run:
@@ -80,8 +94,6 @@ pip install pytest
 ```bash
 pyair2stream --config config.yaml
 ```
-
-This calibrates the model, validates it against a validation set (if provided), writes results to the output directory, and generates plots automatically.
 
 ### Minimal `config.yaml`
 
@@ -150,14 +162,26 @@ Running `pyair2stream` writes to the configured output directory:
 
 | File pattern | Contents |
 |---|---|
-| `0_*.csv` | Optimization history (parameter sets tried and their fit) |
-| `1_*.out` | Best-fit parameters and final efficiency score |
+| `parameters.txt` | Parameter bounds actually used, after fixing version-inactive parameters to 0 |
+| `0_*.csv` | Optimization history (every parameter set tried and its objective score) |
+| `1_*.out` | Best-fit parameters and final efficiency score (calibration, then validation if run) |
 | `2_*.csv` | Simulated vs. observed time series (calibration period) |
-| `3_*.csv` | Simulated vs. observed time series (validation period) |
-| `calibration_*.png` / `.pdf` | Time-series comparison plots |
+| `3_*.csv` | Simulated vs. observed time series (validation period, if validation data was supplied) |
+| `calibration_*.png` / `.pdf` | Time-series plot restricted to the calibration period's observations |
+| `validation_*.png` / `.pdf` | Same, for the validation period |
+| `full_simulation_*.png` / `.pdf` | Same, over the whole simulated record, including where there's no observation |
+| `convergence_*.png` / `.pdf` | Objective-function value vs. optimizer iteration |
 | `dottyplots_*.png` / `.pdf` | Parameter/objective-function dotty plots |
+| `predicted_vs_measured_*.png` / `.pdf` | Simulated vs. observed scatter, one per period (calibration/validation/full_simulation) |
+| `residual_diagnostics_*.png` / `.pdf` | Residual histogram, Q-Q plot, and autocorrelation, one per period |
+| `goodness_of_fit_*.csv` | R², RMSE, MAE, AIC, BIC, one file per period |
+| `sensitivity_*.csv` / `.png` / `.pdf` | One-at-a-time sensitivity analysis (only if `sensitivity_analysis: true`) |
 | `MCMC_chain_*.csv`, `MCMC_envelopes_*.csv` | MCMC parameter samples and prediction intervals (`DE-MCMC` mode only) |
+| `Forward_Prediction_Envelopes_*.csv` | Prediction envelopes for a `FORWARD` run using a prior MCMC chain (see [forward prediction intervals](USER_GUIDE.md#12-forward-prediction-intervals)) |
+| `cv_results.csv` | One row per cross-validation fold with metrics and calibrated parameters (only if `cross_validation.enabled: true`) |
 | `gaps_summary.txt` | Gap/segment diagnostics (gap-tolerant mode only) |
+
+See [§8 of the User Guide](USER_GUIDE.md#8-understanding-the-output-files) for a worked explanation of these files, including an important note about warm-up rows in `2_*.csv`/`3_*.csv`.
 
 ## Using pyair2stream from Python
 
@@ -187,14 +211,20 @@ pytest tests/
 
 ## Examples
 
-The `examples/` directory contains runnable end-to-end examples, including:
+The `examples/` directory contains runnable end-to-end examples, each with its own README explaining the setup and results in detail:
 
-- `synthetic_example/` — a minimal synthetic dataset and config to get started
-- `gap_tolerance/` — demonstrates gap-tolerant calibration
-- `sensitivity_example/` — one-at-a-time sensitivity analysis
-- `forward_prediction_intervals/` — MCMC-based prediction intervals
-- `optimizer_comparison/`, `optimizer_convergence/` — comparing PSO/DE/LATHYP behaviour
-- `Hopelands/`, `Pukeokahu/` — real river-station case studies
+| Directory | Demonstrates |
+|---|---|
+| `quickstart/` | Minimal synthetic dataset and config — the fastest way to see a full run (see [Quick start](#quick-start)) |
+| `gap_tolerance/` | `gap_tolerant` calibration under 1/2/3 simulated data gaps, and the performance trade-offs involved |
+| `gap_experiment/` | How parameter stability and goodness-of-fit degrade as gaps are introduced into `T_air` |
+| `forward_prediction_intervals/` | Generating probabilistic prediction envelopes from a prior `DE-MCMC` calibration, including the AR(1) noise model |
+| `cross_validation/` | Leave-one-year-out cross-validation on a real river dataset |
+| `optimizer_comparison/` | Calibrating the same dataset with `PSO`, `DE`, and `DE-MCMC` and comparing results |
+| `optimizer_convergence/` | How `PSO` and `DE` convergence behaviour changes with iteration count |
+| `Hopelands/`, `Pukeokahu/` | Full real river-station case studies, including raw-data preprocessing, gap-tolerant calibration, and sensitivity analysis |
+| `validation/Switzerland/` | Re-derivation of the Python PSO bugfix (see [Known deviations](#known-deviations-from-the-fortran-reference)) and the literature validation study below |
+| `validation/Moore_Callahan_2026/` | Validation against an independently published literature parameter set for a real station |
 
 ## Relationship to the original Fortran code
 

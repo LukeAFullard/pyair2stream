@@ -15,8 +15,9 @@ This guide walks a first-time user through installing `pyair2stream`, running th
 9. [Troubleshooting](#9-troubleshooting)
 10. [Gap-tolerant mode](#10-gap-tolerant-mode)
 11. [Sensitivity analysis and uncertainty (DE-MCMC)](#11-sensitivity-analysis-and-uncertainty-de-mcmc)
-12. [Cross-validation](#12-cross-validation)
-13. [Where to go next](#13-where-to-go-next)
+12. [Forward prediction intervals](#12-forward-prediction-intervals)
+13. [Cross-validation](#13-cross-validation)
+14. [Where to go next](#14-where-to-go-next)
 
 ## 1. What you're running
 
@@ -47,10 +48,12 @@ If you plan to run the test suite later, also install `pytest` and (optionally) 
 
 ## 3. Your first run: the bundled example
 
-Before touching your own data, run the included synthetic example so you know what a successful run looks like. **Run this from the root of the cloned repository** — the example's config uses paths relative to that directory (see the [working-directory note](#71-run-from-the-right-directory) below).
+Before touching your own data, run the bundled `quickstart` example so you know what a successful run looks like. It uses four years of synthetic daily data for a fictional "River Alpha" (`examples/quickstart/data/`) — three years for calibration, one held back for validation — with a fast `PSO` configuration so the whole thing finishes in well under a minute.
+
+**Run this from the root of the cloned repository** — the example's config uses paths relative to that directory (see the [working-directory note](#71-run-from-the-right-directory) below).
 
 ```bash
-pyair2stream --config examples/synthetic_example/config.yaml
+pyair2stream --config examples/quickstart/config.yaml
 ```
 
 You should see something like:
@@ -59,22 +62,24 @@ You should see something like:
 pyair2stream Version 1.0.0 (Python Port)
 
 mean, TSS and standard deviation (calibration)
-11.96998 58932.21020 5.73146
-N. particles = 20, N. run = 20
+10.00641 28570.62781 5.10802
+N. particles = 20, N. run = 30
+Calcolo al 40.0 %
 Calcolo al 50.0 %
 ...
 Calcolo al 100.0 %
-Efficiency Index in calibration 0.9289082253857379
+Efficiency Index in calibration 0.8371758152864042
 Controllo superato
-Validation file not found --> validation is skipped
-Computation time was 13.77 seconds.
+mean, TSS and standard deviation (validation)
+10.03896 9041.37700 4.98387
+Computation time was 4.76 seconds.
 Starting post-processing visualizations...
 Post-processing completed.
 ```
 
-("Calcolo al X%" / "Controllo superato" are progress and self-check messages carried over from the original Italian-authored model — they're informational, not errors.)
+("Calcolo al X%" / "Controllo superato" are progress and self-check messages carried over from the original Italian-authored model — they're informational, not errors. Because PSO involves randomised search, your efficiency index and exact timings may differ slightly from run to run.)
 
-Open `examples/synthetic_example/calibration_PSO_NSE_River_Alpha.png` to see simulated vs. observed water temperature. An efficiency index (here, NSE ≈ 0.93) close to 1.0 indicates a good fit. Once this runs cleanly for you, move on to your own data.
+Everything is written to `examples/quickstart/output/`. Open `calibration_PSO_NSE_River_Alpha.png` to see simulated vs. observed water temperature for the calibration period, and `validation_PSO_NSE_River_Alpha.png` for the held-out year. An efficiency index (here, NSE ≈ 0.84 on calibration) close to 1.0 indicates a good fit — see [§8](#8-understanding-the-output-files) for what every other output file means. Once this runs cleanly for you, move on to your own data.
 
 ## 4. Choosing a model version and integrator
 
@@ -269,14 +274,18 @@ Everything is written to `output_dir` (or `{project_name}/output_{version}` by d
 | `1_*.out` | Best-fit parameters, plus the final efficiency index (calibration, then validation if run) |
 | `2_*.csv` | Full simulated vs. observed time series for the **calibration** period |
 | `3_*.csv` | Same, for the **validation** period (only created if validation data was supplied) |
-| `goodness_of_fit_*.csv` | R², RMSE, MAE, AIC, BIC summary |
-| `calibration_*.png` / `.pdf` | Time-series plot: observed vs. simulated water temperature, restricted to periods with observations |
+| `goodness_of_fit_calibration_*.csv`, `goodness_of_fit_validation_*.csv`, `goodness_of_fit_full_simulation_*.csv` | R², RMSE, MAE, AIC, BIC — one file per period, each named after the plot it accompanies |
+| `calibration_*.png` / `.pdf` | Time-series plot: observed vs. simulated water temperature, restricted to periods with observations, calibration period only |
+| `validation_*.png` / `.pdf` | Same, for the validation period |
 | `full_simulation_*.png` / `.pdf` | Same, but plotted over the entire simulated record (including where there's no observation to compare against) |
 | `convergence_*.png` / `.pdf` | Objective-function value vs. optimizer iteration — check this flattens out rather than still trending upward at the end |
 | `dottyplots_*.png` / `.pdf` | Parameter value vs. objective score, one panel per parameter — use this to check your bounds (see [§6](#parameter-meaning-a1a8)) |
-| `residual_diagnostics_*.png` / `.pdf` | Residual plots (errors vs. time, distribution, etc.) |
+| `predicted_vs_measured_*.png` / `.pdf` | Simulated vs. observed scatter (one per period: calibration/validation/full_simulation) |
+| `residual_diagnostics_*.png` / `.pdf` | Residual plots — histogram, Q-Q plot, and autocorrelation (one per period) |
 | `sensitivity_*.csv` / `.png` / `.pdf` | Only if `sensitivity_analysis: true` — see [§11](#11-sensitivity-analysis-and-uncertainty-de-mcmc) |
 | `MCMC_chain_*.csv`, `MCMC_envelopes_*.csv` | Only for `run_mode: DE-MCMC` |
+| `Forward_Prediction_Envelopes_*.csv` | Only for a `FORWARD` run with `forward_options.enable_prediction_intervals: true` — see [§12](#12-forward-prediction-intervals) |
+| `cv_results.csv` | Only if `cross_validation.enabled: true` — see [§13](#13-cross-validation). Replaces the usual forward-run/plotting outputs above for that run. |
 | `gaps_summary.txt` | Only for `gap_tolerant: true` — segment/gap diagnostics |
 
 ### ⚠️ The first 365 rows of `2_*.csv` / `3_*.csv` are not real data
@@ -353,13 +362,7 @@ If `noise_model: "ar1"` is selected, `pyair2stream` will resolve the lag-1 autoc
 - Both the `iid` and `ar1` methods add noise *after* the physical integration. This means lower prediction bounds might dip below the physical ice-cover floor (`Tice_cover`).
 - The `rho` value used for the AR(1) interval is fixed and is not jointly calibrated with the physical parameters.
 
-## 13. Where to go next
-
-- Browse `examples/` for runnable configs covering gap-tolerant mode, sensitivity analysis, optimizer comparisons, and real river case studies.
-- See the main [README.md](README.md) for the model-version equations, testing instructions, and how to cite the original model.
-- The original model is described in Toffolon, M. and Piccolroaz, S. (2015), *A hybrid model for river water temperature as a function of air temperature and discharge*, Environmental Research Letters, 10(11), 114011, https://doi.org/10.1088/1748-9326/10/11/114011 — worth reading before calibrating a real river, particularly for guidance on choosing parameter bounds and interpreting dotty plots.
-
-## 12. Cross-validation
+## 13. Cross-validation
 
 `pyair2stream` supports date-based leave-one-year-out (or leave-N-years-out) cross-validation. This repeatedly holds out an entire seasonal block of `T_water` observations, recalibrates on the remaining years, and scores the held-out block.
 
@@ -383,6 +386,8 @@ cross_validation:
     n_run: 20                 # Optional: Reduced iterations for CV folds to save time
 ```
 
+> **Heads-up on `optimizer_overrides` key names**: elsewhere in the config, the number of optimizer iterations is set via `optimization.n_runs` (plural). Inside `optimizer_overrides` it must be spelled `n_run` (singular) — the CV code applies these overrides directly to the same internal field the CLI populates from `n_runs`, and that field is named `n_run`. Using `n_runs` here is silently ignored. `n_particles` is spelled the same in both places.
+
 ### When to use `water_year_start_month != 1`
 
 The seasonal cyclic term (phase-locked) is best grouped such that a fold boundary lands on a seasonal trough (a "water year") rather than splitting a seasonal cycle mid-winter/mid-summer. Adjust this month based on where your river's seasonal cycle is quietest.
@@ -395,7 +400,12 @@ Since cross-validation runs a full calibration process for every fold, N folds t
 
 When enabled, the normal `forward()` validation and single post-processing steps are skipped. Instead, a `cv_results.csv` file will be generated in your output directory containing one row per fold with metrics (NSE, KGE, RMSE) and the calibrated parameters `p1`..`pN`.
 
-## 13. Where to go next
+## 14. Where to go next
 
-- If you want to use pyair2stream with missing gaps in data, read [10. Gap-tolerant mode](#10-gap-tolerant-mode).
-- Compare different optimization algorithms (`PSO` vs `DE`) for your dataset.
+- Browse `examples/` for runnable configs covering gap-tolerant mode, sensitivity analysis, forward prediction intervals, cross-validation, optimizer comparisons, and real river case studies — see the [Examples table in the README](README.md#examples) for what each one demonstrates.
+- If your data has missing days of `T_air` or `Discharge`, read [§10 Gap-tolerant mode](#10-gap-tolerant-mode).
+- If you want uncertainty bounds around your calibration or a forward projection, read [§11](#11-sensitivity-analysis-and-uncertainty-de-mcmc) and [§12](#12-forward-prediction-intervals).
+- If you want to test how well your calibrated parameters generalize across years, read [§13 Cross-validation](#13-cross-validation).
+- Compare different optimization algorithms (`PSO` vs `DE` vs `DE-MCMC`) on your dataset — see [Calibration modes](#calibration-modes-run_mode) in §6.
+- See the main [README.md](README.md) for the model-version equations, output-file reference, testing instructions, and how to cite the original model.
+- The original model is described in Toffolon, M. and Piccolroaz, S. (2015), *A hybrid model for river water temperature as a function of air temperature and discharge*, Environmental Research Letters, 10(11), 114011, https://doi.org/10.1088/1748-9326/10/11/114011 — worth reading before calibrating a real river, particularly for guidance on choosing parameter bounds and interpreting dotty plots.

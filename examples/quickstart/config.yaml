@@ -1,0 +1,24 @@
+# Minimal quick-start example: synthetic "River Alpha" daily data.
+# Run from the repository root with:
+#   pyair2stream --config examples/quickstart/config.yaml
+project_name: "quickstart"
+station_name: "River_Alpha"
+series: "c"
+time_resolution: "1d"
+version: 8
+integrator: "RK4"
+objective_function: "NSE"
+run_mode: "PSO"
+
+paths:
+  input_data: "examples/quickstart/data/calibration_data.csv"
+  validation_data: "examples/quickstart/data/validation_data.csv"
+  output_dir: "examples/quickstart/output"
+
+optimization:
+  n_runs: 30
+  n_particles: 20
+
+parameter_bounds:
+  min: [-5, -5, -5, -1, 0,  0,  0, -1]
+  max: [15, 1.5, 5,  1, 20, 10, 1,  5]
