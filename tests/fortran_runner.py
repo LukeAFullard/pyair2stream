@@ -70,14 +70,15 @@ def _build_fortran_binary():
     build_dir = tempfile.mkdtemp(prefix="air2stream_build_")
     atexit.register(shutil.rmtree, build_dir, ignore_errors=True)
 
-    for fname in _SOURCE_FILES:
-        shutil.copy(os.path.join(_UPSTREAM_SRC, fname), os.path.join(build_dir, fname))
+    src_dir = os.path.join(build_dir, "src")
+    os.makedirs(src_dir)
 
-    # Patch paths are written as a/src/FILE.f90 -> b/src/FILE.f90, but
-    # build_dir *is* the src dir (no src/ subdirectory), so strip two path
-    # components with -p2.
+    for fname in _SOURCE_FILES:
+        shutil.copy(os.path.join(_UPSTREAM_SRC, fname), os.path.join(src_dir, fname))
+
+    # Patch paths are written as a/src/FILE.f90 -> b/src/FILE.f90
     patch_result = subprocess.run(
-        ["patch", "-p2", "-i", _PATCH_FILE],
+        ["patch", "-p1", "-i", _PATCH_FILE],
         cwd=build_dir,
         capture_output=True,
         text=True,
@@ -94,7 +95,7 @@ def _build_fortran_binary():
 
     binary_path = os.path.join(build_dir, "air2stream")
     subprocess.run(
-        ["gfortran", "-ffree-line-length-none", "-o", binary_path] + _SOURCE_FILES,
+        ["gfortran", "-ffree-line-length-none", "-o", binary_path] + [os.path.join("src", f) for f in _SOURCE_FILES],
         cwd=build_dir,
         check=True,
     )
