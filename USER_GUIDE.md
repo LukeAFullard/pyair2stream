@@ -64,12 +64,12 @@ pyair2stream Version 1.0.0 (Python Port)
 mean, TSS and standard deviation (calibration)
 10.00641 28570.62781 5.10802
 N. particles = 20, N. run = 30
-Calcolo al 40.0 %
-Calcolo al 50.0 %
+Progress: 40.0 %
+Progress: 50.0 %
 ...
-Calcolo al 100.0 %
+Progress: 100.0 %
 Efficiency Index in calibration 0.8371758152864042
-Controllo superato
+Consistency check passed.
 mean, TSS and standard deviation (validation)
 10.03896 9041.37700 4.98387
 Computation time was 4.76 seconds.
@@ -77,7 +77,7 @@ Starting post-processing visualizations...
 Post-processing completed.
 ```
 
-("Calcolo al X%" / "Controllo superato" are progress and self-check messages carried over from the original Italian-authored model — they're informational, not errors. Because PSO involves randomised search, your efficiency index and exact timings may differ slightly from run to run.)
+("Progress: X%" / "Consistency check passed." are progress and self-check messages which are informational, not errors. Because PSO involves randomised search, your efficiency index and exact timings may differ slightly from run to run.)
 
 Everything is written to `examples/quickstart/output/`. Open `calibration_PSO_NSE_River_Alpha.png` to see simulated vs. observed water temperature for the calibration period, and `validation_PSO_NSE_River_Alpha.png` for the held-out year. An efficiency index (here, NSE ≈ 0.84 on calibration) close to 1.0 indicates a good fit — see [§8](#8-understanding-the-output-files) for what every other output file means. Once this runs cleanly for you, move on to your own data.
 
@@ -170,7 +170,7 @@ parameter_bounds:           # required for DE/PSO/LATHYP/DE-MCMC; 8 values each 
 parameters_forward: [1.2, 0.3, 0.2, 0.5, 0.1, 1.5, 0.4, 0.1]  # only used when run_mode: FORWARD
 
 optimization:
-  n_runs: 100          # DE: max generations. PSO/LATHYP: max iterations.
+  n_run: 100          # DE: max generations. PSO/LATHYP: max iterations.
   n_particles: 50      # DE: population size. PSO: swarm size.
   # PSO-only:
   c1: 2.0               # cognitive (personal-best) weight
@@ -386,7 +386,6 @@ cross_validation:
     n_run: 20                 # Optional: Reduced iterations for CV folds to save time
 ```
 
-> **Heads-up on `optimizer_overrides` key names**: elsewhere in the config, the number of optimizer iterations is set via `optimization.n_runs` (plural). Inside `optimizer_overrides` it must be spelled `n_run` (singular) — the CV code applies these overrides directly to the same internal field the CLI populates from `n_runs`, and that field is named `n_run`. Using `n_runs` here is silently ignored. `n_particles` is spelled the same in both places.
 
 ### When to use `water_year_start_month != 1`
 

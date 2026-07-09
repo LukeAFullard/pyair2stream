@@ -53,7 +53,7 @@ class CVConfig:
     skip_first_year: bool = True        # first calendar/water year is spin-up-only,
                                          # never a candidate fold (nothing precedes
                                          # it to spin up from)
-    optimizer_overrides: Optional[dict] = None  # e.g. {"n_runs": 20, "n_particles": 20}
+    optimizer_overrides: Optional[dict] = None  # e.g. {"n_run": 20, "n_particles": 20}
                                                  # to cut per-fold cost vs. the
                                                  # production calibration
 
@@ -233,7 +233,7 @@ def _compute_fold_metrics(obs: np.ndarray, sim: np.ndarray, missing_val: float) 
 def _run_optimizer(data: CommonData, run_mode: str, overrides: Optional[dict]) -> None:
     """
     Run the configured optimizer for one fold, applying `overrides` (e.g.
-    reduced n_runs/n_particles for cheaper per-fold CV calibration) for the
+    reduced n_run/n_particles for cheaper per-fold CV calibration) for the
     duration of the call only, then restoring data's original settings.
     """
     from .main import run_optimizer as _dispatch

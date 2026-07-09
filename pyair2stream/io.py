@@ -87,7 +87,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         )
 
     opt_config = config.get('optimization', {})
-    data.n_run = int(opt_config.get('n_runs', 100))
+    data.n_run = int(opt_config.get('n_run', opt_config.get('n_runs', 100)))
     # mineff_index is read from the config root, NOT nested under `optimization:`
     # — this matches USER_GUIDE.md. An earlier version incorrectly looked for it
     # under opt_config, which meant it silently always fell back to its default.

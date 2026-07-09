@@ -112,7 +112,7 @@ paths:
   validation_data: "data/validation_data.csv"   # optional
 
 optimization:
-  n_runs: 100
+  n_run: 100
   n_particles: 50
 
 parameter_bounds:
