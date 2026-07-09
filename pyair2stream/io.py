@@ -164,7 +164,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
 
         out_param_path = os.path.join(data.folder, 'parameters.txt')
         with open(out_param_path, 'w') as f:
-            f.write(f"{n_par}   !numero parametri\n")
+            f.write(f"{n_par}   !number of parameters\n")
             f.write(" ".join(f"{x:.5f}" for x in data.parmin) + "\n")
             f.write(" ".join(f"{x:.5f}" for x in data.parmax) + "\n")
 

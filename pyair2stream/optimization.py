@@ -298,7 +298,7 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
             if i >= 9:
                 if (i + 1) % max(1, int(n_run / 10)) == 0:
                     perc = float(i + 1) / float(n_run) * 100.0
-                    print(f"Calcolo al {perc:.1f} %")
+                    print(f"Progress: {perc:.1f} %")
 
             count = 0
             for k in range(n_particles):
@@ -370,11 +370,11 @@ def LH_mode(data: CommonData, seed: Optional[int] = None) -> None:
         if i >= 9:
             if (i + 1) % max(1, int(n_run / 10)) == 0:
                 perc = float(i + 1) / float(n_run) * 100.0
-                print(f"Calcolo al {perc:.1f} %")
+                print(f"Progress: {perc:.1f} %")
 
     data.par_best = gbest.copy()
     data.finalfit = foptim
-    print(f'Indice efficienza calibrazione {data.finalfit}')
+    print(f'Calibration efficiency index: {data.finalfit}')
 
     # Save to CSV
     # Fix: Pandas handles closing the file handle automatically via to_csv
