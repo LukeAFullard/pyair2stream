@@ -76,22 +76,35 @@ def _build_fortran_binary():
     for fname in _SOURCE_FILES:
         shutil.copy(os.path.join(_UPSTREAM_SRC, fname), os.path.join(src_dir, fname))
 
-    # Patch paths are written as a/src/FILE.f90 -> b/src/FILE.f90
-    patch_result = subprocess.run(
-        ["patch", "-p1", "-i", _PATCH_FILE],
-        cwd=build_dir,
-        capture_output=True,
-        text=True,
-    )
-    if patch_result.returncode != 0:
-        raise RuntimeError(
-            "Failed to apply fortran/patches/gfortran-portability.patch "
-            f"against the upstream submodule source:\n"
-            f"{patch_result.stdout}\n{patch_result.stderr}\n"
-            "This usually means the pinned submodule commit no longer "
-            "matches the patch context. Check .gitmodules / "
-            "fortran/patches/NOTICE.md."
-        )
+    # A python-based search-and-replace patching to avoid fragile diff hunks
+    # and encoding issues with `patch` on legacy Windows codepages.
+    replacements = {
+        "AIR2STREAM_READ.f90": [
+            (b"USE ifport", b"!USE ifport"),
+            (b"result=makedirqq(folder)", b"CALL EXECUTE_COMMAND_LINE('mkdir -p ' // TRIM(folder))"),
+            (b"WRITE(2,'(<n_par>(F10.5,1x))') (parmin(i),i=1,n_par)", b"WRITE(2,*)  (parmin(i),i=1,n_par)"),
+            (b"WRITE(2,'(<n_par>(F10.5,1x))') (parmax(i),i=1,n_par)", b"WRITE(2,*)  (parmax(i),i=1,n_par)")
+        ],
+        "AIR2STREAM_RUNMODE.f90": [
+            (b"form='binary'", b"form='unformatted',access='stream'")
+        ],
+        "AIR2STREAM_SUBROUTINES.f90": [
+            (b"WRITE(11,'(<n_par>(f10.6,1x))') (par_best(i),i=1,n_par)", b"WRITE(11,*)  (par_best(i),i=1,n_par)")
+        ]
+    }
+
+    for filename, reps in replacements.items():
+        filepath = os.path.join(src_dir, filename)
+        with open(filepath, 'rb') as f:
+            content = f.read()
+
+        for old, new in reps:
+            if old not in content:
+                raise RuntimeError(f"Could not find patch target in {filename}: {old}")
+            content = content.replace(old, new)
+
+        with open(filepath, 'wb') as f:
+            f.write(content)
 
     binary_path = os.path.join(build_dir, "air2stream")
     subprocess.run(

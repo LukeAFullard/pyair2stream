@@ -28,14 +28,14 @@ couple of Intel-specific extensions that `gfortran` does not implement:
 
 None of these changes affect the governing equations, numerical integrators,
 or model physics — only file I/O mechanics needed to compile with a
-different (non-Intel) compiler. The full, human-readable diff is in
-[`gfortran-portability.patch`](gfortran-portability.patch), applied
-automatically by `tests/fortran_runner.py` at test time; the submodule
-checkout itself is never modified.
+different (non-Intel) compiler. The changes are applied dynamically by a Python
+script in `tests/fortran_runner.py` at test time via a binary search-and-replace
+(to avoid fragile `patch` context hunks and Windows codepage encoding issues);
+the submodule checkout itself is never modified.
 
 This satisfies the CC BY-SA "clearly label changes" requirement for
-adaptations of the licensed work: the changes are isolated in a single patch
-file, documented here, and never presented as the original.
+adaptations of the licensed work: the changes are isolated, documented here,
+and never presented as the original.
 
 ## Updating the pinned commit
 
@@ -49,8 +49,8 @@ cd ../..
 git add fortran/upstream
 ```
 
-Then re-run the test suite. If upstream has changed any of the four patched
-regions, `patch` will fail loudly with a clear error (see
+Then re-run the test suite. If upstream has changed any of the target lines,
+the Python patcher will fail loudly with a clear `RuntimeError` (see
 `_build_fortran_binary` in `tests/fortran_runner.py`) rather than silently
-compiling something different — at that point the patch context needs a
+compiling something different — at that point the replacement patterns need a
 manual update.
