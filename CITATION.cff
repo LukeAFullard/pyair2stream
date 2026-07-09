@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use this software in published work, please cite it and the original model paper."
 authors:
-  - family-names: "pyair2stream authors"
+  - family-names: "Fullard"
 title: "pyair2stream"
 version: 1.0.0
 url: "https://github.com/LukeAFullard/pyair2stream"
