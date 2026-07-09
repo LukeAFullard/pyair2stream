@@ -402,7 +402,10 @@ def funcobj(data: CommonData) -> float:
     if data.fun_obj == 'NSE': fun_obj_type = 0
     elif data.fun_obj == 'KGE': fun_obj_type = 1
     elif data.fun_obj == 'RMS': fun_obj_type = 2
-    else: print("Errore nella scelta della f. obiettivo")
+    else:
+        raise ValueError(
+            f"Invalid objective_function '{data.fun_obj}'. Must be one of: NSE, KGE, RMS."
+        )
 
     eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
 

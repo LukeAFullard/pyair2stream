@@ -70,7 +70,7 @@ pip install -e .
 pip install pytest
 ```
 
-> The original Fortran source is included under `fortran/` purely as a reference implementation used by the test suite (see [Testing](#testing)); it is not required to run `pyair2stream`.
+> The original Fortran source is pulled in as a git submodule under `fortran/upstream/` purely as a reference implementation used by the test suite (see [Testing](#testing)); it is not required to run `pyair2stream`. Clone with `git clone --recurse-submodules`, or run `git submodule update --init --recursive` after a plain clone.
 
 ## Quick start
 
@@ -201,13 +201,18 @@ print(data.par_best, data.finalfit)
 
 ## Testing
 
-The test suite includes regression tests that compile the original Fortran source (`fortran/src/`) with `gfortran` and numerically compare its output against the Python/Numba implementation, in addition to unit tests for I/O, optimization, sensitivity analysis, and post-processing.
+The test suite includes regression tests that compile the original Fortran source with `gfortran` and numerically compare its output against the Python/Numba implementation, in addition to unit tests for I/O, optimization, sensitivity analysis, and post-processing.
+
+The Fortran source itself is not vendored in this repo — it's a git submodule pinned to a specific commit of the upstream [air2stream](https://github.com/spiccolroaz/air2stream) reference implementation, with a small, documented patch applied at build time to make it compile under `gfortran` (the original targets Intel Fortran on Windows). See [`fortran/patches/NOTICE.md`](fortran/patches/NOTICE.md) for exactly what's patched, why, and licensing attribution.
 
 ```bash
+git submodule update --init --recursive   # fetch the pinned upstream Fortran source
 gfortran --version   # gfortran is required for the golden Fortran-comparison tests
 pip install -e . pytest
 pytest tests/
 ```
+
+If the submodule isn't initialized, the golden tests fail immediately with a clear message telling you to run the `git submodule update` command above, rather than a cryptic file-not-found error.
 
 ## Examples
 

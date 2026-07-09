@@ -54,12 +54,12 @@ def forward(data: CommonData) -> None:
     ei_check = funcobj(data)
 
     if abs(ei_check - data.finalfit) > 0.0001:
-        print('Errore efficienza in forward')
+        print(f'Error: efficiency mismatch in forward run ({ei_check} vs {data.finalfit})')
         print(ei_check, data.finalfit)
         # Replacing Fortran PAUSE with RuntimeError
         raise RuntimeError('Efficiency mismatch in forward run.')
     else:
-        print('Controllo superato')
+        print('Consistency check passed.')
 
     # Output best parameters and ei (Append to 1_ file)
     param_out_path = os.path.join(data.folder, f"1_{data.runmode}_{data.fun_obj}_{data.station}_{data.series}_{data.time_res}.out")
