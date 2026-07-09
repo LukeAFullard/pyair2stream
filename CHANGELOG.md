@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.0] - 2024-05-24
+## [1.0.0] - 2026-07-09
 
 ### Added
 - Python port of the air2stream hybrid model for river water temperature.
