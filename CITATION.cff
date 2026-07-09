@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software in published work, please cite it and the original model paper."
+authors:
+  - family-names: "pyair2stream authors"
+title: "pyair2stream"
+version: 1.0.0
+url: "https://github.com/LukeAFullard/pyair2stream"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: Toffolon
+      given-names: M.
+    - family-names: Piccolroaz
+      given-names: S.
+  title: "A hybrid model for river water temperature as a function of air temperature and discharge"
+  journal: "Environmental Research Letters"
+  volume: 10
+  issue: 11
+  year: 2015
+  doi: 10.1088/1748-9326/10/11/114011
