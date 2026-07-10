@@ -26,6 +26,7 @@ openpyxl = "^3.1.5"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"
+pytest-cov = "^7.1.0"
 
 [tool.poetry.scripts]
 pyair2stream = "pyair2stream.main:main"
