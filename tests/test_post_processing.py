@@ -102,5 +102,35 @@ class TestPostProcessing(unittest.TestCase):
         qq_file = f"predicted_vs_measured_calibration_{self.data.runmode}_{self.data.fun_obj}_{self.data.station}.png"
         self.assertTrue(os.path.exists(os.path.join(self.data.folder, qq_file)), f"Expected QQ file {qq_file} was not generated.")
 
+    def test_post_processing_forward_mode(self):
+        self.data.runmode = 'FORWARD'
+        self.data.n_tot = 380
+
+        # Create a mock envelope file
+        env_file = os.path.join(self.data.folder, f"Forward_Prediction_Envelopes_{self.data.station}_{self.data.series}_{self.data.time_res}.csv")
+        df_env = pd.DataFrame({
+            'Date': pd.date_range(start="2020-01-01", periods=self.data.n_tot, freq='D'),
+            'Twat_mod_p5': np.zeros(self.data.n_tot),
+            'Twat_mod_p95': np.ones(self.data.n_tot)
+        })
+        df_env.to_csv(env_file, index=False)
+
+        post_process(self.data, toll=2.0)
+
+        self.assertTrue(os.path.exists(os.path.join(self.data.folder, "forward_projection.png")))
+
+    def test_post_processing_empty_dataframe(self):
+        # Create an empty CSV file with only headers (simulating no model evaluations reached mineff_index threshold)
+        empty_csv = os.path.join(self.data.folder, f"0_{self.data.runmode}_{self.data.fun_obj}_{self.data.station}_{self.data.series}_{self.data.time_res}.csv")
+        with open(empty_csv, 'w') as f:
+            f.write("par_1,par_2,par_3,par_4,par_5,par_6,par_7,par_8,NSE\n")
+
+        # Create cal/val files just so it doesn't crash on missing files for plotting
+        out_cal_path = os.path.join(self.data.folder, f"2_{self.data.runmode}_{self.data.fun_obj}_{self.data.station}_{self.data.series}c_{self.data.time_res}.csv")
+        pd.DataFrame({'Year': [2000], 'Month': [1], 'Day': [1], 'Tair': [10], 'Twat_obs': [10], 'Twat_mod': [10], 'Twat_obs_agg': [10], 'Twat_mod_agg': [10], 'Q': [10]}).to_csv(out_cal_path, index=False)
+
+        # Call post_process, it should handle the empty dataframe gracefully (not crash)
+        post_process(self.data, toll=2.0)
+
 if __name__ == '__main__':
     unittest.main()

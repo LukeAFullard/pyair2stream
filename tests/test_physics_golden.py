@@ -6,9 +6,30 @@ def RK4_air2stream(Ta, QQ, Tw, time, par, Qmedia):
     p = np.zeros(9)
     p[1:9] = par[0:8]
     DD = (QQ / Qmedia) ** p[4]
-    K = p[1] + p[2]*Ta - p[3]*Tw + (QQ / Qmedia) * (p[5] + p[6]*np.cos(2.0*PI*(time - p[7])) - p[8]*Tw)
+    K = p[1] + p[2]*Ta - p[3]*Tw + (QQ / Qmedia) * (p[5] + p[6]*np.cos(2.0*np.pi*(time - p[7])) - p[8]*Tw)
     K = K / DD
     return K
+
+def RK2_air2stream(Ta, QQ, Tw, time, par, Qmedia):
+    # Heun's method (RK2) uses the same derivative function as RK4
+    return RK4_air2stream(Ta, QQ, Tw, time, par, Qmedia)
+
+def CRN_air2stream(Ta_j, Ta_j1, QQ_j, QQ_j1, Tw_j, time_j, time_j1, par, Qmedia):
+    p = np.zeros(9)
+    p[1:9] = par[0:8]
+
+    theta_j = QQ_j / Qmedia
+    theta_j1 = QQ_j1 / Qmedia
+    DD_j = theta_j ** p[4]
+    DD_j1 = theta_j1 ** p[4]
+
+    denom_term = 1.0 + 0.5 * p[8] * theta_j1 / DD_j1 + 0.5 * p[3] / DD_j1
+
+    num1 = 0.5 / DD_j * (p[1] + p[2]*Ta_j - p[3]*Tw_j + theta_j * (p[5] + p[6]*np.cos(2.0*np.pi*(time_j - p[7])) - p[8]*Tw_j))
+    num2 = 0.5 / DD_j1 * (p[1] + p[2]*Ta_j1 + theta_j1 * (p[5] + p[6]*np.cos(2.0*np.pi*(time_j1 - p[7]))))
+
+    Tw_j1 = (Tw_j + num1 + num2) / denom_term
+    return Tw_j1
 
 def test_physics_golden_match():
     # To properly match Fortran's behavior without running the entire call_model loop
@@ -60,6 +81,149 @@ def test_physics_golden_match():
 
     expected = run_fortran_model(
         version=8,
+        mod_num="RK4",
+        n_tot_raw=n_tot_raw,
+        Tair=Tair[365:],
+        Q=Q[365:],
+        par=par,
+        Qmedia=Qmedia,
+        Twat_initial=4.0
+    )
+
+    np.testing.assert_allclose(Twat_mod[365:], expected, rtol=1e-2, atol=1e-2)
+
+def test_physics_golden_match_rk2():
+    n_tot_raw = 10
+    n_tot = n_tot_raw + 365
+
+    par = np.array([1.0, 0.1, 0.1, 0.5, 1.0, 1.0, 0.5, 0.1], dtype=np.float64)
+    Qmedia = 10.0
+    Tair = np.array([15.0]*n_tot, dtype=np.float64)
+    Q = np.array([10.0]*n_tot, dtype=np.float64)
+    tt = np.zeros(n_tot, dtype=np.float64)
+    k = 0
+    for j in range(1, 366):
+        tt[k + j - 1] = j / 365.0
+    k = 365
+    for j in range(1, 367):
+        if k + j - 1 >= n_tot:
+            break
+        tt[k + j - 1] = j / 366.0
+
+    Twat_mod = np.zeros(n_tot, dtype=np.float64)
+    Twat_mod[0] = 4.0
+    Tice_cover = 0.0
+
+    for j in range(n_tot - 1):
+        ttt = tt[j+1] - tt[j]
+        if j < 365:
+            ttt = 1.0/365.0
+        else:
+            ttt = 1.0/366.0
+
+        K1 = RK2_air2stream(Tair[j], Q[j], Twat_mod[j], tt[j], par, Qmedia)
+        K2 = RK2_air2stream(Tair[j+1], Q[j+1], Twat_mod[j] + K1, tt[j] + ttt, par, Qmedia)
+
+        Twat_mod[j+1] = Twat_mod[j] + 0.5 * (K1 + K2)
+        Twat_mod[j+1] = max(Twat_mod[j+1], Tice_cover)
+
+    from tests.fortran_runner import run_fortran_model
+
+    expected = run_fortran_model(
+        version=8,
+        mod_num="RK2",
+        n_tot_raw=n_tot_raw,
+        Tair=Tair[365:],
+        Q=Q[365:],
+        par=par,
+        Qmedia=Qmedia,
+        Twat_initial=4.0
+    )
+
+    np.testing.assert_allclose(Twat_mod[365:], expected, rtol=1e-2, atol=1e-2)
+
+def test_physics_golden_match_crn():
+    n_tot_raw = 10
+    n_tot = n_tot_raw + 365
+
+    par = np.array([1.0, 0.1, 0.1, 0.5, 1.0, 1.0, 0.5, 0.1], dtype=np.float64)
+    Qmedia = 10.0
+    Tair = np.array([15.0]*n_tot, dtype=np.float64)
+    Q = np.array([10.0]*n_tot, dtype=np.float64)
+    tt = np.zeros(n_tot, dtype=np.float64)
+    k = 0
+    for j in range(1, 366):
+        tt[k + j - 1] = j / 365.0
+    k = 365
+    for j in range(1, 367):
+        if k + j - 1 >= n_tot:
+            break
+        tt[k + j - 1] = j / 366.0
+
+    Twat_mod = np.zeros(n_tot, dtype=np.float64)
+    Twat_mod[0] = 4.0
+    Tice_cover = 0.0
+
+    for j in range(n_tot - 1):
+        Tw_j1 = CRN_air2stream(Tair[j], Tair[j+1], Q[j], Q[j+1], Twat_mod[j], tt[j], tt[j+1], par, Qmedia)
+        Twat_mod[j+1] = max(Tw_j1, Tice_cover)
+
+    from tests.fortran_runner import run_fortran_model
+
+    expected = run_fortran_model(
+        version=8,
+        mod_num="CRN",
+        n_tot_raw=n_tot_raw,
+        Tair=Tair[365:],
+        Q=Q[365:],
+        par=par,
+        Qmedia=Qmedia,
+        Twat_initial=4.0
+    )
+
+    np.testing.assert_allclose(Twat_mod[365:], expected, rtol=1e-2, atol=1e-2)
+
+def test_physics_golden_match_version_7():
+    n_tot_raw = 10
+    n_tot = n_tot_raw + 365
+
+    par = np.array([1.0, 0.1, 0.1, 0.0, 1.0, 1.0, 0.5, 0.1], dtype=np.float64) # param 3 (index 3) is 0.0
+    Qmedia = 10.0
+    Tair = np.array([15.0]*n_tot, dtype=np.float64)
+    Q = np.array([10.0]*n_tot, dtype=np.float64)
+    tt = np.zeros(n_tot, dtype=np.float64)
+    k = 0
+    for j in range(1, 366):
+        tt[k + j - 1] = j / 365.0
+    k = 365
+    for j in range(1, 367):
+        if k + j - 1 >= n_tot:
+            break
+        tt[k + j - 1] = j / 366.0
+
+    Twat_mod = np.zeros(n_tot, dtype=np.float64)
+    Twat_mod[0] = 4.0
+    Tice_cover = 0.0
+
+    for j in range(n_tot - 1):
+        ttt = tt[j+1] - tt[j]
+        if j < 365:
+            ttt = 1.0/365.0
+        else:
+            ttt = 1.0/366.0
+
+        K1 = RK4_air2stream(Tair[j], Q[j], Twat_mod[j], tt[j], par, Qmedia)
+        K2 = RK4_air2stream(0.5 * (Tair[j] + Tair[j+1]), 0.5 * (Q[j] + Q[j+1]), Twat_mod[j] + 0.5 * K1, tt[j] + 0.5 * ttt, par, Qmedia)
+        K3 = RK4_air2stream(0.5 * (Tair[j] + Tair[j+1]), 0.5 * (Q[j] + Q[j+1]), Twat_mod[j] + 0.5 * K2, tt[j] + 0.5 * ttt, par, Qmedia)
+        K4 = RK4_air2stream(Tair[j+1], Q[j+1], Twat_mod[j] + K3, tt[j] + ttt, par, Qmedia)
+
+        Twat_mod[j+1] = Twat_mod[j] + (1.0 / 6.0) * (K1 + 2.0*K2 + 2.0*K3 + K4)
+        Twat_mod[j+1] = max(Twat_mod[j+1], Tice_cover)
+
+    from tests.fortran_runner import run_fortran_model
+
+    expected = run_fortran_model(
+        version=7,
         mod_num="RK4",
         n_tot_raw=n_tot_raw,
         Tair=Tair[365:],
