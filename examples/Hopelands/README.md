@@ -10,7 +10,7 @@ The analysis integrated three primary data sources:
 - **Discharge**: Daily flow observations.
 
 ### 2.1. Data Availability and Segment Analysis
-The timeseries spans from 1972-01-01 to 2026-06-05.
+The merged timeseries index spans 1972-01-01 to 2026-06-05, reflecting the date range of the source files after merging. Note that the air temperature and discharge records end in 2024 (see §2 above); the trailing rows through mid-2026 come from placeholder dates pre-allocated in the raw water-temperature export and carry no air temperature, discharge, or water temperature values, so they contribute nothing to calibration.
 - **T_air missing**: 3.4%
 - **T_water missing**: 51.1%
 - **Discharge missing**: 36.9%

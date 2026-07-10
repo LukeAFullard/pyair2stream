@@ -154,7 +154,7 @@ By default the model requires `T_air` (and `Discharge`, if used) to be gap-free 
 - `T_water` observations that fall inside a forcing gap are excluded from both calibration and evaluation.
 - Each segment discards a short warm-up buffer (`warmup_drop_days`, default 15) after restarting, since the restart condition relies on a day-of-year climatology.
 
-See [USER_GUIDE.md](USER_GUIDE.md#gap-tolerant-mode) for full details.
+See [USER_GUIDE.md](USER_GUIDE.md#10-gap-tolerant-mode) for full details.
 
 ## Outputs
 
@@ -229,7 +229,7 @@ The `examples/` directory contains runnable end-to-end examples, each with its o
 | `optimizer_convergence/` | How `PSO` and `DE` convergence behaviour changes with iteration count |
 | `Hopelands/`, `Pukeokahu/` | Full real river-station case studies, including raw-data preprocessing, gap-tolerant calibration, and sensitivity analysis |
 | `validation/Switzerland/` | Re-derivation of the Python PSO bugfix (see [Known deviations](#known-deviations-from-the-fortran-reference)) and the literature validation study below |
-| `validation/Moore_Callahan_2026/` | Validation against an independently published literature parameter set for a real station |
+| `validation/Callahan_Moore_2025/` | Validation against an independently published literature parameter set for a real station |
 
 ## Relationship to the original Fortran code
 

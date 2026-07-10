@@ -6,7 +6,7 @@ This report details the stability of parameter values when gaps are introduced i
 A baseline Differential Evolution (DE) optimization was run (3000 iterations, 100 particles) using the complete DAV dataset from Switzerland. Various types of gaps were then systematically introduced to the `T_air` column (`NaN` injection), and the DE calibration was repeated to observe how equifinality and goodness-of-fit reacted to missing data.
 
 ## Discussion
-The results show that the pyair2stream model exhibits remarkable robustness to missing forcing data. When gaps are introduced (ranging from short random bursts to extended absences), the objective function values (NSE, R2) and model fit parameters (p1-p8) remain relatively stable compared to the baseline without missing values. The equifinality (seen in the dotty plots) and parameter convergence are well-preserved across the gap scenarios.
+Across the systematic gap scenarios (`few_short` through `many_long`), the model fit parameters (p1-p8) and objective function values stay close to the gap-free baseline, with NSE shifting by no more than +0.003 even as missing `T_air` reaches 5.9%. The `random` scenario is the exception: NSE rises from 0.9558 to 0.9842, a larger jump than any of the systematic scenarios despite a comparable proportion of missing data. This is consistent with the caveat in the main README's [gap-tolerant mode](../../README.md#gap-tolerant-mode) section — gaps scattered at random are more likely to remove difficult-to-model days piecemeal, without necessarily excluding an entire hard event (like a freeze or flood), which can inflate NSE relative to a continuous record. Parameter convergence (seen in the dotty plots) is well-preserved across all scenarios.
 
 ## Results
 
@@ -21,49 +21,39 @@ The results show that the pyair2stream model exhibits remarkable robustness to m
 
 ## Scenario Visualizations
 
-### baseline
-These plots show the pre-analysis timeline, optimizer convergence, parameter dotty plots, and the full simulation.
+Each scenario below shows the same four diagnostics: the pre-analysis timeline, optimizer convergence, parameter dotty plots, and the full simulation.
 
+### baseline
 ![baseline Pre-analysis](output/baseline_pre_analysis.png)
 ![baseline Convergence](output/convergence_DE_NSE_baseline.png)
 ![baseline Dotty Plots](output/dottyplots_DE_NSE_baseline.png)
 ![baseline Full Simulation](output/full_simulation_DE_NSE_baseline.png)
 
 ### few_short
-These plots show the pre-analysis timeline, optimizer convergence, parameter dotty plots, and the full simulation.
-
 ![few_short Pre-analysis](output/few_short_pre_analysis.png)
 ![few_short Convergence](output/convergence_DE_NSE_few_short.png)
 ![few_short Dotty Plots](output/dottyplots_DE_NSE_few_short.png)
 ![few_short Full Simulation](output/full_simulation_DE_NSE_few_short.png)
 
 ### many_short
-These plots show the pre-analysis timeline, optimizer convergence, parameter dotty plots, and the full simulation.
-
 ![many_short Pre-analysis](output/many_short_pre_analysis.png)
 ![many_short Convergence](output/convergence_DE_NSE_many_short.png)
 ![many_short Dotty Plots](output/dottyplots_DE_NSE_many_short.png)
 ![many_short Full Simulation](output/full_simulation_DE_NSE_many_short.png)
 
 ### few_long
-These plots show the pre-analysis timeline, optimizer convergence, parameter dotty plots, and the full simulation.
-
 ![few_long Pre-analysis](output/few_long_pre_analysis.png)
 ![few_long Convergence](output/convergence_DE_NSE_few_long.png)
 ![few_long Dotty Plots](output/dottyplots_DE_NSE_few_long.png)
 ![few_long Full Simulation](output/full_simulation_DE_NSE_few_long.png)
 
 ### many_long
-These plots show the pre-analysis timeline, optimizer convergence, parameter dotty plots, and the full simulation.
-
 ![many_long Pre-analysis](output/many_long_pre_analysis.png)
 ![many_long Convergence](output/convergence_DE_NSE_many_long.png)
 ![many_long Dotty Plots](output/dottyplots_DE_NSE_many_long.png)
 ![many_long Full Simulation](output/full_simulation_DE_NSE_many_long.png)
 
 ### random
-These plots show the pre-analysis timeline, optimizer convergence, parameter dotty plots, and the full simulation.
-
 ![random Pre-analysis](output/random_pre_analysis.png)
 ![random Convergence](output/convergence_DE_NSE_random.png)
 ![random Dotty Plots](output/dottyplots_DE_NSE_random.png)

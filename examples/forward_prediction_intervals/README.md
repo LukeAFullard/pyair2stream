@@ -16,12 +16,12 @@ This example showcases the two noise generation methods available:
 
 1. Generate synthetic historical (with AR(1) structured noise injected) and future climate data:
 ```bash
-poetry run python examples/forward_prediction_intervals/generate_data.py
+python examples/forward_prediction_intervals/generate_data.py
 ```
 
 2. Run the full calibration and projection pipeline:
 ```bash
-poetry run python examples/forward_prediction_intervals/run_example.py
+python examples/forward_prediction_intervals/run_example.py
 ```
 
 This script will:
@@ -43,21 +43,21 @@ The generated plot features four panels that illustrate the practical difference
 
 
 ## Additional Goodness of fit and model fit parameters
-- Sigma: 0.8185108685637652
-- Rho: 0.5910357316648412
-- Best NSE: 0.9727516010328746
-- Best R2: 0.9727516041586916
-- Best MAE: 0.6463062429471895
+- Sigma: 0.8185
+- Rho: 0.5910
+- Best NSE: 0.9728
+- Best R2: 0.9728
+- Best MAE: 0.6463
 
 ### Best Parameters:
-- par_1: 0.4021291550566604
-- par_2: 0.0431781983923235
-- par_3: 0.0603445120378626
-- par_4: 0.4619397898649217
-- par_5: 1.1496073864321397
-- par_6: 0.7581240017948266
-- par_7: 0.5008910497421541
-- par_8: 0.1194132072963056
+- par_1: 0.4021
+- par_2: 0.0432
+- par_3: 0.0603
+- par_4: 0.4619
+- par_5: 1.1496
+- par_6: 0.7581
+- par_7: 0.5009
+- par_8: 0.1194
 
 
 
