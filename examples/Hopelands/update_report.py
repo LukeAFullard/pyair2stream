@@ -34,8 +34,10 @@ def main():
     # 3. Construct the Report
     report = f"""# Hopelands Water Temperature Analysis Report
 
+*(Report current as of commit `dc4cba90a0f5591292c16de3407d30ad6fbaf279`)*
+
 ## 1. Executive Summary
-A full analysis was performed on the Hopelands dataset to calibrate the `pyair2stream` water temperature model. The model achieved a high level of accuracy with a Nash-Sutcliffe Efficiency (NSE) of **{nse}**, indicating a strong fit between observed and simulated water temperatures.
+The `pyair2stream` water temperature model was calibrated on the Hopelands dataset, yielding a Nash-Sutcliffe Efficiency (NSE) of **{nse}**.
 
 ## 2. Dataset and Preprocessing
 The analysis integrated three primary data sources:
@@ -98,7 +100,7 @@ A local One-At-A-Time (OAT) sensitivity analysis was performed to evaluate the i
 *Figure 8: Sensitivity index for each model parameter across different perturbation levels.*
 
 ## 5. Conclusion
-The `pyair2stream` model demonstrates strong performance for the Hopelands station, achieving an NSE of 0.956 despite fragmented discharge and temperature records. The significant parameter estimates suggest the model is a viable candidate for gap-filling at this location, though predictions during unobserved extremes should be treated with appropriate caution.
+The calibration for the Hopelands station reached an NSE of 0.956 on a dataset with fragmented discharge and temperature records. The parameter estimates are statistically significant, but error margins will be wider when extrapolating across extreme unobserved gaps.
 
 ---
 *Report updated on 2026-06-05*

@@ -1,5 +1,7 @@
 # Validation Analysis: Callahan & Moore (2025)
 
+*(Report current as of commit `dc4cba90a0f5591292c16de3407d30ad6fbaf279`)*
+
 ## Station 07EA004
 
 This report compares the pyair2stream model (both PSO and DE optimizers, and CRN and RK4 integrators) against literature parameters for station 07EA004, published in Callahan, L. and Moore, R.D. (2025), "Evaluation of the Hybrid Air2stream Model for Simulating Daily Stream Temperature During Extreme Summer Heat Wave and Autumn Drought Conditions", *Hydrological Processes*, 39: e70033, [doi:10.1002/hyp.70033](https://doi.org/10.1002/hyp.70033). This pass used high-intensity search settings (500 particles for PSO, 100 particles for DE, 3000 runs) to ensure absolute convergence limits.
@@ -23,6 +25,6 @@ Two sets of tests were run: the 'orig' tests used the full default bounds (where
 | Fortran_PSO_RK4_orig |  0.9693 |  nan | 0.098 | 0.227 | 0.234 | -0.275 | 0.131 | 1.386 | 0.565 | 0.166 |
 
 ### Discussion
-The analysis successfully completed the evaluation for PSO and DE using both CRN and RK4, as well as a reference run using the original Fortran version of `air2stream`. The high-intensity search confirms that both DE and PSO reach reliable global minimums with NSE values around 0.97. DE is particularly successful at locking onto the lowest possible objective bound across both RK4 and CRN integrators, while PSO achieves closely corresponding results. These optimized parameter solutions show strong agreement in functional form, aligning with what is presented in the literature. The Python-based PSO implementation is also shown to closely match the legacy Fortran implementation in performance and parameter selection.
+The analysis evaluates PSO and DE using both CRN and RK4, alongside a reference run using the original Fortran version of `air2stream`. Both DE and PSO return NSE values around 0.97. DE identifies the lowest objective minimum across both RK4 and CRN integrators, while PSO achieves comparable results. The optimized parameter solutions align in functional form with those presented in the literature. The Python-based PSO implementation matches the performance and parameter selection of the legacy Fortran implementation.
 
-When `a4` was restricted to `[0.0, 1.0]`, the models generally hit the lower bound (`0.0`) for parameter `a4`. This indicates that the true global minimum (which utilizes negative values of `a4` around `-1.0` as seen in both literature and the original unconstrained runs) exists outside this bounded region. The restricted models experienced a marginal performance degradation in NSE as they sought alternate local optima, compensating by noticeably increasing parameter `a1` (and modifying other parameters) to offset the forced bound on `a4`.
+When `a4` was restricted to `[0.0, 1.0]`, the models generally hit the lower bound (`0.0`) for parameter `a4`. This indicates that the global minimum (which utilizes negative values of `a4` around `-1.0`, as seen in both the literature and the unconstrained runs) exists outside this bounded region. The restricted models yielded a lower NSE and compensated by increasing parameter `a1` (and modifying other parameters) to offset the forced bound on `a4`.

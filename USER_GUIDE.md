@@ -288,7 +288,7 @@ Everything is written to `output_dir` (or `{project_name}/output_{version}` by d
 | `cv_results.csv` | Only if `cross_validation.enabled: true` — see [§13](#13-cross-validation). Replaces the usual forward-run/plotting outputs above for that run. |
 | `gaps_summary.txt` | Only for `gap_tolerant: true` — segment/gap diagnostics |
 
-### ⚠️ The first 365 rows of `2_*.csv` / `3_*.csv` are not real data
+### The first 365 rows of `2_*.csv` / `3_*.csv` are not real data
 
 Every run internally prepends a duplicate of the first simulated year as a numerical warm-up, to reduce sensitivity to the initial condition. In the output CSVs, these warm-up rows are easy to spot: **`Year`, `Month`, and `Day` are all `-999`**. Ignore/filter out any row where `Year == -999` before analysing results — the real, evaluated time series starts at the first row with a genuine date.
 
