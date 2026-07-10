@@ -58,7 +58,7 @@ The 8-parameter `air2stream` equation parameters identified by DE for each scena
 *Even after significantly increasing the intensity of the Differential Evolution Optimization (`n_particles: 100`, `n_runs: 5000`), the parameters still vary between scenarios (e.g. `p4` varying between 0.690 and 0.933). This demonstrates that equifinality in conceptual hydrological models cannot always be "brute-forced" away simply by running longer calibrations, as different data gaps fundamentally shift the mathematical constraints available to the optimizer.*
 
 **Key Takeaways:**
-*   **Gap-Tolerant Calibration Works**: The model successfully calibrates parameters that generalize extremely well to the missing periods (True NSE remains > 0.95).
+*   **Gap-Tolerant Calibration Works**: The model successfully calibrates parameters that generalize well to the missing periods (True NSE remains > 0.95).
 *   **MNAR Bias**: Note that dropping the hardest periods to simulate (winter freezing, spring floods) can inflate or warp the performance metric relative to the underlying physics. This is why gap-tolerant metrics should be carefully compared to metrics from continuous runs.
 *   **External Qmedia**: The configurations use a user-supplied `Qmedia: 19.86`. Because the Spring 2020 flood was excluded in the 2-gap and 3-gap datasets, a dynamically computed `Qmedia` would be biased low, systematically warping the depth scaling parameters. Using an external `Qmedia` isolates this error.
 

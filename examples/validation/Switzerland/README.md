@@ -52,7 +52,7 @@ The script `validate_literature.py` was introduced to programmatically reconstru
 -   **SIO (Regulated):** ~0.924 (vs literature 0.923)
 -   **DAV (Snow-fed):** ~0.955 (vs literature 0.950)
 
-These near-identical index metrics indicate that the `RK4` integrator in `pyair2stream` executes the thermal dynamics perfectly without structural bias, matching the legacy Fortran codebase evaluations to a negligible margin of error across differing hydrological flow regimes.
+These near-identical index metrics indicate that the `RK4` integrator in `pyair2stream` executes the thermal dynamics without structural bias, closely matching the legacy Fortran codebase evaluations across differing hydrological flow regimes.
 
 The complete comparison plots corresponding to this execution are saved in:
 -   `examples/validation/Switzerland/forward_MAH.png`

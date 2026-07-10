@@ -58,6 +58,8 @@ The following optimal parameters were determined, with their 95% Confidence Inte
 
 All parameters are significantly different from zero.
 
+*Note: The model output files in `examples/Pukeokahu/output` use "Rangitikei" in their filenames because Pukeokahu is located on the Rangitikei River, which is the internal identifier used in the configuration.*
+
 ## 4. Visualizations
 
 ### Calibration Timeseries
