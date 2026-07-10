@@ -20,8 +20,8 @@ The goal is to evaluate their relative performance in terms of model fit (Nash-S
 
 ### Observations
 
-*   **Hybrid DE** achieved the best goodness of fit (NSE = ~0.953) and did so in an incredibly short amount of time. It effectively utilizes a global search (Differential Evolution) followed by local refinement (L-BFGS-B).
-*   **PSO**, despite the massive increase to 500 particles and 500 runs (resulting in 250,000 evaluations), found a solution (NSE = ~0.953) that is essentially tied with Hybrid DE. However, it took nearly 2.5 minutes to achieve this result, demonstrating the relative inefficiency of PSO compared to the DE-based methods for this problem structure.
+*   **Hybrid DE** achieved the best goodness of fit (NSE = ~0.953) and did so in a short amount of time. It effectively utilizes a global search (Differential Evolution) followed by local refinement (L-BFGS-B).
+*   **PSO**, despite the increase to 500 particles and 500 runs (resulting in 250,000 evaluations), found a solution (NSE = ~0.953) that is essentially tied with Hybrid DE. However, it took nearly 2.5 minutes to achieve this result, demonstrating the relative inefficiency of PSO compared to the DE-based methods for this problem structure.
 *   **DE-MCMC** performs the exact same initial optimization phase as Hybrid DE. Because they now share the same random seed, they find the exact same Best Objective and Best Parameters. DE-MCMC takes longer overall (35.73s) because it additionally runs 2000 MCMC steps across 32 walkers to estimate parameter uncertainty envelopes.
 
 ## Model Fit Comparison
@@ -36,7 +36,7 @@ This plot illustrates how quickly each optimization algorithm converges toward a
 
 ![Convergence Plot](convergence_plot.png)
 
-Because Hybrid DE and DE-MCMC start with the exact same seed, their convergence trajectories (green and blue) overlap perfectly. Hybrid DE quickly achieves a near-optimal score and refines it. PSO explores a vastly wider parameter space early on (due to the 500 particles) but takes many more evaluations to reach its plateau.
+Because Hybrid DE and DE-MCMC start with the exact same seed, their convergence trajectories (green and blue) overlap. Hybrid DE quickly achieves a near-optimal score and refines it. PSO explores a vastly wider parameter space early on (due to the 500 particles) but takes many more evaluations to reach its plateau.
 
 ## Parameter Sensitivity Analysis
 

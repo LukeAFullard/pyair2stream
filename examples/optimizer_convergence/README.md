@@ -36,4 +36,4 @@ The algorithms were executed across increasing iteration counts (from 10 up to 5
 *Discussion*: The time taken by both optimizers scales roughly linearly with the number of iterations.
 
 ## Conclusion
-Overall, DE is more efficient at finding optimal parameters for this configuration, reaching a higher NSE with better parameter stability at a similar computational cost compared to PSO.
+Overall, DE is more efficient at finding optimal parameters for this configuration, reaching a similar NSE with better parameter stability at a similar computational cost compared to PSO. However, it is notable that the final parameter sets found by DE and PSO diverge substantially (e.g., `p4`: 0.6133 vs 0.9995) despite achieving near-identical NSE values (~0.9705). This is indicative of equifinality, where multiple, differing sets of parameters can yield similarly high objective function efficiencies.

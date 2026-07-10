@@ -98,10 +98,10 @@ A local One-At-A-Time (OAT) sensitivity analysis was performed to evaluate the i
 *Figure 8: Sensitivity index for each model parameter across different perturbation levels.*
 
 ## 5. Conclusion
-The `pyair2stream` model is well-suited for the Hopelands station, providing a robust representation of water temperature dynamics even with fragmented discharge and temperature records. The high NSE and significant parameter estimates suggest that the model can be reliably used for future projections or gap-filling at this location.
+The `pyair2stream` model demonstrates strong performance for the Hopelands station, achieving an NSE of 0.956 despite fragmented discharge and temperature records. The significant parameter estimates suggest the model is a viable candidate for gap-filling at this location, though predictions during unobserved extremes should be treated with appropriate caution.
 
 ---
-*Report updated on 2025-06-29*
+*Report updated on 2026-06-05*
 """
     with open(report_path, 'w') as f:
         f.write(report)
