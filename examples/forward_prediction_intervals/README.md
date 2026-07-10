@@ -1,5 +1,7 @@
 # Probabilistic Forward Prediction Intervals
 
+*(Report current as of commit `dc4cba90a0f5591292c16de3407d30ad6fbaf279`)*
+
 This example demonstrates how to project future water temperatures probabilistically, using the parameter distributions and residual error ($\sigma$) derived during a `DE-MCMC` historical calibration.
 
 ## The Problem
@@ -39,7 +41,7 @@ The generated plot features four panels that illustrate the practical difference
 1. **Forward Projection - IID Noise**: Shows the standard 90% Prediction Interval using white noise.
 2. **Forward Projection - AR(1) Noise**: Shows the 90% Prediction Interval using autoregressive noise. Note that at a daily scale, the overall width of the interval is mathematically identical to the IID interval, because both models are calibrated to the exact same marginal variance ($\sigma^2$).
 3. **Sample Individual Trajectories**: Overlays individual simulation traces. Here the structural difference becomes visible: the IID trace (green) oscillates rapidly day-to-day around the median, while the AR(1) trace (blue) exhibits realistic "memory", wandering away from the median for several days at a time (e.g., simulating a multi-day heatwave or cold snap).
-4. **7-Day Rolling Average Prediction Interval**: This is the most crucial panel for understanding the real-world impact. When we calculate a 7-day rolling average of the envelopes, the rapid daily oscillations of the IID white noise cancel each other out, causing the green uncertainty bounds to shrink drastically. In contrast, because the AR(1) errors are temporally correlated, they do not perfectly cancel out over a week. The blue AR(1) bounds remain much wider, correctly preserving the uncertainty for time-averaged metrics (e.g., weekly compliance thresholds) which IID models underestimate.
+4. **7-Day Rolling Average Prediction Interval**: When we calculate a 7-day rolling average of the envelopes, the rapid daily oscillations of the IID white noise cancel each other out, causing the green IID uncertainty bounds to shrink. In contrast, because the AR(1) errors are temporally correlated, they do not perfectly cancel out over a week. The blue AR(1) bounds remain wider, preserving the uncertainty margin for time-averaged thresholds.
 
 
 ## Additional Goodness of fit and model fit parameters
@@ -62,9 +64,9 @@ The generated plot features four panels that illustrate the practical difference
 
 
 ### Discussion of Results
-The historical calibration run successfully quantified the parameter uncertainty and estimated the intrinsic observation noise.
-- **Model Fit Parameters**: The calibration achieved excellent goodness-of-fit metrics, with an NSE of nearly 0.97 and an R² of 0.97. The Mean Absolute Error (MAE) is approx 0.65°C.
-- **Error Structure**: The estimated residual standard deviation ($\sigma$) is ~0.82°C, closely matching the injected synthetic noise. The autocorrelation coefficient ($\rho$) is ~0.59, indicating significant daily memory in the water temperature residuals.
+The historical calibration run yielded the parameter uncertainty and observation noise estimates.
+- **Model Fit Parameters**: The calibration yielded an NSE of 0.9728 and an R² of 0.9728. The Mean Absolute Error (MAE) was 0.6463°C.
+- **Error Structure**: The estimated residual standard deviation ($\sigma$) is 0.8185°C, closely matching the injected synthetic noise. The autocorrelation coefficient ($\rho$) is 0.5910, indicating daily memory in the water temperature residuals.
 
 #### Visual Diagnostics
 1. **Comparison Plot (`comparison_iid_vs_ar1.png`)**: This plot contrasts the prediction bounds produced using standard white noise vs. autoregressive noise. The AR(1) bounds realistically widen over multi-day periods when rolled/averaged, providing safer estimates for medium-term temperature thresholds.

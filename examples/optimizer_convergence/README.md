@@ -1,5 +1,7 @@
 # Optimizer Convergence Report
 
+*(Report current as of commit `dc4cba90a0f5591292c16de3407d30ad6fbaf279`)*
+
 This report evaluates the convergence behavior of two optimization algorithms available in `pyair2stream`:
 1. **PSO** (Particle Swarm Optimization)
 2. **DE** (Differential Evolution hybrid with L-BFGS-B polish)
@@ -36,4 +38,4 @@ The algorithms were executed across increasing iteration counts (from 10 up to 5
 *Discussion*: The time taken by both optimizers scales roughly linearly with the number of iterations.
 
 ## Conclusion
-Overall, DE is more efficient at finding optimal parameters for this configuration, reaching a similar NSE with better parameter stability at a similar computational cost compared to PSO. However, it is notable that the final parameter sets found by DE and PSO diverge substantially (e.g., `p4`: 0.6133 vs 0.9995) despite achieving near-identical NSE values (~0.9705). This is indicative of equifinality, where multiple, differing sets of parameters can yield similarly high objective function efficiencies.
+DE reaches convergence and achieves stable parameter values in fewer iterations than PSO for this configuration, at a similar computational cost. Both optimizers reach near-identical NSE values (~0.9705), but the final parameter sets diverge substantially (e.g., `p4`: 0.6133 vs 0.9995). This indicates equifinality, where multiple, differing parameter sets yield similarly high objective function efficiencies.

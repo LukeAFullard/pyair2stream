@@ -1,5 +1,7 @@
 # Pukeokahu Catchment Analysis
 
+*(Report current as of commit `dc4cba90a0f5591292c16de3407d30ad6fbaf279`)*
+
 This example demonstrates how to take raw, disjointed time series data for Air Temperature, Water Temperature, and Discharge, preprocess them into a single coherent format, run a gap-tolerance pre-analysis, and calibrate the `pyair2stream` model using the robust DE-MCMC optimizer.
 
 ## 1. Data Preprocessing & Pre-Analysis
@@ -30,7 +32,7 @@ We calibrated the 8-parameter version of the model using the `DE-MCMC` optimizer
 
 ## 3. Results and Goodness of Fit
 
-The model calibration successfully completed and yielded excellent performance metrics:
+Calibration completed with the following goodness-of-fit metrics:
 
 ### Goodness of Fit Parameters
 | Metric | Value |

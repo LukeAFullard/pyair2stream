@@ -1,7 +1,9 @@
 # Python PSO Optimization Fix & Verification
 
+*(Report current as of commit `dc4cba90a0f5591292c16de3407d30ad6fbaf279`)*
+
 ## Problem Statement
-The user reported that the `pyair2stream` PSO optimization in the Python port incorrectly selected parameters of all zeros, whereas the original Fortran model successfully explored the parameter space and derived accurate optimizations.
+The `pyair2stream` PSO optimization in the Python port incorrectly selected parameters of all zeros, whereas the original Fortran model successfully explored the parameter space and derived optimal parameters.
 
 ## Bug Identification
 Two specific issues inside the Python PSO implementation (`pyair2stream/optimization.py`) caused this:
@@ -18,7 +20,7 @@ Additionally, the configuration parser (`pyair2stream/io.py`) incorrectly nested
 3. **Fix YAML Parsers**: `data.mineff_index = np.float64(config.get('mineff_index', 0.0))` securely extracts the configuration in `io.py`.
 
 ## Verification & Results
-We successfully set up identical validation environments using the `DAV_2327` dataset for both the legacy Fortran codebase and the `pyair2stream` package.
+Identical validation environments were set up using the `DAV_2327` dataset for both the legacy Fortran codebase and the `pyair2stream` package to compare parameter selection.
 
 ### Results
 The Python solver was observed escaping the 0-gradient trap and arriving at identical physical models as the original legacy codebase.
@@ -36,10 +38,8 @@ The Python solver was observed escaping the 0-gradient trap and arriving at iden
 ### Visual Comparison
 A generated comparison script plotted identical segments from both models (`examples/validation/Switzerland/comparison.png`).
 
-The solution is correctly functioning, handles `NaN` values, properly exports `.csv` generation logs, and successfully solves the requested parameter regression.
-
 ## Literature Parameter Validation
-To further demonstrate the robustness of `pyair2stream` and its fidelity to the underlying physical concepts defined by Toffolon & Piccolroaz (2015), an extended validation was conducted against three distinct datasets provided in the supplementary materials:
+To evaluate the outputs of `pyair2stream` against the parameters published by Toffolon & Piccolroaz (2015), an extended validation was conducted against three distinct datasets provided in the supplementary materials:
 
 1.  **River Mentue (MAH-2369)**: Natural flow
 2.  **River Rhone (SIO-2011)**: Regulated flow
@@ -48,11 +48,11 @@ To further demonstrate the robustness of `pyair2stream` and its fidelity to the 
 The script `validate_literature.py` was introduced to programmatically reconstruct the data pipelines and evaluate the `pyair2stream` port by statically injecting the 8 parameters derived from literature (Table 1 of the supplementary text) using the `FORWARD` run mode.
 
 **The results for NSE calibration efficiencies are as follows:**
--   **MAH (Natural):** ~0.988 (vs literature 0.989)
--   **SIO (Regulated):** ~0.924 (vs literature 0.923)
--   **DAV (Snow-fed):** ~0.955 (vs literature 0.950)
+-   **MAH (Natural):** 0.988 (vs literature 0.989, $\Delta$ = -0.001)
+-   **SIO (Regulated):** 0.924 (vs literature 0.923, $\Delta$ = +0.001)
+-   **DAV (Snow-fed):** 0.955 (vs literature 0.950, $\Delta$ = +0.005)
 
-These near-identical index metrics indicate that the `RK4` integrator in `pyair2stream` executes the thermal dynamics without structural bias, closely matching the legacy Fortran codebase evaluations across differing hydrological flow regimes.
+The NSE scores from the `pyair2stream` RK4 integrator match the legacy Fortran codebase evaluations within $\Delta$ = 0.005 across the three flow regimes.
 
 The complete comparison plots corresponding to this execution are saved in:
 -   `examples/validation/Switzerland/forward_MAH.png`
