@@ -8,12 +8,12 @@ The configuration instructs pyair2stream to withhold one year of water temperatu
 
 fold|NSE|RMSE
 ---|---|---
-2004|0.9336510325773706|0.6915489003214208
-2005|0.961441332404084|0.5843174852899023
-2006|0.960523706666189|0.6027803485526382
-2007|0.9476407057692268|0.6652603271559584
-2008|0.8690747650140415|0.9832347343729628
-2009|0.954027961169306|0.6266860719857689
+2004|0.9337|0.6915
+2005|0.9614|0.5843
+2006|0.9605|0.6028
+2007|0.9476|0.6653
+2008|0.8691|0.9832
+2009|0.9540|0.6267
 
 
 ### Summary across folds
@@ -22,9 +22,9 @@ The table below shows the summary across all folds. `mean` and `std` represent t
 
 fold|NSE|RMSE
 ---|---|---
-mean|0.9377265839333696|0.6923046446131086
-std|0.035144857863638|0.1478877321628146
-pooled|0.9399833784683193|0.7054903608716758
+mean|0.9377|0.6923
+std|0.0351|0.1479
+pooled|0.9400|0.7055
 
 
 ## Parameter Stability
@@ -33,7 +33,7 @@ Because the dataset is split and the model is recalibrated for each fold, each f
 
 The following plot shows the distribution of the calibrated parameters across all the folds. This can be used as a diagnostic for parameter stability and equifinality.
 
-*Observation:* As seen in the table and plot below, the calibrated parameters fluctuate significantly between folds. This high variance is a classic sign of **equifinality**. Because we are using the 8-parameter version of the model on a relatively short timeframe (only ~5 years of training data per fold), the model is likely overparameterized. The optimizer finds different local minima that fit the training subset well, but the parameter sets themselves aren't uniquely defined.
+*Observation:* `p1`–`p4` and `p6`–`p8` are stable across folds, varying by only 2–5% of their mean value (see the summary table below) — not the signature of a poorly-identified parameter. `p5` is the exception: it sits at 0.0 (the lower bound) in five of the six folds and only becomes non-zero (0.053) in the 2005 fold, so its variability is a scale artifact rather than genuine fold-to-fold disagreement. This pattern — most parameters well-constrained, one sitting at a bound and contributing little — is consistent with mild **equifinality** in `p5` specifically, rather than broad overparameterization of the 8-parameter model. With ~5 years of training data per fold, `p5` (a constant offset scaled by relative discharge) may simply not be well-identified by this particular record.
 
 ![Parameter Stability](cv_parameter_stability.png)
 
@@ -41,18 +41,19 @@ The following plot shows the distribution of the calibrated parameters across al
 
 fold|p1|p2|p3|p4|p5|p6|p7|p8
 ---|---|---|---|---|---|---|---|---
-2004|4.795641815383528|0.6103077249857868|1.3956443363706583|0.2745013244964654|0.0|5.179274393222586|0.5786001067577446|0.6458024742405858
-2005|4.76271648273271|0.6421840942843177|1.4477240179950464|0.2462690236395343|0.052801103700152|4.548313402748649|0.5853046787790146|0.592330799327366
-2006|4.944995137694723|0.6407303151952116|1.4389007914002063|0.2701604544619786|0.0|4.84226851882783|0.5814700874037776|0.6314930784636547
-2007|4.76504572642723|0.5930047130797977|1.366381142327927|0.283403569125073|0.0|5.104576818186302|0.5834991918935633|0.6631714080479653
-2008|4.913088885611565|0.6412360456560914|1.4543006512795214|0.2634223327818473|0.0|5.278014302772802|0.5787892494336416|0.6615160275044232
-2009|4.767484923469988|0.6279217429158289|1.3971252988338208|0.2671041079989953|0.0|4.885608472735765|0.5819411856437816|0.6354772153927758
+2004|4.7956|0.6103|1.3956|0.2745|0.0000|5.1793|0.5786|0.6458
+2005|4.7627|0.6422|1.4477|0.2463|0.0528|4.5483|0.5853|0.5923
+2006|4.9450|0.6407|1.4389|0.2702|0.0000|4.8423|0.5815|0.6315
+2007|4.7650|0.5930|1.3664|0.2834|0.0000|5.1046|0.5835|0.6632
+2008|4.9131|0.6412|1.4543|0.2634|0.0000|5.2780|0.5788|0.6615
+2009|4.7675|0.6279|1.3971|0.2671|0.0000|4.8856|0.5819|0.6355
 
 
 ### Parameter Summary Across Folds
 
 fold|p1|p2|p3|p4|p5|p6|p7|p8
 ---|---|---|---|---|---|---|---|---
-mean|4.82482882855329|0.625897439352839|1.41667937303453|0.2674768020839823|0.0088001839500253|4.9730093180823225|0.5816007499852539|0.6382985004961285
-std|0.0822215878169828|0.0202465336221937|0.035292119769733|0.012462385825694|0.0215559603201922|0.2675750413810571|0.002621622950265|0.0260051059672355
-pooled||||||||
+mean|4.8248|0.6259|1.4167|0.2675|0.0088|4.9730|0.5816|0.6383
+std|0.0822|0.0202|0.0353|0.0125|0.0216|0.2676|0.0026|0.0260
+
+*`pooled` is omitted from this table: pooling applies to held-out predictions, not to per-fold parameter sets, so a single "pooled" parameter value has no meaning here.*

@@ -55,5 +55,5 @@ The sensitivity profiles show that the optimal parameter sets found by the two o
 To reproduce this analysis and generate the plots yourself, run the following command from the repository root:
 
 ```bash
-poetry run python examples/optimizer_comparison/compare_optimizers.py
+python examples/optimizer_comparison/compare_optimizers.py
 ```

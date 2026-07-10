@@ -60,7 +60,7 @@ The complete comparison plots corresponding to this execution are saved in:
 -   `examples/validation/Switzerland/forward_DAV.png`
 
 ### Equifinality and Parameter Uniqueness
-As highlighted by the literature and the agent's memory, the `air2stream` model is susceptible to "equifinality" — meaning that multiple, differing sets of parameters can yield similarly high objective function efficiencies (like NSE).
+As documented in the literature, the `air2stream` model is susceptible to "equifinality" — meaning that multiple, differing sets of parameters can yield similarly high objective function efficiencies (like NSE).
 
 When running stochastic optimizations like PSO from a randomized initialization grid (e.g., the 100 particles used here), the parameters that output the best NSE may not exactly equal the precise parameter decimals recorded in literature, but the overall predictive efficiency envelope remains robust. For example, when optimizing MAH, the Python PSO achieved an NSE of ~0.973, which is highly competitive, despite the extracted internal parameter values taking a different path than those in the literature's Table 1.
 
@@ -161,11 +161,6 @@ A fully extended evaluation was run on all three Swiss stations utilizing high-i
 
 ### Discussion
 The analysis confirms that restricting `a4` strictly bounds the optimizer to non-negative domains for that variable. In cases like MAH where the global minimum uses a positive `a4`, restricting the bounds yielded effectively identical performance. However, for stations whose optimal `a4` lies below `0.0`, the restricted optimizer reliably bottoms out at `a4=0.000` and compensates via corresponding adjustments in other parameters, yielding marginally lower NSE outcomes compared to the true global minima reached in the unbounded configurations.
-
-
-
-
-
 
 ## Extended Analysis: Fortran PSO vs Python PSO at 3000 iterations
 

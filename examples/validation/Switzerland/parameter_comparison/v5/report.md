@@ -55,8 +55,8 @@
 ### NSE Performance
 Differential Evolution consistently achieves similar or higher Calibration NSE than the literature parameters across all stations, as expected from an optimization procedure directly targeting NSE. Validation performance remains competitive.
 
-### Equifinality and Parameter Divergence
-Despite attaining comparable or superior NSE values, the DE-calibrated parameters often diverge significantly from the literature parameters (Toffolon & Piccolroaz 2015). This is indicative of **equifinality** — multiple distinct parameter sets yielding similar model performance. Even with a large population (500 particles) and many iterations (5000), the optimizer often finds alternative local/global optima within the 8-dimensional parameter space.
+### Parameter Agreement
+As with version 3, the DE-calibrated parameters recover the literature values (Toffolon & Piccolroaz 2015) almost exactly at all three stations, with differences no larger than 0.23%. The 5-dimensional parameter space (including the seasonal amplitude/phase terms `a6`/`a7`) does not appear to introduce meaningful equifinality on these datasets.
 
 ### Parameter Bounds Observations
 - None of the active parameters explicitly hit the tight upper or lower bounds provided, indicating the search space bounds were sufficiently wide for version 5.

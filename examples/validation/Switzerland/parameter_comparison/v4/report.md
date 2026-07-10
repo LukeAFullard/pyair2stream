@@ -52,8 +52,8 @@
 ### NSE Performance
 Differential Evolution consistently achieves similar or higher Calibration NSE than the literature parameters across all stations, as expected from an optimization procedure directly targeting NSE. Validation performance remains competitive.
 
-### Equifinality and Parameter Divergence
-Despite attaining comparable or superior NSE values, the DE-calibrated parameters often diverge significantly from the literature parameters (Toffolon & Piccolroaz 2015). This is indicative of **equifinality** — multiple distinct parameter sets yielding similar model performance. Even with a large population (500 particles) and many iterations (5000), the optimizer often finds alternative local/global optima within the 4-dimensional parameter space.
+### Parameter Agreement
+For MAH and DAV, the DE-calibrated parameters match the literature values (Toffolon & Piccolroaz 2015) to within 0.2%. SIO is the exception: differences of 1.5–5.2% appear across all four parameters despite calibration NSE matching literature almost exactly. This is consistent with **equifinality** — the discharge-attenuation exponent `a4` and the other parameters can trade off against each other on the regulated-flow SIO record while leaving NSE essentially unchanged, so a single DE run is not guaranteed to land on the same point in parameter space as the original calibration.
 
 ### Parameter Bounds Observations
 - None of the active parameters explicitly hit the tight upper or lower bounds provided, indicating the search space bounds were sufficiently wide for version 4.
