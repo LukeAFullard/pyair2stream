@@ -1,6 +1,6 @@
 # pyair2stream Optimizer Comparison
 
-This example demonstrates the calibration of the `pyair2stream` model on the "Switzerland (DAV)" dataset using three different optimization strategies provided by the package:
+To compare the efficiency and accuracy of different optimization strategies, the `pyair2stream` model is calibrated on the "Switzerland (DAV)" dataset using three approaches provided by the package:
 
 1. **PSO (Particle Swarm Optimization)**
 2. **Hybrid DE (Differential Evolution + L-BFGS-B)**

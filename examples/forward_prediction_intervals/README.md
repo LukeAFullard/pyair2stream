@@ -1,8 +1,7 @@
 # Probabilistic Forward Prediction Intervals
 
-*(Report current as of commit `dc4cba90a0f5591292c16de3407d30ad6fbaf279`)*
 
-This example demonstrates how to project future water temperatures probabilistically, using the parameter distributions and residual error ($\sigma$) derived during a `DE-MCMC` historical calibration.
+This walkthrough shows how to probabilistically project future water temperatures by leveraging the parameter distributions and residual error ($\sigma$) derived during a `DE-MCMC` historical calibration.
 
 ## The Problem
 By default, the `FORWARD` run mode in `pyair2stream` is deterministic. It accepts a single `parameters_forward` array and outputs exactly one predicted line. While useful, this ignores the parameter uncertainty (equifinality) and intrinsic data noise.
@@ -44,22 +43,6 @@ The generated plot features four panels that illustrate the practical difference
 4. **7-Day Rolling Average Prediction Interval**: When we calculate a 7-day rolling average of the envelopes, the rapid daily oscillations of the IID white noise cancel each other out, causing the green IID uncertainty bounds to shrink. In contrast, because the AR(1) errors are temporally correlated, they do not perfectly cancel out over a week. The blue AR(1) bounds remain wider, preserving the uncertainty margin for time-averaged thresholds.
 
 
-## Additional Goodness of fit and model fit parameters
-- Sigma: 0.8185
-- Rho: 0.5910
-- Best NSE: 0.9728
-- Best R2: 0.9728
-- Best MAE: 0.6463
-
-### Best Parameters:
-- par_1: 0.4021
-- par_2: 0.0432
-- par_3: 0.0603
-- par_4: 0.4619
-- par_5: 1.1496
-- par_6: 0.7581
-- par_7: 0.5009
-- par_8: 0.1194
 
 
 

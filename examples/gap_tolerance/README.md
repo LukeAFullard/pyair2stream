@@ -1,6 +1,5 @@
 # pyair2stream Gap-Tolerant Mode Experiment
 
-*(Report current as of commit `dc4cba90a0f5591292c16de3407d30ad6fbaf279`)*
 
 This folder demonstrates the use of **pyair2stream**'s `gap_tolerant` configuration flag to handle real-world scenarios where hydrological time series are missing data, and evaluates the performance implications of missing data chunks.
 

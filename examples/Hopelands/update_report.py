@@ -34,7 +34,6 @@ def main():
     # 3. Construct the Report
     report = f"""# Hopelands Water Temperature Analysis Report
 
-*(Report current as of commit `dc4cba90a0f5591292c16de3407d30ad6fbaf279`)*
 
 ## 1. Executive Summary
 The `pyair2stream` water temperature model was calibrated on the Hopelands dataset, yielding a Nash-Sutcliffe Efficiency (NSE) of **{nse}**.

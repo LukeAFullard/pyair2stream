@@ -32,3 +32,6 @@ examples/forward_prediction_intervals/**/*.csv
 
 # Allow specific quickstart inputs
 !examples/quickstart/data/*.csv
+
+# Allow results and plots for Switzerland validation example
+!examples/validation/Switzerland/*.png
