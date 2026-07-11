@@ -3,7 +3,6 @@ message: "If you use this software in published work, please cite it and the ori
 authors:
   - family-names: "Fullard"
 title: "pyair2stream"
-version: 1.0.0
 url: "https://github.com/LukeAFullard/pyair2stream"
 preferred-citation:
   type: article

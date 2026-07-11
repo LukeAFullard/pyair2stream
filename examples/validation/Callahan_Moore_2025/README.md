@@ -1,10 +1,9 @@
 # Validation Analysis: Callahan & Moore (2025)
 
-*(Report current as of commit `dc4cba90a0f5591292c16de3407d30ad6fbaf279`)*
 
 ## Station 07EA004
 
-This report compares the pyair2stream model (both PSO and DE optimizers, and CRN and RK4 integrators) against literature parameters for station 07EA004, published in Callahan, L. and Moore, R.D. (2025), "Evaluation of the Hybrid Air2stream Model for Simulating Daily Stream Temperature During Extreme Summer Heat Wave and Autumn Drought Conditions", *Hydrological Processes*, 39: e70033, [doi:10.1002/hyp.70033](https://doi.org/10.1002/hyp.70033). This pass used high-intensity search settings (500 particles for PSO, 100 particles for DE, 3000 runs) to ensure absolute convergence limits.
+In this document, the pyair2stream model is compared (both PSO and DE optimizers, and CRN and RK4 integrators) against literature parameters for station 07EA004, published in Callahan, L. and Moore, R.D. (2025), "Evaluation of the Hybrid Air2stream Model for Simulating Daily Stream Temperature During Extreme Summer Heat Wave and Autumn Drought Conditions", *Hydrological Processes*, 39: e70033, [doi:10.1002/hyp.70033](https://doi.org/10.1002/hyp.70033). This pass used high-intensity search settings (500 particles for PSO, 100 particles for DE, 3000 runs) to ensure absolute convergence limits.
 
 Two sets of tests were run: the 'orig' tests used the full default bounds (where `a4` can range from `[-1.0, 1.0]`), while the 'restr' tests forced parameter `a4` to be restricted within `[0.0, 1.0]` to observe differences in performance and parameter identifiability.
 

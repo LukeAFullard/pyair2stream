@@ -1,6 +1,6 @@
 # Gap Analysis Experiment Results
 
-This report details the stability of parameter values when gaps are introduced into the `T_air` forcing data.
+The following analysis examines the stability of parameter values when gaps are introduced into the `T_air` forcing data.
 
 ## Method
 A baseline Differential Evolution (DE) optimization was run (3000 iterations, 100 particles) using the complete DAV dataset from Switzerland. Various types of gaps were then systematically introduced to the `T_air` column (`NaN` injection), and the DE calibration was repeated to observe how equifinality and goodness-of-fit reacted to missing data.

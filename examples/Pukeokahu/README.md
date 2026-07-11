@@ -1,8 +1,7 @@
 # Pukeokahu Catchment Analysis
 
-*(Report current as of commit `dc4cba90a0f5591292c16de3407d30ad6fbaf279`)*
 
-This example demonstrates how to take raw, disjointed time series data for Air Temperature, Water Temperature, and Discharge, preprocess them into a single coherent format, run a gap-tolerance pre-analysis, and calibrate the `pyair2stream` model using the robust DE-MCMC optimizer.
+Starting with raw, disjointed time series data for Air Temperature, Water Temperature, and Discharge, this walkthrough shows how to preprocess them into a single coherent format, run a gap-tolerance pre-analysis, and calibrate the `pyair2stream` model using the robust DE-MCMC optimizer.
 
 ## 1. Data Preprocessing & Pre-Analysis
 
@@ -77,7 +76,7 @@ The pair-wise correlation distributions from the MCMC chain highlight potential 
 ![Parameter Correlation](output/parameter_correlation_DE-MCMC_Rangitikei.png)
 
 ### Residual Diagnostics
-Residual analysis verifies the unbiased nature of the model error:
+Residuals show no obvious pattern of bias (see plot):
 ![Residual Diagnostics](output/residual_diagnostics_calibration_DE-MCMC_NSE_Rangitikei.png)
 
 ### Sensitivity Analysis

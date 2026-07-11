@@ -1,6 +1,6 @@
 # Leave-One-Year-Out Cross-Validation Example
 
-This example demonstrates how to use the `cross_validation` block in the configuration to perform Leave-One-Year-Out (LOYO) cross-validation on the DAV dataset.
+To perform Leave-One-Year-Out (LOYO) cross-validation on the DAV dataset, you can use the `cross_validation` block in the configuration as shown here.
 
 The configuration instructs pyair2stream to withhold one year of water temperature observations at a time, calibrate the model on the remaining data, and calculate metrics (NSE, KGE, RMSE) on the withheld year. Each fold completely excludes the specified year from the optimization target. For instance, in fold `2004`, the parameters are trained purely on the data from 2005-2009, and the predictions made for 2004 are scored to see how well the parameters generalized.
 

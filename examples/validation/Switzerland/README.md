@@ -1,6 +1,5 @@
 # Python PSO Optimization Fix & Verification
 
-*(Report current as of commit `dc4cba90a0f5591292c16de3407d30ad6fbaf279`)*
 
 ## Problem Statement
 The `pyair2stream` PSO optimization in the Python port incorrectly selected parameters of all zeros, whereas the original Fortran model successfully explored the parameter space and derived optimal parameters.
@@ -62,7 +61,7 @@ The complete comparison plots corresponding to this execution are saved in:
 ### Equifinality and Parameter Uniqueness
 As documented in the literature, the `air2stream` model is susceptible to "equifinality" — meaning that multiple, differing sets of parameters can yield similarly high objective function efficiencies (like NSE).
 
-When running stochastic optimizations like PSO from a randomized initialization grid (e.g., the 100 particles used here), the parameters that output the best NSE may not exactly equal the precise parameter decimals recorded in literature, but the overall predictive efficiency envelope remains robust. For example, when optimizing MAH, the Python PSO achieved an NSE of ~0.973, which is highly competitive, despite the extracted internal parameter values taking a different path than those in the literature's Table 1.
+When running stochastic optimizations like PSO from a randomized initialization grid (e.g., the 100 particles used here), the parameters that output the best NSE may not exactly equal the precise parameter decimals recorded in literature, but the overall predictive efficiency remains highly competitive. For example, when optimizing MAH, the Python PSO achieved an NSE of 0.9689, despite the extracted internal parameter values taking a different path than those in the literature's Table 1.
 
 
 ### Parameter Comparison (Literature vs. Python PSO)
