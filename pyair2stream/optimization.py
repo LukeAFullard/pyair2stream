@@ -203,7 +203,7 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
     # fitbest must NOT be initialized to zero: the objective function (e.g. NSE)
     # can be strongly negative for poor initial random parameter draws, so a
     # zero-initialized fitbest is never beaten and PSO silently returns the
-    # all-zero initial parameters (see examples/validation/Switzerland/report.md).
+    # all-zero initial parameters (see examples/validation/Switzerland/README.md).
     fitbest = np.full(n_particles, -1e30, dtype=np.float64)
 
     # We output history to CSV instead of binary

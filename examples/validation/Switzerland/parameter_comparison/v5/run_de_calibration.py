@@ -153,7 +153,7 @@ with concurrent.futures.ThreadPoolExecutor() as executor:
         station, res = future.result()
         results[station] = res
 
-report_path = os.path.join(v_dir, 'report.md')
+report_path = os.path.join(v_dir, 'README.md')
 with open(report_path, 'w') as report:
     report.write("# Version 5 Parameter Comparison\n\n")
     report.write("## Shared Setup\n")
