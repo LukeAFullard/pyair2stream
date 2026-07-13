@@ -140,7 +140,7 @@ for station, _, _ in stations:
     plot_results(station)
 
 # 2. Run PSO and DE to optimize and compare parameters against literature
-with open('examples/validation/Switzerland/report.md', 'a') as report:
+with open('examples/validation/Switzerland/README.md', 'a') as report:
     report.write("\n\n### Extended Evaluation: Differential Evolution (DE) vs PSO vs Literature\n")
     report.write("Following the initial evaluation, a high-intensity Differential Evolution pass (500 particles, 3000 runs) was executed to ascertain whether a stronger global search bounds the parameters closer to literature values, and to evaluate absolute convergence limits of the model equifinality.\n\n")
 
