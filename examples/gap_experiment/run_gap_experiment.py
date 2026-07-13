@@ -212,18 +212,14 @@ with open(report_path, 'w') as f:
     f.write("\n## Scenario Visualizations\n\n")
     for s in scenarios:
         f.write(f"### {s}\n")
-        f.write("These plots show the pre-analysis timeline, optimizer convergence, parameter dotty plots, and the full simulation.\n\n")
+        f.write("These plots show the pre-analysis timeline and the full simulation.\n\n")
 
         pre_plot = f"{s}_pre_analysis.png"
-        conv_plot = f"convergence_DE_NSE_{s}.png"
-        dot_plot = f"dottyplots_DE_NSE_{s}.png"
         sim_plot = f"full_simulation_DE_NSE_{s}.png"
 
-        used_files.extend([pre_plot, conv_plot, dot_plot, sim_plot])
+        used_files.extend([pre_plot, sim_plot])
 
         f.write(f"![{s} Pre-analysis](output/{pre_plot})\n")
-        f.write(f"![{s} Convergence](output/{conv_plot})\n")
-        f.write(f"![{s} Dotty Plots](output/{dot_plot})\n")
         f.write(f"![{s} Full Simulation](output/{sim_plot})\n\n")
 
 print(f"\nDone! Report written to {report_path}")
