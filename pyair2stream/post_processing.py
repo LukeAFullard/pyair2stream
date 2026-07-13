@@ -40,6 +40,7 @@ def post_process(data: CommonData, toll: float = None):
     orange = '#E69F00'
     blue = '#0072B2'
     light_blue = '#56B4E9'
+    black = '#000000'
 
     # Set fonts
     plt.rcParams['font.family'] = 'serif'
@@ -327,7 +328,7 @@ def post_process(data: CommonData, toll: float = None):
 
         # Plot temperatures on primary y-axis
         l1 = ax.plot(dates, df['Tair'], '.', color=light_blue, label='Air temperature', markersize=2)
-        l2 = ax.plot(dates, df['Twat_obs_agg'], '.', color=blue, label='Observed water temperature', markersize=2)
+        l2 = ax.plot(dates, df['Twat_obs_agg'], '.', color=black, label='Observed water temperature', markersize=2)
 
         # If Twat_mod_agg is mostly NaN (like in forward projections where obs is missing), fallback to Twat_mod
         mod_series = df['Twat_mod_agg'] if df['Twat_mod_agg'].notna().sum() > 0 else df['Twat_mod']
