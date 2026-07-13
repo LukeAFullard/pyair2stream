@@ -229,7 +229,6 @@ The `examples/` directory contains runnable end-to-end examples, each with its o
 | `optimizer_convergence/` | How `PSO` and `DE` convergence behaviour changes with iteration count |
 | `Hopelands/`, `Pukeokahu/` | Full real river-station case studies, including raw-data preprocessing, gap-tolerant calibration, and sensitivity analysis |
 | `validation/Switzerland/` | Re-derivation of the Python PSO bugfix (see [Known deviations](#known-deviations-from-the-fortran-reference)) and the literature validation study below |
-| `validation/Callahan_Moore_2025/` | Validation against an independently published literature parameter set for a real station |
 
 ## Relationship to the original Fortran code
 
