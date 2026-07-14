@@ -155,9 +155,8 @@ Overall, DE is more efficient at finding optimal parameters for this configurati
 
     # Cleanup unused files
     files_to_remove = [
-        "examples/optimizer_convergence/synthetic_data.csv",
-        "examples/optimizer_convergence/0_DE_NSE_River_Alpha_c_1d.csv",
-        "examples/optimizer_convergence/0_PSO_NSE_River_Alpha_c_1d.csv",
+        "examples/optimizer_convergence/0_DE_NSE_DAV_2327_cc_1d.csv",
+        "examples/optimizer_convergence/0_PSO_NSE_DAV_2327_cc_1d.csv",
         "examples/optimizer_convergence/parameters.txt"
     ]
     for f in files_to_remove:
