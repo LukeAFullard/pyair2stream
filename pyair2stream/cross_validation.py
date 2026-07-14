@@ -53,6 +53,8 @@ class CVConfig:
     skip_first_year: bool = True        # first calendar/water year is spin-up-only,
                                          # never a candidate fold (nothing precedes
                                          # it to spin up from)
+    min_valid_obs: int = 1              # minimum number of valid T_water observations
+                                         # required for a block to be considered a fold
     optimizer_overrides: Optional[dict] = None  # e.g. {"n_run": 20, "n_particles": 20}
                                                  # to cut per-fold cost vs. the
                                                  # production calibration
@@ -147,6 +149,12 @@ def build_folds(data: CommonData, cv_config: CVConfig) -> list[tuple[str, np.nda
         idx = np.where(mask)[0]
         if idx.size == 0:
             continue
+
+        # Only create a fold if there is enough valid water temperature observation
+        valid_obs = np.sum(data.Twat_obs[idx] != MISSING_DATA_SENTINEL)
+        if valid_obs < cv_config.min_valid_obs:
+            continue
+
         label = str(block[0]) if len(block) == 1 else f"{block[0]}-{block[-1]}"
         folds.append((label, idx))
     return folds
