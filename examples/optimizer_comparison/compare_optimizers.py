@@ -149,8 +149,8 @@ def main():
 
     # We copy them locally for the README
     import shutil
-    shutil.copyfile(f"{pso_results['folder']}/sensitivity_PSO_NSE_DAV.png", "examples/optimizer_comparison/sensitivity_PSO.png")
-    shutil.copyfile(f"{de_results['folder']}/sensitivity_DE_NSE_DAV.png", "examples/optimizer_comparison/sensitivity_DE.png")
+    shutil.copyfile(f"{pso_results['folder']}/sensitivity_PSO_NSE_MAH.png", "examples/optimizer_comparison/sensitivity_PSO.png")
+    shutil.copyfile(f"{de_results['folder']}/sensitivity_DE_NSE_MAH.png", "examples/optimizer_comparison/sensitivity_DE.png")
     print("Sensitivity plots copied to examples/optimizer_comparison/sensitivity_PSO.png and sensitivity_DE.png")
 
 if __name__ == "__main__":

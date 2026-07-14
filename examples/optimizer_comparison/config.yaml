@@ -1,5 +1,5 @@
 project_name: "optimizer_comparison"
-station_name: "DAV"
+station_name: "MAH"
 series: "c"
 time_resolution: "1d"
 version: 8
@@ -10,7 +10,7 @@ run_mode: "PSO"
 prc: 1.0
 
 paths:
-  input_data: "examples/validation/Switzerland/DAV_2327_cc.csv"
+  input_data: "examples/validation/Switzerland/MAH_2369_cc.csv"
   output_dir: "examples/optimizer_comparison"
 
 optimization:
