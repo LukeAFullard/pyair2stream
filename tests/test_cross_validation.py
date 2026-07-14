@@ -19,7 +19,6 @@ def dummy_data():
     data.date[:, 0] = dates.year
     data.date[:, 1] = dates.month
     data.date[:, 2] = dates.day
-    data.Twat_obs = np.ones(n_tot) * 10.0
 
     return data
 
@@ -51,29 +50,6 @@ def test_build_folds_n_years(dummy_data):
     # 2013 is dropped because it's a partial block.
     assert len(folds) == 1
     assert folds[0][0] == "2011-2012"
-
-def test_build_folds_min_valid_obs(dummy_data):
-    from pyair2stream.config import MISSING_DATA_SENTINEL
-
-    # Let's set the first eligible year (2012, since min_train_years=1, skip_first_year=True -> 2010, 2011 skipped)
-    # to have fewer valid obs than the threshold
-    idx_2012 = np.where(dummy_data.date[:, 0] == 2012)[0]
-    dummy_data.Twat_obs[idx_2012] = MISSING_DATA_SENTINEL
-    # Give it 50 valid observations
-    dummy_data.Twat_obs[idx_2012[:50]] = 10.0
-
-    # Test with default min_valid_obs=1 (should keep 2012)
-    config1 = CVConfig(unit="year", n_years_per_fold=1, min_train_years=1, skip_first_year=True)
-    folds1 = build_folds(dummy_data, config1)
-    assert len(folds1) == 2
-    assert folds1[0][0] == "2012"
-    assert folds1[1][0] == "2013"
-
-    # Test with min_valid_obs=100 (should drop 2012)
-    config2 = CVConfig(unit="year", n_years_per_fold=1, min_train_years=1, skip_first_year=True, min_valid_obs=100)
-    folds2 = build_folds(dummy_data, config2)
-    assert len(folds2) == 1
-    assert folds2[0][0] == "2013"
 
 def test_cross_validation_leak_prevention(dummy_data):
     """

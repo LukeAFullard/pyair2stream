@@ -83,6 +83,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
             water_year_start_month=int(cv_config_dict.get('water_year_start_month', 1)),
             min_train_years=int(cv_config_dict.get('min_train_years', 1)),
             skip_first_year=bool(cv_config_dict.get('skip_first_year', True)),
+            min_valid_obs=int(cv_config_dict.get('min_valid_obs', 1)),
             optimizer_overrides=cv_config_dict.get('optimizer_overrides', None)
         )
 
@@ -174,6 +175,76 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
 
     return data
 
+def compute_qmedia(data: CommonData, verbose: bool = False) -> None:
+    """
+    Calculate Qmedia from the currently valid (unmasked) Q array.
+    Recalculating this per fold ensures held-out data doesn't leak into ODE physics.
+    """
+    Q = data.Q[365:data.n_tot]
+    valid_Q_mask = (Q != -999.0) & (Q > 0.0)
+    computed_qmedia = np.float64(0.0)
+    if np.any(valid_Q_mask):
+        computed_qmedia = np.float64(np.mean(Q[valid_Q_mask]))
+        data.n_Q = np.sum(valid_Q_mask)
+    else:
+        computed_qmedia = np.float64(0.0)
+        data.n_Q = 0
+
+    if data.Qmedia_user is not None:
+        data.Qmedia = np.float64(data.Qmedia_user)
+        if verbose:
+            print(f"Using user-supplied Qmedia: {data.Qmedia:.5f} (computed was {computed_qmedia:.5f})")
+    else:
+        data.Qmedia = computed_qmedia
+
+    if data.gap_tolerant:
+        n_tot_raw = getattr(data, '_n_tot_raw', data.n_tot - 365)
+        if data.Qmedia <= 0 and data.version not in [3, 5]:
+            raise ValueError("Qmedia is zero or negative. Please supply Qmedia in the configuration file if the data is mostly empty.")
+        if verbose and (data.n_Q / n_tot_raw) < 0.5 and data.Qmedia_user is None:
+            print("Warning: More than 50% of Discharge values are missing. Consider supplying Qmedia_user in the configuration file.")
+        if verbose and data.version in [3, 5]:
+            print(f"Info: Q gaps are ignored because version {data.version} does not use Discharge in the ODE.")
+        if verbose and data.Qmedia_user is not None and computed_qmedia > 0 and abs(computed_qmedia - data.Qmedia_user) / computed_qmedia > 0.3:
+            print(f"Warning: Computed Qmedia ({computed_qmedia:.5f}) differs from user-supplied Qmedia ({data.Qmedia_user:.5f}) by more than 30%.")
+
+
+def compute_doy_climatology(data: CommonData) -> None:
+    """
+    Calculate DOY climatology from the currently valid (unmasked) Twat_obs.
+    Recalculating this per fold ensures held-out data doesn't leak into segment initial conditions.
+    """
+    data.doy_climatology = np.zeros(366, dtype=np.float64)
+    doy_sums = np.zeros(366, dtype=np.float64)
+    doy_counts = np.zeros(366, dtype=int)
+
+    for i in range(365, data.n_tot):
+        if data.Twat_obs[i] != -999.0:
+            year = data.date[i, 0]
+            month = data.date[i, 1]
+            day = data.date[i, 2]
+            doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
+            doy_sums[doy] += data.Twat_obs[i]
+            doy_counts[doy] += 1
+
+    if np.sum(doy_counts) == 0:
+        raise ValueError("Zero T_water observations found during calibration. Calibration is impossible.")
+
+    for i in range(366):
+        if doy_counts[i] > 0:
+            data.doy_climatology[i] = doy_sums[i] / doy_counts[i]
+        else:
+            data.doy_climatology[i] = np.nan
+
+    # Interpolate missing DOYs
+    if np.isnan(data.doy_climatology).any():
+        df_clim = pd.Series(data.doy_climatology)
+        # Duplicate to handle wrapping around year
+        df_clim_extended = pd.concat([df_clim, df_clim, df_clim]).reset_index(drop=True)
+        df_clim_extended = df_clim_extended.interpolate(method='linear')
+        data.doy_climatology = df_clim_extended.iloc[366:2*366].values
+
+
 def read_Tseries(data: CommonData, p: str) -> None:
     """
     Reads the time series data from a CSV file and replicates the first year.
@@ -243,31 +314,8 @@ def read_Tseries(data: CommonData, p: str) -> None:
     data.n_tot = n_tot
     data.n_dat = n_tot  # Based on other parts of codebase, usually n_dat starts as n_tot. Aggregation changes n_dat.
 
-    # Calculate Qmedia ignoring -999.0 and <= 0.0
-    valid_Q_mask = (Q != -999.0) & (Q > 0.0)
-    computed_qmedia = np.float64(0.0)
-    if np.any(valid_Q_mask):
-        computed_qmedia = np.float64(np.mean(Q[valid_Q_mask]))
-        data.n_Q = np.sum(valid_Q_mask)
-    else:
-        computed_qmedia = np.float64(0.0)
-        data.n_Q = 0
-
-    if data.Qmedia_user is not None:
-        data.Qmedia = np.float64(data.Qmedia_user)
-        print(f"Using user-supplied Qmedia: {data.Qmedia:.5f} (computed was {computed_qmedia:.5f})")
-    else:
-        data.Qmedia = computed_qmedia
-
-    if data.gap_tolerant:
-        if data.Qmedia <= 0 and data.version not in [3, 5]:
-            raise ValueError("Qmedia is zero or negative. Please supply Qmedia in the configuration file if the data is mostly empty.")
-        if (data.n_Q / n_tot_raw) < 0.5 and data.Qmedia_user is None:
-            print("Warning: More than 50% of Discharge values are missing. Consider supplying Qmedia_user in the configuration file.")
-        if data.version in [3, 5]:
-            print(f"Info: Q gaps are ignored because version {data.version} does not use Discharge in the ODE.")
-        if data.Qmedia_user is not None and computed_qmedia > 0 and abs(computed_qmedia - data.Qmedia_user) / computed_qmedia > 0.3:
-            print(f"Warning: Computed Qmedia ({computed_qmedia:.5f}) differs from user-supplied Qmedia ({data.Qmedia_user:.5f}) by more than 30%.")
+    # Store n_tot_raw on data object for use in compute_qmedia
+    data._n_tot_raw = n_tot_raw
 
     # Allocate arrays
     data.date = np.zeros((n_tot, 3), dtype=np.int32)
@@ -314,34 +362,7 @@ def read_Tseries(data: CommonData, p: str) -> None:
         doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days + 1
         data.tt[i] = np.float64(doy / float(days_in_year))
 
-    # Calculate DOY climatology (calibration pass only)
+    # Initial Qmedia and DOY climatology calculations
+    compute_qmedia(data, verbose=True)
     if data.gap_tolerant and p == 'c':
-        data.doy_climatology = np.zeros(366, dtype=np.float64)
-        doy_sums = np.zeros(366, dtype=np.float64)
-        doy_counts = np.zeros(366, dtype=int)
-
-        for i in range(365, n_tot):
-            if data.Twat_obs[i] != -999.0:
-                year = data.date[i, 0]
-                month = data.date[i, 1]
-                day = data.date[i, 2]
-                doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
-                doy_sums[doy] += data.Twat_obs[i]
-                doy_counts[doy] += 1
-
-        if np.sum(doy_counts) == 0:
-            raise ValueError("Zero T_water observations found during calibration. Calibration is impossible.")
-
-        for i in range(366):
-            if doy_counts[i] > 0:
-                data.doy_climatology[i] = doy_sums[i] / doy_counts[i]
-            else:
-                data.doy_climatology[i] = np.nan
-
-        # Interpolate missing DOYs
-        if np.isnan(data.doy_climatology).any():
-            df_clim = pd.Series(data.doy_climatology)
-            # Duplicate to handle wrapping around year
-            df_clim_extended = pd.concat([df_clim, df_clim, df_clim]).reset_index(drop=True)
-            df_clim_extended = df_clim_extended.interpolate(method='linear')
-            data.doy_climatology = df_clim_extended.iloc[366:2*366].values
+        compute_doy_climatology(data)

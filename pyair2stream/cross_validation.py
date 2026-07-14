@@ -129,7 +129,8 @@ def build_folds(data: CommonData, cv_config: CVConfig) -> list[tuple[str, np.nda
       a partial fold.
     """
     wy = assign_year_groups(data, cv_config.water_year_start_month)
-    unique_years = sorted(int(y) for y in np.unique(wy))
+    # Exclude the synthetic -999 year from the warm-up block
+    unique_years = sorted(int(y) for y in np.unique(wy) if y != -999)
 
     first_eligible = cv_config.min_train_years + (1 if cv_config.skip_first_year else 0)
     eligible_years = unique_years[first_eligible:]
@@ -149,12 +150,6 @@ def build_folds(data: CommonData, cv_config: CVConfig) -> list[tuple[str, np.nda
         idx = np.where(mask)[0]
         if idx.size == 0:
             continue
-
-        # Only create a fold if there is enough valid water temperature observation
-        valid_obs = np.sum(data.Twat_obs[idx] != MISSING_DATA_SENTINEL)
-        if valid_obs < cv_config.min_valid_obs:
-            continue
-
         label = str(block[0]) if len(block) == 1 else f"{block[0]}-{block[-1]}"
         folds.append((label, idx))
     return folds
@@ -291,9 +286,15 @@ def run_leave_one_year_out_cv(
 
     results: list[FoldResult] = []
 
+    from .io import compute_doy_climatology, compute_qmedia
+
     for label, idx in folds:
         orig_twat, orig_tair, orig_q = _mask_fold(data, idx)
         try:
+            if data.gap_tolerant:
+                compute_qmedia(data)
+                compute_doy_climatology(data)
+
             aggregation(data)
             statis(data)
 
