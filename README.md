@@ -227,7 +227,7 @@ The `examples/` directory contains runnable end-to-end examples, each with its o
 | `cross_validation/` | Leave-one-year-out cross-validation on a real river dataset |
 | `optimizer_comparison/` | Calibrating the same dataset with `PSO`, `DE`, and `DE-MCMC` and comparing results |
 | `optimizer_convergence/` | How `PSO` and `DE` convergence behaviour changes with iteration count |
-| `Hopelands/`, `Pukeokahu/` | Full real river-station case studies, including raw-data preprocessing, gap-tolerant calibration, and sensitivity analysis |
+| `Hopelands/` | Full real river-station case studies, including raw-data preprocessing, gap-tolerant calibration, and sensitivity analysis |
 | `validation/Switzerland/` | Re-derivation of the Python PSO bugfix (see [Known deviations](#known-deviations-from-the-fortran-reference)) and the literature validation study below |
 
 ## Relationship to the original Fortran code
