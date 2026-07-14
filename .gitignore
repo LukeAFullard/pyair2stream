@@ -35,3 +35,8 @@ examples/forward_prediction_intervals/**/*.csv
 
 # Allow results and plots for Switzerland validation example
 !examples/validation/Switzerland/*.png
+
+# Allow results and plots for optimizer comparison example
+!examples/optimizer_comparison/**/*.png
+!examples/optimizer_comparison/**/*.out
+examples/optimizer_comparison/**/*.csv
