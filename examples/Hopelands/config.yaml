@@ -6,7 +6,7 @@ version: 8
 Tice_cover: 0.0
 objective_function: "NSE"
 integrator: "RK4"
-run_mode: "DE-MCMC"
+run_mode: "DE"
 prc: 1.0
 
 paths:
@@ -32,3 +32,12 @@ sensitivity_analysis: true
 sensitivity_perturbations: [1.0, 5.0, 10.0]
 
 gap_tolerant: true
+
+cross_validation:
+  enabled: true
+  unit: "year"
+  n_years_per_fold: 1
+  water_year_start_month: 1
+  min_train_years: 1
+  skip_first_year: true
+  min_valid_obs: 300
