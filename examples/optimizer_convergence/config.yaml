@@ -1,6 +1,6 @@
 project_name: "optimizer_convergence"
-station_name: "River_Alpha"
-series: "c"
+station_name: "DAV_2327"
+series: "cc"
 time_resolution: "1d"
 version: 8
 Tice_cover: 0.0
@@ -10,7 +10,7 @@ run_mode: "PSO"
 prc: 1.0
 
 paths:
-  input_data: "examples/optimizer_convergence/synthetic_data.csv"
+  input_data: "examples/validation/Switzerland/DAV_2327_cc.csv"
   output_dir: "examples/optimizer_convergence"
 
 optimization:
