@@ -140,7 +140,14 @@ def build_folds(data: CommonData, cv_config: CVConfig) -> list[tuple[str, np.nda
     elif cv_config.unit == "n_years":
         n = cv_config.n_years_per_fold
         blocks = [eligible_years[i:i + n] for i in range(0, len(eligible_years), n)]
-        blocks = [b for b in blocks if len(b) == n]
+        valid_blocks = []
+        for b in blocks:
+            if len(b) == n:
+                valid_blocks.append(b)
+            else:
+                import warnings
+                warnings.warn(f"Dropping short trailing cross-validation block of {len(b)} years (requires {n}).")
+        blocks = valid_blocks
     else:
         raise ValueError(f"Unknown CVConfig.unit: {cv_config.unit!r} (expected 'year' or 'n_years')")
 
@@ -187,24 +194,10 @@ def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarra
         data.Tair[idx] = MISSING_DATA_SENTINEL
         data.Q[idx] = MISSING_DATA_SENTINEL
 
-    # Also handle warm-up block if year 1 is masked
-    w_mask = (idx >= 365) & (idx < 730)
-    w_idx = idx[w_mask] - 365
-
-    orig_w_twat = data.Twat_obs[w_idx].copy() if w_idx.size > 0 else np.array([])
-    orig_w_tair = data.Tair[w_idx].copy() if w_idx.size > 0 else np.array([])
-    orig_w_q = data.Q[w_idx].copy() if w_idx.size > 0 else np.array([])
-
-    if w_idx.size > 0:
-        data.Twat_obs[w_idx] = MISSING_DATA_SENTINEL
-        if data.gap_tolerant:
-            data.Tair[w_idx] = MISSING_DATA_SENTINEL
-            data.Q[w_idx] = MISSING_DATA_SENTINEL
-
-    return orig_twat, orig_tair, orig_q, w_idx, orig_w_twat, orig_w_tair, orig_w_q
+    return orig_twat, orig_tair, orig_q
 
 
-def _restore_fold(data: CommonData, idx: np.ndarray, orig_twat: np.ndarray, orig_tair: np.ndarray, orig_q: np.ndarray, w_idx: np.ndarray, orig_w_twat: np.ndarray, orig_w_tair: np.ndarray, orig_w_q: np.ndarray) -> None:
+def _restore_fold(data: CommonData, idx: np.ndarray, orig_twat: np.ndarray, orig_tair: np.ndarray, orig_q: np.ndarray) -> None:
     """
     Restore the original forcing data and observations to the global CommonData
     arrays after a cross-validation fold has finished.
@@ -216,12 +209,6 @@ def _restore_fold(data: CommonData, idx: np.ndarray, orig_twat: np.ndarray, orig
     if data.gap_tolerant:
         data.Tair[idx] = orig_tair
         data.Q[idx] = orig_q
-
-    if w_idx.size > 0:
-        data.Twat_obs[w_idx] = orig_w_twat
-        if data.gap_tolerant:
-            data.Tair[w_idx] = orig_w_tair
-            data.Q[w_idx] = orig_w_q
 
 
 # --------------------------------------------------------------------------
@@ -243,6 +230,10 @@ def _compute_fold_metrics(obs: np.ndarray, sim: np.ndarray, missing_val: float) 
     if o.size == 0:
         return float("nan"), float("nan"), float("nan")
 
+    if o.size < 10:
+        import warnings
+        warnings.warn(f"Computing metrics with very few observations ({o.size}). Metrics may not be statistically meaningful.")
+
     mean_o = o.mean()
     denom = np.sum((o - mean_o) ** 2)
     nse = 1.0 - np.sum((o - s) ** 2) / denom if denom > 0 else float("nan")
@@ -255,7 +246,11 @@ def _compute_fold_metrics(obs: np.ndarray, sim: np.ndarray, missing_val: float) 
     else:
         kge = float("nan")
 
-    rmse = float(np.sqrt(np.mean((o - s) ** 2)))
+    if o.size > 1:
+        rmse = float(np.sqrt(np.mean((o - s) ** 2)))
+    else:
+        rmse = float("nan")
+
     return float(nse), float(kge), rmse
 
 
@@ -320,75 +315,76 @@ def run_leave_one_year_out_cv(
     orig_par = data.par.copy() if data.par is not None else None
     orig_par_best = data.par_best.copy() if data.par_best is not None else None
 
-    for label, idx in folds:
-        orig_twat, orig_tair, orig_q, w_idx, orig_w_twat, orig_w_tair, orig_w_q = _mask_fold(data, idx)
-        try:
-            if data.gap_tolerant:
-                compute_qmedia(data)
-                compute_doy_climatology(data)
+    try:
+        for label, idx in folds:
+            orig_twat, orig_tair, orig_q = _mask_fold(data, idx)
+            try:
+                if data.gap_tolerant:
+                    compute_qmedia(data)
+                    compute_doy_climatology(data)
 
-            aggregation(data)
-            statis(data)
+                aggregation(data)
+                statis(data)
 
-            if data.gap_tolerant:
-                data.segments = None
-                detect_segments(data)
+                if data.gap_tolerant:
+                    data.segments = None
+                    detect_segments(data)
 
-            _run_optimizer(data, run_mode, cv_config.optimizer_overrides)
-            data.par[:] = data.par_best[:]
+                _run_optimizer(data, run_mode, cv_config.optimizer_overrides)
+                data.par[:] = data.par_best[:]
 
-            # Restore forcing variables (Tair, Q) before forward simulation
-            # so the model integrates through the held-out window properly.
-            # (Note: _restore_fold also restores forcing, but doing it here is required
-            # for the forward simulation. _restore_fold is idempotent.)
-            if data.gap_tolerant:
-                data.Tair[idx] = orig_tair
-                data.Q[idx] = orig_q
-                if w_idx.size > 0:
-                    data.Tair[w_idx] = orig_w_tair
-                    data.Q[w_idx] = orig_w_q
+                # Restore forcing variables (Tair, Q) before forward simulation
+                # so the model integrates through the held-out window properly.
+                # (Note: _restore_fold also restores forcing, but doing it here is required
+                # for the forward simulation. _restore_fold is idempotent.)
+                if data.gap_tolerant:
+                    data.Tair[idx] = orig_tair
+                    data.Q[idx] = orig_q
 
-            if data.gap_tolerant:
-                data.segments = None
-                detect_segments(data)
+                if data.gap_tolerant:
+                    data.segments = None
+                    detect_segments(data)
 
-            # Re-aggregate and statis now that forcing data is restored to allow
-            # potential evaluation at non-daily time-scales
-            aggregation(data)
-            statis(data)
+                # Re-aggregate and statis now that forcing data is restored to allow
+                # potential evaluation at non-daily time-scales
+                aggregation(data)
+                statis(data)
 
-            call_model(data)
+                call_model(data)
 
-            sim = data.Twat_mod
-            nse, kge, rmse = _compute_fold_metrics(orig_twat, sim[idx], MISSING_DATA_SENTINEL)
+                sim = data.Twat_mod
+                nse, kge, rmse = _compute_fold_metrics(orig_twat, sim[idx], MISSING_DATA_SENTINEL)
 
-            start_date = pd.Timestamp(*data.date[idx[0]])
-            end_date = pd.Timestamp(*data.date[idx[-1]])
+                start_date = pd.Timestamp(*data.date[idx[0]])
+                end_date = pd.Timestamp(*data.date[idx[-1]])
 
-            results.append(FoldResult(
-                fold_id=len(results),
-                label=label,
-                held_out_start=start_date,
-                held_out_end=end_date,
-                n_obs_held_out=int(np.sum(orig_twat != MISSING_DATA_SENTINEL)),
-                par_best=data.par_best.copy(),
-                nse=nse,
-                kge=kge,
-                rmse=rmse,
-                obs_held_out=orig_twat.copy(),
-                sim_held_out=sim[idx].copy(),
-            ))
-        finally:
-            _restore_fold(data, idx, orig_twat, orig_tair, orig_q, w_idx, orig_w_twat, orig_w_tair, orig_w_q)
+                results.append(FoldResult(
+                    fold_id=len(results),
+                    label=label,
+                    held_out_start=start_date,
+                    held_out_end=end_date,
+                    n_obs_held_out=int(np.sum(orig_twat != MISSING_DATA_SENTINEL)),
+                    par_best=data.par_best.copy(),
+                    nse=nse,
+                    kge=kge,
+                    rmse=rmse,
+                    obs_held_out=orig_twat.copy(),
+                    sim_held_out=sim[idx].copy(),
+                ))
+            finally:
+                _restore_fold(data, idx, orig_twat, orig_tair, orig_q)
+    finally:
+        if orig_par is not None:
+            data.par[:] = orig_par[:]
+        if orig_par_best is not None:
+            data.par_best[:] = orig_par_best[:]
 
     if data.gap_tolerant:
         compute_qmedia(data)
         compute_doy_climatology(data)
 
-    if orig_par is not None:
-        data.par[:] = orig_par[:]
-    if orig_par_best is not None:
-        data.par_best[:] = orig_par_best[:]
+    aggregation(data)
+    statis(data)
 
     return results
 
