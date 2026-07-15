@@ -36,6 +36,7 @@ def test_assign_year_groups_water_year(dummy_data):
     assert wy[idx_oct] == 2011
 
 def test_build_folds_single_year(dummy_data):
+    dummy_data.Twat_obs = np.ones(dummy_data.n_tot)
     # min_train_years=1, skip_first_year=True -> first 2 years skipped
     config = CVConfig(unit="year", n_years_per_fold=1, water_year_start_month=1, min_train_years=1, skip_first_year=True)
     folds = build_folds(dummy_data, config)
@@ -44,6 +45,7 @@ def test_build_folds_single_year(dummy_data):
     assert folds[1][0] == "2013"
 
 def test_build_folds_n_years(dummy_data):
+    dummy_data.Twat_obs = np.ones(dummy_data.n_tot)
     config = CVConfig(unit="n_years", n_years_per_fold=2, water_year_start_month=1, min_train_years=0, skip_first_year=True)
     folds = build_folds(dummy_data, config)
     # 2010 skipped. 2011, 2012, 2013 remain. Blocks of 2 -> [2011, 2012]
@@ -89,7 +91,7 @@ def test_cross_validation_leak_prevention(dummy_data):
     assert n_dat_unmasked == n_tot - 365
 
     # 2. Mask the fold
-    orig_twat, orig_tair, orig_q = _mask_fold(dummy_data, fold_idx)
+    orig_twat, orig_tair, orig_q, w_idx, orig_w_twat, orig_w_tair, orig_w_q = _mask_fold(dummy_data, fold_idx)
 
     # Verify the masking used the codebase sentinel, NOT mineff_index
     assert np.all(dummy_data.Twat_obs[fold_idx] == -999.0)
@@ -140,6 +142,8 @@ def test_run_leave_one_year_out_cv(dummy_data):
     dummy_data.n_particles = 5
     dummy_data.mod_num = "RK4"
     dummy_data.fun_obj = "NSE"
+    dummy_data.objective_function = "NSE"
+    dummy_data.fun_obj = "NSE"
 
     config = CVConfig(
         unit="year",
@@ -166,3 +170,66 @@ def test_run_leave_one_year_out_cv(dummy_data):
     # Verify we got metrics
     for r in results:
         assert not np.isnan(r.rmse)
+
+def test_run_leave_one_year_out_cv_gap_tolerant(dummy_data):
+    from pyair2stream.cross_validation import run_leave_one_year_out_cv, summarize
+    np.random.seed(42)
+
+    dummy_data.gap_tolerant = True
+    dummy_data.n_run = 10
+    dummy_data.version = 5
+    n_tot = dummy_data.n_tot
+    dummy_data.Tair = np.sin(np.linspace(0, 4 * np.pi, n_tot)) + 10
+    dummy_data.Twat_obs = np.sin(np.linspace(0, 4 * np.pi, n_tot)) * 0.8 + 10
+    dummy_data.Q = np.ones(n_tot) * 10
+    dummy_data.tt = np.linspace(0, 4, n_tot)
+
+    dummy_data.parmin = np.zeros(8)
+    dummy_data.parmax = np.ones(8) * 10
+    dummy_data.par = np.ones(8)
+    dummy_data.par_best = np.ones(8)
+    dummy_data.flag_par = np.ones(8, dtype=bool)
+
+    # Initialize required arrays
+    dummy_data.Twat_mod = np.zeros(n_tot)
+    dummy_data.Twat_mod_agg = np.zeros(n_tot)
+    dummy_data.Twat_obs_agg = np.zeros(n_tot)
+    dummy_data.I_pos = np.zeros(n_tot, dtype=np.int32)
+    dummy_data.I_inf = np.zeros(n_tot, dtype=np.int32)
+
+    # Required for compute_qmedia
+    dummy_data._n_tot_raw = n_tot - 365
+    dummy_data.doy_climatology = np.zeros(366)
+
+    dummy_data.segments = [(0, n_tot - 1)]
+
+    # Needs a runmode for the fallback optimizer override
+    dummy_data.runmode = 'PSO'
+    dummy_data.time_res = "1d"
+    dummy_data.n_particles = 5
+    dummy_data.mod_num = "RK4"
+    dummy_data.fun_obj = "NSE"
+    dummy_data.objective_function = "NSE"
+
+    config = CVConfig(
+        unit="year",
+        n_years_per_fold=1,
+        water_year_start_month=1,
+        min_train_years=1,
+        skip_first_year=True,
+        min_valid_obs=1,
+        optimizer_overrides={"n_run": 2, "n_particles": 2} # speed up test
+    )
+
+    results = run_leave_one_year_out_cv(dummy_data, config, 'PSO')
+
+    assert len(results) > 0, "CV did not return any results"
+    for r in results:
+        assert r.nse >= -1e6  # Just verify it computed something
+
+    df = summarize(results)
+    assert not df.empty
+
+    # Assert data was restored
+    assert (dummy_data.Tair != -999.0).all()
+    assert (dummy_data.Q != -999.0).all()
