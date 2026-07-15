@@ -71,11 +71,22 @@ def test_cross_validation_leak_prevention(dummy_data):
     dummy_data.Q = np.ones(n_tot) * 10
     dummy_data.tt = np.linspace(0, 4, n_tot)
 
+    dummy_data.parmin = np.array([-5, -5, -5, -1, 0, 0, 0, -1], dtype=np.float64)
+    dummy_data.parmax = np.array([15, 1.5, 5, 1, 20, 10, 1, 5], dtype=np.float64)
+    dummy_data.par = np.zeros(8, dtype=np.float64)
+    dummy_data.par_best = np.zeros(8, dtype=np.float64)
+    dummy_data.flag_par = np.ones(8, dtype=int)
+    dummy_data.Twat_mod = np.zeros(n_tot)
     dummy_data.Twat_mod_agg = np.zeros(n_tot)
     dummy_data.Twat_obs_agg = np.zeros(n_tot)
     dummy_data.I_pos = np.zeros(n_tot, dtype=np.int32)
     dummy_data.I_inf = np.zeros(n_tot, dtype=np.int32)
     dummy_data.time_res = "1d"
+    dummy_data.parmin = np.array([-5, -5, -5, -1, 0, 0, 0, -1], dtype=np.float64)
+    dummy_data.parmax = np.array([15, 1.5, 5, 1, 20, 10, 1, 5], dtype=np.float64)
+    dummy_data.par = np.zeros(8, dtype=np.float64)
+    dummy_data.par_best = np.zeros(8, dtype=np.float64)
+    dummy_data.flag_par = np.ones(8, dtype=int)
 
     # Define a mock fold targeting the second half of the data
     fold_idx = np.arange(n_tot // 2, n_tot)
@@ -91,7 +102,7 @@ def test_cross_validation_leak_prevention(dummy_data):
     assert n_dat_unmasked == n_tot - 365
 
     # 2. Mask the fold
-    orig_twat, orig_tair, orig_q, w_idx, orig_w_twat, orig_w_tair, orig_w_q = _mask_fold(dummy_data, fold_idx)
+    orig_twat, orig_tair, orig_q = _mask_fold(dummy_data, fold_idx)
 
     # Verify the masking used the codebase sentinel, NOT mineff_index
     assert np.all(dummy_data.Twat_obs[fold_idx] == -999.0)
@@ -117,6 +128,7 @@ def test_run_leave_one_year_out_cv(dummy_data):
     dummy_data.gap_tolerant = False
     dummy_data.n_run = 10
     dummy_data.version = 5
+    dummy_data.mod_num = "RK4"
     n_tot = dummy_data.n_tot
     dummy_data.Tair = np.sin(np.linspace(0, 4 * np.pi, n_tot)) + 10
     dummy_data.Twat_obs = np.sin(np.linspace(0, 4 * np.pi, n_tot)) * 0.8 + 10
@@ -233,3 +245,53 @@ def test_run_leave_one_year_out_cv_gap_tolerant(dummy_data):
     # Assert data was restored
     assert (dummy_data.Tair != -999.0).all()
     assert (dummy_data.Q != -999.0).all()
+
+def test_run_leave_one_year_out_cv_untested_paths(dummy_data):
+    from pyair2stream.cross_validation import run_leave_one_year_out_cv
+    np.random.seed(42)
+
+    dummy_data.gap_tolerant = False
+    dummy_data.n_run = 10
+    dummy_data.version = 5
+    n_tot = dummy_data.n_tot
+    dummy_data.Tair = np.sin(np.linspace(0, 4 * np.pi, n_tot)) + 10
+    dummy_data.Twat_obs = np.sin(np.linspace(0, 4 * np.pi, n_tot)) * 0.8 + 10
+    dummy_data.Q = np.ones(n_tot) * 10
+    dummy_data.tt = np.linspace(0, 4, n_tot)
+
+    dummy_data.Twat_mod_agg = np.zeros(n_tot)
+    dummy_data.Twat_obs_agg = np.zeros(n_tot)
+    dummy_data.I_pos = np.zeros(n_tot, dtype=np.int32)
+    dummy_data.I_inf = np.zeros(n_tot, dtype=np.int32)
+    dummy_data.time_res = "1d"
+    dummy_data.parmin = np.array([-5, -5, -5, -1, 0, 0, 0, -1], dtype=np.float64)
+    dummy_data.parmax = np.array([15, 1.5, 5, 1, 20, 10, 1, 5], dtype=np.float64)
+    dummy_data.par = np.zeros(8, dtype=np.float64)
+    dummy_data.par_best = np.zeros(8, dtype=np.float64)
+    dummy_data.flag_par = np.ones(8, dtype=int)
+    dummy_data.Twat_mod = np.zeros(n_tot)
+    dummy_data.mod_num = "RK4"
+    dummy_data.fun_obj = "NSE"
+    dummy_data.folder = ""
+    dummy_data.station = "test"
+    dummy_data.series = "test"
+
+    # We want to test unit="n_years", water_year_start_month=10, skip_first_year=False, min_train_years=0
+    # Our dummy data is 4 years (1460 days) starting 2010-01-01
+    # 2010 water year (Oct 2009-Sep 2010): first 273 days (Jan 1 to Sep 30 2010)
+    # 2011 water year (Oct 2010-Sep 2011): next 365 days
+    # 2012 water year (Oct 2011-Sep 2012): next 366 days (leap)
+    # 2013 water year (Oct 2012-Sep 2013): next 365 days
+    # 2014 water year (Oct 2013-Dec 2013): remaining 91 days
+    config = CVConfig(
+        unit="n_years",
+        n_years_per_fold=2,
+        water_year_start_month=10,
+        min_train_years=0,
+        skip_first_year=False,
+        optimizer_overrides={"n_run": 2, "n_particles": 2}
+    )
+
+    results = run_leave_one_year_out_cv(dummy_data, config, 'PSO')
+    assert len(results) > 0, "Should generate folds"
+    assert results[0].label == "2010-2011" or "2010" in results[0].label
