@@ -5,7 +5,7 @@ This module implements the block cross-validation routines used to evaluate
 the out-of-sample parameter stability and predictive performance of the
 calibrated air2stream models.
 
-See CROSS_VALIDATION_PLAN.md for full rationale. Summary of the design:
+Summary of the design:
 
 - Folds are built from *calendar dates* (data.date), never row counts, so
   leap years, gap-tolerant segments, and the seasonal cosine term's phase
@@ -150,6 +150,11 @@ def build_folds(data: CommonData, cv_config: CVConfig) -> list[tuple[str, np.nda
         idx = np.where(mask)[0]
         if idx.size == 0:
             continue
+
+        valid_obs_count = np.sum(data.Twat_obs[idx] != MISSING_DATA_SENTINEL)
+        if valid_obs_count < cv_config.min_valid_obs:
+            continue
+
         label = str(block[0]) if len(block) == 1 else f"{block[0]}-{block[-1]}"
         folds.append((label, idx))
     return folds
@@ -159,7 +164,7 @@ def build_folds(data: CommonData, cv_config: CVConfig) -> list[tuple[str, np.nda
 # Masking helpers
 # --------------------------------------------------------------------------
 
-def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Set Twat_obs, Tair, and Q to the configured missing value for the given rows and return the original
     values (for scoring + restoration). By masking the forcing data as well, gap_tolerant
@@ -182,10 +187,24 @@ def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarra
         data.Tair[idx] = MISSING_DATA_SENTINEL
         data.Q[idx] = MISSING_DATA_SENTINEL
 
-    return orig_twat, orig_tair, orig_q
+    # Also handle warm-up block if year 1 is masked
+    w_mask = (idx >= 365) & (idx < 730)
+    w_idx = idx[w_mask] - 365
+
+    orig_w_twat = data.Twat_obs[w_idx].copy() if w_idx.size > 0 else np.array([])
+    orig_w_tair = data.Tair[w_idx].copy() if w_idx.size > 0 else np.array([])
+    orig_w_q = data.Q[w_idx].copy() if w_idx.size > 0 else np.array([])
+
+    if w_idx.size > 0:
+        data.Twat_obs[w_idx] = MISSING_DATA_SENTINEL
+        if data.gap_tolerant:
+            data.Tair[w_idx] = MISSING_DATA_SENTINEL
+            data.Q[w_idx] = MISSING_DATA_SENTINEL
+
+    return orig_twat, orig_tair, orig_q, w_idx, orig_w_twat, orig_w_tair, orig_w_q
 
 
-def _restore_fold(data: CommonData, idx: np.ndarray, orig_twat: np.ndarray, orig_tair: np.ndarray, orig_q: np.ndarray) -> None:
+def _restore_fold(data: CommonData, idx: np.ndarray, orig_twat: np.ndarray, orig_tair: np.ndarray, orig_q: np.ndarray, w_idx: np.ndarray, orig_w_twat: np.ndarray, orig_w_tair: np.ndarray, orig_w_q: np.ndarray) -> None:
     """
     Restore the original forcing data and observations to the global CommonData
     arrays after a cross-validation fold has finished.
@@ -194,8 +213,15 @@ def _restore_fold(data: CommonData, idx: np.ndarray, orig_twat: np.ndarray, orig
     the datasets from disk.
     """
     data.Twat_obs[idx] = orig_twat
-    data.Tair[idx] = orig_tair
-    data.Q[idx] = orig_q
+    if data.gap_tolerant:
+        data.Tair[idx] = orig_tair
+        data.Q[idx] = orig_q
+
+    if w_idx.size > 0:
+        data.Twat_obs[w_idx] = orig_w_twat
+        if data.gap_tolerant:
+            data.Tair[w_idx] = orig_w_tair
+            data.Q[w_idx] = orig_w_q
 
 
 # --------------------------------------------------------------------------
@@ -275,8 +301,7 @@ def run_leave_one_year_out_cv(
 
     Per fold: mask -> aggregate/statis -> (rebuild segments if
     gap_tolerant) -> optimize -> simulate full series -> score held-out
-    window against the original obs -> restore. See module docstring and
-    CROSS_VALIDATION_PLAN.md section 6 for the full rationale.
+    window against the original obs -> restore. See module docstring for the full rationale.
 
     Every fold reuses the same data.Tair/data.Q; only data.Twat_obs is ever
     mutated, and only for the duration of that fold's block below.
@@ -292,8 +317,11 @@ def run_leave_one_year_out_cv(
 
     from .io import compute_doy_climatology, compute_qmedia
 
+    orig_par = data.par.copy() if data.par is not None else None
+    orig_par_best = data.par_best.copy() if data.par_best is not None else None
+
     for label, idx in folds:
-        orig_twat, orig_tair, orig_q = _mask_fold(data, idx)
+        orig_twat, orig_tair, orig_q, w_idx, orig_w_twat, orig_w_tair, orig_w_q = _mask_fold(data, idx)
         try:
             if data.gap_tolerant:
                 compute_qmedia(data)
@@ -310,9 +338,15 @@ def run_leave_one_year_out_cv(
             data.par[:] = data.par_best[:]
 
             # Restore forcing variables (Tair, Q) before forward simulation
-            # so the model integrates through the held-out window properly
-            data.Tair[idx] = orig_tair
-            data.Q[idx] = orig_q
+            # so the model integrates through the held-out window properly.
+            # (Note: _restore_fold also restores forcing, but doing it here is required
+            # for the forward simulation. _restore_fold is idempotent.)
+            if data.gap_tolerant:
+                data.Tair[idx] = orig_tair
+                data.Q[idx] = orig_q
+                if w_idx.size > 0:
+                    data.Tair[w_idx] = orig_w_tair
+                    data.Q[w_idx] = orig_w_q
 
             if data.gap_tolerant:
                 data.segments = None
@@ -345,11 +379,16 @@ def run_leave_one_year_out_cv(
                 sim_held_out=sim[idx].copy(),
             ))
         finally:
-            _restore_fold(data, idx, orig_twat, orig_tair, orig_q)
+            _restore_fold(data, idx, orig_twat, orig_tair, orig_q, w_idx, orig_w_twat, orig_w_tair, orig_w_q)
 
     if data.gap_tolerant:
         compute_qmedia(data)
         compute_doy_climatology(data)
+
+    if orig_par is not None:
+        data.par[:] = orig_par[:]
+    if orig_par_best is not None:
+        data.par_best[:] = orig_par_best[:]
 
     return results
 
