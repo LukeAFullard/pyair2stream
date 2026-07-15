@@ -207,8 +207,12 @@ def _compute_fold_metrics(obs: np.ndarray, sim: np.ndarray, missing_val: float) 
     NSE, KGE, RMSE for one fold, computed only over rows where `obs`
     (the pre-mask backup) is an actual observation, i.e. genuinely-missing
     T_water inside the held-out window is correctly excluded too.
+
+    In gap-tolerant mode, `sim` will contain `missing_val` for days outside
+    of any valid segment (e.g., due to forcing data gaps). We must exclude
+    these from scoring as well to prevent -999.0 from destroying the metric.
     """
-    valid = obs != missing_val
+    valid = (obs != missing_val) & (sim != missing_val)
     o, s = obs[valid], sim[valid]
     if o.size == 0:
         return float("nan"), float("nan"), float("nan")
@@ -342,6 +346,10 @@ def run_leave_one_year_out_cv(
             ))
         finally:
             _restore_fold(data, idx, orig_twat, orig_tair, orig_q)
+
+    if data.gap_tolerant:
+        compute_qmedia(data)
+        compute_doy_climatology(data)
 
     return results
 

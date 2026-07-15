@@ -6,7 +6,7 @@ version: 8
 Tice_cover: 0.0
 objective_function: "NSE"
 integrator: "RK4"
-run_mode: "DE"
+run_mode: "DE-MCMC"
 prc: 1.0
 
 paths:
