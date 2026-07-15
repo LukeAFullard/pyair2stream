@@ -3,8 +3,11 @@ import os
 import subprocess
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
 def main():
+    # Fix random seed for reproducible optimizer runs
+    np.random.seed(42)
     # 1. Run the cross-validation
     print("Running cross-validation on DAV dataset...")
     try:
