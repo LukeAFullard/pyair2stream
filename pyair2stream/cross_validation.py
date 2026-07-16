@@ -18,6 +18,10 @@ Summary of the design:
   past the held-out period, with no re-spin-up required.
 - Only data.Twat_obs is ever mutated, and only transiently (masked, then
   restored via try/finally before the next fold or on error).
+- The first eligible calendar year is strictly enforced to never be a
+  candidate fold, as there is no prior year of valid data to use for
+  model spin-up. If `skip_first_year` is False, `min_train_years` must
+  be > 0.
 
 """
 
@@ -52,7 +56,8 @@ class CVConfig:
                                          # sequence, it is NOT an ongoing per-fold minimum.
     skip_first_year: bool = True        # first calendar/water year is spin-up-only,
                                          # never a candidate fold (nothing precedes
-                                         # it to spin up from)
+                                         # it to spin up from). If set to False, you
+                                         # MUST set min_train_years > 0 to skip it.
     min_valid_obs: int = 1              # minimum number of valid T_water observations
                                          # required for a block to be considered a fold
     optimizer_overrides: Optional[dict] = None  # e.g. {"n_run": 20, "n_particles": 20}
@@ -128,11 +133,17 @@ def build_folds(data: CommonData, cv_config: CVConfig) -> list[tuple[str, np.nda
       (fewer than n_years_per_fold years) is dropped rather than yielded as
       a partial fold.
     """
+    if not cv_config.skip_first_year and cv_config.min_train_years == 0:
+        raise ValueError(
+            "The first year cannot be a candidate fold. You must set skip_first_year=True "
+            "or min_train_years > 0 to ensure the model has a prior year to spin up from."
+        )
+
     wy = assign_year_groups(data, cv_config.water_year_start_month)
     # Exclude the synthetic -999 year from the warm-up block
     unique_years = sorted(int(y) for y in np.unique(wy) if y != -999)
 
-    first_eligible = cv_config.min_train_years + (1 if cv_config.skip_first_year else 0)
+    first_eligible = cv_config.min_train_years + 1
     eligible_years = unique_years[first_eligible:]
 
     if cv_config.unit == "year":
@@ -190,20 +201,9 @@ def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarra
 
     data.Twat_obs[idx] = MISSING_DATA_SENTINEL
 
-    # If the held-out fold includes rows from the first eligible calendar year (indices 365 to 729),
-    # we must also mask the corresponding rows in the duplicate spin-up block (indices 0 to 364).
-    # This prevents those observations from leaking into ODE initial conditions or the spin-up year.
-    spinup_mask = idx < 730
-    if np.any(spinup_mask):
-        spinup_idx = idx[spinup_mask] - 365
-        data.Twat_obs[spinup_idx] = MISSING_DATA_SENTINEL
-
     if data.gap_tolerant:
         data.Tair[idx] = MISSING_DATA_SENTINEL
         data.Q[idx] = MISSING_DATA_SENTINEL
-        if np.any(spinup_mask):
-            data.Tair[spinup_idx] = MISSING_DATA_SENTINEL
-            data.Q[spinup_idx] = MISSING_DATA_SENTINEL
 
     return orig_twat, orig_tair, orig_q
 
@@ -218,18 +218,9 @@ def _restore_fold(data: CommonData, idx: np.ndarray, orig_twat: np.ndarray, orig
     """
     data.Twat_obs[idx] = orig_twat
 
-    # Restore the duplicate spin-up block if it was masked
-    spinup_mask = idx < 730
-    if np.any(spinup_mask):
-        spinup_idx = idx[spinup_mask] - 365
-        data.Twat_obs[spinup_idx] = orig_twat[spinup_mask]
-
     if data.gap_tolerant:
         data.Tair[idx] = orig_tair
         data.Q[idx] = orig_q
-        if np.any(spinup_mask):
-            data.Tair[spinup_idx] = orig_tair[spinup_mask]
-            data.Q[spinup_idx] = orig_q[spinup_mask]
 
 
 # --------------------------------------------------------------------------

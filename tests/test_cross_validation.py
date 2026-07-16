@@ -246,7 +246,7 @@ def test_run_leave_one_year_out_cv_gap_tolerant(dummy_data):
     assert (dummy_data.Tair != -999.0).all()
     assert (dummy_data.Q != -999.0).all()
 
-def test_run_leave_one_year_out_cv_untested_paths(dummy_data):
+def test_run_leave_one_year_out_cv_rejects_first_year(dummy_data):
     from pyair2stream.cross_validation import run_leave_one_year_out_cv
     np.random.seed(42)
 
@@ -292,6 +292,6 @@ def test_run_leave_one_year_out_cv_untested_paths(dummy_data):
         optimizer_overrides={"n_run": 2, "n_particles": 2}
     )
 
-    results = run_leave_one_year_out_cv(dummy_data, config, 'PSO')
-    assert len(results) > 0, "Should generate folds"
-    assert results[0].label == "2010-2011" or "2010" in results[0].label
+    import pytest
+    with pytest.raises(ValueError, match="The first year cannot be a candidate fold"):
+        run_leave_one_year_out_cv(dummy_data, config, 'PSO')
