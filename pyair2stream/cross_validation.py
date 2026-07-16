@@ -171,7 +171,7 @@ def build_folds(data: CommonData, cv_config: CVConfig) -> list[tuple[str, np.nda
 # Masking helpers
 # --------------------------------------------------------------------------
 
-def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Set Twat_obs, Tair, and Q to the configured missing value for the given rows and return the original
     values (for scoring + restoration). By masking the forcing data as well, gap_tolerant
@@ -319,9 +319,18 @@ def run_leave_one_year_out_cv(
         for label, idx in folds:
             orig_twat, orig_tair, orig_q = _mask_fold(data, idx)
             try:
+                # To prevent Qmedia data leakage in non-gap-tolerant mode (V6/V8),
+                # we must mask Q during compute_qmedia so the held-out fold is excluded.
+                if not data.gap_tolerant:
+                    data.Q[idx] = MISSING_DATA_SENTINEL
+
+                compute_qmedia(data)
                 if data.gap_tolerant:
-                    compute_qmedia(data)
                     compute_doy_climatology(data)
+
+                # Restore Q if we masked it solely for Qmedia computation in non-gap-tolerant mode
+                if not data.gap_tolerant:
+                    data.Q[idx] = orig_q
 
                 aggregation(data)
                 statis(data)
@@ -344,11 +353,6 @@ def run_leave_one_year_out_cv(
                 if data.gap_tolerant:
                     data.segments = None
                     detect_segments(data)
-
-                # Re-aggregate and statis now that forcing data is restored to allow
-                # potential evaluation at non-daily time-scales
-                aggregation(data)
-                statis(data)
 
                 call_model(data)
 
