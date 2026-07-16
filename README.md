@@ -183,6 +183,9 @@ Running `pyair2stream` writes to the configured output directory:
 
 See [§8 of the User Guide](USER_GUIDE.md#8-understanding-the-output-files) for a worked explanation of these files, including an important note about warm-up rows in `2_*.csv`/`3_*.csv`.
 
+### Note on Cross-Validation
+In `cross_validation` mode, the first eligible calendar year is strictly enforced to never be a candidate fold. This is because the model requires a prior year of continuous data for initialization and spin-up. If `skip_first_year: false` is configured without skipping years via `min_train_years`, execution will halt with a configuration error.
+
 ## Using pyair2stream from Python
 
 ```python

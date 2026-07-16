@@ -17,3 +17,4 @@
 - Addressed stale Italian console strings in documentation.
 - Removed dead and unused functions (`_step`, `_get_RK_func`) from `model.py`.
 - Corrected `n_runs` parameter naming inconsistency in configuration files to `n_run`.
+- Fixed cross-validation data leak and hardcoded initial condition bug by strictly enforcing that the first year of data cannot be a candidate fold.
