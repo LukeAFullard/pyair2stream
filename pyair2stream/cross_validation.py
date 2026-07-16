@@ -190,9 +190,20 @@ def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarra
 
     data.Twat_obs[idx] = MISSING_DATA_SENTINEL
 
+    # If the held-out fold includes rows from the first eligible calendar year (indices 365 to 729),
+    # we must also mask the corresponding rows in the duplicate spin-up block (indices 0 to 364).
+    # This prevents those observations from leaking into ODE initial conditions or the spin-up year.
+    spinup_mask = idx < 730
+    if np.any(spinup_mask):
+        spinup_idx = idx[spinup_mask] - 365
+        data.Twat_obs[spinup_idx] = MISSING_DATA_SENTINEL
+
     if data.gap_tolerant:
         data.Tair[idx] = MISSING_DATA_SENTINEL
         data.Q[idx] = MISSING_DATA_SENTINEL
+        if np.any(spinup_mask):
+            data.Tair[spinup_idx] = MISSING_DATA_SENTINEL
+            data.Q[spinup_idx] = MISSING_DATA_SENTINEL
 
     return orig_twat, orig_tair, orig_q
 
@@ -206,9 +217,19 @@ def _restore_fold(data: CommonData, idx: np.ndarray, orig_twat: np.ndarray, orig
     the datasets from disk.
     """
     data.Twat_obs[idx] = orig_twat
+
+    # Restore the duplicate spin-up block if it was masked
+    spinup_mask = idx < 730
+    if np.any(spinup_mask):
+        spinup_idx = idx[spinup_mask] - 365
+        data.Twat_obs[spinup_idx] = orig_twat[spinup_mask]
+
     if data.gap_tolerant:
         data.Tair[idx] = orig_tair
         data.Q[idx] = orig_q
+        if np.any(spinup_mask):
+            data.Tair[spinup_idx] = orig_tair[spinup_mask]
+            data.Q[spinup_idx] = orig_q[spinup_mask]
 
 
 # --------------------------------------------------------------------------
@@ -324,7 +345,7 @@ def run_leave_one_year_out_cv(
                 if not data.gap_tolerant:
                     data.Q[idx] = MISSING_DATA_SENTINEL
 
-                compute_qmedia(data)
+                compute_qmedia(data, verbose=True)
                 if data.gap_tolerant:
                     compute_doy_climatology(data)
 
@@ -383,8 +404,8 @@ def run_leave_one_year_out_cv(
         if orig_par_best is not None:
             data.par_best[:] = orig_par_best[:]
 
+    compute_qmedia(data)
     if data.gap_tolerant:
-        compute_qmedia(data)
         compute_doy_climatology(data)
 
     aggregation(data)
