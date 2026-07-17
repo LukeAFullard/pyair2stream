@@ -58,7 +58,7 @@ class CVConfig:
                                          # never a candidate fold (nothing precedes
                                          # it to spin up from). If set to False, you
                                          # MUST set min_train_years > 0 to skip it.
-    min_valid_obs: int = 1              # minimum number of valid T_water observations
+    min_valid_obs: int = 10              # minimum number of valid T_water observations
                                          # required for a block to be considered a fold
     optimizer_overrides: Optional[dict] = None  # e.g. {"n_run": 20, "n_particles": 20}
                                                  # to cut per-fold cost vs. the
@@ -143,7 +143,7 @@ def build_folds(data: CommonData, cv_config: CVConfig) -> list[tuple[str, np.nda
     # Exclude the synthetic -999 year from the warm-up block
     unique_years = sorted(int(y) for y in np.unique(wy) if y != -999)
 
-    first_eligible = cv_config.min_train_years + 1
+    first_eligible = cv_config.min_train_years + int(cv_config.skip_first_year)
     eligible_years = unique_years[first_eligible:]
 
     if cv_config.unit == "year":
