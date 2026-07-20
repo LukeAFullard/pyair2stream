@@ -127,6 +127,10 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         data.n_particles = int(opt_config.get('n_particles', 50)) # Using n_particles as population size for initial DE
         data.mcmc_walkers = int(opt_config.get('mcmc_walkers', 32))
         data.mcmc_steps = int(opt_config.get('mcmc_steps', 1000))
+    elif data.runmode == 'DE-CV-MCMC':
+        data.n_particles = int(opt_config.get('n_particles', 50))
+        data.mcmc_walkers = int(opt_config.get('mcmc_walkers', 32))
+        data.mcmc_steps = int(opt_config.get('mcmc_steps', 1000))
 
     bounds = config.get('parameter_bounds', {})
     vals_min = bounds.get('min', [])
@@ -137,7 +141,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     if len(vals_max) > 0:
         data.parmax[:min(len(vals_max), n_par)] = [np.float64(x) for x in vals_max[:min(len(vals_max), n_par)]]
 
-    if data.runmode in ['PSO', 'LATHYP', 'DE', 'DE-MCMC', 'FORWARD']:
+    if data.runmode in ['PSO', 'LATHYP', 'DE', 'DE-MCMC', 'DE-CV-MCMC', 'FORWARD']:
         # NOTE: 0-indexed in Python vs 1-indexed in Fortran
         # Fortran: parmin(4)=0 -> Python: parmin[3]=0
 

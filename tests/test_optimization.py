@@ -219,5 +219,37 @@ class TestOptimization(unittest.TestCase):
         # We check the length of the CSV written BEFORE validation was attempted.
         self.assertEqual(len(df), 375)
 
+
+    def test_DE_CV_MCMC_mode(self):
+        from pyair2stream.optimization import DE_CV_MCMC_mode
+        self.data.n_particles = 2
+        self.data.n_run = 1
+        self.data.mcmc_walkers = 16
+        self.data.mcmc_steps = 10
+        self.data.runmode = 'DE-CV-MCMC'
+        self.data.uncertainty_options = {"noise_model": "iid", "ar1_rho": None}
+        from pyair2stream.cross_validation import CVConfig
+        self.data.cross_validation = CVConfig(unit="year", skip_first_year=True, min_train_years=0, min_valid_obs=1)
+        # Mock dates to ensure we have two years in dummy data so skip_first_year=True leaves 1 fold
+        self.data.date = np.zeros((375, 3), dtype=np.int32)
+        # Spinup year
+        self.data.date[0:365, 0] = -999
+        # Year 1 (skipped by skip_first_year=True)
+        self.data.date[365:370, 0] = 2020
+        # Year 2 (used as fold)
+        self.data.date[370:375, 0] = 2021
+        self.data.date[:, 1] = 1 # Month 1
+        self.data.date[:, 2] = 1 # Day 1
+
+
+        DE_CV_MCMC_mode(self.data, seed=42)
+
+        chain_path = os.path.join(self.data.folder, f"MCMC_chain_test_station_test_series_1d.csv")
+        sidecar_path = os.path.join(self.data.folder, f"MCMC_chain_test_station_test_series_1d_meta.json")
+        env_path = os.path.join(self.data.folder, f"MCMC_envelopes_test_station_test_series_1d.csv")
+
+        self.assertTrue(os.path.exists(chain_path))
+        self.assertTrue(os.path.exists(sidecar_path))
+        self.assertTrue(os.path.exists(env_path))
 if __name__ == '__main__':
     unittest.main()
