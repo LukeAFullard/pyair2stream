@@ -498,23 +498,11 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     Differential Evolution + L-BFGS-B followed by MCMC for uncertainty quantification.
     """
     print("Starting DE-MCMC Calibration Mode")
-    print("Phase 1 & 2: Finding best parameters using DE + L-BFGS-B")
 
-    # Run the standard DE mode first to find best parameters
-    # DE_mode sets data.par_best and data.finalfit
-    DE_mode(data, seed)
-
-    print("Phase 3: MCMC Uncertainty Analysis")
     n_par = 8
     nwalkers = data.mcmc_walkers
     nsteps = data.mcmc_steps
 
-    if seed is not None:
-        np.random.seed(seed)
-
-    best_params = data.par_best[:n_par].copy()
-
-    # Determine which parameters are actively varying
     active_params = []
     for j in range(n_par):
         if data.flag_par[j] and data.parmin[j] != data.parmax[j]:
@@ -524,6 +512,26 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     if ndim == 0:
         print("Warning: No active parameters for MCMC. Skipping MCMC phase.")
         return
+
+    if nwalkers < 2 * ndim:
+        raise ValueError(
+            f"mcmc_walkers ({nwalkers}) must be at least 2x the number of "
+            f"active parameters ({ndim} active -> need >= {2*ndim}). "
+            "Increase mcmc_walkers in your config."
+        )
+
+    print("Phase 1 & 2: Finding best parameters using DE + L-BFGS-B")
+
+    # Run the standard DE mode first to find best parameters
+    # DE_mode sets data.par_best and data.finalfit
+    DE_mode(data, seed)
+
+    print("Phase 3: MCMC Uncertainty Analysis")
+
+    if seed is not None:
+        np.random.seed(seed)
+
+    best_params = data.par_best[:n_par].copy()
 
     # Define log_probability function for emcee
     def log_probability(theta):
@@ -591,6 +599,24 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     print(f"Running MCMC for {nsteps} steps with {nwalkers} walkers...")
     sampler.run_mcmc(p0, nsteps, progress=True)
 
+    try:
+        tau = sampler.get_autocorr_time(quiet=True)
+        print(f"Estimated autocorrelation time per parameter: {tau}")
+        if nsteps < 50 * np.max(tau):
+            print(f"Warning: chain length ({nsteps}) is less than 50x the estimated "
+                  f"autocorrelation time ({np.max(tau):.1f}). Consider increasing mcmc_steps.")
+        mean_tau = float(np.mean(tau))
+    except emcee.autocorr.AutocorrError:
+        print("Warning: autocorrelation time could not be reliably estimated; "
+              "chain may be too short to assess convergence.")
+        mean_tau = None
+    except Exception as e:
+        print(f"Warning: failed to compute autocorrelation time ({e}).")
+        mean_tau = None
+
+    mean_acc = float(np.mean(sampler.acceptance_fraction))
+    print(f"Mean acceptance fraction: {mean_acc:.3f}")
+
     # Discard the first 30% of steps as burn-in to ensure envelopes are drawn from fully converged distributions
     burnin = int(nsteps * 0.3)
 
@@ -636,7 +662,9 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
         "noise_model_used_for_this_run": noise_model,
         "mcmc_walkers": nwalkers,
         "mcmc_steps": nsteps,
-        "mcmc_seed": seed
+        "mcmc_seed": seed,
+        "mean_acceptance_fraction": mean_acc,
+        "mean_autocorr_time": mean_tau
     }
 
     sidecar_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}_meta.json")
@@ -742,6 +770,28 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     Differential Evolution + L-BFGS-B followed by Cross-Validation to inform MCMC initialization.
     """
     print("Starting DE-CV-MCMC Calibration Mode")
+
+    n_par = 8
+    nwalkers = data.mcmc_walkers
+    nsteps = data.mcmc_steps
+
+    active_params = []
+    for j in range(n_par):
+        if data.flag_par[j] and data.parmin[j] != data.parmax[j]:
+            active_params.append(j)
+
+    ndim = len(active_params)
+    if ndim == 0:
+        print("Warning: No active parameters for MCMC. Skipping MCMC phase.")
+        return
+
+    if nwalkers < 2 * ndim:
+        raise ValueError(
+            f"mcmc_walkers ({nwalkers}) must be at least 2x the number of "
+            f"active parameters ({ndim} active -> need >= {2*ndim}). "
+            "Increase mcmc_walkers in your config."
+        )
+
     print("Phase 1 & 2: Finding best parameters using DE + L-BFGS-B")
 
     # Run the standard DE mode first to find best parameters
@@ -759,16 +809,6 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     # or just use whatever is in cv_config.optimizer_overrides
     results = run_leave_one_year_out_cv(data, cv_config, 'DE')
 
-    n_par = 8
-    active_params = []
-    for j in range(n_par):
-        if data.flag_par[j] and data.parmin[j] != data.parmax[j]:
-            active_params.append(j)
-
-    ndim = len(active_params)
-    if ndim == 0:
-        print("Warning: No active parameters for MCMC. Skipping MCMC phase.")
-        return
 
     # Extract standard deviations from CV folds
     if len(results) > 1:
@@ -843,6 +883,24 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     print(f"Running MCMC for {nsteps} steps with {nwalkers} walkers...")
     sampler.run_mcmc(p0, nsteps, progress=True)
 
+    try:
+        tau = sampler.get_autocorr_time(quiet=True)
+        print(f"Estimated autocorrelation time per parameter: {tau}")
+        if nsteps < 50 * np.max(tau):
+            print(f"Warning: chain length ({nsteps}) is less than 50x the estimated "
+                  f"autocorrelation time ({np.max(tau):.1f}). Consider increasing mcmc_steps.")
+        mean_tau = float(np.mean(tau))
+    except emcee.autocorr.AutocorrError:
+        print("Warning: autocorrelation time could not be reliably estimated; "
+              "chain may be too short to assess convergence.")
+        mean_tau = None
+    except Exception as e:
+        print(f"Warning: failed to compute autocorrelation time ({e}).")
+        mean_tau = None
+
+    mean_acc = float(np.mean(sampler.acceptance_fraction))
+    print(f"Mean acceptance fraction: {mean_acc:.3f}")
+
     # Discard the first 30% of steps as burn-in to ensure envelopes are drawn from fully converged distributions
     burnin = int(nsteps * 0.3)
 
@@ -889,7 +947,9 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
         "noise_model_used_for_this_run": noise_model,
         "mcmc_walkers": nwalkers,
         "mcmc_steps": nsteps,
-        "mcmc_seed": seed
+        "mcmc_seed": seed,
+        "mean_acceptance_fraction": mean_acc,
+        "mean_autocorr_time": mean_tau
     }
 
     sidecar_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}_meta.json")
