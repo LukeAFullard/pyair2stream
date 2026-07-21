@@ -88,7 +88,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
             water_year_start_month=int(cv_config_dict.get('water_year_start_month', 1)),
             min_train_years=int(cv_config_dict.get('min_train_years', 1)),
             skip_first_year=bool(cv_config_dict.get('skip_first_year', True)),
-            min_valid_obs=int(cv_config_dict.get('min_valid_obs', 1)),
+            min_valid_obs=int(cv_config_dict.get('min_valid_obs', 10)),
             optimizer_overrides=cv_config_dict.get('optimizer_overrides', None)
         )
 

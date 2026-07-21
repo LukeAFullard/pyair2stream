@@ -170,6 +170,7 @@ class TestMain(unittest.TestCase):
     @patch('sys.argv', ['main.py', '--config', 'dummy.yaml'])
     def test_main_cross_validation(self, mock_summarize, mock_run_cv, mock_statis, mock_agg, mock_read_ts, mock_read_cal):
         data = CommonData()
+        data.runmode = "DE"
         data.cross_validation = "loyo"
         data.folder = tempfile.mkdtemp()
         data.mean_obs = 10.0

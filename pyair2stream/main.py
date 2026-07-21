@@ -226,7 +226,7 @@ def main():
     print('mean, TSS and standard deviation (calibration)')
     print(f"{data.mean_obs:.5f} {data.TSS_obs:.5f} {data.std_obs:.5f}")
 
-    if getattr(data, 'cross_validation', None):
+    if getattr(data, 'cross_validation', None) and data.runmode in ('PSO', 'DE', 'LATHYP'):
         from .cross_validation import run_leave_one_year_out_cv, summarize
         results = run_leave_one_year_out_cv(data, data.cross_validation, data.runmode)
         df = summarize(results)
