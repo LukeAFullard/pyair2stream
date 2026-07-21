@@ -509,11 +509,8 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
             active_params.append(j)
 
     ndim = len(active_params)
-    if ndim == 0:
-        print("Warning: No active parameters for MCMC. Skipping MCMC phase.")
-        return
 
-    if nwalkers < 2 * ndim:
+    if ndim > 0 and nwalkers < 2 * ndim:
         raise ValueError(
             f"mcmc_walkers ({nwalkers}) must be at least 2x the number of "
             f"active parameters ({ndim} active -> need >= {2*ndim}). "
@@ -525,6 +522,10 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     # Run the standard DE mode first to find best parameters
     # DE_mode sets data.par_best and data.finalfit
     DE_mode(data, seed)
+
+    if ndim == 0:
+        print("Warning: No active parameters for MCMC. Skipping MCMC phase.")
+        return
 
     print("Phase 3: MCMC Uncertainty Analysis")
 
@@ -601,12 +602,14 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
     try:
         tau = sampler.get_autocorr_time(quiet=True)
+        if np.any(np.isnan(tau)) or np.any(~np.isfinite(tau)):
+            raise ValueError("autocorrelation time not reliably estimated")
         print(f"Estimated autocorrelation time per parameter: {tau}")
         if nsteps < 50 * np.max(tau):
             print(f"Warning: chain length ({nsteps}) is less than 50x the estimated "
                   f"autocorrelation time ({np.max(tau):.1f}). Consider increasing mcmc_steps.")
         mean_tau = float(np.mean(tau))
-    except emcee.autocorr.AutocorrError:
+    except (ValueError, emcee.autocorr.AutocorrError):
         print("Warning: autocorrelation time could not be reliably estimated; "
               "chain may be too short to assess convergence.")
         mean_tau = None
@@ -669,7 +672,7 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
     sidecar_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}_meta.json")
     with open(sidecar_filename, 'w') as f:
-        json.dump(sidecar_data, f, indent=4)
+        json.dump(sidecar_data, f, indent=4, allow_nan=False)
     print(f"Saved MCMC metadata sidecar to {sidecar_filename}")
 
     # Step 6: Compute Predictive Uncertainty Envelopes
@@ -781,11 +784,8 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
             active_params.append(j)
 
     ndim = len(active_params)
-    if ndim == 0:
-        print("Warning: No active parameters for MCMC. Skipping MCMC phase.")
-        return
 
-    if nwalkers < 2 * ndim:
+    if ndim > 0 and nwalkers < 2 * ndim:
         raise ValueError(
             f"mcmc_walkers ({nwalkers}) must be at least 2x the number of "
             f"active parameters ({ndim} active -> need >= {2*ndim}). "
@@ -797,6 +797,10 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     # Run the standard DE mode first to find best parameters
     # DE_mode sets data.par_best and data.finalfit
     DE_mode(data, seed)
+
+    if ndim == 0:
+        print("Warning: No active parameters for MCMC. Skipping MCMC phase.")
+        return
 
     print("Phase 3: Cross-Validation to estimate parameter standard deviations")
     from .cross_validation import CVConfig, run_leave_one_year_out_cv
@@ -885,12 +889,14 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
     try:
         tau = sampler.get_autocorr_time(quiet=True)
+        if np.any(np.isnan(tau)) or np.any(~np.isfinite(tau)):
+            raise ValueError("autocorrelation time not reliably estimated")
         print(f"Estimated autocorrelation time per parameter: {tau}")
         if nsteps < 50 * np.max(tau):
             print(f"Warning: chain length ({nsteps}) is less than 50x the estimated "
                   f"autocorrelation time ({np.max(tau):.1f}). Consider increasing mcmc_steps.")
         mean_tau = float(np.mean(tau))
-    except emcee.autocorr.AutocorrError:
+    except (ValueError, emcee.autocorr.AutocorrError):
         print("Warning: autocorrelation time could not be reliably estimated; "
               "chain may be too short to assess convergence.")
         mean_tau = None
@@ -954,7 +960,7 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
     sidecar_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}_meta.json")
     with open(sidecar_filename, 'w') as f:
-        json.dump(sidecar_data, f, indent=4)
+        json.dump(sidecar_data, f, indent=4, allow_nan=False)
     print(f"Saved MCMC metadata sidecar to {sidecar_filename}")
 
     # Compute Predictive Uncertainty Envelopes
