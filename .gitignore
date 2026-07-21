@@ -40,3 +40,9 @@ examples/forward_prediction_intervals/**/*.csv
 !examples/optimizer_comparison/**/*.png
 !examples/optimizer_comparison/**/*.out
 examples/optimizer_comparison/**/*.csv
+
+# Allow results and plots for MCMC comparison example
+!examples/mcmc_comparison/**/*.png
+!examples/mcmc_comparison/**/*.out
+!examples/mcmc_comparison/**/*.json
+examples/mcmc_comparison/**/*.csv

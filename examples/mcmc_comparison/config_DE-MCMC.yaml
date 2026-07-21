@@ -1,0 +1,46 @@
+cross_validation:
+  enabled: false
+  min_train_years: 0
+  min_valid_obs: 10
+  optimizer_overrides:
+    n_particles: 10
+    n_run: 10
+  skip_first_year: true
+  unit: year
+integrator: RK4
+objective_function: NSE
+optimization:
+  mcmc_steps: 100
+  mcmc_walkers: 32
+  n_particles: 20
+  n_run: 20
+parameter_bounds:
+  max:
+  - 5.0
+  - 2.0
+  - 2.0
+  - 2.0
+  - 30.0
+  - 15.0
+  - 1.0
+  - 2.0
+  min:
+  - -1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - -1.0
+paths:
+  input_data: ../../examples/validation/Switzerland/DAV_2327_cc.csv
+  output_dir: output_DE_MCMC
+project_name: mcmc_comparison_DE-MCMC
+run_mode: DE-MCMC
+station_name: Validation_Station
+time_resolution: 1d
+uncertainty_options:
+  noise_model: iid
+  prediction_interval: 95.0
+version: 8

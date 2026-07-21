@@ -69,9 +69,14 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
             raise ValueError(f"ar1_rho must be strictly between -1.0 and 1.0, got {ar1_rho}")
         ar1_rho = float(ar1_rho)
 
+    prediction_interval = float(uncertainty_options.get('prediction_interval', 90.0))
+    if not (0.0 < prediction_interval < 100.0):
+        raise ValueError(f"prediction_interval must be strictly between 0 and 100, got {prediction_interval}")
+
     data.uncertainty_options = {
         "noise_model": noise_model,
-        "ar1_rho": ar1_rho
+        "ar1_rho": ar1_rho,
+        "prediction_interval": prediction_interval
     }
 
     cv_config_dict = config.get('cross_validation', {})
@@ -105,6 +110,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     n_par = 8
 
     data.par = np.zeros(n_par, dtype=np.float64)
+    data.par_best = np.zeros(n_par, dtype=np.float64)
     data.parmin = np.zeros(n_par, dtype=np.float64)
     data.parmax = np.zeros(n_par, dtype=np.float64)
     data.flag_par = np.ones(n_par, dtype=np.bool_)
@@ -123,7 +129,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     elif data.runmode == 'DE':
         data.n_particles = int(opt_config.get('n_particles', 50)) # Using n_particles as population size
         # c1, c2, wmax, wmin not used for DE
-    elif data.runmode == 'DE-MCMC':
+    elif data.runmode in ['DE-MCMC', 'DE-CV-MCMC']:
         data.n_particles = int(opt_config.get('n_particles', 50)) # Using n_particles as population size for initial DE
         data.mcmc_walkers = int(opt_config.get('mcmc_walkers', 32))
         data.mcmc_steps = int(opt_config.get('mcmc_steps', 1000))
@@ -137,7 +143,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     if len(vals_max) > 0:
         data.parmax[:min(len(vals_max), n_par)] = [np.float64(x) for x in vals_max[:min(len(vals_max), n_par)]]
 
-    if data.runmode in ['PSO', 'LATHYP', 'DE', 'DE-MCMC', 'FORWARD']:
+    if data.runmode in ['PSO', 'LATHYP', 'DE', 'DE-MCMC', 'DE-CV-MCMC', 'FORWARD']:
         # NOTE: 0-indexed in Python vs 1-indexed in Fortran
         # Fortran: parmin(4)=0 -> Python: parmin[3]=0
 

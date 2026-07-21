@@ -318,9 +318,11 @@ def post_process(data: CommonData, toll: float = None):
         metrics_str = f"R²={r2:.3f}, RMSE={rmse:.2f}°C, MAE={mae:.2f}°C\nAIC={aic:.1f}, BIC={bic:.1f}"
 
         if os.path.exists(env_file_mcmc):
-            ax.set_title(f"Historical Calibration with 90% Prediction Interval\n{metrics_str}")
+            pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+            ax.set_title(f"Historical Calibration with {pi_val:g}% Prediction Interval\n{metrics_str}")
         else:
-            title_text = "Forward Projection with 90% Prediction Interval" if os.path.exists(env_file_fwd) else title_prefix
+            pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+            title_text = f"Forward Projection with {pi_val:g}% Prediction Interval" if os.path.exists(env_file_fwd) else title_prefix
             ax.set_title(f"{title_text}\n{metrics_str}")
 
         if not filter_to_obs:
@@ -359,17 +361,26 @@ def post_process(data: CommonData, toll: float = None):
                 env_df = env_df.iloc[start_idx:end_idx+1].copy()
 
             if len(env_df) == len(dates):
-                # Ensure backward compatibility with legacy MCMC files containing -999.0
-                env_df['Twat_mod_p5'] = np.where(env_df['Twat_mod_p5'] == -999.0, np.nan, env_df['Twat_mod_p5'])
-                env_df['Twat_mod_p95'] = np.where(env_df['Twat_mod_p95'] == -999.0, np.nan, env_df['Twat_mod_p95'])
+                if 'Twat_mod_lower' in env_df.columns:
+                    env_df['Twat_mod_lower'] = np.where(env_df['Twat_mod_lower'] == -999.0, np.nan, env_df['Twat_mod_lower'])
+                    env_df['Twat_mod_upper'] = np.where(env_df['Twat_mod_upper'] == -999.0, np.nan, env_df['Twat_mod_upper'])
+                    lower_col = 'Twat_mod_lower'
+                    upper_col = 'Twat_mod_upper'
+                else:
+                    env_df['Twat_mod_p5'] = np.where(env_df['Twat_mod_p5'] == -999.0, np.nan, env_df['Twat_mod_p5'])
+                    env_df['Twat_mod_p95'] = np.where(env_df['Twat_mod_p95'] == -999.0, np.nan, env_df['Twat_mod_p95'])
+                    lower_col = 'Twat_mod_p5'
+                    upper_col = 'Twat_mod_p95'
 
-                l_env = [ax.fill_between(dates, env_df['Twat_mod_p5'], env_df['Twat_mod_p95'], color='green', alpha=0.3, label='90% Prediction Interval')]
+                pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+                l_env = [ax.fill_between(dates, env_df[lower_col], env_df[upper_col], color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')]
 
         lines = l1 + l2 + l3 + l4
         if l_env:
             # We add a proxy artist for the fill_between to show up nicely in the legend
             import matplotlib.patches as mpatches
-            proxy = mpatches.Patch(color='green', alpha=0.3, label='90% Prediction Interval')
+            pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+            proxy = mpatches.Patch(color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')
             lines.append(proxy)
 
         labels = [l.get_label() for l in lines]
@@ -488,9 +499,11 @@ def post_process(data: CommonData, toll: float = None):
         env_file = env_file_mcmc if os.path.exists(env_file_mcmc) else env_file_fwd
 
         if os.path.exists(env_file_mcmc):
-            ax.set_title("Historical Calibration with 90% Prediction Interval")
+            pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+            ax.set_title(f"Historical Calibration with {pi_val:g}% Prediction Interval")
         else:
-            ax.set_title("Forward Projection with 90% Prediction Interval")
+            pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+            ax.set_title(f"Forward Projection with {pi_val:g}% Prediction Interval")
 
         if os.path.exists(env_file):
             env_df = pd.read_csv(env_file)
@@ -499,11 +512,19 @@ def post_process(data: CommonData, toll: float = None):
             if len(env_df) > 365:
                 env_df = env_df.iloc[365:].copy()
             if len(env_df) == len(dates):
-                # Ensure backward compatibility with legacy MCMC files containing -999.0
-                env_df['Twat_mod_p5'] = np.where(env_df['Twat_mod_p5'] == -999.0, np.nan, env_df['Twat_mod_p5'])
-                env_df['Twat_mod_p95'] = np.where(env_df['Twat_mod_p95'] == -999.0, np.nan, env_df['Twat_mod_p95'])
+                if 'Twat_mod_lower' in env_df.columns:
+                    env_df['Twat_mod_lower'] = np.where(env_df['Twat_mod_lower'] == -999.0, np.nan, env_df['Twat_mod_lower'])
+                    env_df['Twat_mod_upper'] = np.where(env_df['Twat_mod_upper'] == -999.0, np.nan, env_df['Twat_mod_upper'])
+                    lower_col = 'Twat_mod_lower'
+                    upper_col = 'Twat_mod_upper'
+                else:
+                    env_df['Twat_mod_p5'] = np.where(env_df['Twat_mod_p5'] == -999.0, np.nan, env_df['Twat_mod_p5'])
+                    env_df['Twat_mod_p95'] = np.where(env_df['Twat_mod_p95'] == -999.0, np.nan, env_df['Twat_mod_p95'])
+                    lower_col = 'Twat_mod_p5'
+                    upper_col = 'Twat_mod_p95'
 
-                l_env = [ax.fill_between(dates, env_df['Twat_mod_p5'], env_df['Twat_mod_p95'], color='green', alpha=0.3, label='90% Prediction Interval')]
+                pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+                l_env = [ax.fill_between(dates, env_df[lower_col], env_df[upper_col], color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')]
 
         l3 = ax.plot(dates, Twat_mod, '-', color=orange, label='Simulated median water temp.', linewidth=1.5)
 
@@ -518,7 +539,8 @@ def post_process(data: CommonData, toll: float = None):
         lines = l1 + l3 + l4
         if l_env:
             import matplotlib.patches as mpatches
-            proxy = mpatches.Patch(color='green', alpha=0.3, label='90% Prediction Interval')
+            pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+            proxy = mpatches.Patch(color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')
             lines.append(proxy)
 
         labels = [l.get_label() for l in lines]
