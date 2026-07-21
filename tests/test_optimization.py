@@ -204,6 +204,70 @@ class TestOptimization(unittest.TestCase):
         self.assertTrue(len(df) > 0)
         self.assertTrue("eff_index" in df.columns)
 
+    def test_DE_CV_MCMC_mode(self):
+        from pyair2stream.optimization import DE_CV_MCMC_mode
+        from pyair2stream.cross_validation import CVConfig
+
+        # We need at least 3 calendar years for CV
+        # 3 years = 1095 days. We use 1096 days for simplicity (3 years + 1 day).
+        self.data.n_tot = 1096
+        self.data.date = np.zeros((self.data.n_tot, 3), dtype=np.int32)
+        self.data.tt = np.zeros(self.data.n_tot, dtype=np.float64)
+        self.data.Tair = np.zeros(self.data.n_tot, dtype=np.float64)
+        self.data.Q = np.zeros(self.data.n_tot, dtype=np.float64)
+        self.data.Twat_obs = np.full(self.data.n_tot, -999.0, dtype=np.float64)
+        self.data.Twat_mod = np.zeros(self.data.n_tot, dtype=np.float64)
+        self.data.Twat_obs_agg = np.full(self.data.n_tot, -999.0, dtype=np.float64)
+        self.data.Twat_mod_agg = np.full(self.data.n_tot, -999.0, dtype=np.float64)
+
+        import pandas as pd
+        dates = pd.date_range(start='2020-01-01', periods=self.data.n_tot, freq='D')
+        self.data.date[:, 0] = dates.year
+        self.data.date[:, 1] = dates.month
+        self.data.date[:, 2] = dates.day
+
+        for i in range(self.data.n_tot):
+            self.data.tt[i] = np.float64(i / 365.0)
+            self.data.Tair[i] = 15.0 + 10.0 * np.sin(2.0 * PI * self.data.tt[i])
+            self.data.Q[i] = 10.0 + 5.0 * np.cos(2.0 * PI * self.data.tt[i])
+            if i >= 365:
+                self.data.Twat_obs[i] = 12.0 + 8.0 * np.sin(2.0 * PI * self.data.tt[i])
+
+        self.data.n_dat = self.data.n_tot - 365
+        self.data.I_inf = np.zeros((self.data.n_dat, 3), dtype=np.int32)
+        self.data.I_pos = np.zeros(self.data.n_dat, dtype=np.int32)
+        n_inf = 0
+        n_pos = 0
+        for i in range(365, self.data.n_tot):
+            self.data.I_inf[n_inf, 0] = n_pos
+            self.data.I_inf[n_inf, 1] = n_pos
+            self.data.I_inf[n_inf, 2] = i
+            self.data.I_pos[n_pos] = i
+            self.data.Twat_obs_agg[i] = self.data.Twat_obs[i]
+            n_inf += 1
+            n_pos += 1
+
+        self.data.runmode = 'DE-CV-MCMC'
+        self.data.n_particles = 2
+        self.data.n_run = 1
+        self.data.mcmc_walkers = 16
+        self.data.mcmc_steps = 10
+
+        self.data.cross_validation = CVConfig(
+            min_train_years=0,
+            skip_first_year=True,
+            optimizer_overrides={"n_run": 1, "n_particles": 2}
+        )
+
+        DE_CV_MCMC_mode(self.data, seed=42)
+
+        chain_path = os.path.join(self.data.folder, f"MCMC_chain_test_station_test_series_1d.csv")
+        self.assertTrue(os.path.exists(chain_path))
+
+        import json
+        sidecar_path = os.path.join(self.data.folder, f"MCMC_chain_test_station_test_series_1d_meta.json")
+        self.assertTrue(os.path.exists(sidecar_path))
+
     def test_forward_routine(self):
         self.data.n_particles = 2
         self.data.n_run = 1
