@@ -1,6 +1,6 @@
 # pyair2stream
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: CC BY-SA 3.0](https://img.shields.io/badge/License-CC_BY--SA_3.0-lightgrey.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
 
 A modern Python port of **air2stream**, a hybrid physics-based/empirical model for simulating daily river water temperature from air temperature and (optionally) discharge.
@@ -305,4 +305,4 @@ study (`git rev-parse HEAD`) so your results are reproducible, e.g.:
 
 ## License
 
-[MIT](LICENSE)
+[CC BY-SA 3.0](LICENSE)
