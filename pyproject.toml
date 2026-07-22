@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pyair2stream"
-version = "1.0.0"
+version = "0.1.0"
 description = "Python port of the air2stream hybrid model for river water temperature."
 authors = ["pyair2stream authors <LukeAFullard@users.noreply.github.com>"]
 readme = "README.md"
