@@ -340,7 +340,7 @@ Before relying on it:
 ## 11. Sensitivity analysis and uncertainty (DE-MCMC)
 
 - Set `sensitivity_analysis: true` to get a one-at-a-time local sensitivity analysis around your best-fit parameters: each parameter is perturbed by ±`sensitivity_perturbations`% of its own value (bounded by `parameter_bounds`), and the mean absolute change in simulated water temperature is reported per parameter. This tells you which parameters the fit is most sensitive to, which is useful for deciding which bounds are worth tightening.
-- Set `run_mode: DE-MCMC` to get full parameter and predictive uncertainty: it runs `DE` to find the best fit, then samples the posterior around it with `emcee`, producing an MCMC chain (`MCMC_chain_*.csv`) and predictive envelopes (`MCMC_envelopes_*.csv`). This is more expensive than `DE` alone. Expect it to take noticeably longer, scaling with `mcmc_walkers × mcmc_steps`. The `DE-CV-MCMC` run mode is also available; see `docs/MCMC_uncertainty.md` for full details.
+- Set `run_mode: DE-MCMC` to get full parameter and predictive uncertainty: it runs `DE` to find the best fit, then samples the posterior around it with `emcee`, producing an MCMC chain (`MCMC_chain_*.csv`) and predictive envelopes (`MCMC_envelopes_*.csv`). This is more expensive than `DE` alone. Expect it to take noticeably longer, scaling with `mcmc_walkers × mcmc_steps`. The `DE-CV-MCMC` run mode is also available.
 
 ## 12. Forward prediction intervals
 
@@ -424,7 +424,6 @@ When enabled, the normal `forward()` validation and single post-processing steps
 ## 14. Where to go next
 
 - Browse `examples/` for runnable configs covering gap-tolerant mode, sensitivity analysis, forward prediction intervals, cross-validation, optimizer comparisons, and real river case studies. See the [Examples table in the README](README.md#examples) for what each one demonstrates.
-- For full algorithmic detail behind gap-tolerant mode, DE-MCMC/DE-CV-MCMC uncertainty, cross-validation, and sensitivity analysis, see the deep-dive docs in `docs/`.
 - If your data has missing days of `T_air` or `Discharge`, read [§10 Gap-tolerant mode](#10-gap-tolerant-mode).
 - If you want uncertainty bounds around your calibration or a forward projection, read [§11](#11-sensitivity-analysis-and-uncertainty-de-mcmc) and [§12](#12-forward-prediction-intervals).
 - If you want to test how well your calibrated parameters generalize across years, read [§13 Cross-validation](#13-cross-validation).
