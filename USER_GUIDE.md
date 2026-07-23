@@ -59,7 +59,13 @@ pyair2stream --config examples/quickstart/config.yaml
 You should see something like:
 
 ```
-pyair2stream Version 1.0.0 (Python Port)
+       .__       ________            __
+_____  |__|______\_____  \   _______/  |________   ____ _____    _____
+\__  \ |  \_  __ \/  ____/  /  ___/\   __\_  __ \_/ __ \__  \  /     \
+ / __ \|  ||  | \/       \  \___ \  |  |  |  | \/\  ___/ / __ \|  Y Y  \
+(____  /__||__|  \_______ \/____  > |__|  |__|    \___  >____  /__|_|  /
+     \/                  \/     \/                    \/     \/      \/
+pyair2stream Version 0.1.0 (Python Port)
 
 mean, TSS and standard deviation (calibration)
 10.00641 28570.62781 5.10802
@@ -72,7 +78,7 @@ Efficiency Index in calibration 0.8371758152864042
 Consistency check passed.
 mean, TSS and standard deviation (validation)
 10.03896 9041.37700 4.98387
-Computation time was 4.76 seconds.
+Computation time was 4.7600 seconds.
 Starting post-processing visualizations...
 Post-processing completed.
 ```
@@ -131,6 +137,8 @@ Date,T_air,T_water,Discharge
 
 You need at least a full year of data, and ideally several years, since the model always discards its first simulated year as a warm-up (see [§8](#8-understanding-the-output-files)), so a one-year file leaves nothing left to evaluate.
 
+**Pre-flight checks**: Before running a full calibration, you can run `pyair2stream.analyze_timeseries()` on your dataset to check missing-data percentages, valid segments, and data-to-parameter ratios. If your raw data isn't already daily/merged, see `pyair2stream.preprocessing.merge_timeseries` and `pyair2stream.preprocessing.read_and_resample`.
+
 ## 6. Configuration reference
 
 Create a `config.yaml` (any filename is fine; pass it with `--config`). Every field below is optional unless marked **required**, and defaults are as shown.
@@ -153,7 +161,7 @@ prc: 1.0                   # for time_resolution other than 1d: minimum fraction
 
 # --- Calibration ---
 objective_function: "NSE"  # NSE, KGE, or RMS (all reported as "higher is better" internally)
-run_mode: "DE"              # DE (recommended default), PSO, LATHYP, FORWARD, DE-MCMC (see below)
+run_mode: "PSO"              # PSO (default fallback). DE is recommended. Also: LATHYP, FORWARD, DE-MCMC, DE-CV-MCMC (see below)
 mineff_index: 0.0           # only parameter sets scoring >= this are kept in the "0_*.csv" history.
                              # Must be a TOP-LEVEL key (see callout below the table) (not nested)
                              # under `optimization:`, despite what the bundled example configs show.
@@ -170,7 +178,7 @@ parameter_bounds:           # required for DE/PSO/LATHYP/DE-MCMC; 8 values each 
 parameters_forward: [1.2, 0.3, 0.2, 0.5, 0.1, 1.5, 0.4, 0.1]  # only used when run_mode: FORWARD
 
 optimization:
-  n_run: 100          # DE: max generations. PSO/LATHYP: max iterations.
+  n_run: 100          # DE: max generations. PSO/LATHYP: max iterations. (also accepts n_runs)
   n_particles: 50      # DE: population size. PSO: swarm size.
   # PSO-only:
   c1: 2.0               # cognitive (personal-best) weight
@@ -190,7 +198,7 @@ min_segment_days: 30
 
 # --- Optional analyses ---
 sensitivity_analysis: false
-sensitivity_perturbations: [1.0, 2.0, 5.0]   # % perturbations for one-at-a-time sensitivity
+sensitivity_perturbations: [1.0, 2.0, 5.0]   # % perturbations for one-at-a-time sensitivity (default is [1.0])
 ```
 
 **Note on `series`**: in the original Fortran model this switched between a continuous daily series (`c`) and a repeated "mean year" climatology (`m`). This Python port only implements the continuous-series behaviour; `series` here is used solely as a text label in output filenames, whatever value you set.
@@ -230,6 +238,7 @@ Treat these as a wide starting range, not universal defaults. Narrow them once y
 | `PSO` | Particle Swarm Optimization | Legacy-compatible alternative to DE; tune `c1`/`c2`/`wmax`/`wmin` if used |
 | `LATHYP` | Latin Hypercube sampling (no optimization, just space-filling exploration) | Exploring the response surface / a cheap uncertainty screen |
 | `DE-MCMC` | Runs `DE` to find the best fit, then samples the posterior with MCMC (`emcee`) | You want calibration *and* parameter/prediction uncertainty envelopes |
+| `DE-CV-MCMC` | Runs cross-validation to inform initial walker spread, then samples with MCMC | You want robust uncertainty envelopes for parameters and predictions |
 | `FORWARD` | Runs the model once with a fixed parameter set (`parameters_forward`), no calibration | You already know the parameters (e.g. from a previous calibration) and just want to simulate |
 
 ## 7. Running the model
@@ -305,6 +314,15 @@ Every run internally prepends a duplicate of the first simulated year as a numer
 | `No valid segments found after gap detection and filtering.` | Gap-tolerant mode couldn't find any block of valid forcing data long enough (`min_segment_days`) | Loosen `min_segment_days`, or check your gap pattern |
 | `Qmedia is zero or negative. Please supply Qmedia...` | Discharge is effectively all missing/invalid in gap-tolerant mode | Supply `Qmedia:` explicitly in the config |
 | `n_dat is 0 after aggregation. No T_water observations survived.` | No usable `T_water` observations after filtering (e.g. `prc` too strict, or all observations fall in gaps) | Lower `prc`, check for excessive missing `T_water`, or check for a `gap_tolerant` misconfiguration |
+| `Zero T_water observations found during calibration` | No usable `T_water` observations during calibration phase | Verify your `T_water` column has data for the calibration period |
+| `Total valid forcing days across all segments is zero` | The forcing data is fully missing or segments are too short | Check `T_air` and `Discharge` columns, adjust `min_segment_days` |
+| `Invalid noise_model` | A noise model other than 'iid' or 'ar1' was specified | Use 'iid' or 'ar1' for `noise_model` in `uncertainty_options` |
+| `ar1_rho must be strictly between -1.0 and 1.0` | `ar1_rho` parameter is out of bounds | Provide a valid `ar1_rho` between -1.0 and 1.0 |
+| `prediction_interval must be strictly between 0 and 100` | The specified `prediction_interval` is not a valid percentage | Use a value between 0 and 100 for `prediction_interval` |
+| `Autocorrelation time not reliably estimated` | `mcmc_steps` is too low for the MCMC chain to converge | Increase `mcmc_steps` |
+| `Missing 'Date' column` | The input CSV doesn't have a 'Date' column | Make sure to include a valid 'Date' column |
+| `Missing 'T_air' column` | The input CSV doesn't have a 'T_air' column | Make sure to include a valid 'T_air' column |
+| `mcmc_walkers < 2 * ndim` (`ValueError`) | `mcmc_walkers` is set too low for the number of active parameters | Set `mcmc_walkers` to at least twice the number of active parameters |
 | Results look implausible (e.g. temperatures diverging or oscillating wildly) | Parameter bounds too wide for `EUL`/`RK2`, or version/integrator mismatch | Switch to `RK4` or `CRN`; tighten `parameter_bounds` |
 
 ## 10. Gap-tolerant mode
@@ -322,7 +340,7 @@ Before relying on it:
 ## 11. Sensitivity analysis and uncertainty (DE-MCMC)
 
 - Set `sensitivity_analysis: true` to get a one-at-a-time local sensitivity analysis around your best-fit parameters: each parameter is perturbed by ±`sensitivity_perturbations`% of its own value (bounded by `parameter_bounds`), and the mean absolute change in simulated water temperature is reported per parameter. This tells you which parameters the fit is most sensitive to, which is useful for deciding which bounds are worth tightening.
-- Set `run_mode: DE-MCMC` to get full parameter and predictive uncertainty: it runs `DE` to find the best fit, then samples the posterior around it with `emcee`, producing an MCMC chain (`MCMC_chain_*.csv`) and 5th/50th/95th percentile prediction envelopes (`MCMC_envelopes_*.csv`). This is more expensive than `DE` alone. Expect it to take noticeably longer, scaling with `mcmc_walkers × mcmc_steps`.
+- Set `run_mode: DE-MCMC` to get full parameter and predictive uncertainty: it runs `DE` to find the best fit, then samples the posterior around it with `emcee`, producing an MCMC chain (`MCMC_chain_*.csv`) and predictive envelopes (`MCMC_envelopes_*.csv`). This is more expensive than `DE` alone. Expect it to take noticeably longer, scaling with `mcmc_walkers × mcmc_steps`. The `DE-CV-MCMC` run mode is also available; see `docs/MCMC_uncertainty.md` for full details.
 
 ## 12. Forward prediction intervals
 
@@ -343,10 +361,11 @@ forward_options:
 
 ### Noise Models
 
-By default, the noise applied to generate the prediction envelopes assumes independent and identically distributed (i.i.d.) residuals. However, river water temperature residuals typically exhibit significant serial correlation. To generate more realistic uncertainty bounds, you can opt into an Autoregressive AR(1) noise model via the `uncertainty_options` block:
+By default, the noise applied to generate the prediction envelopes assumes independent and identically distributed (i.i.d.) residuals. However, river water temperature residuals typically exhibit significant serial correlation. To generate more realistic uncertainty bounds, you can opt into an Autoregressive AR(1) noise model via the `uncertainty_options` block. The width of the prediction envelope is configurable via `prediction_interval` (default 90.0 for 5th/95th percentiles):
 
 ```yaml
 uncertainty_options:
+  prediction_interval: 90.0 # Envelope width (e.g. 90.0 -> 5th/95th percentiles)
   noise_model: "ar1"  # "iid" (default) or "ar1"
   ar1_rho: null       # optional override, between -1 and 1
 ```
@@ -380,6 +399,7 @@ cross_validation:
   unit: year                  # Either 'year' or 'n_years'
   n_years_per_fold: 1         # The number of years to hold out per fold
   water_year_start_month: 1   # Start of the seasonal block (1 = calendar year)
+  min_valid_obs: 10           # Minimum T_water observations required per fold
   min_train_years: 1          # Skip the first N eligible years for spin up
   skip_first_year: true       # First calendar/water year is skipped (warm-up only)
   optimizer_overrides:
@@ -397,11 +417,14 @@ Since cross-validation runs a full calibration process for every fold, N folds t
 
 ### Output
 
-When enabled, the normal `forward()` validation and single post-processing steps are skipped. Instead, a `cv_results.csv` file will be generated in your output directory containing one row per fold with metrics (NSE, KGE, RMSE) and the calibrated parameters `p1`..`pN`.
+When enabled, the normal `forward()` validation and single post-processing steps are skipped. Instead, a `cv_results.csv` file will be generated in your output directory containing one row per fold with metrics (NSE, KGE, RMSE) and the calibrated parameters `p1`..`pN`. The file also appends three extra summary rows: `mean`, `std`, and `pooled` (pooled metrics across all folds).
+
+> **Important:** Cross-validation is only triggered for `PSO`, `DE`, and `LATHYP` run modes. If `cross_validation.enabled: true` is used with `DE-MCMC`, `DE-CV-MCMC`, or `FORWARD`, cross-validation is silently ignored.
 
 ## 14. Where to go next
 
 - Browse `examples/` for runnable configs covering gap-tolerant mode, sensitivity analysis, forward prediction intervals, cross-validation, optimizer comparisons, and real river case studies. See the [Examples table in the README](README.md#examples) for what each one demonstrates.
+- For full algorithmic detail behind gap-tolerant mode, DE-MCMC/DE-CV-MCMC uncertainty, cross-validation, and sensitivity analysis, see the deep-dive docs in `docs/`.
 - If your data has missing days of `T_air` or `Discharge`, read [§10 Gap-tolerant mode](#10-gap-tolerant-mode).
 - If you want uncertainty bounds around your calibration or a forward projection, read [§11](#11-sensitivity-analysis-and-uncertainty-de-mcmc) and [§12](#12-forward-prediction-intervals).
 - If you want to test how well your calibrated parameters generalize across years, read [§13 Cross-validation](#13-cross-validation).
