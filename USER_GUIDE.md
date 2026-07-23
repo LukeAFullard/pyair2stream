@@ -161,7 +161,7 @@ prc: 1.0                   # for time_resolution other than 1d: minimum fraction
 
 # --- Calibration ---
 objective_function: "NSE"  # NSE, KGE, or RMS (all reported as "higher is better" internally)
-run_mode: "PSO"              # PSO (default fallback). DE is recommended. Also: LATHYP, FORWARD, DE-MCMC, DE-CV-MCMC (see below)
+run_mode: "DE"              # DE (default). Also: PSO, LATHYP, FORWARD, DE-MCMC, DE-CV-MCMC (see below)
 mineff_index: 0.0           # only parameter sets scoring >= this are kept in the "0_*.csv" history.
                              # Must be a TOP-LEVEL key (see callout below the table) (not nested)
                              # under `optimization:`, despite what the bundled example configs show.
