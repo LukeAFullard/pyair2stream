@@ -36,7 +36,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data.Tice_cover = np.float64(config.get('Tice_cover', 0.0))
     data.fun_obj = config.get('objective_function', 'NSE')
     data.mod_num = config.get('integrator', 'RK4')
-    data.runmode = config.get('run_mode', 'PSO')
+    data.runmode = config.get('run_mode', 'DE')
     data.prc = np.float64(config.get('prc', 1.0))
 
     # Gap-tolerant mode configuration
