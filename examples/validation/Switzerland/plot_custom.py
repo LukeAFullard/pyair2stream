@@ -12,6 +12,11 @@ fortran_params = [3.164, 0.417, 0.829, 0.340, 1.343, 5.192, 0.574, 0.883]
 
 # Create forward config to run with python params
 def create_forward_config(params):
+    # FORWARD mode requires an explicit Qmedia (see docs/audit/01_qmedia_scenario_invariance.md):
+    # recomputing it from whatever discharge is loaded would silently rescale theta. This replays
+    # the same calibration discharge, so pin Qmedia to that series' own mean.
+    qmedia = float(pd.read_csv('examples/validation/Switzerland/DAV_2327_cc.csv')['Discharge'].pipe(
+        lambda q: q[(q != -999.0) & (q > 0.0)].mean()))
     with open('examples/validation/Switzerland/config_forward.yaml', 'w') as f:
         f.write(f"""project_name: "validation"
 station_name: "DAV"
@@ -22,6 +27,7 @@ Tice_cover: 0.0
 objective_function: "NSE"
 integrator: "RK4"
 run_mode: "FORWARD"
+Qmedia: {qmedia}
 parameters_forward: {params}
 
 paths:

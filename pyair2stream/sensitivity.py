@@ -11,7 +11,7 @@ import os
 import matplotlib.pyplot as plt
 
 from .config import CommonData
-from .model import call_model, detect_segments
+from .model import call_model, detect_segments, warn_on_stability, check_numerical_divergence
 from .io import read_Tseries
 
 def sensitivity_analysis(data: CommonData):
@@ -34,7 +34,9 @@ def sensitivity_analysis(data: CommonData):
     data.par[:] = data.par_best[:]
     if data.gap_tolerant and data.segments is None:
         detect_segments(data)
+    warn_on_stability(data, error_fraction=data.stability_error_fraction)
     call_model(data)
+    check_numerical_divergence(data, max_plausible_twat=data.max_plausible_twat)
 
     # Determine valid indices based on where we actually have reliable water temperature
     # observations AND where the model was validly evaluated.

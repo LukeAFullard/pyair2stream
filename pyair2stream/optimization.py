@@ -16,7 +16,7 @@ import emcee
 
 import json
 from .config import CommonData
-from .model import call_model, funcobj, detect_segments
+from .model import call_model, funcobj, detect_segments, warn_on_stability, check_numerical_divergence
 from .uncertainty import estimate_ar1_rho, generate_ar1_noise
 
 def sub_1(data: CommonData) -> np.float64:
@@ -52,6 +52,8 @@ def forward_mode(data: CommonData) -> None:
             has_obs = True
             break
 
+    warn_on_stability(data, error_fraction=data.stability_error_fraction)
+
     if has_obs:
         ei = sub_1(data)
     else:
@@ -60,6 +62,8 @@ def forward_mode(data: CommonData) -> None:
             detect_segments(data)
         call_model(data)
         ei = -999.0
+
+    check_numerical_divergence(data, max_plausible_twat=data.max_plausible_twat)
 
     data.par_best = data.par.copy()
     data.finalfit = ei

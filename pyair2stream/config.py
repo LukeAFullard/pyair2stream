@@ -35,6 +35,8 @@ class CommonData:
     # Gap-tolerant mode fields
     gap_tolerant: bool = False
     Qmedia_user: Optional[float] = None
+    calib_theta_min: Optional[float] = None
+    calib_theta_max: Optional[float] = None
     warmup_drop_days: int = 15
     min_segment_days: int = 30
     segments: Optional[list] = None
@@ -64,6 +66,9 @@ class CommonData:
     finalfit: np.float64 = np.float64(0.0)
     c1: np.float64 = np.float64(0.0)
     c2: np.float64 = np.float64(0.0)
+    # Numerical-stability guard settings (see docs/audit/02_numerical_integration.md)
+    max_plausible_twat: np.float64 = np.float64(60.0)
+    stability_error_fraction: np.float64 = np.float64(0.10)
     wmin: np.float64 = np.float64(0.0)
     wmax: np.float64 = np.float64(0.0)
 
