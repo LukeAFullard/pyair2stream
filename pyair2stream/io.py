@@ -124,10 +124,24 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     if not (0.0 < prediction_interval < 100.0):
         raise ValueError(f"prediction_interval must be strictly between 0 and 100, got {prediction_interval}")
 
+    save_ensemble = bool(uncertainty_options.get('save_ensemble', False))
+    strict_convergence = bool(uncertainty_options.get('strict_convergence', False))
+
+    # Burn-in override for DE-MCMC/DE-CV-MCMC. Left unset (None), burn-in defaults to
+    # max(0.3*mcmc_steps, 5*max(tau)) -- see docs/audit/04_uncertainty_and_mcmc.md, 4.6.
+    burnin_fraction = uncertainty_options.get('burnin_fraction', None)
+    if burnin_fraction is not None:
+        burnin_fraction = float(burnin_fraction)
+        if not (0.0 < burnin_fraction < 1.0):
+            raise ValueError(f"burnin_fraction must be strictly between 0 and 1, got {burnin_fraction}")
+
     data.uncertainty_options = {
         "noise_model": noise_model,
         "ar1_rho": ar1_rho,
-        "prediction_interval": prediction_interval
+        "prediction_interval": prediction_interval,
+        "save_ensemble": save_ensemble,
+        "strict_convergence": strict_convergence,
+        "burnin_fraction": burnin_fraction,
     }
 
     cv_config_dict = config.get('cross_validation', {})

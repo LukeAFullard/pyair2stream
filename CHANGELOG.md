@@ -44,8 +44,56 @@
   returned before overwriting `data.n_tot` for a too-short validation period, so
   it silently retained the calibration value and passed the length guard in
   `main.forward()`.
+- **The DE-MCMC/DE-CV-MCMC likelihood can now account for residual autocorrelation**
+  (audit report 04, Defect A). Setting `uncertainty_options.noise_model: "ar1"` now
+  also selects an AR(1)-whitened concentrated log-likelihood for the sampler itself
+  (previously the AR(1) noise model was applied only to the downstream predictive
+  envelope, never to the likelihood the posterior was actually sampled from). Daily
+  residuals with `rho` in the 0.8-0.95 range typically understate posterior/interval
+  width by a factor of `sqrt((1+rho)/(1-rho))` (~4x at `rho=0.9`) under the unchanged
+  `iid` default. `rho` is estimated once at the DE optimum and held fixed for the
+  likelihood.
+- **`forward_mode()` now falls back to the MCMC sidecar for `residual_sigma`, and
+  raises instead of warning if none is available** (audit report 04, Defect C).
+  Previously an omitted `residual_sigma` silently defaulted to `0.0` behind a
+  `print`, producing a "prediction interval" with parameter uncertainty only and no
+  residual term. It now mirrors the existing `rho` sidecar carry-forward, and raises
+  `ValueError` if `enable_prediction_intervals` is set with no usable sigma from
+  either source.
+- **MCMC walker initialisation now reflects off parameter bounds instead of
+  clipping to them, and is scaled to each parameter's bound width** (audit report
+  04, Defect D). Clipping collapsed the ensemble's spread to a single point in any
+  dimension where the DE optimum sat exactly on a bound (observed for `a5`/`a6` on
+  some validation datasets), which `emcee`'s stretch move cannot recover from.
+  Initialisation now asserts non-degenerate spread and raises rather than proceeding
+  silently.
+- **MCMC burn-in is now adaptive by default, and convergence diagnostics are
+  computed on the post-burn-in chain** (audit report 04, 4.6). Burn-in defaults to
+  `max(0.3*mcmc_steps, 5*max(tau))` (previously a flat 30%), overridable via
+  `uncertainty_options.burnin_fraction`. Autocorrelation time is now recomputed
+  after discarding burn-in rather than on the full chain. A new split-Rhat
+  (Gelman-Rubin) diagnostic is reported per parameter and recorded in the sidecar.
+  `uncertainty_options.strict_convergence: true` promotes the existing
+  chain-too-short warning to a hard `RuntimeError`.
+- **`docs/MCMC_uncertainty.md`'s `DE-MCMC` vs. `DE-CV-MCMC` comparison reframed**
+  (audit report 04, 4.5) as a non-convergence diagnostic rather than evidence that
+  `DE-CV-MCMC` finds a wider/better posterior -- two converged chains sampling the
+  same posterior must agree on spread as well as point estimate.
 
 ### Added
+- `pyair2stream/scenario.py`: `load_ensemble`, `aggregate`, `exceedance`, and
+  `paired_difference` helpers for working with a saved raw MCMC/forward ensemble
+  (audit report 04, Defect B / 4.2). Percentile envelope bands alone cannot produce
+  aggregate statistics (the p5 of a 7-day rolling mean is not the rolling mean of
+  the p5 series), so `uncertainty_options.save_ensemble: true` now additionally
+  writes the full `(n_samples, n_days)` noisy-trajectory matrix, post-warm-up, as
+  compressed `.npz` (`MCMC_ensemble_*.npz` / `Forward_Prediction_Ensemble_*.npz`).
+  `paired_difference` is the row-aligned scenario-comparison function both the
+  water-abstraction and climate-projection studies need and which was previously
+  unobtainable from the percentile-only output.
+- New `uncertainty_options` keys: `save_ensemble` (bool, default `false`),
+  `strict_convergence` (bool, default `false`), `burnin_fraction` (optional float
+  in `(0, 1)`, default adaptive).
 - `NumericalDivergenceError`, raised by `main.forward()`, `optimization.forward_mode()`,
   and `sensitivity_analysis()` when a simulated water temperature is non-finite or
   exceeds `max_plausible_twat` (default 60 °C) -- not inside the calibration hot loop.
