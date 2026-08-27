@@ -18,18 +18,23 @@ The method implemented is a local OAT sensitivity analysis: sensitivities are co
 
 ### 3.2 Perturbation Construction
 
-For each active parameter `a_j` (indexed 0–7 internally, `par_1`–`par_8` in output), the perturbation magnitude is scaled by the parameter's own calibrated value, not by the width of its configured bounds:
+For each active parameter `a_j` (indexed 0–7 internally, `par_1`–`par_8` in output), the perturbation magnitude is scaled by `base_scale`, which depends on `sensitivity_perturbation_mode` (Section 5):
 
 ```
+# sensitivity_perturbation_mode: "value" (default)
 base_scale = max(|par_best[j]|, 1e-4)
+
+# sensitivity_perturbation_mode: "range"
+base_scale = parmax[j] - parmin[j]
+
 delta = (perturbation_pct / 100) * base_scale
 p_plus  = clip(par_best[j] + delta, parmin[j], parmax[j])
 p_minus = clip(par_best[j] - delta, parmin[j], parmax[j])
 ```
 
-A floor of `1e-4` is applied to `base_scale` to avoid a degenerate, exactly-zero perturbation for a parameter whose calibrated value happens to be exactly (or very near) zero. If either `p_plus` or `p_minus` would fall outside the parameter's configured bounds, it is clipped to that bound instead — this occurs, for example, whenever the calibrated value sits close to `parmin[j]` or `parmax[j]` and a full-size perturbation in that direction would exceed the feasible range. The resulting `actual_delta = p_plus - p_minus` is the true, bound-respecting span between the two evaluated points, which may therefore be asymmetric or narrower than `2 x delta` for a parameter calibrated near one of its bounds.
+In the default `"value"` mode, a floor of `1e-4` is applied to `base_scale` to avoid a degenerate, exactly-zero perturbation for a parameter whose calibrated value happens to be exactly (or very near) zero — no floor is needed in `"range"` mode, since only genuinely active, non-degenerate parameters (`parmax[j] != parmin[j]`) reach this point at all. If either `p_plus` or `p_minus` would fall outside the parameter's configured bounds, it is clipped to that bound instead — this occurs, for example, whenever the calibrated value sits close to `parmin[j]` or `parmax[j]` and a full-size perturbation in that direction would exceed the feasible range. The resulting `actual_delta = p_plus - p_minus` is the true, bound-respecting span between the two evaluated points, which may therefore be asymmetric or narrower than `2 x delta` for a parameter calibrated near one of its bounds; when only one side was clipped, the row's `Status` is reported as `"Bounded"` rather than `"Active"` (Section 3.6).
 
-Multiple perturbation magnitudes may be requested in a single run via `sensitivity_perturbations` (e.g., `[1.0, 2.0, 5.0]`, meaning 1%, 2%, and 5% of each parameter's own calibrated value); comparing the resulting sensitivity indices across magnitudes is a simple, practical check of local linearity around the optimum (Section 6).
+Multiple perturbation magnitudes may be requested in a single run via `sensitivity_perturbations` (e.g., `[1.0, 2.0, 5.0]`, meaning 1%, 2%, and 5% of `base_scale`); comparing the resulting sensitivity indices across magnitudes is a simple, practical check of local linearity around the optimum (Section 6).
 
 ### 3.3 Simulating the Perturbed Response
 
@@ -51,11 +56,11 @@ Over the remaining (stable, in-window, observed) days, the sensitivity index is 
 sensitivity_index = mean(|Twat_mod(p_plus) - Twat_mod(p_minus)|) / (actual_delta / base_scale)
 ```
 
-The denominator, `actual_delta / base_scale`, equals `2 x (perturbation_pct / 100)` whenever neither `p_plus` nor `p_minus` was clipped by a bound, so in the unclipped case the index is simply the mean absolute response divided by the nominal (symmetric) perturbation fraction requested. When one side has been clipped (calibrated value near a bound), this rescaling compensates for the resulting narrower `actual_delta`, so that sensitivity indices remain comparable across parameters regardless of how close each one's calibrated value sits to its bound — though see Section 7 for a caution on interpreting sensitivities computed this way very close to a bound. The reported unit is degrees Celsius of simulated water temperature change corresponding to the nominal requested perturbation fraction of the parameter's own calibrated value.
+The denominator, `actual_delta / base_scale`, equals `2 x (perturbation_pct / 100)` whenever neither `p_plus` nor `p_minus` was clipped by a bound, so in the unclipped case the index is simply the mean absolute response divided by the nominal (symmetric) perturbation fraction requested. When one side has been clipped (calibrated value near a bound), this rescaling compensates for the resulting narrower `actual_delta`, so that sensitivity indices remain comparable across parameters regardless of how close each one's calibrated value sits to its bound — though see Section 7 for a caution on interpreting sensitivities computed this way very close to a bound. The reported unit is degrees Celsius of simulated water temperature change corresponding to the nominal requested perturbation fraction of `base_scale` (Section 3.2) -- the sensitivity plot's y-axis label states which normalization was in effect for the run that produced it.
 
-### 3.6 Inactive and Fixed Parameters
+### 3.6 Inactive, Fixed, and Bounded Parameters
 
-Parameters that are not used by the selected model version (`flag_par[j] is False`) are reported with `Sensitivity_Index = NaN` and `Status = "Inactive"`, without running any additional model evaluations for them. Parameters that are active but have a degenerate range (`parmax[j] - parmin[j] <= 0`), or whose perturbation could not produce any actual separation between `p_plus` and `p_minus` after bound-clipping, are reported with `Sensitivity_Index = 0.0` and `Status = "Fixed"`. All other parameters are reported with `Status = "Active"` and a numeric (or `NaN`, if fully filtered by the stability check) sensitivity index.
+Parameters that are not used by the selected model version (`flag_par[j] is False`) are reported with `Sensitivity_Index = NaN` and `Status = "Inactive"`, without running any additional model evaluations for them. Parameters that are active but have a degenerate range (`parmax[j] - parmin[j] <= 0`), or whose perturbation could not produce any actual separation between `p_plus` and `p_minus` after bound-clipping, are reported with `Sensitivity_Index = 0.0` and `Status = "Fixed"`. Parameters where the perturbation was clipped on exactly one side (an asymmetric, first-order rather than second-order finite difference) are reported with `Status = "Bounded"` and a numeric sensitivity index, still included in the plot but distinguishable in the CSV from a fully-symmetric `"Active"` estimate. All remaining parameters are reported with `Status = "Active"` and a numeric (or `NaN`, if fully filtered by the stability check) sensitivity index.
 
 ## 4. Implementation Summary
 
@@ -72,17 +77,23 @@ The routine is `sensitivity_analysis(data)` in `pyair2stream/sensitivity.py`, in
 
 ```yaml
 sensitivity_analysis: true
-sensitivity_perturbations: [1.0, 2.0, 5.0]   # percent of each parameter's own calibrated value
+sensitivity_perturbations: [1.0, 2.0, 5.0]      # percent of base_scale (see below)
+sensitivity_perturbation_mode: "value"           # "value" (default) or "range"
 ```
 
-`sensitivity_analysis` defaults to `false`, and `sensitivity_perturbations` defaults to `[1.0]` (a single 1% perturbation) if the key is omitted while `sensitivity_analysis` is enabled. Both fields sit at the top level of the YAML configuration, alongside `gap_tolerant` and the other top-level run-mode settings.
+`sensitivity_analysis` defaults to `false`, and `sensitivity_perturbations` defaults to `[1.0]` (a single 1% perturbation) if the key is omitted while `sensitivity_analysis` is enabled. All three fields sit at the top level of the YAML configuration, alongside `gap_tolerant` and the other top-level run-mode settings.
+
+`sensitivity_perturbation_mode` selects `base_scale` (Section 3.2):
+
+- **`"value"` (default, unchanged from earlier releases)**: `base_scale` is the parameter's own calibrated value (floored at `1e-4`). A parameter calibrated to a very small value receives a correspondingly tiny absolute perturbation even at a large percentage setting, and different parameters are perturbed by very different absolute amounts at the same requested percentage (Section 7).
+- **`"range"`**: `base_scale` is the parameter's configured bound width, `parmax[j] - parmin[j]`. This is comparable across parameters regardless of their calibrated magnitude and immune to the near-zero-value problem, at the cost of no longer being backward compatible with sensitivity indices computed under `"value"` mode -- **switching modes changes the reported numbers**, it is not merely a relabeling.
 
 Two output files are produced in the run's output folder:
 
 | Output | Contents |
 |---|---|
-| `sensitivity_<run_mode>_<objective>_<station>.csv` | One row per (parameter, perturbation percentage) combination: `Parameter` (`par_1`–`par_8`), `Perturbation_%`, `Sensitivity_Index`, `Status` (`Active`, `Fixed`, or `Inactive`) |
-| `sensitivity_<run_mode>_<objective>_<station>.png` / `.pdf` | A grouped bar chart of the sensitivity index for every active parameter, with one bar group per requested perturbation percentage |
+| `sensitivity_<run_mode>_<objective>_<station>.csv` | One row per (parameter, perturbation percentage) combination: `Parameter` (`par_1`–`par_8`), `Perturbation_%`, `Sensitivity_Index`, `Status` (`Active`, `Bounded`, `Fixed`, or `Inactive`) |
+| `sensitivity_<run_mode>_<objective>_<station>.png` / `.pdf` | A grouped bar chart of the sensitivity index for every `Active`/`Bounded` parameter, with one bar group per requested perturbation percentage; the y-axis label states which `sensitivity_perturbation_mode` normalization is in effect |
 
 ## 6. Empirical Application
 
@@ -113,8 +124,8 @@ Parameters `a1`, `a2`, `a5`, `a6`, and `a7` show sensitivity indices that change
 
 - **Local, not global.** All results characterize only the immediate neighbourhood of the single calibrated parameter vector; a different (potentially equally well-fitting, given known equifinality) parameter vector could exhibit a materially different sensitivity ranking. This method does not explore the full parameter space and should not be used to draw conclusions about global parameter identifiability — the cross-validation and MCMC-based uncertainty features are better suited to that question (see the accompanying documentation for those features).
 - **No parameter interactions.** Because only one parameter is varied at a time, this method cannot detect sensitivity that emerges from the interaction of two or more parameters; a parameter that appears locally insensitive when varied alone could still matter jointly with another. Global variance-based methods (e.g., Sobol indices) or elementary-effects screening (e.g., the Morris method) are the appropriate tools if interaction effects are of interest.
-- **Perturbations near a parameter's own value, not its bound range.** Because the perturbation is scaled by the parameter's own calibrated value rather than by the width of `parameter_bounds`, a parameter calibrated to a very small value (near the `1e-4` floor) receives a correspondingly tiny absolute perturbation even under a large percentage setting; conversely, two parameters with very different calibrated magnitudes are perturbed by very different absolute amounts even at the same requested percentage. This makes sensitivity indices most directly comparable within a single parameter's own perturbation-magnitude sweep (Section 6.2), and only loosely comparable across parameters of very different magnitude.
-- **Bound-clipping and near-bound calibrations.** A parameter calibrated very close to `parmin[j]` or `parmax[j]` has its perturbation clipped on that side, and the reported sensitivity index is rescaled to compensate for the resulting narrower `actual_delta` (Section 3.5). This rescaling keeps the index numerically comparable to an unclipped case, but the underlying finite-difference estimate is then based on an asymmetric, one-sided step; results for such parameters should be interpreted with some caution, and a calibrated value sitting hard against a bound is, independently, a signal (documented elsewhere in the package) that the bound itself may be too tight and worth revisiting.
+- **Perturbations near a parameter's own value, not its bound range, by default.** Under the default `"value"` mode, a parameter calibrated to a very small value (near the `1e-4` floor) receives a correspondingly tiny absolute perturbation even under a large percentage setting; conversely, two parameters with very different calibrated magnitudes are perturbed by very different absolute amounts even at the same requested percentage. This makes sensitivity indices most directly comparable within a single parameter's own perturbation-magnitude sweep (Section 6.2), and only loosely comparable across parameters of very different magnitude. Set `sensitivity_perturbation_mode: "range"` (Section 5) if cross-parameter comparability at a single perturbation magnitude matters more than backward compatibility with earlier releases' numbers.
+- **Bound-clipping and near-bound calibrations.** A parameter calibrated very close to `parmin[j]` or `parmax[j]` has its perturbation clipped on that side, and the reported sensitivity index is rescaled to compensate for the resulting narrower `actual_delta` (Section 3.5); such rows are flagged `Status = "Bounded"` rather than `"Active"` in the CSV (Section 3.6). This rescaling keeps the index numerically comparable to an unclipped case, but the underlying finite-difference estimate is then based on an asymmetric, one-sided step; results for such parameters should be interpreted with some caution, and a calibrated value sitting hard against a bound is, independently, a signal (documented elsewhere in the package) that the bound itself may be too tight and worth revisiting.
 - **Numerical-instability filtering can silently reduce the effective sample.** The >50°C stability filter (Section 3.4) is a deliberate safeguard against a known numerical artefact, but it means the number of days contributing to the mean-absolute-difference calculation can shrink — sometimes substantially — for aggressively perturbed, discharge-coupled parameters, and can in the extreme case leave zero valid days (reported as `NaN`). Section 6.2's cross-magnitude comparison is one practical way to notice when this is happening.
 
 ## 8. References

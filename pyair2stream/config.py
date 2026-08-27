@@ -42,6 +42,12 @@ class CommonData:
     segments: Optional[list] = None
     sensitivity_analysis: bool = False
     sensitivity_perturbations: Optional[list] = None
+    # 'value' (default, unchanged behaviour): perturb by delta_pct% of the parameter's
+    # own calibrated value. 'range': perturb by delta_pct% of (parmax - parmin) instead,
+    # which is comparable across parameters and immune to the near-zero-value problem
+    # but is not what earlier releases computed -- see docs/audit/06_diagnostics_and_plots.md,
+    # Defect E.
+    sensitivity_perturbation_mode: str = 'value'
     mcmc_walkers: int = 32
     mcmc_steps: int = 2000
 

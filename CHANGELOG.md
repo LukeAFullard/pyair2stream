@@ -79,6 +79,49 @@
   (audit report 04, 4.5) as a non-convergence diagnostic rather than evidence that
   `DE-CV-MCMC` finds a wider/better posterior -- two converged chains sampling the
   same posterior must agree on spread as well as point estimate.
+- **Dotty plots select parameter/efficiency columns by name, not position**
+  (audit report 06, Defect A). The optimizer history CSV has 12 columns
+  (`par_1..par_8, eff_index, NSE, R2, MAE`); the previous positional `[:-1]`/`[-1]`
+  split treated `NSE`/`R2` as parameter columns and `MAE` as the plotted
+  "efficiency", mislabeling the y-axis and marking the highest-error parameter set
+  as best. Visible in the previously-committed
+  `examples/Hopelands/output/dottyplots_DE-MCMC_NSE_Hopelands.png` (y-axis labelled
+  "NSE" with values 1-4.3, impossible for NSE). Committed example dotty plots have
+  not been regenerated in this change -- doing so requires re-running each
+  example's full (often multi-hour) calibration; treat any committed dotty plot as
+  stale until its example is next re-run.
+- **The dotty-plot `par_8` panel is no longer blanked on every run** (audit report
+  06, Defect B). A stray `for...else` (same indentation as the plotting loop, not
+  inside an `if`) ran unconditionally after normal loop completion and called
+  `axes[7].axis('off')`.
+- **PSO history now records each particle's own NSE/R2/MAE** (audit report 06,
+  Defect C). `eval_particle_worker` previously returned only the scalar objective
+  value from its `ProcessPoolExecutor` worker; `data.current_nse`/`current_r2`/
+  `current_mae` are set as a side effect inside the child process and never
+  crossed back to the parent, so every history row silently recorded the parent's
+  own untouched `-999.0` defaults for all three columns regardless of the
+  particle's actual fit. `DE_mode`/`LH_mode` run single-threaded and were
+  unaffected.
+- **Sensitivity index normalization is now configurable, and the console message
+  describing it now matches what is actually computed** (audit report 06, Defect
+  E). New `sensitivity_perturbation_mode` config key: `"value"` (default,
+  unchanged from earlier releases -- perturb by a percentage of the parameter's
+  own calibrated value) or `"range"` (perturb by a percentage of the parameter's
+  bound width instead, comparable across parameters and immune to the
+  near-zero-value problem, but not backward compatible with `"value"`-mode
+  numbers). The console message previously said "% of parameter range" while
+  always computing "% of parameter value" regardless of setting. A perturbation
+  clipped on only one side by a bound (an asymmetric, first-order rather than
+  second-order estimate) is now flagged `Status: "Bounded"` in the output CSV
+  instead of being silently reported as a plain `"Active"` row, and the plot's
+  y-axis label states which normalization was used.
+- **Residual ACF plot is now gap-aware** (audit report 06, Defect F).
+  `pd.plotting.autocorrelation_plot()` on a NaN-dropped residual series
+  concatenates non-adjacent days, so its lag-k is not lag-k in calendar time
+  (`estimate_ar1_rho` already handled this correctly for lag-1; the diagnostic
+  plot did not, and the two could disagree). `post_processing.gap_aware_acf()`
+  instead pairs day `t` with day `t+k` only where both are non-missing, for every
+  plotted lag, and the plot now reports the number of valid pairs used.
 
 ### Added
 - `pyair2stream/scenario.py`: `load_ensemble`, `aggregate`, `exceedance`, and
@@ -112,6 +155,10 @@
   1-January start requirement is also relaxed for `run_mode: FORWARD`.
 - New config keys: `max_plausible_twat`, `stability_error_fraction`,
   `paths.calibration_metadata`, `calendar`.
+- New config key `sensitivity_perturbation_mode` (`"value"`, default, or
+  `"range"`; audit report 06, Defect E).
+- `pyair2stream.post_processing.select_dotty_data()` and `.gap_aware_acf()`,
+  factored out for direct testability (audit report 06, Defects A and F).
 
 ### Removed
 - The `Twat_mod_p5`/`Twat_mod_p95` dual-name fallback in `post_processing.py`

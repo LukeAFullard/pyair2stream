@@ -137,7 +137,7 @@ class TestPostProcessing(unittest.TestCase):
         # Create an empty CSV file with only headers (simulating no model evaluations reached mineff_index threshold)
         empty_csv = os.path.join(self.data.folder, f"0_{self.data.runmode}_{self.data.fun_obj}_{self.data.station}_{self.data.series}_{self.data.time_res}.csv")
         with open(empty_csv, 'w') as f:
-            f.write("par_1,par_2,par_3,par_4,par_5,par_6,par_7,par_8,NSE\n")
+            f.write("par_1,par_2,par_3,par_4,par_5,par_6,par_7,par_8,eff_index,NSE,R2,MAE\n")
 
         # Create cal/val files just so it doesn't crash on missing files for plotting
         out_cal_path = os.path.join(self.data.folder, f"2_{self.data.runmode}_{self.data.fun_obj}_{self.data.station}_{self.data.series}c_{self.data.time_res}.csv")

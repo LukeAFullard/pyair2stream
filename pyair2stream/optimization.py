@@ -219,11 +219,19 @@ def eval_particle_worker(args):
     """
     Top-level helper for multiprocessing.
     Args should be a tuple of (CommonData, parameter_array, n_par).
+
+    Returns `(eff_index, nse, r2, mae)`. `sub_1` sets `data.current_nse`/
+    `current_r2`/`current_mae` as a side effect inside this (child) process; only
+    the explicit return value crosses the process boundary back to the parent, so
+    those metrics must be returned here rather than read from `data` afterward --
+    the parent's own `data.current_*` are untouched defaults otherwise (audit
+    report 06, Defect C).
     """
     data, p_vals, n_par = args
     # When passed to a new process via executor.map, 'data' is already a local deserialized copy.
     data.par[:n_par] = p_vals
-    return sub_1(data)
+    eff_index = sub_1(data)
+    return eff_index, data.current_nse, data.current_r2, data.current_mae
 
 def forward_mode(data: CommonData) -> None:
     """
@@ -434,11 +442,11 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
         results = list(executor.map(eval_particle_worker, [(data, x[:, k], n_par) for k in range(n_particles)]))
 
         for k in range(n_particles):
-            eff_index = results[k]
+            eff_index, nse_k, r2_k, mae_k = results[k]
             if not np.isnan(eff_index):
                 fitbest[k] = eff_index
             if not np.isnan(eff_index) and eff_index >= data.mineff_index:
-                row = list(x[:, k]) + [eff_index, data.current_nse, data.current_r2, data.current_mae]
+                row = list(x[:, k]) + [eff_index, nse_k, r2_k, mae_k]
                 history.append(row)
 
         # Fix: use fitbest to find initial global best instead of fit
@@ -480,10 +488,10 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
             idx = 0
             for k in eval_indices:
-                eff_index = eval_results[idx]
+                eff_index, nse_k, r2_k, mae_k = eval_results[idx]
                 fit[k] = eff_index
                 if not np.isnan(eff_index) and eff_index >= data.mineff_index:
-                    row = list(x[:, k]) + [eff_index, data.current_nse, data.current_r2, data.current_mae]
+                    row = list(x[:, k]) + [eff_index, nse_k, r2_k, mae_k]
                     history.append(row)
                 idx += 1
 
