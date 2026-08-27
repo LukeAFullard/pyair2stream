@@ -105,6 +105,13 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     sens_pert = config.get('sensitivity_perturbations', [1.0])
     data.sensitivity_perturbations = [float(x) for x in sens_pert] if isinstance(sens_pert, list) else [float(sens_pert)]
 
+    data.sensitivity_perturbation_mode = config.get('sensitivity_perturbation_mode', 'value')
+    if data.sensitivity_perturbation_mode not in ('value', 'range'):
+        raise ValueError(
+            f"Invalid sensitivity_perturbation_mode: '{data.sensitivity_perturbation_mode}'. "
+            "Must be 'value' or 'range'."
+        )
+
     data.forward_options = config.get('forward_options', {})
 
     # Parse uncertainty_options

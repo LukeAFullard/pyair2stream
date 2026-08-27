@@ -21,7 +21,13 @@ def sensitivity_analysis(data: CommonData):
     and measure the mean absolute change in the predicted water temperatures.
     """
     perturbations = data.sensitivity_perturbations if data.sensitivity_perturbations else [1.0]
-    print(f"Starting Local Sensitivity Analysis (perturbations = {perturbations}% of parameter range)...")
+    # 'value' (default) matches every prior release: delta scales with the parameter's
+    # own calibrated value. 'range' scales with (parmax - parmin) instead -- comparable
+    # across parameters and immune to the near-zero-value problem, but not backward
+    # compatible, so it is opt-in (docs/audit/06_diagnostics_and_plots.md, Defect E).
+    perturbation_mode = getattr(data, 'sensitivity_perturbation_mode', 'value')
+    mode_desc = "each parameter's own calibrated value" if perturbation_mode == 'value' else "each parameter's bound range (parmax - parmin)"
+    print(f"Starting Local Sensitivity Analysis (perturbations = {perturbations}% of {mode_desc})...")
 
     n_par = 8
     sensitivities = []
@@ -77,10 +83,13 @@ def sensitivity_analysis(data: CommonData):
                 })
                 continue
 
-            # Use the actual parameter value to determine scale, with a fallback for exactly zero
-            base_scale = abs(data.par_best[j])
-            if base_scale < 1e-4:
-                base_scale = 1e-4
+            if perturbation_mode == 'range':
+                base_scale = param_range
+            else:
+                # Use the actual parameter value to determine scale, with a fallback for exactly zero
+                base_scale = abs(data.par_best[j])
+                if base_scale < 1e-4:
+                    base_scale = 1e-4
 
             delta = (delta_pct / 100.0) * base_scale
 
@@ -88,9 +97,17 @@ def sensitivity_analysis(data: CommonData):
             p_plus = data.par_best[j] + delta
             p_minus = data.par_best[j] - delta
 
-            if p_plus > data.parmax[j]:
+            # Track whether clipping made the difference one-sided (only one side hit a
+            # bound): the estimate is then first-order rather than second-order, which
+            # is worth flagging rather than silently reporting as a normal "Active" row
+            # (docs/audit/06_diagnostics_and_plots.md, Defect E).
+            plus_clipped = p_plus > data.parmax[j]
+            minus_clipped = p_minus < data.parmin[j]
+            one_sided_clip = plus_clipped != minus_clipped
+
+            if plus_clipped:
                 p_plus = data.parmax[j]
-            if p_minus < data.parmin[j]:
+            if minus_clipped:
                 p_minus = data.parmin[j]
 
             actual_delta = p_plus - p_minus
@@ -134,7 +151,7 @@ def sensitivity_analysis(data: CommonData):
                 "Parameter": f"par_{j+1}",
                 "Perturbation_%": delta_pct,
                 "Sensitivity_Index": sens_index,
-                "Status": "Active"
+                "Status": "Bounded" if one_sided_clip else "Active"
             })
 
     # Restore best parameters
@@ -173,8 +190,10 @@ def _plot_sensitivity(data: CommonData, df_sens: pd.DataFrame):
     plt.rcParams['font.serif'] = ['Times New Roman'] + plt.rcParams['font.serif']
     plt.rcParams['font.size'] = 10
 
-    # Filter active parameters
-    df_active = df_sens[df_sens['Status'] == 'Active'].copy()
+    # Include both plain "Active" rows and "Bounded" rows (one-sided-clipped but
+    # still a valid, if first-order, estimate) -- only "Fixed"/"Inactive" rows
+    # (no perturbation actually applied) are excluded from the chart.
+    df_active = df_sens[df_sens['Status'].isin(['Active', 'Bounded'])].copy()
     if df_active.empty:
         return
 
@@ -196,7 +215,13 @@ def _plot_sensitivity(data: CommonData, df_sens: pd.DataFrame):
         offset = (i - len(perturbations) / 2 + 0.5) * width
         ax.bar(x + offset, subset['Sensitivity_Index'], width, label=f'{pert}%', color=colors[i % len(colors)])
 
-    ax.set_ylabel('Sensitivity Index [\u00B0C]')
+    # State the normalisation explicitly: the index is a mean absolute change in
+    # simulated water temperature per unit of *normalized* perturbation, and that
+    # normalization differs by mode -- it is not simply an absolute degC scale
+    # (docs/audit/06_diagnostics_and_plots.md, Defect E).
+    mode = getattr(data, 'sensitivity_perturbation_mode', 'value')
+    norm_desc = "% of parameter value" if mode == 'value' else "% of parameter bound range"
+    ax.set_ylabel(f'Sensitivity Index [\u00B0C per {norm_desc}]')
     ax.set_title('Local Parameter Sensitivity')
     ax.set_xticks(x)
     ax.set_xticklabels(parameters, rotation=45)

@@ -14,6 +14,65 @@ import matplotlib.dates as mdates
 
 from .config import CommonData
 
+
+def select_dotty_data(df_0: pd.DataFrame) -> tuple:
+    """
+    Extract parameter columns and the efficiency-index column from a `0_*.csv`
+    optimizer history file, by name rather than position: the file has 12
+    columns (`par_1`..`par_8`, `eff_index`, `NSE`, `R2`, `MAE` --
+    `optimization.py`'s `PSO_mode`/`DE_mode`/`LH_mode` history rows), so a
+    positional `[:-1]`/`[-1]` split silently treated `NSE`/`R2` as parameter
+    columns and `MAE` as the plotted "efficiency" (docs/audit/06_diagnostics_and_plots.md,
+    Defect A).
+
+    Returns
+    -------
+    parset : ndarray, shape (n_rows, n_par)
+    eff : ndarray, shape (n_rows,) -- the `eff_index` column
+    n_par : int
+    """
+    par_cols = [c for c in df_0.columns if c.startswith('par_')]
+    return df_0[par_cols].values, df_0['eff_index'].values, len(par_cols)
+
+
+def gap_aware_acf(residuals: pd.Series, max_lag: int) -> tuple:
+    """
+    Pairwise-complete sample autocorrelation of `residuals` -- a regularly-spaced
+    daily series that may contain NaN at data gaps -- for lags 1..max_lag.
+
+    `pd.plotting.autocorrelation_plot` on a NaN-dropped series concatenates
+    non-adjacent days, so its lag-k is not lag-k in time. This instead pairs day
+    `t` with day `t+k` only where both are non-NaN, generalising
+    `uncertainty.estimate_ar1_rho`'s lag-1 adjacency handling to arbitrary lags
+    (docs/audit/06_diagnostics_and_plots.md, Defect F).
+
+    Returns
+    -------
+    lags : ndarray of int, 1..max_lag (clipped to len(residuals)-1)
+    acf : ndarray of float, NaN where fewer than 2 valid pairs exist at that lag
+    n_pairs : ndarray of int, the number of valid pairs used at each lag
+    """
+    values = residuals.to_numpy(dtype=np.float64)
+    n = len(values)
+    valid = ~np.isnan(values)
+
+    max_lag = min(max_lag, max(n - 1, 0))
+    lags = np.arange(1, max_lag + 1)
+    acf = np.full(max_lag, np.nan)
+    n_pairs = np.zeros(max_lag, dtype=np.int64)
+
+    for i, k in enumerate(lags):
+        pair_mask = valid[:n - k] & valid[k:]
+        n_pairs[i] = pair_mask.sum()
+        if n_pairs[i] > 1:
+            a = values[:n - k][pair_mask]
+            b = values[k:][pair_mask]
+            if np.std(a) > 0 and np.std(b) > 0:
+                acf[i] = np.corrcoef(a, b)[0, 1]
+
+    return lags, acf, n_pairs
+
+
 def post_process(data: CommonData, toll: float = None):
     """
     Analyzes and plots the results of the pyair2stream simulation.
@@ -98,11 +157,7 @@ def post_process(data: CommonData, toll: float = None):
         # Read the parameter tracking CSV
         df_0 = pd.read_csv(file_0)
 
-        # Determine number of parameters dynamically
-        n_par = len(df_0.columns) - 1
-
-        parset = df_0.iloc[:, :-1].values
-        eff = df_0.iloc[:, -1].values
+        parset, eff, n_par = select_dotty_data(df_0)
 
         plot_data = False
         if len(eff) > 0:
@@ -143,20 +198,25 @@ def post_process(data: CommonData, toll: float = None):
             axes = axes.flatten()
 
             for i in range(8):
-                if i < n_par:
-                    axes[i].plot(parset[:, i], eff, '.k', markersize=2)
-                    if len(parset) > 0:
-                        axes[i].plot(parset[i_best, i], best_eff, '.', color=orange, markersize=10)
+                # Not a for...else: that clause runs once after normal loop
+                # completion (i == 7) and blanked the par_8 panel on every run
+                # (audit report 06, Defect B). Hide only the genuinely unused
+                # panels (i >= n_par), explicitly, inside the loop.
+                if i >= n_par:
+                    axes[i].axis('off')
+                    continue
 
-                    axes[i].set_ylim(plot_limits)
-                    axes[i].set_xlabel(f'par{i+1}')
+                axes[i].plot(parset[:, i], eff, '.k', markersize=2)
+                if len(parset) > 0:
+                    axes[i].plot(parset[i_best, i], best_eff, '.', color=orange, markersize=10)
+
+                axes[i].set_ylim(plot_limits)
+                axes[i].set_xlabel(f'par{i+1}')
 
                 if data.fun_obj == 'RMS':
                     axes[i].set_ylabel(f"{data.fun_obj} [\u00B0C]")
                 else:
                     axes[i].set_ylabel(data.fun_obj)
-            else:
-                axes[i].axis('off')
 
             plt.tight_layout()
             dotty_pdf = os.path.join(data.folder, f"dottyplots_{data.runmode}_{data.fun_obj}_{data.station}.pdf")
@@ -413,10 +473,24 @@ def post_process(data: CommonData, toll: float = None):
             stats.probplot(res_clean, dist="norm", plot=axes[1])
             axes[1].set_title(f'Normal Q-Q Plot ({output_name})')
 
-            # Autocorrelation (ACF)
-            pd.plotting.autocorrelation_plot(res_clean, ax=axes[2])
+            # Autocorrelation (ACF), computed gap-aware on the full (NaN-retaining)
+            # residual series so lag-k pairs days k calendar days apart, not the
+            # k-th and (k+1)-th surviving non-missing days (audit report 06, Defect F).
+            lags, acf_vals, n_pairs = gap_aware_acf(residuals, max_lag=50)
+            if len(lags) > 0:
+                axes[2].bar(lags, acf_vals, width=0.8, color='steelblue')
+                axes[2].axhline(0, color='black', linewidth=0.8)
+                valid_n = n_pairs[n_pairs > 1]
+                if len(valid_n) > 0:
+                    band = 1.96 / np.sqrt(float(valid_n.min()))
+                    axes[2].axhline(band, color='red', linestyle='--', linewidth=0.8)
+                    axes[2].axhline(-band, color='red', linestyle='--', linewidth=0.8)
+                axes[2].set_xlim([0, len(lags)])
+                axes[2].set_xlabel(
+                    f'Lag (days) -- {int(n_pairs[0])} valid pairs at lag 1, '
+                    f'{int(n_pairs.min())}-{int(n_pairs.max())} across all lags shown'
+                )
             axes[2].set_title(f'Autocorrelation ({output_name})')
-            axes[2].set_xlim([0, min(50, len(res_clean))]) # Limit x-axis to first 50 lags for readability
 
             plt.tight_layout()
             diag_pdf = os.path.join(data.folder, f"residual_diagnostics_{output_name}_{data.runmode}_{data.fun_obj}_{data.station}.pdf")
