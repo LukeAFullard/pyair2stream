@@ -49,9 +49,13 @@ def run_forward(best_params, historical_sigma, qmedia, noise_model):
     # docs/audit/01_qmedia_scenario_invariance.md.
     config['Qmedia'] = qmedia
 
-    # Enable the chosen noise model
+    # Enable the chosen noise model. save_ensemble additionally writes the raw
+    # (n_samples, n_days) noisy-trajectory matrix, which compare_plots() below uses
+    # directly instead of re-implementing AR(1) noise generation by hand (audit
+    # report 04, Defect B).
     config['uncertainty_options'] = {
-        'noise_model': noise_model
+        'noise_model': noise_model,
+        'save_ensemble': True,
     }
 
     config_filename = f"examples/forward_prediction_intervals/config_forward_{noise_model}.yaml"
@@ -68,23 +72,36 @@ def run_forward(best_params, historical_sigma, qmedia, noise_model):
 
     import shutil
     import os
-    # Rename output so it isn't overwritten by the next run
+    # Rename outputs so they aren't overwritten by the next run
     src_csv = f"examples/forward_prediction_intervals/Forward_Prediction_Envelopes_Alpha_future_1d.csv"
     dest_csv = f"examples/forward_prediction_intervals/Forward_Prediction_Envelopes_{noise_model}.csv"
+    src_npz = f"examples/forward_prediction_intervals/Forward_Prediction_Ensemble_Alpha_future_1d.npz"
+    dest_npz = f"examples/forward_prediction_intervals/Forward_Prediction_Ensemble_{noise_model}.npz"
 
     if os.path.exists(src_csv):
         shutil.move(src_csv, dest_csv)
+    if os.path.exists(src_npz):
+        shutil.move(src_npz, dest_npz)
 
     print(f"Forward run complete! Envelopes saved to {dest_csv}")
 
 def compare_plots():
     import pandas as pd
+    import numpy as np
     import matplotlib.pyplot as plt
+    from pyair2stream import scenario
 
     print("--- 3. Plotting IID vs AR(1) Envelopes ---")
 
     env_iid = pd.read_csv("examples/forward_prediction_intervals/Forward_Prediction_Envelopes_iid.csv")
     env_ar1 = pd.read_csv("examples/forward_prediction_intervals/Forward_Prediction_Envelopes_ar1.csv")
+
+    # Load the raw ensembles saved by forward_mode() (uncertainty_options.save_ensemble),
+    # rather than hand-rolling AR(1)/IID noise here -- that used to substitute the
+    # ensemble median for the deterministic base and drop parameter uncertainty from
+    # the demonstration entirely (audit report 04, Defect B).
+    ens_iid, dates_iid = scenario.load_ensemble("examples/forward_prediction_intervals/Forward_Prediction_Ensemble_iid.npz")
+    ens_ar1, dates_ar1 = scenario.load_ensemble("examples/forward_prediction_intervals/Forward_Prediction_Ensemble_ar1.npz")
 
     fig, axes = plt.subplots(4, 1, figsize=(10, 13), sharex=True)
 
@@ -104,83 +121,43 @@ def compare_plots():
     ax.set_ylabel("Water Temp (°C)")
     ax.legend(loc='lower left', fontsize='small')
 
-    # Plot Individual Trajectories
+    # Plot Individual Trajectories -- real ensemble members (each already includes
+    # both parameter uncertainty and observation-error noise).
     ax = axes[2]
-
-    # We will simulate individual noisy trajectories manually to plot them.
-    # To do this correctly, we need the deterministic base projection.
-    base_projection = env_iid['Twat_mod_p50'].values # Approximation of base model
-
-    # Need to generate AR1 and IID noise manually for demonstration
-    import numpy as np
-    import scipy.signal
-
-    np.random.seed(42)
-    n_days = len(base_projection)
-
-    with open("examples/forward_prediction_intervals/MCMC_chain_Alpha_historical_1d_meta.json", 'r') as f:
-        import json
-        sidecar_data = json.load(f)
-        sigma = sidecar_data['sigma']
-        rho = sidecar_data['rho']
-
-    n_samples_for_plot = 100
-    all_iid_trajectories = []
-    all_ar1_trajectories = []
-
-    for i in range(n_samples_for_plot):
-        # IID noise
-        noise_iid = np.random.normal(0, sigma, n_days)
-
-        # AR1 noise
-        eps = np.random.standard_normal(n_days)
-        epsilon = np.empty(n_days)
-        epsilon[0] = sigma * eps[0]
-        epsilon[1:] = sigma * np.sqrt(1 - rho**2) * eps[1:]
-        noise_ar1 = scipy.signal.lfilter([1.0], [1.0, -rho], epsilon)
-
-        all_iid_trajectories.append(base_projection + noise_iid)
-        all_ar1_trajectories.append(base_projection + noise_ar1)
-
-        if i < 3: # Plot first 3 trajectories
-            ax.plot(env_iid.index, all_iid_trajectories[-1], color='green', alpha=0.4,
-                    label='IID Trajectory' if i == 0 else "")
-            ax.plot(env_ar1.index, all_ar1_trajectories[-1], color='blue', alpha=0.6,
-                    label='AR(1) Trajectory' if i == 0 else "")
-
+    for i in range(3):
+        ax.plot(env_iid.index, ens_iid[i], color='green', alpha=0.4,
+                label='IID Trajectory' if i == 0 else "")
+        ax.plot(env_ar1.index, ens_ar1[i], color='blue', alpha=0.6,
+                label='AR(1) Trajectory' if i == 0 else "")
     ax.set_title("Sample Individual Trajectories (IID vs AR(1))")
     ax.set_ylabel("Water Temp (°C)")
     ax.legend(loc='upper right', fontsize='small')
 
-    # Plot 7-day Rolling Average Envelope
+    # Plot 7-day Rolling Average Envelope. Aggregate each ensemble member first,
+    # then take percentiles across members -- the reverse (percentile of a rolling
+    # mean of the percentile series) is not the same quantity and is not available
+    # from the envelope CSV alone (audit report 04, Defect B).
     ax = axes[3]
-
-    # Calculate rolling averages for each sample
     rolling_window = 7
-    all_iid_trajectories = np.array(all_iid_trajectories)
-    all_ar1_trajectories = np.array(all_ar1_trajectories)
+    iid_rolling = scenario.aggregate(ens_iid, dates_iid, how='mean', freq=f'{rolling_window}D')
+    ar1_rolling = scenario.aggregate(ens_ar1, dates_ar1, how='mean', freq=f'{rolling_window}D')
 
-    # Convert to pandas dataframe to use rolling mean
-    iid_df = pd.DataFrame(all_iid_trajectories.T)
-    ar1_df = pd.DataFrame(all_ar1_trajectories.T)
+    iid_rolling_p5 = np.percentile(iid_rolling, 5, axis=0)
+    iid_rolling_p95 = np.percentile(iid_rolling, 95, axis=0)
+    iid_rolling_p50 = np.percentile(iid_rolling, 50, axis=0)
 
-    iid_rolling = iid_df.rolling(window=rolling_window, min_periods=1).mean()
-    ar1_rolling = ar1_df.rolling(window=rolling_window, min_periods=1).mean()
+    ar1_rolling_p5 = np.percentile(ar1_rolling, 5, axis=0)
+    ar1_rolling_p95 = np.percentile(ar1_rolling, 95, axis=0)
+    ar1_rolling_p50 = np.percentile(ar1_rolling, 50, axis=0)
 
-    # Calculate 5th and 95th percentiles of the rolling averages
-    iid_rolling_p5 = iid_rolling.quantile(0.05, axis=1)
-    iid_rolling_p95 = iid_rolling.quantile(0.95, axis=1)
-    iid_rolling_p50 = iid_rolling.quantile(0.50, axis=1)
+    x_iid = np.arange(len(iid_rolling_p50)) * rolling_window
+    x_ar1 = np.arange(len(ar1_rolling_p50)) * rolling_window
 
-    ar1_rolling_p5 = ar1_rolling.quantile(0.05, axis=1)
-    ar1_rolling_p95 = ar1_rolling.quantile(0.95, axis=1)
-    ar1_rolling_p50 = ar1_rolling.quantile(0.50, axis=1)
+    ax.fill_between(x_iid, iid_rolling_p5, iid_rolling_p95, color='green', alpha=0.3, label=f'90% PI (IID) - {rolling_window}d rolling')
+    ax.plot(x_iid, iid_rolling_p50, color='green', linestyle='--', label='Median (IID)')
 
-    ax.fill_between(env_iid.index, iid_rolling_p5, iid_rolling_p95, color='green', alpha=0.3, label=f'90% PI (IID) - {rolling_window}d rolling')
-    ax.plot(env_iid.index, iid_rolling_p50, color='green', linestyle='--', label=f'Median (IID)')
-
-    ax.fill_between(env_ar1.index, ar1_rolling_p5, ar1_rolling_p95, color='blue', alpha=0.3, label=f'90% PI (AR1) - {rolling_window}d rolling')
-    ax.plot(env_ar1.index, ar1_rolling_p50, color='blue', linestyle='--', label=f'Median (AR1)')
+    ax.fill_between(x_ar1, ar1_rolling_p5, ar1_rolling_p95, color='blue', alpha=0.3, label=f'90% PI (AR1) - {rolling_window}d rolling')
+    ax.plot(x_ar1, ar1_rolling_p50, color='blue', linestyle='--', label='Median (AR1)')
 
     ax.set_title(f"{rolling_window}-Day Rolling Average Prediction Interval")
     ax.set_xlabel("Days into Future")
@@ -194,7 +171,8 @@ def compare_plots():
 if __name__ == "__main__":
     import os
     # Clean old artifacts
-    for f in ["config_forward_injected.yaml", "Forward_Prediction_Envelopes_iid.csv", "Forward_Prediction_Envelopes_ar1.csv", "comparison_iid_vs_ar1.png"]:
+    for f in ["config_forward_injected.yaml", "Forward_Prediction_Envelopes_iid.csv", "Forward_Prediction_Envelopes_ar1.csv",
+              "Forward_Prediction_Ensemble_iid.npz", "Forward_Prediction_Ensemble_ar1.npz", "comparison_iid_vs_ar1.png"]:
         path = os.path.join("examples/forward_prediction_intervals", f)
         if os.path.exists(path):
             os.remove(path)

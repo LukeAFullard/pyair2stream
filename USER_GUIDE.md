@@ -404,6 +404,10 @@ Every run internally prepends a duplicate of the first simulated year as a numer
 | `Invalid noise_model` | A noise model other than 'iid' or 'ar1' was specified | Use 'iid' or 'ar1' for `noise_model` in `uncertainty_options` |
 | `ar1_rho must be strictly between -1.0 and 1.0` | `ar1_rho` parameter is out of bounds | Provide a valid `ar1_rho` between -1.0 and 1.0 |
 | `prediction_interval must be strictly between 0 and 100` | The specified `prediction_interval` is not a valid percentage | Use a value between 0 and 100 for `prediction_interval` |
+| `burnin_fraction must be strictly between 0 and 1` | `uncertainty_options.burnin_fraction` is out of range | Provide a value in `(0, 1)`, or omit it for the adaptive default |
+| `enable_prediction_intervals is True but residual_sigma is 0.0/unavailable` | `FORWARD` mode with prediction intervals enabled has no usable `residual_sigma` (no override, no sidecar) | Set `forward_options.residual_sigma`, or point `mcmc_chain_path` at a chain with a `_meta.json` sidecar that has `sigma` |
+| `MCMC did not converge` (`RuntimeError`) | `uncertainty_options.strict_convergence: true` and the chain is shorter than 50x the estimated autocorrelation time | Increase `mcmc_steps`, or unset `strict_convergence` to downgrade this to a warning |
+| `MCMC walker initialisation collapsed to zero spread` | The initial walker ball has zero variance in some dimension (should not happen with the default reflected initialisation unless the requested spread itself is exactly zero) | Check any custom cross-validation-derived spread for degenerate (all-equal) folds |
 | `Autocorrelation time not reliably estimated` | `mcmc_steps` is too low for the MCMC chain to converge | Increase `mcmc_steps` |
 | `Missing 'Date' column` | The input CSV doesn't have a 'Date' column | Make sure to include a valid 'Date' column |
 | `Missing 'T_air' column` | The input CSV doesn't have a 'T_air' column | Make sure to include a valid 'T_air' column |
@@ -469,6 +473,9 @@ Before relying on it:
 
 - Set `sensitivity_analysis: true` to get a one-at-a-time local sensitivity analysis around your best-fit parameters: each parameter is perturbed by ±`sensitivity_perturbations`% of its own value (bounded by `parameter_bounds`), and the mean absolute change in simulated water temperature is reported per parameter. This tells you which parameters the fit is most sensitive to, which is useful for deciding which bounds are worth tightening.
 - Set `run_mode: DE-MCMC` to get full parameter and predictive uncertainty: it runs `DE` to find the best fit, then samples the posterior around it with `emcee`, producing an MCMC chain (`MCMC_chain_*.csv`) and predictive envelopes (`MCMC_envelopes_*.csv`). This is more expensive than `DE` alone. Expect it to take noticeably longer, scaling with `mcmc_walkers × mcmc_steps`. The `DE-CV-MCMC` run mode is also available.
+- The sampler's own likelihood assumes i.i.d. residuals by default (`uncertainty_options.noise_model: "iid"`). Daily stream-temperature residuals are typically autocorrelated (lag-1 `rho` of 0.8-0.95 is common), which understates posterior/predictive width by roughly `sqrt((1+rho)/(1-rho))` if ignored. Set `uncertainty_options.noise_model: "ar1"` to use an AR(1)-aware likelihood instead (see `docs/MCMC_uncertainty.md`, Section 3.1).
+- The sidecar `MCMC_chain_*_meta.json` also reports `burnin`, post-burn-in `mean_autocorr_time`, and `max_split_rhat` (a Gelman-Rubin convergence check, warns above 1.01). Set `uncertainty_options.burnin_fraction` to override the adaptive burn-in, or `uncertainty_options.strict_convergence: true` to turn the "chain may be too short" warning into a hard error.
+- Set `uncertainty_options.save_ensemble: true` to also write the raw `(n_samples, n_days)` noisy-trajectory matrix as `MCMC_ensemble_*.npz` (or `Forward_Prediction_Ensemble_*.npz` for `FORWARD` mode). Percentile envelopes alone cannot produce aggregate statistics (a 7-day rolling mean of the 5th percentile is not the same as the 5th percentile of the 7-day rolling mean); use `pyair2stream.scenario.load_ensemble/aggregate/exceedance/paired_difference` to work with the raw ensemble for degree-days, threshold-exceedance, or paired scenario comparisons.
 
 ## 12. Forward prediction intervals
 
@@ -482,10 +489,12 @@ To enable forward prediction intervals, configure the `forward_options` block in
 forward_options:
   enable_prediction_intervals: true
   mcmc_chain_path: "output_v4/MCMC_chain_test_station_c_1d.csv"
-  residual_sigma: 1.0  # Observation error variance (optional)
+  residual_sigma: 1.0  # Observation error std dev (optional -- see below)
   n_samples: 1000      # Number of parameter sets to sample
   random_seed: 42      # Seed for reproducibility
 ```
+
+`residual_sigma` is optional: if omitted (or `<= 0.0`), `pyair2stream` falls back to the `sigma` field of the `_meta.json` sidecar alongside `mcmc_chain_path` (written automatically by `DE-MCMC`/`DE-CV-MCMC`). If neither is available, `forward_mode()` raises a `ValueError` rather than silently producing an interval that reflects parameter uncertainty only.
 
 ### Noise Models
 
@@ -496,6 +505,7 @@ uncertainty_options:
   prediction_interval: 90.0 # Envelope width (e.g. 90.0 -> 5th/95th percentiles)
   noise_model: "ar1"  # "iid" (default) or "ar1"
   ar1_rho: null       # optional override, between -1 and 1
+  save_ensemble: false # if true, also write the raw ensemble as .npz (see Section 11)
 ```
 
 If `noise_model: "ar1"` is selected, `pyair2stream` will resolve the lag-1 autocorrelation coefficient (`rho`) using the following priority order:

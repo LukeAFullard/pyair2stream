@@ -17,12 +17,195 @@ import emcee
 import json
 from .config import CommonData
 from .model import call_model, funcobj, aggregation, statis, warn_on_stability, check_numerical_divergence
-from .uncertainty import estimate_ar1_rho, generate_ar1_noise
+from .uncertainty import estimate_ar1_rho, generate_ar1_noise, build_ar1_runs, ar1_whitened_stats
 
 # A near-perfect-fit MCMC log-likelihood is capped at this large but finite value rather
 # than returned as a literal np.inf, which poisons emcee's acceptance-ratio arithmetic
 # (inf - inf = nan). See docs/audit/03_objective_function_and_masks.md, 3.4.
 MCMC_MAX_LOG_LIKELIHOOD = 1e10
+
+# Number of physical model parameters (a1..a8 in the Fortran reference).
+N_PAR = 8
+
+
+def _active_params(data: CommonData, n_par: int = N_PAR) -> list:
+    """Indices of parameters that are both flagged active and non-degenerate (parmin != parmax)."""
+    return [j for j in range(n_par) if data.flag_par[j] and data.parmin[j] != data.parmax[j]]
+
+
+def _segments_for(data: CommonData) -> list:
+    """Segments to treat as independent adjacency/AR(1) runs: gap-tolerant segments, or the whole series."""
+    return data.segments if data.gap_tolerant else [(0, data.n_tot - 1)]
+
+
+def _iid_log_likelihood(mod_valid: np.ndarray, obs_valid: np.ndarray) -> float:
+    """Concentrated Gaussian log-likelihood assuming iid residuals (docs/audit/04, pre-existing form)."""
+    N = len(obs_valid)
+    if N == 0:
+        return -np.inf
+    SSE = np.sum((mod_valid - obs_valid) ** 2)
+    if SSE == 0:
+        return MCMC_MAX_LOG_LIKELIHOOD
+    return -0.5 * N * np.log(SSE / N)
+
+
+def _ar1_log_likelihood(residuals: np.ndarray, rho: float, runs: list) -> float:
+    """
+    Concentrated Gaussian log-likelihood accounting for AR(1)-correlated residuals
+    (docs/audit/04_uncertainty_and_mcmc.md, Defect A / 4.1). `rho` is treated as fixed
+    (estimated once at the DE optimum, not sampled). Each independent run contributes
+    its own `0.5*log(1-rho**2)` term, so the correction scales with the number of runs.
+    """
+    sse_u, N, n_runs = ar1_whitened_stats(residuals, rho, runs)
+    if N == 0:
+        return -np.inf
+    if sse_u == 0:
+        return MCMC_MAX_LOG_LIKELIHOOD
+    return -0.5 * N * np.log(sse_u / N) + 0.5 * n_runs * np.log(1.0 - rho ** 2)
+
+
+def _reflected_walker_init(initial: np.ndarray, scale: np.ndarray, lo: np.ndarray, hi: np.ndarray,
+                            nwalkers: int, rng: np.random.Generator) -> np.ndarray:
+    """
+    Build the initial emcee walker ball around `initial`, reflecting draws back inside
+    `[lo, hi]` instead of clipping them to the bound. Clipping collapses the ensemble's
+    spread in any dimension where the DE optimum sits exactly on a bound -- emcee's
+    stretch move cannot generate spread from a degenerate ensemble (docs/audit/04,
+    Defect D / 4.4). Raises if any dimension still ends up with zero spread.
+    """
+    ndim = len(initial)
+    raw = initial[None, :] + scale[None, :] * rng.standard_normal((nwalkers, ndim))
+    span = hi - lo
+    rel = (raw - lo) % (2.0 * span)
+    reflected = np.where(rel > span, 2.0 * span - rel, rel)
+    p0 = lo + reflected
+
+    variances = np.var(p0, axis=0)
+    collapsed = np.where(variances <= 0.0)[0]
+    if len(collapsed) > 0:
+        raise ValueError(
+            "MCMC walker initialisation collapsed to zero spread in active-parameter "
+            f"position(s) {list(collapsed)}; emcee's stretch move cannot explore from a "
+            "degenerate ensemble (docs/audit/04_uncertainty_and_mcmc.md, Defect D)."
+        )
+    return p0
+
+
+def _split_rhat(chain: np.ndarray) -> np.ndarray:
+    """
+    Gelman-Rubin split-Rhat per parameter, from a raw (non-flattened) emcee chain of
+    shape (n_iter, n_walkers, n_dim). Splitting each walker's chain in half along the
+    iteration axis also flags within-walker non-stationarity, not just between-walker
+    disagreement (docs/audit/04_uncertainty_and_mcmc.md, 4.6).
+    """
+    n_iter, n_chains, n_dim = chain.shape
+    n = n_iter // 2
+    if n < 2:
+        return np.full(n_dim, np.nan)
+    split = np.concatenate([chain[:n], chain[n:2 * n]], axis=1)
+    chain_means = split.mean(axis=0)
+    chain_vars = split.var(axis=0, ddof=1)
+    W = chain_vars.mean(axis=0)
+    B = n * chain_means.var(axis=0, ddof=1)
+    var_hat = ((n - 1) / n) * W + B / n
+    with np.errstate(divide='ignore', invalid='ignore'):
+        rhat = np.sqrt(var_hat / W)
+    return rhat
+
+
+def _estimate_autocorr(sampler, discard: int):
+    """
+    Estimate the per-parameter integrated autocorrelation time on the chain with the
+    first `discard` steps removed. Returns `(tau_array_or_None, mean_tau_or_None)`.
+    Failures (chain too short, non-finite estimate) are reported as a warning rather
+    than raised; convergence is only fatal via the explicit `strict_convergence` gate.
+    """
+    try:
+        tau = sampler.get_autocorr_time(discard=discard, quiet=True)
+        if np.any(np.isnan(tau)) or np.any(~np.isfinite(tau)):
+            raise ValueError("autocorrelation time not reliably estimated")
+        return tau, float(np.mean(tau))
+    except (ValueError, emcee.autocorr.AutocorrError):
+        print("Warning: autocorrelation time could not be reliably estimated; "
+              "chain may be too short to assess convergence.")
+        return None, None
+    except Exception as e:
+        print(f"Warning: failed to compute autocorrelation time ({e}).")
+        return None, None
+
+
+def _resolve_burnin(nsteps: int, tau_rough, uncertainty_options: dict) -> int:
+    """
+    Burn-in length in steps. An explicit `uncertainty_options.burnin_fraction` overrides
+    everything; otherwise default to `max(0.3*nsteps, 5*max(tau))` when a rough
+    autocorrelation estimate is available, else the historical flat 30%
+    (docs/audit/04_uncertainty_and_mcmc.md, 4.6).
+    """
+    frac = uncertainty_options.get('burnin_fraction')
+    if frac is not None:
+        burnin = int(round(float(frac) * nsteps))
+    elif tau_rough is not None:
+        burnin = max(int(0.3 * nsteps), int(5 * np.max(tau_rough)))
+    else:
+        burnin = int(0.3 * nsteps)
+    return int(np.clip(burnin, 0, max(nsteps - 1, 0)))
+
+
+def _percentile_envelope(data: CommonData, ensemble_simulations: np.ndarray, prediction_interval: float) -> pd.DataFrame:
+    lower_perc = (100.0 - prediction_interval) / 2.0
+    upper_perc = 100.0 - lower_perc
+
+    perc_lower = np.percentile(ensemble_simulations, lower_perc, axis=0)
+    perc_50 = np.percentile(ensemble_simulations, 50, axis=0)
+    perc_upper = np.percentile(ensemble_simulations, upper_perc, axis=0)
+
+    # Replace calculated percentiles with NaN where the base model has missing data gaps
+    perc_lower = np.where(data.Twat_mod == -999.0, np.nan, perc_lower)
+    perc_50 = np.where(data.Twat_mod == -999.0, np.nan, perc_50)
+    perc_upper = np.where(data.Twat_mod == -999.0, np.nan, perc_upper)
+
+    return pd.DataFrame({
+        'Year': data.date[:, 0],
+        'Month': data.date[:, 1],
+        'Day': data.date[:, 2],
+        'Twat_mod_lower': perc_lower,
+        'Twat_mod_p50': perc_50,
+        'Twat_mod_upper': perc_upper
+    })
+
+
+def _save_ensemble_npz(data: CommonData, ensemble_simulations: np.ndarray, filename: str) -> None:
+    """
+    Write the raw (n_samples, n_days) ensemble matrix, post-warm-up, as compressed
+    npz (docs/audit/04_uncertainty_and_mcmc.md, 4.2 / Defect B). Percentile bands alone
+    cannot produce aggregate statistics (a rolling mean of the p5 series is not the p5
+    of the rolling mean), so the raw ensemble is needed for degree-days, threshold
+    exceedance, and paired scenario differences -- see `pyair2stream/scenario.py`.
+    """
+    dates = data.date[365:]
+    np.savez_compressed(
+        filename,
+        simulations=ensemble_simulations[:, 365:],
+        year=dates[:, 0],
+        month=dates[:, 1],
+        day=dates[:, 2],
+    )
+    print(f"Saved raw ensemble matrix ({ensemble_simulations.shape[0]} samples x "
+          f"{ensemble_simulations.shape[1] - 365} days) to {filename}")
+
+
+def _export_ensemble_outputs(data: CommonData, ensemble_simulations: np.ndarray, prediction_interval: float,
+                              env_filename: str, ensemble_filename: Optional[str] = None,
+                              save_ensemble: bool = False) -> None:
+    """Write the percentile envelope CSV and, if requested, the raw ensemble npz (both post-warm-up)."""
+    env_df = _percentile_envelope(data, ensemble_simulations, prediction_interval)
+    env_df.iloc[365:].to_csv(env_filename, index=False)  # drop the warm-up block (report 05, Defect C)
+    print(f"Saved predictive uncertainty envelopes to {env_filename}")
+
+    if save_ensemble:
+        if ensemble_filename is None:
+            raise ValueError("save_ensemble is True but no ensemble_filename was provided.")
+        _save_ensemble_npz(data, ensemble_simulations, ensemble_filename)
 
 def sub_1(data: CommonData) -> np.float64:
     """
@@ -94,7 +277,6 @@ def forward_mode(data: CommonData) -> None:
         if seed is not None:
             np.random.seed(seed)
 
-        import pandas as pd
         chain_df = pd.read_csv(chain_path)
         chain = chain_df.values
 
@@ -104,23 +286,51 @@ def forward_mode(data: CommonData) -> None:
         sample_indices = np.random.choice(len(chain), size=n_samples, replace=False)
         samples = chain[sample_indices]
 
-        sigma = float(data.forward_options.get('residual_sigma', 0.0))
-        if sigma <= 0.0:
-            print("Warning: residual_sigma is 0.0. Prediction interval will only reflect parameter uncertainty, not observation error.")
+        uncertainty_options = getattr(data, 'uncertainty_options', None) or {}
+        sidecar_path = chain_path.replace('.csv', '_meta.json')
 
-        noise_model = getattr(data, 'uncertainty_options', {}).get('noise_model', 'iid')
+        # Resolve sigma: explicit config override first, then the sidecar written by
+        # DE-MCMC/DE-CV-MCMC (mirroring the `rho` resolution below), matching `rho`'s
+        # existing carry-forward instead of silently defaulting to 0.0 behind a print
+        # (docs/audit/04_uncertainty_and_mcmc.md, Defect C / 4.3).
+        sigma_override = data.forward_options.get('residual_sigma')
+        if sigma_override is not None and float(sigma_override) > 0.0:
+            sigma = float(sigma_override)
+            print(f"Using explicit residual_sigma override: {sigma}")
+        elif os.path.exists(sidecar_path):
+            import json
+            try:
+                with open(sidecar_path, 'r') as f:
+                    sidecar_data = json.load(f)
+                sigma = float(sidecar_data.get('sigma', 0.0))
+                if sigma > 0.0:
+                    print(f"Using sigma={sigma:.4f} carried from calibration run {sidecar_path}")
+            except Exception as e:
+                print(f"Warning: Failed to read sigma from sidecar {sidecar_path} ({e}).")
+                sigma = 0.0
+        else:
+            sigma = 0.0
+
+        if sigma <= 0.0:
+            raise ValueError(
+                "enable_prediction_intervals is True but residual_sigma is 0.0/unavailable "
+                f"(no forward_options.residual_sigma override, and no usable 'sigma' in "
+                f"sidecar {sidecar_path}). A prediction interval with no residual term is "
+                "not a prediction interval -- docs/audit/04_uncertainty_and_mcmc.md, Defect C."
+            )
+
+        noise_model = uncertainty_options.get('noise_model', 'iid')
         rho_used = 0.0
 
         if noise_model == 'ar1':
-            ar1_rho_override = data.uncertainty_options.get('ar1_rho')
-            sidecar_path = chain_path.replace('.csv', '_meta.json')
+            ar1_rho_override = uncertainty_options.get('ar1_rho')
 
             if ar1_rho_override is not None:
                 rho_used = ar1_rho_override
                 print(f"Using explicit ar1_rho override: {rho_used}")
             elif has_obs:
                 eval_mask_for_rho = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=bool)
-                segments_for_rho = data.segments if data.gap_tolerant else [(0, data.n_tot - 1)]
+                segments_for_rho = _segments_for(data)
                 rho_used = estimate_ar1_rho(data.Twat_mod, data.Twat_obs, eval_mask_for_rho, segments_for_rho)
                 print(f"Using rho={rho_used:.4f} estimated directly from this run's own residuals.")
             elif os.path.exists(sidecar_path):
@@ -140,14 +350,14 @@ def forward_mode(data: CommonData) -> None:
             rng = np.random.default_rng(seed)
 
         ensemble_simulations = []
-        n_par = 8
+        n_par = N_PAR
 
         # Determine active params from dataframe columns
         active_cols = chain_df.columns
         active_params = [int(c.split('_')[1])-1 for c in active_cols]
 
         best_params_deterministic = data.par_best.copy()
-        segments_for_noise = data.segments if data.gap_tolerant else [(0, data.n_tot - 1)]
+        segments_for_noise = _segments_for(data)
 
         for i, theta in enumerate(samples):
             p_vals = best_params_deterministic.copy()
@@ -169,31 +379,11 @@ def forward_mode(data: CommonData) -> None:
 
         ensemble_simulations = np.array(ensemble_simulations)
 
-        prediction_interval = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0)
-        lower_perc = (100.0 - prediction_interval) / 2.0
-        upper_perc = 100.0 - lower_perc
-
-        perc_lower = np.percentile(ensemble_simulations, lower_perc, axis=0)
-        perc_50 = np.percentile(ensemble_simulations, 50, axis=0)
-        perc_upper = np.percentile(ensemble_simulations, upper_perc, axis=0)
-
-        # Replace calculated percentiles with NaN where the base model has missing data gaps
-        perc_lower = np.where(data.Twat_mod == -999.0, np.nan, perc_lower)
-        perc_50 = np.where(data.Twat_mod == -999.0, np.nan, perc_50)
-        perc_upper = np.where(data.Twat_mod == -999.0, np.nan, perc_upper)
-
-        env_df = pd.DataFrame({
-            'Year': data.date[:, 0],
-            'Month': data.date[:, 1],
-            'Day': data.date[:, 2],
-            'Twat_mod_lower': perc_lower,
-            'Twat_mod_p50': perc_50,
-            'Twat_mod_upper': perc_upper
-        })
-
+        prediction_interval = uncertainty_options.get('prediction_interval', 90.0)
         env_filename = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
-        env_df.iloc[365:].to_csv(env_filename, index=False)  # drop the warm-up block (report 05, Defect C)
-        print(f"Saved forward prediction uncertainty envelopes to {env_filename}")
+        ensemble_filename = os.path.join(data.folder, f"Forward_Prediction_Ensemble_{data.station}_{data.series}_{data.time_res}.npz")
+        save_ensemble = bool(uncertainty_options.get('save_ensemble', False))
+        _export_ensemble_outputs(data, ensemble_simulations, prediction_interval, env_filename, ensemble_filename, save_ensemble)
 
         # Restore deterministic parameters
         data.par[:n_par] = best_params_deterministic
@@ -506,21 +696,210 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
     df = pd.DataFrame(history, columns=[f"par_{j+1}" for j in range(n_par)] + ["eff_index", "NSE", "R2", "MAE"])
     df.to_csv(output_filename, index=False)
 
+def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np.ndarray,
+                           active_params: list, init_scale, n_par: int = N_PAR) -> None:
+    """
+    Shared Phase 3+ implementation for `DE_MCMC_mode` and `DE_CV_MCMC_mode`: builds the
+    walker ensemble, runs `emcee`, computes convergence diagnostics, and writes the
+    chain/sidecar/envelope (and optional raw ensemble) outputs.
+
+    `init_scale` is either `None` (the two-mode-agnostic default: a ball scaled to each
+    active parameter's bound width) or an explicit per-dimension array of standard
+    deviations (the `DE-CV-MCMC` cross-validation-informed spread) -- see
+    docs/audit/04_uncertainty_and_mcmc.md, 3.3/4.4.
+    """
+    nwalkers = data.mcmc_walkers
+    nsteps = data.mcmc_steps
+    ndim = len(active_params)
+
+    uncertainty_options = getattr(data, 'uncertainty_options', None) or {}
+    noise_model = uncertainty_options.get('noise_model', 'iid')
+
+    eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
+    segments = _segments_for(data)
+
+    # Re-evaluate at the DE optimum so rho/sigma are estimated at the point the MCMC
+    # ensemble is actually centred on.
+    data.par[:n_par] = best_params.copy()
+    call_model(data)
+    funcobj(data)
+
+    best_rho = estimate_ar1_rho(data.Twat_mod, data.Twat_obs, eval_mask, segments)
+
+    valid_mask_agg = (data.Twat_obs_agg != -999.0) & eval_mask
+    mod_valid = data.Twat_mod_agg[valid_mask_agg]
+    obs_valid = data.Twat_obs_agg[valid_mask_agg]
+    N = len(obs_valid)
+    best_sigma = float(np.sqrt(np.sum((mod_valid - obs_valid) ** 2) / N)) if N > 0 else 0.0
+
+    # Reused across every likelihood evaluation below: observations (and therefore the
+    # valid/AR(1)-run structure) do not change while theta is being explored, only the
+    # simulated series does (docs/audit/04_uncertainty_and_mcmc.md, 4.1).
+    ar1_runs = build_ar1_runs(valid_mask_agg, segments) if noise_model == 'ar1' else None
+
+    def log_probability(theta):
+        p_vals = best_params.copy()
+        for idx, j in enumerate(active_params):
+            p_vals[j] = theta[idx]
+            if p_vals[j] < data.parmin[j] or p_vals[j] > data.parmax[j]:
+                return -np.inf
+
+        data.par[:n_par] = p_vals
+        call_model(data)
+        eff_index = funcobj(data)
+
+        if np.isnan(eff_index):
+            return -np.inf
+
+        # Computed on the SAME (aggregated) series the objective function itself scores
+        # (report 03, 3.4) -- daily and aggregated coincide at 1d resolution.
+        if noise_model == 'ar1':
+            residuals = data.Twat_mod_agg - data.Twat_obs_agg
+            return _ar1_log_likelihood(residuals, best_rho, ar1_runs)
+        else:
+            mod = data.Twat_mod_agg[valid_mask_agg]
+            obs = data.Twat_obs_agg[valid_mask_agg]
+            return _iid_log_likelihood(mod, obs)
+
+    initial = np.array([best_params[j] for j in active_params])
+    lo = np.array([data.parmin[j] for j in active_params])
+    hi = np.array([data.parmax[j] for j in active_params])
+    scale = (1e-3 * (hi - lo)) if init_scale is None else np.asarray(init_scale, dtype=np.float64)
+
+    rng = np.random.default_rng(seed)
+    p0 = _reflected_walker_init(initial, scale, lo, hi, nwalkers, rng)
+
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability)
+
+    print(f"Running MCMC for {nsteps} steps with {nwalkers} walkers...")
+    sampler.run_mcmc(p0, nsteps, progress=True)
+
+    # A rough, full-chain autocorrelation estimate sizes the burn-in; the diagnostic
+    # actually reported is then recomputed on the post-burn-in chain below
+    # (docs/audit/04_uncertainty_and_mcmc.md, 4.6).
+    tau_rough, _ = _estimate_autocorr(sampler, discard=0)
+    burnin = _resolve_burnin(nsteps, tau_rough, uncertainty_options)
+
+    tau_final, mean_tau = _estimate_autocorr(sampler, discard=burnin)
+    if tau_final is not None:
+        print(f"Estimated autocorrelation time per parameter (post burn-in): {tau_final}")
+
+    strict_convergence = bool(uncertainty_options.get('strict_convergence', False))
+    if tau_final is not None and nsteps < 50 * np.max(tau_final):
+        msg = (f"chain length ({nsteps}) is less than 50x the estimated post-burn-in "
+               f"autocorrelation time ({np.max(tau_final):.1f}).")
+        if strict_convergence:
+            raise RuntimeError(
+                f"MCMC did not converge: {msg} Increase mcmc_steps, or unset "
+                "uncertainty_options.strict_convergence to downgrade this to a warning."
+            )
+        print(f"Warning: {msg} Consider increasing mcmc_steps.")
+
+    mean_acc = float(np.mean(sampler.acceptance_fraction))
+    print(f"Mean acceptance fraction: {mean_acc:.3f}")
+
+    max_rhat = None
+    try:
+        raw_chain = sampler.get_chain(discard=burnin, flat=False)
+        rhat = _split_rhat(raw_chain)
+        finite_rhat = rhat[np.isfinite(rhat)]
+        if len(finite_rhat) > 0:
+            max_rhat = float(np.max(finite_rhat))
+            print(f"Split-Rhat per parameter: {rhat}")
+            if max_rhat >= 1.01:
+                print(f"Warning: split-Rhat ({max_rhat:.4f}) exceeds 1.01; chain may not have converged.")
+    except Exception as e:
+        print(f"Warning: failed to compute split-Rhat ({e}).")
+
+    # Save raw MCMC chain (flattened, removing burnin)
+    chain = sampler.get_chain(discard=burnin, flat=True)
+    chain_df = pd.DataFrame(chain, columns=[f"par_{j+1}" for j in active_params])
+
+    chain_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}.csv")
+    chain_df.to_csv(chain_filename, index=False)
+    print(f"Saved MCMC chain (discarded {burnin} burn-in steps) to {chain_filename}")
+
+    print("Writing metadata sidecar...")
+    sidecar_data = {
+        "rho": best_rho,
+        "sigma": best_sigma,
+        "n_valid_pairs": N,  # N valid points used for variance, proxy for pairs
+        "noise_model_used_for_this_run": noise_model,
+        "mcmc_walkers": nwalkers,
+        "mcmc_steps": nsteps,
+        "mcmc_seed": seed,
+        "burnin": burnin,
+        "mean_acceptance_fraction": mean_acc,
+        "mean_autocorr_time": mean_tau,
+        "max_split_rhat": max_rhat if (max_rhat is not None and np.isfinite(max_rhat)) else None,
+        "strict_convergence": strict_convergence,
+    }
+
+    sidecar_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}_meta.json")
+    with open(sidecar_filename, 'w') as f:
+        json.dump(sidecar_data, f, indent=4, allow_nan=False)
+    print(f"Saved MCMC metadata sidecar to {sidecar_filename}")
+
+    # Compute Predictive Uncertainty Envelopes
+    print("Generating Predictive Uncertainty Envelopes...")
+    n_samples = min(1000, len(chain))
+    sample_indices = rng.choice(len(chain), size=n_samples, replace=False)
+    samples = chain[sample_indices]
+
+    ensemble_simulations = []
+
+    for theta in samples:
+        p_vals = best_params.copy()
+        for idx, j in enumerate(active_params):
+            p_vals[j] = theta[idx]
+
+        data.par[:n_par] = p_vals
+        call_model(data)
+        funcobj(data)  # populate Twat_mod_agg for the aggregated-residual sigma below
+
+        # Estimate sigma from this sample's own residuals, on the same (aggregated)
+        # series the objective scores (report 03, 3.4). The noise itself is still
+        # injected at daily resolution, matching the exported daily envelope.
+        mod_iter = data.Twat_mod_agg[valid_mask_agg]
+        obs_iter = data.Twat_obs_agg[valid_mask_agg]
+        N_iter = len(obs_iter)
+        sigma_iter = float(np.sqrt(np.sum((mod_iter - obs_iter) ** 2) / N_iter)) if N_iter > 0 else 0.0
+
+        if noise_model == 'ar1':
+            noise = generate_ar1_noise(data.n_tot, sigma_iter, best_rho, segments, rng)
+        else:
+            noise = rng.normal(0, sigma_iter, data.n_tot)
+
+        ensemble_simulations.append(data.Twat_mod + noise)
+
+    ensemble_simulations = np.array(ensemble_simulations)
+
+    prediction_interval = uncertainty_options.get('prediction_interval', 90.0)
+    env_filename = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
+    ensemble_filename = os.path.join(data.folder, f"MCMC_ensemble_{data.station}_{data.series}_{data.time_res}.npz")
+    save_ensemble = bool(uncertainty_options.get('save_ensemble', False))
+    _export_ensemble_outputs(data, ensemble_simulations, prediction_interval, env_filename, ensemble_filename, save_ensemble)
+
+    # Restore best parameters for forward pass and fix finalfit mismatch
+    data.par[:n_par] = best_params.copy()
+    if getattr(data, 'par_best', None) is None:
+        data.par_best = np.zeros_like(data.par)
+    data.par_best[:n_par] = best_params.copy()
+
+    call_model(data)
+    data.finalfit = funcobj(data)
+
+
 def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     """
     Differential Evolution + L-BFGS-B followed by MCMC for uncertainty quantification.
     """
     print("Starting DE-MCMC Calibration Mode")
 
-    n_par = 8
+    n_par = N_PAR
     nwalkers = data.mcmc_walkers
-    nsteps = data.mcmc_steps
 
-    active_params = []
-    for j in range(n_par):
-        if data.flag_par[j] and data.parmin[j] != data.parmax[j]:
-            active_params.append(j)
-
+    active_params = _active_params(data, n_par)
     ndim = len(active_params)
 
     if ndim > 0 and nwalkers < 2 * ndim:
@@ -541,244 +920,13 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
         return
 
     print("Phase 3: MCMC Uncertainty Analysis")
-
-    if seed is not None:
-        np.random.seed(seed)
-
     best_params = data.par_best[:n_par].copy()
 
-    # Define log_probability function for emcee
-    def log_probability(theta):
-        """
-        Compute the log-probability of a parameter set for MCMC sampling.
+    # Walker ball scaled to each active parameter's bound width (docs/audit/04, 4.4),
+    # rather than the previous fixed 1e-4, which is negligible for a wide parameter
+    # and can collapse the ensemble's effective spread relative to the posterior.
+    _run_mcmc_uncertainty(data, seed, best_params, active_params, init_scale=None, n_par=n_par)
 
-        Calculates a formal concentrated Gaussian log-likelihood, assuming normally
-        distributed observation errors.
-
-        Parameters
-        ----------
-        theta : ndarray
-            Array containing only the actively varying parameters (those not
-            fixed by bounds).
-
-        Returns
-        -------
-        float
-            The log-likelihood of the parameter set, or -np.inf if the parameters
-            fall outside the defined prior boundaries or cause simulation failure.
-        """
-        # theta contains only the active parameters
-        p_vals = best_params.copy()
-        for idx, j in enumerate(active_params):
-            p_vals[j] = theta[idx]
-
-            # Check bounds
-            if p_vals[j] < data.parmin[j] or p_vals[j] > data.parmax[j]:
-                return -np.inf
-
-        data.par[:n_par] = p_vals
-        call_model(data)
-        eff_index = funcobj(data)
-
-        if np.isnan(eff_index):
-            return -np.inf
-        # Formal Concentrated Gaussian Log-Likelihood, computed on the SAME
-        # (aggregated) series the objective function itself scores -- daily
-        # Twat_obs/Twat_mod only coincide with Twat_obs_agg/Twat_mod_agg for
-        # time_resolution: 1d. eval_mask should always be set by this point
-        # (report 03); the fallback below only matters for direct/unit-test use
-        # that bypasses read_Tseries. Without it, the warm-up transient was
-        # double-counted here even at 1d resolution.
-        eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
-        valid_mask = (data.Twat_obs_agg != -999.0) & eval_mask
-        mod_valid = data.Twat_mod_agg[valid_mask]
-        obs_valid = data.Twat_obs_agg[valid_mask]
-        N = len(obs_valid)
-        if N == 0:
-            return -np.inf
-        SSE = np.sum((mod_valid - obs_valid)**2)
-        if SSE == 0:
-            return MCMC_MAX_LOG_LIKELIHOOD  # near-perfect fit; a literal inf poisons emcee
-        log_L = -0.5 * N * np.log(SSE / N)
-        return log_L
-
-    # Initialize walkers around best parameters
-    initial = np.array([best_params[j] for j in active_params])
-    p0 = initial + 1e-4 * np.random.randn(nwalkers, ndim)
-
-    # Ensure initial positions are within bounds
-    for i in range(nwalkers):
-        for idx, j in enumerate(active_params):
-            p0[i, idx] = np.clip(p0[i, idx], data.parmin[j], data.parmax[j])
-
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability)
-
-    print(f"Running MCMC for {nsteps} steps with {nwalkers} walkers...")
-    sampler.run_mcmc(p0, nsteps, progress=True)
-
-    try:
-        tau = sampler.get_autocorr_time(quiet=True)
-        if np.any(np.isnan(tau)) or np.any(~np.isfinite(tau)):
-            raise ValueError("autocorrelation time not reliably estimated")
-        print(f"Estimated autocorrelation time per parameter: {tau}")
-        if nsteps < 50 * np.max(tau):
-            print(f"Warning: chain length ({nsteps}) is less than 50x the estimated "
-                  f"autocorrelation time ({np.max(tau):.1f}). Consider increasing mcmc_steps.")
-        mean_tau = float(np.mean(tau))
-    except (ValueError, emcee.autocorr.AutocorrError):
-        print("Warning: autocorrelation time could not be reliably estimated; "
-              "chain may be too short to assess convergence.")
-        mean_tau = None
-    except Exception as e:
-        print(f"Warning: failed to compute autocorrelation time ({e}).")
-        mean_tau = None
-
-    mean_acc = float(np.mean(sampler.acceptance_fraction))
-    print(f"Mean acceptance fraction: {mean_acc:.3f}")
-
-    # Discard the first 30% of steps as burn-in to ensure envelopes are drawn from fully converged distributions
-    burnin = int(nsteps * 0.3)
-
-    # Save raw MCMC chain (flattened, removing burnin)
-    chain = sampler.get_chain(discard=burnin, flat=True)
-    chain_df = pd.DataFrame(chain, columns=[f"par_{j+1}" for j in active_params])
-
-    chain_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}.csv")
-    chain_df.to_csv(chain_filename, index=False)
-    print(f"Saved MCMC chain (discarded {burnin} burn-in steps) to {chain_filename}")
-
-    # Step 5: Calculate properties for sidecar file from best_params
-    print("Writing metadata sidecar...")
-    data.par[:n_par] = best_params.copy()
-    call_model(data)
-    funcobj(data)  # populate Twat_mod_agg for the aggregated-residual sigma below
-
-    eval_mask_for_sigma = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
-    # Sigma is estimated on the SAME (aggregated) series the objective scores, matching
-    # the MCMC likelihood (report 03, 3.4) -- daily and aggregated coincide at 1d resolution.
-    valid_mask = (data.Twat_obs_agg != -999.0) & eval_mask_for_sigma
-
-    mod_valid = data.Twat_mod_agg[valid_mask]
-    obs_valid = data.Twat_obs_agg[valid_mask]
-
-    N = len(obs_valid)
-    if N > 0:
-        SSE = np.sum((mod_valid - obs_valid)**2)
-        best_sigma = float(np.sqrt(SSE / N))
-    else:
-        best_sigma = 0.0
-
-    eval_mask_for_rho = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=bool)
-    segments_for_rho = data.segments if data.gap_tolerant else [(0, data.n_tot - 1)]
-    best_rho = estimate_ar1_rho(data.Twat_mod, data.Twat_obs, eval_mask_for_rho, segments_for_rho)
-
-    noise_model = getattr(data, 'uncertainty_options', {}).get('noise_model', 'iid')
-
-    sidecar_data = {
-        "rho": best_rho,
-        "sigma": best_sigma,
-        "n_valid_pairs": N,  # N valid points used for variance, proxy for pairs
-        "noise_model_used_for_this_run": noise_model,
-        "mcmc_walkers": nwalkers,
-        "mcmc_steps": nsteps,
-        "mcmc_seed": seed,
-        "mean_acceptance_fraction": mean_acc,
-        "mean_autocorr_time": mean_tau
-    }
-
-    sidecar_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}_meta.json")
-    with open(sidecar_filename, 'w') as f:
-        json.dump(sidecar_data, f, indent=4, allow_nan=False)
-    print(f"Saved MCMC metadata sidecar to {sidecar_filename}")
-
-    # Step 6: Compute Predictive Uncertainty Envelopes
-    print("Generating Predictive Uncertainty Envelopes...")
-    # Take 1000 random samples from the flattened converged chain to make a robust envelope
-    n_samples = min(1000, len(chain))
-    sample_indices = np.random.choice(len(chain), size=n_samples, replace=False)
-    samples = chain[sample_indices]
-
-    # Store simulated time series
-    ensemble_simulations = []
-
-    if noise_model == 'ar1':
-        rng = np.random.default_rng(seed)
-
-    for i, theta in enumerate(samples):
-        p_vals = best_params.copy()
-        for idx, j in enumerate(active_params):
-            p_vals[j] = theta[idx]
-
-        data.par[:n_par] = p_vals
-
-        call_model(data)
-        funcobj(data)  # populate Twat_mod_agg for the aggregated-residual sigma below
-
-        # To build a true Prediction Interval (as opposed to just parameter confidence),
-        # we must add the observation error variance back into the simulations.
-        # We estimate sigma from the residuals of this specific parameter set, on the
-        # same (aggregated) series the objective scores (report 03, 3.4). The noise
-        # itself is still injected at daily resolution below, matching the exported
-        # daily envelope.
-        valid_mask_iter = (data.Twat_obs_agg != -999.0) & eval_mask_for_sigma
-
-        mod_valid_iter = data.Twat_mod_agg[valid_mask_iter]
-        obs_valid_iter = data.Twat_obs_agg[valid_mask_iter]
-
-        N_iter = len(obs_valid_iter)
-        if N_iter > 0:
-            SSE_iter = np.sum((mod_valid_iter - obs_valid_iter)**2)
-            sigma = np.sqrt(SSE_iter / N_iter)
-        else:
-            sigma = 0.0
-
-        if noise_model == 'ar1':
-            noise = generate_ar1_noise(data.n_tot, sigma, best_rho, segments_for_rho, rng)
-        else:
-            noise = np.random.normal(0, sigma, data.n_tot)
-
-        noisy_simulation = data.Twat_mod + noise
-
-        ensemble_simulations.append(noisy_simulation)
-
-    ensemble_simulations = np.array(ensemble_simulations)
-
-    # Calculate percentiles at each time step
-    prediction_interval = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0)
-    lower_perc = (100.0 - prediction_interval) / 2.0
-    upper_perc = 100.0 - lower_perc
-
-    perc_lower = np.percentile(ensemble_simulations, lower_perc, axis=0)
-    perc_50 = np.percentile(ensemble_simulations, 50, axis=0)
-    perc_upper = np.percentile(ensemble_simulations, upper_perc, axis=0)
-
-    # Replace calculated percentiles with NaN where the base model has missing data gaps
-    perc_lower = np.where(data.Twat_mod == -999.0, np.nan, perc_lower)
-    perc_50 = np.where(data.Twat_mod == -999.0, np.nan, perc_50)
-    perc_upper = np.where(data.Twat_mod == -999.0, np.nan, perc_upper)
-
-    # Export envelopes
-    env_df = pd.DataFrame({
-        'Year': data.date[:, 0],
-        'Month': data.date[:, 1],
-        'Day': data.date[:, 2],
-        'Twat_mod_lower': perc_lower,
-        'Twat_mod_p50': perc_50,
-        'Twat_mod_upper': perc_upper
-    })
-
-    env_filename = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
-    env_df.iloc[365:].to_csv(env_filename, index=False)  # drop the warm-up block (report 05, Defect C)
-    print(f"Saved predictive uncertainty envelopes to {env_filename}")
-
-    # Restore best parameters for forward pass and fix finalfit mismatch
-    data.par[:n_par] = best_params.copy()
-    if getattr(data, 'par_best', None) is None:
-        data.par_best = np.zeros_like(data.par)
-    data.par_best[:n_par] = best_params.copy()
-
-    call_model(data)
-    data.finalfit = funcobj(data)
 
 def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     """
@@ -786,15 +934,10 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     """
     print("Starting DE-CV-MCMC Calibration Mode")
 
-    n_par = 8
+    n_par = N_PAR
     nwalkers = data.mcmc_walkers
-    nsteps = data.mcmc_steps
 
-    active_params = []
-    for j in range(n_par):
-        if data.flag_par[j] and data.parmin[j] != data.parmax[j]:
-            active_params.append(j)
-
+    active_params = _active_params(data, n_par)
     ndim = len(active_params)
 
     if ndim > 0 and nwalkers < 2 * ndim:
@@ -825,7 +968,6 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     # or just use whatever is in cv_config.optimizer_overrides
     results = run_leave_one_year_out_cv(data, cv_config, 'DE')
 
-
     # Extract standard deviations from CV folds
     if len(results) > 1:
         cv_params = np.array([r.par_best for r in results])
@@ -843,211 +985,5 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
             std_active[idx] = val
 
     print("Phase 4: MCMC Uncertainty Analysis (with CV-informed spread)")
-    nwalkers = data.mcmc_walkers
-    nsteps = data.mcmc_steps
-
-    if seed is not None:
-        np.random.seed(seed)
-
     best_params = data.par_best[:n_par].copy()
-
-    # Define log_probability function for emcee
-    def log_probability(theta):
-        # theta contains only the active parameters
-        p_vals = best_params.copy()
-        for idx, j in enumerate(active_params):
-            p_vals[j] = theta[idx]
-
-            # Check bounds
-            if p_vals[j] < data.parmin[j] or p_vals[j] > data.parmax[j]:
-                return -np.inf
-
-        data.par[:n_par] = p_vals
-        call_model(data)
-        eff_index = funcobj(data)
-
-        if np.isnan(eff_index):
-            return -np.inf
-        # Formal Concentrated Gaussian Log-Likelihood, computed on the SAME
-        # (aggregated) series the objective function itself scores (report 03, 3.4).
-        eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
-        valid_mask = (data.Twat_obs_agg != -999.0) & eval_mask
-        mod_valid = data.Twat_mod_agg[valid_mask]
-        obs_valid = data.Twat_obs_agg[valid_mask]
-        N = len(obs_valid)
-        if N == 0:
-            return -np.inf
-        SSE = np.sum((mod_valid - obs_valid)**2)
-        if SSE == 0:
-            return MCMC_MAX_LOG_LIKELIHOOD  # near-perfect fit; a literal inf poisons emcee
-        log_L = -0.5 * N * np.log(SSE / N)
-        return log_L
-
-    # Initialize walkers around best parameters
-    initial = np.array([best_params[j] for j in active_params])
-    p0 = initial + std_active * np.random.randn(nwalkers, ndim)
-
-    # Ensure initial positions are within bounds
-    for i in range(nwalkers):
-        for idx, j in enumerate(active_params):
-            p0[i, idx] = np.clip(p0[i, idx], data.parmin[j], data.parmax[j])
-
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability)
-
-    print(f"Running MCMC for {nsteps} steps with {nwalkers} walkers...")
-    sampler.run_mcmc(p0, nsteps, progress=True)
-
-    try:
-        tau = sampler.get_autocorr_time(quiet=True)
-        if np.any(np.isnan(tau)) or np.any(~np.isfinite(tau)):
-            raise ValueError("autocorrelation time not reliably estimated")
-        print(f"Estimated autocorrelation time per parameter: {tau}")
-        if nsteps < 50 * np.max(tau):
-            print(f"Warning: chain length ({nsteps}) is less than 50x the estimated "
-                  f"autocorrelation time ({np.max(tau):.1f}). Consider increasing mcmc_steps.")
-        mean_tau = float(np.mean(tau))
-    except (ValueError, emcee.autocorr.AutocorrError):
-        print("Warning: autocorrelation time could not be reliably estimated; "
-              "chain may be too short to assess convergence.")
-        mean_tau = None
-    except Exception as e:
-        print(f"Warning: failed to compute autocorrelation time ({e}).")
-        mean_tau = None
-
-    mean_acc = float(np.mean(sampler.acceptance_fraction))
-    print(f"Mean acceptance fraction: {mean_acc:.3f}")
-
-    # Discard the first 30% of steps as burn-in to ensure envelopes are drawn from fully converged distributions
-    burnin = int(nsteps * 0.3)
-
-    # Save raw MCMC chain (flattened, removing burnin)
-    chain = sampler.get_chain(discard=burnin, flat=True)
-    chain_df = pd.DataFrame(chain, columns=[f"par_{j+1}" for j in active_params])
-
-    chain_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}.csv")
-    chain_df.to_csv(chain_filename, index=False)
-    print(f"Saved MCMC chain (discarded {burnin} burn-in steps) to {chain_filename}")
-
-    # Calculate properties for sidecar file from best_params
-    print("Writing metadata sidecar...")
-    data.par[:n_par] = best_params.copy()
-    call_model(data)
-    funcobj(data)  # populate Twat_mod_agg for the aggregated-residual sigma below
-
-    eval_mask_for_sigma = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
-    # Sigma is estimated on the SAME (aggregated) series the objective scores (report 03, 3.4).
-    valid_mask = (data.Twat_obs_agg != -999.0) & eval_mask_for_sigma
-
-    mod_valid = data.Twat_mod_agg[valid_mask]
-    obs_valid = data.Twat_obs_agg[valid_mask]
-
-    N = len(obs_valid)
-    if N > 0:
-        SSE = np.sum((mod_valid - obs_valid)**2)
-        best_sigma = float(np.sqrt(SSE / N))
-    else:
-        best_sigma = 0.0
-
-    eval_mask_for_rho = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=bool)
-    segments_for_rho = data.segments if data.gap_tolerant else [(0, data.n_tot - 1)]
-    best_rho = estimate_ar1_rho(data.Twat_mod, data.Twat_obs, eval_mask_for_rho, segments_for_rho)
-
-    noise_model = getattr(data, 'uncertainty_options', {}).get('noise_model', 'iid')
-
-    import json
-    sidecar_data = {
-        "rho": best_rho,
-        "sigma": best_sigma,
-        "n_valid_pairs": N,
-        "noise_model_used_for_this_run": noise_model,
-        "mcmc_walkers": nwalkers,
-        "mcmc_steps": nsteps,
-        "mcmc_seed": seed,
-        "mean_acceptance_fraction": mean_acc,
-        "mean_autocorr_time": mean_tau
-    }
-
-    sidecar_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}_meta.json")
-    with open(sidecar_filename, 'w') as f:
-        json.dump(sidecar_data, f, indent=4, allow_nan=False)
-    print(f"Saved MCMC metadata sidecar to {sidecar_filename}")
-
-    # Compute Predictive Uncertainty Envelopes
-    print("Generating Predictive Uncertainty Envelopes...")
-    n_samples = min(1000, len(chain))
-    sample_indices = np.random.choice(len(chain), size=n_samples, replace=False)
-    samples = chain[sample_indices]
-
-    ensemble_simulations = []
-
-    if noise_model == 'ar1':
-        rng = np.random.default_rng(seed)
-
-    from .uncertainty import generate_ar1_noise
-    for i, theta in enumerate(samples):
-        p_vals = best_params.copy()
-        for idx, j in enumerate(active_params):
-            p_vals[j] = theta[idx]
-
-        data.par[:n_par] = p_vals
-
-        call_model(data)
-        funcobj(data)  # populate Twat_mod_agg for the aggregated-residual sigma below
-
-        # Sigma estimated on the aggregated series (report 03, 3.4); noise is still
-        # injected at daily resolution below, matching the exported daily envelope.
-        valid_mask_iter = (data.Twat_obs_agg != -999.0) & eval_mask_for_sigma
-
-        mod_valid_iter = data.Twat_mod_agg[valid_mask_iter]
-        obs_valid_iter = data.Twat_obs_agg[valid_mask_iter]
-
-        N_iter = len(obs_valid_iter)
-        if N_iter > 0:
-            SSE_iter = np.sum((mod_valid_iter - obs_valid_iter)**2)
-            sigma = np.sqrt(SSE_iter / N_iter)
-        else:
-            sigma = 0.0
-
-        if noise_model == 'ar1':
-            noise = generate_ar1_noise(data.n_tot, sigma, best_rho, segments_for_rho, rng)
-        else:
-            noise = np.random.normal(0, sigma, data.n_tot)
-
-        noisy_simulation = data.Twat_mod + noise
-        ensemble_simulations.append(noisy_simulation)
-
-    ensemble_simulations = np.array(ensemble_simulations)
-
-    prediction_interval = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0)
-    lower_perc = (100.0 - prediction_interval) / 2.0
-    upper_perc = 100.0 - lower_perc
-
-    perc_lower = np.percentile(ensemble_simulations, lower_perc, axis=0)
-    perc_50 = np.percentile(ensemble_simulations, 50, axis=0)
-    perc_upper = np.percentile(ensemble_simulations, upper_perc, axis=0)
-
-    perc_lower = np.where(data.Twat_mod == -999.0, np.nan, perc_lower)
-    perc_50 = np.where(data.Twat_mod == -999.0, np.nan, perc_50)
-    perc_upper = np.where(data.Twat_mod == -999.0, np.nan, perc_upper)
-
-    env_df = pd.DataFrame({
-        'Year': data.date[:, 0],
-        'Month': data.date[:, 1],
-        'Day': data.date[:, 2],
-        'Twat_mod_lower': perc_lower,
-        'Twat_mod_p50': perc_50,
-        'Twat_mod_upper': perc_upper
-    })
-
-    env_filename = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
-    env_df.iloc[365:].to_csv(env_filename, index=False)  # drop the warm-up block (report 05, Defect C)
-    print(f"Saved predictive uncertainty envelopes to {env_filename}")
-
-    # Final fix for finalfit mismatch
-    data.par[:n_par] = best_params.copy()
-    if data.par_best is None:
-        data.par_best = np.zeros_like(data.par)
-    data.par_best[:n_par] = best_params.copy()
-
-    call_model(data)
-    data.finalfit = funcobj(data)
+    _run_mcmc_uncertainty(data, seed, best_params, active_params, init_scale=std_active, n_par=n_par)
