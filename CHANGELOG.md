@@ -28,6 +28,22 @@
   `warmup_drop_days`) -- a different, larger sample than the one actually scored.
   This changes every reported NSE/KGE/R²/AIC/BIC in gap-tolerant mode, and the
   MCMC posterior in every mode.
+- **Output CSVs no longer contain the 365-day warm-up block** (audit report 05,
+  Defect C). `2_*.csv`, `3_*.csv`, `MCMC_envelopes_*.csv`, and
+  `Forward_Prediction_Envelopes_*.csv` previously started with 365 rows of
+  `Year=-999` junk (a verbatim copy of year one used internally as a numerical
+  spin-up); reading these files directly broke `pd.to_datetime` and row-count
+  expectations. Row count now equals the input file's row count.
+- **`FORWARD` mode with no `T_water` at all no longer crashes** (audit report 05,
+  Defect A). `main()` called `aggregation()`/`statis()` unconditionally before
+  dispatching to any run mode; a pure climate-projection run (no observations to
+  calibrate against) crashed with `n_dat is 0` before reaching `forward_mode()`'s
+  own correct handling of that case.
+- **A validation period shorter than one year no longer silently re-scores the
+  calibration data as "validation"** (audit report 05, Defect B). `read_Tseries`
+  returned before overwriting `data.n_tot` for a too-short validation period, so
+  it silently retained the calibration value and passed the length guard in
+  `main.forward()`.
 
 ### Added
 - `NumericalDivergenceError`, raised by `main.forward()`, `optimization.forward_mode()`,
@@ -40,8 +56,21 @@
   stable and exact for piecewise-constant coefficients.
 - `calibration_metadata.json`, written by every run, recording `Qmedia`, its source,
   the calibrated theta range, version, integrator, and best-fit parameters.
+- New config key `calendar`: `"standard"` (default), `"noleap"`, or `"360_day"`, for
+  GCM output on a non-standard calendar (audit report 05, Defect D). `tt` (the
+  seasonal term's phase) is computed from row position against the declared
+  calendar rather than from the `Date` column, which a non-standard-calendar file
+  padded to pass the old validation would otherwise silently misalign. The
+  1-January start requirement is also relaxed for `run_mode: FORWARD`.
 - New config keys: `max_plausible_twat`, `stability_error_fraction`,
-  `paths.calibration_metadata`.
+  `paths.calibration_metadata`, `calendar`.
+
+### Removed
+- The `Twat_mod_p5`/`Twat_mod_p95` dual-name fallback in `post_processing.py`
+  (audit report 05, Defect E) -- a compatibility shim for a column name the code
+  has never actually written (the real columns are `Twat_mod_lower`/
+  `Twat_mod_p50`/`Twat_mod_upper`). Two example scripts still referenced the
+  removed names and have been fixed.
 
 ## [1.0.0] - 2026-07-09
 

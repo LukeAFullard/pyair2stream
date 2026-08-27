@@ -16,7 +16,7 @@ import emcee
 
 import json
 from .config import CommonData
-from .model import call_model, funcobj, warn_on_stability, check_numerical_divergence
+from .model import call_model, funcobj, aggregation, statis, warn_on_stability, check_numerical_divergence
 from .uncertainty import estimate_ar1_rho, generate_ar1_noise
 
 # A near-perfect-fit MCMC log-likelihood is capped at this large but finite value rather
@@ -47,8 +47,11 @@ def forward_mode(data: CommonData) -> None:
     Replicates SUBROUTINE forward_mode
     Adds optional probabilistic Prediction Intervals based on MCMC chains.
     """
-    # We must aggregate the data so I_inf / I_pos are created for funcobj to work without throwing NoneType exceptions
-    # But ONLY if Twat_obs is not entirely -999.0, else n_dat becomes 0 which we should skip or mock.
+    # FORWARD mode does not calibrate, so it may legitimately have no T_water
+    # observations at all (a pure climate-projection/scenario run). main() no
+    # longer calls aggregation()/statis() unconditionally before dispatching
+    # here (report 05, Defect A) -- statis() raises when there are no
+    # observations, so it must only run when there are some.
     has_obs = False
     for val in data.Twat_obs:
         if val != -999.0:
@@ -57,7 +60,15 @@ def forward_mode(data: CommonData) -> None:
 
     warn_on_stability(data, error_fraction=data.stability_error_fraction)
 
+    # Always aggregate: this builds I_inf/I_pos (needed by funcobj) and
+    # correctly re-initialises Twat_obs_agg to all -999 when there are no
+    # observations, rather than leaving it at read_Tseries's all-zero
+    # allocation. n_dat comes out 0 when has_obs is False, which funcobj()
+    # already handles by returning -999.0 without touching mean_obs/TSS_obs.
+    aggregation(data)
+
     if has_obs:
+        statis(data)
         ei = sub_1(data)
     else:
         # It's a pure projection, we skip the objective evaluation.
@@ -181,7 +192,7 @@ def forward_mode(data: CommonData) -> None:
         })
 
         env_filename = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
-        env_df.to_csv(env_filename, index=False)
+        env_df.iloc[365:].to_csv(env_filename, index=False)  # drop the warm-up block (report 05, Defect C)
         print(f"Saved forward prediction uncertainty envelopes to {env_filename}")
 
         # Restore deterministic parameters
@@ -757,7 +768,7 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     })
 
     env_filename = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
-    env_df.to_csv(env_filename, index=False)
+    env_df.iloc[365:].to_csv(env_filename, index=False)  # drop the warm-up block (report 05, Defect C)
     print(f"Saved predictive uncertainty envelopes to {env_filename}")
 
     # Restore best parameters for forward pass and fix finalfit mismatch
@@ -1029,7 +1040,7 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     })
 
     env_filename = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
-    env_df.to_csv(env_filename, index=False)
+    env_df.iloc[365:].to_csv(env_filename, index=False)  # drop the warm-up block (report 05, Defect C)
     print(f"Saved predictive uncertainty envelopes to {env_filename}")
 
     # Final fix for finalfit mismatch

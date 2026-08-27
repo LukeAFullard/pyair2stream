@@ -104,10 +104,14 @@ def main():
 
     if os.path.exists(demcmc_results['env_file']):
         env_df = pd.read_csv(demcmc_results['env_file'])
-        # Extract valid envelope data matching valid_mask
-        # (the length should match the model array since it is printed row-for-row)
-        if len(env_df) == len(valid_mask):
-            plt.fill_between(dates, env_df['Twat_mod_p5'][valid_mask], env_df['Twat_mod_p95'][valid_mask], color='green', alpha=0.2, label='DE-MCMC 90% Envelope')
+        # The envelope CSV no longer contains the warm-up block (it is dropped on
+        # write), so align it with the post-warm-up portion of valid_mask instead
+        # of valid_mask itself. Columns are Twat_mod_lower/Twat_mod_upper -- the
+        # dual p5/p95 naming was a compatibility shim for a name that was never
+        # released and has been removed.
+        valid_mask_real = valid_mask[365:]
+        if len(env_df) == len(valid_mask_real):
+            plt.fill_between(dates, env_df['Twat_mod_lower'][valid_mask_real], env_df['Twat_mod_upper'][valid_mask_real], color='green', alpha=0.2, label='DE-MCMC 90% Envelope')
 
     plt.plot(dates, pso_results['mod_temp'][valid_mask], label='PSO Mod (NSE={:.3f})'.format(pso_results['objective']), alpha=0.7)
     plt.plot(dates, de_results['mod_temp'][valid_mask], '--', label='DE Mod (NSE={:.3f})'.format(de_results['objective']), alpha=0.7)

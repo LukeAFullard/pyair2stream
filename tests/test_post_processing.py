@@ -109,13 +109,23 @@ class TestPostProcessing(unittest.TestCase):
     def test_post_processing_forward_mode(self):
         self.data.runmode = 'FORWARD'
         self.data.n_tot = 380
+        # Mark the warm-up block exactly as read_Tseries does, so the
+        # `year > 0` validity mask in post_processing excludes it (report 05,
+        # Defect C -- there is no separate positional [365:] slice any more).
+        self.data.date[0:365, :] = -999
 
-        # Create a mock envelope file
+        # Create a mock envelope file. Real envelope CSVs no longer contain the
+        # warm-up block and use Twat_mod_lower/upper (the p5/p95 fallback was
+        # removed -- report 05, Defect E), so the mock must match: n_tot - 365 rows.
+        n_real = self.data.n_tot - 365
         env_file = os.path.join(self.data.folder, f"Forward_Prediction_Envelopes_{self.data.station}_{self.data.series}_{self.data.time_res}.csv")
         df_env = pd.DataFrame({
-            'Date': pd.date_range(start="2020-01-01", periods=self.data.n_tot, freq='D'),
-            'Twat_mod_p5': np.zeros(self.data.n_tot),
-            'Twat_mod_p95': np.ones(self.data.n_tot)
+            'Year': self.data.date[365:, 0],
+            'Month': self.data.date[365:, 1],
+            'Day': self.data.date[365:, 2],
+            'Twat_mod_lower': np.zeros(n_real),
+            'Twat_mod_p50': np.full(n_real, 0.5),
+            'Twat_mod_upper': np.ones(n_real),
         })
         df_env.to_csv(env_file, index=False)
 

@@ -50,8 +50,12 @@ class TestMain(unittest.TestCase):
             # Assert correct orchestration sequence
             mock_read_cal.assert_called_once_with(config_file='dummy.yaml')
             mock_read_ts.assert_called_once_with(data, 'c')
-            mock_agg.assert_called_once_with(data)
-            mock_statis.assert_called_once_with(data)
+            # FORWARD mode does not calibrate and may have no observations at all
+            # (a pure projection); main() must not call aggregation()/statis()
+            # unconditionally -- forward_mode() (mocked here) handles both cases
+            # itself via its own has_obs check (report 05, Defect A).
+            mock_agg.assert_not_called()
+            mock_statis.assert_not_called()
             mock_fwd_mode.assert_called_once_with(data)
             mock_fwd.assert_called_once_with(data)
             mock_post.assert_called_once_with(data)
@@ -183,6 +187,10 @@ class TestMain(unittest.TestCase):
 
         main()
 
+        # Non-FORWARD run modes calibrate and must still get aggregation()/statis()
+        # from main() before dispatching (report 05, Defect A only concerns FORWARD).
+        mock_agg.assert_called_once_with(data)
+        mock_statis.assert_called_once_with(data)
         mock_run_cv.assert_called_once_with(data, "loyo", data.runmode)
         mock_summarize.assert_called_once()
         self.assertTrue(os.path.exists(os.path.join(data.folder, "cv_results.csv")))

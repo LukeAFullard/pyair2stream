@@ -45,6 +45,15 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data.max_plausible_twat = np.float64(config.get('max_plausible_twat', 60.0))
     data.stability_error_fraction = np.float64(config.get('stability_error_fraction', 0.10))
 
+    data.calendar = config.get('calendar', 'standard')
+    if data.calendar not in ('standard', 'noleap', '360_day'):
+        raise ValueError(
+            f"Invalid calendar '{data.calendar}'. Must be one of: 'standard', 'noleap', "
+            "'360_day'. GCM output on a non-standard calendar (no leap days, or 12 "
+            "uniform 30-day months) must declare it explicitly rather than being padded "
+            "to fake Gregorian dates -- see docs/audit/05_cli_and_io_correctness.md."
+        )
+
     # Paths mapping
     paths = config.get('paths', {})
 
@@ -316,6 +325,11 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
     else:
         period = 'validation'
         filename = getattr(data, '_input_data_path_val', None)
+        # Pessimistic default: only set True once validation has been fully and
+        # successfully loaded below. Every early-return path in this function
+        # must leave this False rather than overload data.n_tot, which stays at
+        # the calibration value on some of those paths (report 05, Defect B).
+        data.validation_available = False
 
     if not filename or not os.path.exists(filename):
         if p == 'v':
@@ -334,14 +348,37 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
 
     date_col = pd.to_datetime(df['Date'])
 
-    # Validate Start Date
-    if not data.gap_tolerant and len(date_col) > 0 and (date_col.iloc[0].month != 1 or date_col.iloc[0].day != 1):
+    # Validate Start Date. A projection period rarely starts on 1 January -- the
+    # constraint exists only so the warm-up block's tt values (hardcoded to
+    # (j+1)/365.0) line up with the real record; FORWARD mode's own parameters
+    # are already fitted, so this alignment does not matter there (report 05,
+    # Defect D).
+    if (
+        not data.gap_tolerant
+        and data.runmode != 'FORWARD'
+        and len(date_col) > 0
+        and (date_col.iloc[0].month != 1 or date_col.iloc[0].day != 1)
+    ):
         raise ValueError(f"The time series in {filename} must start on January 1st.")
 
-    # Validate Daily Scale (no gaps)
-    expected_dates = pd.date_range(start=date_col.iloc[0], end=date_col.iloc[-1], freq='D')
-    if len(date_col) != len(expected_dates) or not date_col.equals(pd.Series(expected_dates)):
-        raise ValueError(f"The time series in {filename} must be continuous at a daily time scale with no missing dates. Fill missing rows with NaN or -999.")
+    if data.calendar == 'standard':
+        # Validate Daily Scale (no gaps). Only meaningful for the real Gregorian
+        # calendar -- a genuine noleap/360_day series will never satisfy this by
+        # construction (see the `calendar` branch below).
+        expected_dates = pd.date_range(start=date_col.iloc[0], end=date_col.iloc[-1], freq='D')
+        if len(date_col) != len(expected_dates) or not date_col.equals(pd.Series(expected_dates)):
+            raise ValueError(f"The time series in {filename} must be continuous at a daily time scale with no missing dates. Fill missing rows with NaN or -999.")
+    else:
+        # Non-standard calendar: dates are informational only (used for the
+        # output Year/Month/Day columns), not for physics. Do not validate them
+        # against real Gregorian day-spacing -- only that they are in order, so
+        # a genuinely mis-ordered file is still caught. tt is computed from row
+        # position against the declared calendar below, not from these dates,
+        # so a "padded" Gregorian date column cannot silently misalign it.
+        if not date_col.is_monotonic_increasing:
+            raise ValueError(
+                f"The time series in {filename} must have non-decreasing dates."
+            )
 
     # Validate completeness of T_air and Discharge
     if 'T_air' not in df.columns:
@@ -365,6 +402,16 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
     if p == 'v' and n_tot_raw < 365:
         print('Validation period < 1 year --> validation is skipped')
         return
+
+    if p == 'c' and n_tot_raw < 365:
+        # The warm-up block replicates the first 365 rows of the real record; a
+        # shorter calibration series would otherwise fail later with an opaque
+        # numpy broadcast error instead of an actionable message.
+        raise ValueError(
+            f"The {period} time series in {filename} has only {n_tot_raw} day(s); "
+            "at least 365 are required (the warm-up block replicates the first "
+            "year of data)."
+        )
 
     n_year = int(np.ceil(n_tot_raw / 365.25))
     n_tot = n_tot_raw + 365
@@ -402,23 +449,38 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
     data.Q[0:365] = Q[:365]
 
     # Rewrite tt calculation to use calendar dates.
-    # The first 365 days (warm-up) keep existing logic: 1..365 / 365.0
+    # The first 365 days (warm-up) keep existing logic: 1..365 / 365.0. Left
+    # unchanged regardless of `calendar` -- the warm-up-block design is out of
+    # scope for report 05 (it is Fortran-equivalent and the golden tests depend
+    # on it).
     for j in range(365):
         data.tt[j] = np.float64((j + 1) / 365.0)
 
-    for i in range(365, n_tot):
-        year = data.date[i, 0]
-        month = data.date[i, 1]
-        day = data.date[i, 2]
-        is_leap = False
-        if year % 4 == 0:
-            if year % 100 != 0 or year % 400 == 0:
-                is_leap = True
-        days_in_year = 366 if is_leap else 365
+    if data.calendar == 'standard':
+        for i in range(365, n_tot):
+            year = data.date[i, 0]
+            month = data.date[i, 1]
+            day = data.date[i, 2]
+            is_leap = False
+            if year % 4 == 0:
+                if year % 100 != 0 or year % 400 == 0:
+                    is_leap = True
+            days_in_year = 366 if is_leap else 365
 
-        # Calculate day of year
-        doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days + 1
-        data.tt[i] = np.float64(doy / float(days_in_year))
+            # Calculate day of year
+            doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days + 1
+            data.tt[i] = np.float64(doy / float(days_in_year))
+    else:
+        # noleap / 360_day: compute tt from ROW POSITION against the declared
+        # calendar's fixed day-count, not from the (possibly padded/fake)
+        # Gregorian dates in `Date` -- those would silently misalign the
+        # seasonal cosine term against the true day of year (report 05, Defect
+        # D). Row 365 (the first real day) restarts the annual cycle at day 1,
+        # matching the warm-up block's own convention above.
+        days_in_year = 365 if data.calendar == 'noleap' else 360
+        for i in range(365, n_tot):
+            doy = ((i - 365) % days_in_year) + 1
+            data.tt[i] = np.float64(doy / float(days_in_year))
 
     # Initial Qmedia and DOY climatology calculations
     if recompute_qmedia:
@@ -477,5 +539,6 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
             print(f"Validation skipped: {e}")
             data.n_tot = 0
             return
+        data.validation_available = True
     else:
         prepare_evaluation(data)

@@ -90,7 +90,7 @@ def compare_plots():
 
     # Plot IID
     ax = axes[0]
-    ax.fill_between(env_iid.index, env_iid['Twat_mod_p5'], env_iid['Twat_mod_p95'], color='green', alpha=0.3, label='90% PI (IID)')
+    ax.fill_between(env_iid.index, env_iid['Twat_mod_lower'], env_iid['Twat_mod_upper'], color='green', alpha=0.3, label='90% PI (IID)')
     ax.plot(env_iid.index, env_iid['Twat_mod_p50'], color='black', label='Median (IID)')
     ax.set_title("Forward Projection - IID Noise")
     ax.set_ylabel("Water Temp (°C)")
@@ -98,7 +98,7 @@ def compare_plots():
 
     # Plot AR1
     ax = axes[1]
-    ax.fill_between(env_ar1.index, env_ar1['Twat_mod_p5'], env_ar1['Twat_mod_p95'], color='blue', alpha=0.3, label='90% PI (AR1)')
+    ax.fill_between(env_ar1.index, env_ar1['Twat_mod_lower'], env_ar1['Twat_mod_upper'], color='blue', alpha=0.3, label='90% PI (AR1)')
     ax.plot(env_ar1.index, env_ar1['Twat_mod_p50'], color='black', label='Median (AR1)')
     ax.set_title("Forward Projection - AR(1) Noise")
     ax.set_ylabel("Water Temp (°C)")
