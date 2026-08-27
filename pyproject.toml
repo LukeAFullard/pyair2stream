@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pyair2stream"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python port of the air2stream hybrid model for river water temperature."
 authors = ["pyair2stream authors <LukeAFullard@users.noreply.github.com>"]
 readme = "README.md"
@@ -13,6 +13,16 @@ exclude = [
     "examples", "tests", "fortran", "*.md", "*.txt", "*.docx"
 ]
 
+# Lower bounds only pin the oldest version known to work; no upper bounds are
+# set so security/bugfix releases aren't blocked. `pip install -e .` (used by
+# the CI matrix job) resolves against these bounds and can pick very different
+# dependency sets on Python 3.9 vs 3.12 as a result -- for a package intended
+# for reproducible science, the CI "locked-env" job installs the exact,
+# pinned versions from `poetry.lock` instead (see .github/workflows/tests.yml
+# and docs/audit/07_reproducibility_and_provenance.md, 7.7). The audited/tested
+# environment for the example outputs bundled in this repository is documented
+# in docs/audit/00_INDEX.md: Python 3.12, numpy 2.4.4, scipy 1.17.1,
+# pandas 3.0.2, numba 0.67.0, emcee 3.1.6.
 [tool.poetry.dependencies]
 python = ">=3.9"
 numpy = ">=1.20.0"

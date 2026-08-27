@@ -1,9 +1,14 @@
 cff-version: 1.2.0
-message: "If you use this software in published work, please cite it and the original model paper."
+message: "If you use this software in published work, please cite it and the original model paper. pyair2stream is an independent Python port and is not maintained by or endorsed by the original air2stream authors (Toffolon & Piccolroaz)."
 authors:
   - family-names: "Fullard"
+    given-names: "Luke"
 title: "pyair2stream"
+version: "0.2.0"
+date-released: "2026-08-27"
 url: "https://github.com/LukeAFullard/pyair2stream"
+# TODO: add a software DOI once a Zenodo archive is created for this
+# repository (Zenodo's GitHub integration mints one per tagged release).
 preferred-citation:
   type: article
   authors:

@@ -30,3 +30,34 @@ jobs:
 
       - name: Run test suite (including Fortran golden tests)
         run: pytest tests/ -v
+
+  # `pip install -e .` above resolves against pyproject.toml's loose lower-bound-only
+  # dependency floors and can silently pick a different dependency set than the one
+  # `poetry.lock` pins and the one the bundled example outputs were generated with
+  # (docs/audit/00_INDEX.md's audited environment; docs/audit/07_reproducibility_and_
+  # provenance.md, 7.7). This job installs the exact locked versions instead, so a
+  # regression caused by a newer transitive dependency doesn't hide behind the
+  # floating-dependency matrix job above.
+  test-locked-env:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install gfortran
+        run: sudo apt-get update && sudo apt-get install -y gfortran
+
+      - name: Install poetry
+        run: pip install poetry
+
+      - name: Install exact locked dependencies from poetry.lock
+        run: poetry install --with dev --sync
+
+      - name: Run test suite (including Fortran golden tests) against the locked environment
+        run: poetry run pytest tests/ -v

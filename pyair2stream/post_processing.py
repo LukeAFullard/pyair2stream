@@ -377,10 +377,10 @@ def post_process(data: CommonData, toll: float = None):
         metrics_str = f"R²={r2:.3f}, RMSE={rmse:.2f}°C, MAE={mae:.2f}°C\nAIC={aic:.1f}, BIC={bic:.1f}"
 
         if os.path.exists(env_file_mcmc):
-            pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+            pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
             ax.set_title(f"Historical Calibration with {pi_val:g}% Prediction Interval\n{metrics_str}")
         else:
-            pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+            pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
             title_text = f"Forward Projection with {pi_val:g}% Prediction Interval" if os.path.exists(env_file_fwd) else title_prefix
             ax.set_title(f"{title_text}\n{metrics_str}")
 
@@ -424,14 +424,14 @@ def post_process(data: CommonData, toll: float = None):
                 lower_col = 'Twat_mod_lower'
                 upper_col = 'Twat_mod_upper'
 
-                pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+                pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
                 l_env = [ax.fill_between(dates, env_df[lower_col], env_df[upper_col], color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')]
 
         lines = l1 + l2 + l3 + l4
         if l_env:
             # We add a proxy artist for the fill_between to show up nicely in the legend
             import matplotlib.patches as mpatches
-            pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+            pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
             proxy = mpatches.Patch(color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')
             lines.append(proxy)
 
@@ -561,10 +561,10 @@ def post_process(data: CommonData, toll: float = None):
         env_file = env_file_mcmc if os.path.exists(env_file_mcmc) else env_file_fwd
 
         if os.path.exists(env_file_mcmc):
-            pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+            pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
             ax.set_title(f"Historical Calibration with {pi_val:g}% Prediction Interval")
         else:
-            pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+            pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
             ax.set_title(f"Forward Projection with {pi_val:g}% Prediction Interval")
 
         if os.path.exists(env_file):
@@ -578,7 +578,7 @@ def post_process(data: CommonData, toll: float = None):
                 lower_col = 'Twat_mod_lower'
                 upper_col = 'Twat_mod_upper'
 
-                pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+                pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
                 l_env = [ax.fill_between(dates, env_df[lower_col], env_df[upper_col], color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')]
 
         l3 = ax.plot(dates, Twat_mod, '-', color=orange, label='Simulated median water temp.', linewidth=1.5)
@@ -594,7 +594,7 @@ def post_process(data: CommonData, toll: float = None):
         lines = l1 + l3 + l4
         if l_env:
             import matplotlib.patches as mpatches
-            pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
+            pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
             proxy = mpatches.Patch(color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')
             lines.append(proxy)
 

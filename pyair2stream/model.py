@@ -260,7 +260,7 @@ def detect_segments(data: CommonData) -> None:
         raise ValueError("Total valid forcing days across all segments is zero.")
 
     # Optional diagnostics (avoid spamming in optimization loops)
-    if not hasattr(data, '_segment_warned'):
+    if not data._segment_warned:
         if total_valid_days < 365:
             print(f"Warning: Total valid forcing days is {total_valid_days} (< 365). Calibration results may be unreliable.")
         if len(data.segments) > 2:

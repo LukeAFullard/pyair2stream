@@ -197,6 +197,12 @@ run_mode: "DE"              # DE (default). Also: PSO, LATHYP, FORWARD, DE-MCMC,
 mineff_index: 0.0           # only parameter sets scoring >= this are kept in the "0_*.csv" history.
                              # Must be a TOP-LEVEL key (see callout below the table) (not nested)
                              # under `optimization:`, despite what the bundled example configs show.
+random_seed: 42              # optional; default: null (unseeded). Threaded through to whichever
+                             # optimizer `run_mode` dispatches to (PSO/LATHYP/DE/DE-MCMC/DE-CV-MCMC)
+                             # and recorded in `calibration_metadata.json`. Without it, two runs of
+                             # the same config can converge to different parameter sets (DE's own
+                             # global-state RNG, PSO/LATHYP's use of `numpy`'s global random state)
+                             # with no way to reproduce a published result.
 
 paths:
   input_data: "data/calibration_data.csv"        # required

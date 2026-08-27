@@ -1,6 +1,18 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] - 2026-08-27
+
+Version numbers previously disagreed three ways: `pyproject.toml`/`__init__.py`
+stayed at `0.1.0` while this file's newest heading said `[1.0.0]` and the CLI
+banner printed `0.1.0` (docs/audit/07_reproducibility_and_provenance.md, Defect
+D). `pyproject.toml` was in fact never bumped for that `1.0.0` heading, and
+given the P0 findings fixed by audit reports 01 and 02 above, a `1.0.0` release
+at that point would have been premature regardless. The `[1.0.0]` heading below
+has been relabelled `[0.1.0]` to match what was actually shipped, and this
+release -- everything above it in this file -- is `0.2.0`. `pyair2stream.__version__`
+is now read from installed package metadata (`importlib.metadata.version`)
+rather than duplicated as a literal string, so it cannot drift from
+`pyproject.toml` again.
 
 ### Changed
 - **Default integrator changed from `RK4` to `CRN`** (audit report 02). Explicit
@@ -159,6 +171,15 @@
   `"range"`; audit report 06, Defect E).
 - `pyair2stream.post_processing.select_dotty_data()` and `.gap_aware_acf()`,
   factored out for direct testability (audit report 06, Defects A and F).
+- New top-level config key `random_seed` (audit report 07, 7.1), threaded through
+  `run_optimizer` to whichever optimizer `run_mode` dispatches to (PSO, LATHYP, DE,
+  DE-MCMC, DE-CV-MCMC) and recorded in `calibration_metadata.json`. Previously no
+  config key seeded calibration at all -- `differential_evolution(..., seed=None)`
+  drew from global numpy random state, so two runs of the same config could
+  converge to substantially different parameter sets with no way to reproduce a
+  published result. `PSO_mode`/`LH_mode` now also draw from a local
+  `np.random.Generator` instead of mutating global `numpy.random` state via
+  `np.random.seed()`.
 
 ### Removed
 - The `Twat_mod_p5`/`Twat_mod_p95` dual-name fallback in `post_processing.py`
@@ -167,7 +188,7 @@
   `Twat_mod_p50`/`Twat_mod_upper`). Two example scripts still referenced the
   removed names and have been fixed.
 
-## [1.0.0] - 2026-07-09
+## [0.1.0] - 2026-07-09
 
 ### Added
 - Python port of the air2stream hybrid model for river water temperature.
@@ -179,7 +200,6 @@
 - Leave-one-year-out cross-validation.
 
 ### Fixed
-- Fixed version 8 parameter zeroing bug from original Fortran implementation.
 - Fixed PSO initialization to handle NaN and use `-1e30` instead of zero.
 - Addressed stale Italian console strings in documentation.
 - Removed dead and unused functions (`_step`, `_get_RK_func`) from `model.py`.

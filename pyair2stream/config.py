@@ -62,6 +62,17 @@ class CommonData:
     # Forward options
     forward_options: Optional[dict] = None
 
+    # Uncertainty-quantification options parsed from `uncertainty_options:` in the
+    # config (noise_model, ar1_rho, prediction_interval, save_ensemble,
+    # strict_convergence, burnin_fraction). Declared explicitly (rather than set
+    # only by assignment in io.py) so it is visible to type checkers and callers
+    # don't need `getattr(data, 'uncertainty_options', {})` (docs/audit/07, Defect G).
+    uncertainty_options: Optional[dict] = None
+
+    # Top-level calibration seed (docs/audit/07_reproducibility_and_provenance.md,
+    # 7.1). None reproduces the previous unseeded behaviour.
+    random_seed: Optional[int] = None
+
     # Cross Validation
     cross_validation: Optional['CVConfig'] = None  # Expected to be Optional[CVConfig]
 
@@ -91,6 +102,24 @@ class CommonData:
     calendar: str = 'standard'
     wmin: np.float64 = np.float64(0.0)
     wmax: np.float64 = np.float64(0.0)
+
+    # Input data file paths, stashed by `read_calibration` for `read_Tseries` to
+    # consume. Declared explicitly rather than set only by assignment
+    # (docs/audit/07_reproducibility_and_provenance.md, Defect G).
+    _input_data_path_cal: Optional[str] = None
+    _input_data_path_val: Optional[str] = None
+
+    # Raw (pre-warm-up-padding) row count of the most recently loaded series, used by
+    # `compute_qmedia` to report the fraction of missing discharge. Declared
+    # explicitly rather than set only by assignment (docs/audit/07, Defect G).
+    _n_tot_raw: Optional[int] = None
+
+    # Set True once `detect_segments` has printed its one-time fragmentation
+    # diagnostics for the current data load, so repeated calls inside the
+    # optimizer hot loop don't spam the same warning. Declared explicitly rather
+    # than tested via `hasattr` (docs/audit/07_reproducibility_and_provenance.md,
+    # Defect G).
+    _segment_warned: bool = False
 
     # Strings
     folder: str = ""
