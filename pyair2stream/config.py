@@ -66,6 +66,9 @@ class CommonData:
     finalfit: np.float64 = np.float64(0.0)
     c1: np.float64 = np.float64(0.0)
     c2: np.float64 = np.float64(0.0)
+    # Numerical-stability guard settings (see docs/audit/02_numerical_integration.md)
+    max_plausible_twat: np.float64 = np.float64(60.0)
+    stability_error_fraction: np.float64 = np.float64(0.10)
     wmin: np.float64 = np.float64(0.0)
     wmax: np.float64 = np.float64(0.0)
 

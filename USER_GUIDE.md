@@ -105,7 +105,17 @@ If you're unsure, start with **version 8**, then compare against version 7 (equi
 
 ### Integrator
 
-Set via `integrator`. **`RK4`** (4th-order Runge-Kutta) is the default and recommended choice for accuracy. `CRN` (Crank-Nicolson) is more numerically stable for stiff parameter combinations; `RK2` and `EUL` are simpler/faster but less accurate. These are mainly useful for quick tests.
+Set via `integrator`. **`CRN`** (Crank-Nicolson) is the default: it is unconditionally
+stable regardless of discharge or parameters, second-order accurate, and matches the
+exponential integrator (`EXP`) to well under 0.1 °C on every case tested. `EXP` is an
+integrating-factor scheme, also unconditionally stable, exact for piecewise-constant
+coefficients. `RK4`, `RK2`, and `EUL` are explicit schemes that are only
+*conditionally* stable -- they can diverge (silently, with no error) at high enough
+discharge -- but are needed to match the Fortran reference and are more accurate than
+`CRN` when comfortably within their stability limit. See
+[§9.1](#91-numerical-stability-b-and-the-choice-of-integrator) before choosing an
+explicit scheme for anything other than reproducing Fortran output, and never for
+scenario work (naturalised flow, climate projection).
 
 ## 5. Preparing your own data
 
@@ -152,12 +162,15 @@ series: "c"                          # free-text label only (see note below)
 
 # --- Model setup ---
 version: 8                # required in practice: 3, 4, 5, 7, or 8 (see §4)
-integrator: "RK4"          # RK4 (default), EUL, RK2, CRN
+integrator: "CRN"          # CRN (default, unconditionally stable), EXP, RK4, RK2, EUL -- see §4/§9.1
 Tice_cover: 0.0            # water temperature floor (°C); simulated Tw is clamped at this value
 time_resolution: "1d"      # 1d = daily; "Nw" = N weeks (e.g. "2w"); "Nm" = N months (e.g. "1m")
 prc: 1.0                   # for time_resolution other than 1d: minimum fraction (0-1) of days
                             # that must have valid T_water within a period for that period's
                             # aggregate to be used in calibration
+max_plausible_twat: 60.0   # sanity bound (°C) for the divergence guard in forward runs (§9.1)
+stability_error_fraction: 0.10   # error if more than this fraction of days exceed the
+                            # integrator's stability limit in the pre-flight check (§9.1)
 
 # --- Calibration ---
 objective_function: "NSE"  # NSE, KGE, or RMS (all reported as "higher is better" internally)
@@ -366,7 +379,50 @@ Every run internally prepends a duplicate of the first simulated year as a numer
 | `Missing 'Date' column` | The input CSV doesn't have a 'Date' column | Make sure to include a valid 'Date' column |
 | `Missing 'T_air' column` | The input CSV doesn't have a 'T_air' column | Make sure to include a valid 'T_air' column |
 | `mcmc_walkers < 2 * ndim` (`ValueError`) | `mcmc_walkers` is set too low for the number of active parameters | Set `mcmc_walkers` to at least twice the number of active parameters |
-| Results look implausible (e.g. temperatures diverging or oscillating wildly) | Parameter bounds too wide for `EUL`/`RK2`, or version/integrator mismatch | Switch to `RK4` or `CRN`; tighten `parameter_bounds` |
+| `NumericalDivergenceError` | The chosen integrator is numerically unstable for this discharge/parameter combination | Switch to `CRN` (the default) or `EXP` -- **not** `RK4`/`RK2`, which are the schemes that diverge. See [§9.1](#91-numerical-stability-b-and-the-choice-of-integrator) |
+| Results look implausible (e.g. temperatures diverging, oscillating wildly, or an unrealistic plateau) with no error | An explicit integrator (`RK4`/`RK2`/`EUL`) diverged and then re-stabilised, or the sanity guard is disabled | Switch to `CRN` or `EXP`; do **not** switch *to* `RK4` -- see [§9.1](#91-numerical-stability-b-and-the-choice-of-integrator) |
+
+### 9.1 Numerical stability, B, and the choice of integrator
+
+The air2stream ODE is linear in `Tw`: `dTw/dt = A(t) - B(t)*Tw`, where `B` (units
+1/day) is the linear decay rate -- for version 8, `B = (a3 + a8*theta) / theta**a4`
+with `theta = Discharge/Qmedia`. The daily step is fixed at 1 day, so an explicit
+integrator's stability depends entirely on `B` itself:
+
+| Integrator | Stable for |
+|---|---|
+| `EUL` | `B < 2.0` |
+| `RK2` | `B < 2.0` |
+| `RK4` | `B < 2.785` |
+| `CRN` (default) | unconditionally stable |
+| `EXP` | unconditionally stable |
+
+Because `B` depends on discharge, **a parameter set that is stable at calibration
+discharge can be unstable at a different (e.g. scenario) discharge** -- with `a4 < 0`,
+which optimizers do select, higher flow *increases* `B`. When an explicit scheme goes
+unstable it does **not** produce a NaN or a warning by default: it produces either an
+astronomically wrong number, or -- more dangerously -- a diverged-then-re-stabilised
+value that looks physically plausible but is wrong.
+
+Because of this, `pyair2stream`:
+
+- defaults `integrator` to `CRN` (Crank-Nicolson), which is unconditionally stable,
+  second-order accurate, and matches the exponential integrator (`EXP`) to well under
+  0.1 °C on every case tested;
+- raises `NumericalDivergenceError` in `main.forward()`, `forward_mode()`, and
+  `sensitivity_analysis()` (not inside the calibration hot loop, where a bad trial
+  parameter set is a normal, harmless occurrence) if the simulated water temperature
+  is non-finite or exceeds `max_plausible_twat` (default 60 °C, configurable);
+- prints a pre-flight warning -- and raises if more than `stability_error_fraction`
+  (default 10%) of days exceed it -- when `max(B)` exceeds the current integrator's
+  stability limit. This is a conservative screening heuristic, not an exact verdict:
+  isolated high-`theta` days often simulate fine because the transient decays before
+  it compounds, so treat it as a signal to double-check, not as a bug on its own.
+
+`RK4`/`RK2`/`EUL` remain available (needed to match the Fortran reference, and more
+accurate than `CRN` when `B` is comfortably below its limit), but **do not use them for
+scenario work** -- naturalised flow, climate projection, or anything else that runs
+fitted parameters on discharge different from calibration. Use `CRN` or `EXP` there.
 
 ## 10. Gap-tolerant mode
 

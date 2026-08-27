@@ -214,6 +214,41 @@ def fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, Tw, time, Q
         return 0.0
 
 @njit
+def fast_AB_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, time, Qmedia):
+    """
+    Split the air2stream ODE right-hand side into its linear form
+    dTw/dt = A - B*Tw, for a specific model version.
+
+    A is the state-independent forcing term; B is the (discharge-dependent,
+    for versions 4/7/8) linear decay rate in 1/day. Used by the EXP
+    (integrating-factor / exponential) integrator, which is exact for
+    piecewise-constant A/B. See docs/audit/02_numerical_integration.md.
+    """
+    if version == 3:
+        A = p1 + p2 * Ta
+        B = p3
+    elif version == 5:
+        A = p1 + p2 * Ta + p6 * math.cos(2.0 * PI * (time - p7))
+        B = p3
+    elif version == 8:
+        theta = QQ / Qmedia
+        DD = theta ** p4
+        A = (p1 + p2 * Ta + theta * (p5 + p6 * math.cos(2.0 * PI * (time - p7)))) / DD
+        B = (p3 + p8 * theta) / DD
+    elif version == 7:
+        theta = QQ / Qmedia
+        A = p1 + p2 * Ta + theta * (p5 + p6 * math.cos(2.0 * PI * (time - p7)))
+        B = p3 + p8 * theta
+    elif version == 4:
+        DD = (QQ / Qmedia) ** p4
+        A = (p1 + p2 * Ta) / DD
+        B = p3 / DD
+    else:
+        A = 0.0
+        B = 0.0
+    return A, B
+
+@njit
 def fast_run_integration(Tair, Q, tt, Twat_mod, Tice_cover, Qmedia, version, mod_num_idx, segments, p1, p2, p3, p4, p5, p6, p7, p8):
     """
     Execute the numerical integration of the air2stream ODE over given segments.
@@ -237,7 +272,8 @@ def fast_run_integration(Tair, Q, tt, Twat_mod, Tice_cover, Qmedia, version, mod
         The model version (3, 4, 5, 7, or 8) determining the governing ODE.
     mod_num_idx : int
         The integrator to use: 0 = Crank-Nicolson (CRN), 1 = Heun/RK2,
-        2 = Runge-Kutta 4 (RK4), 3 = Explicit Euler (EUL).
+        2 = Runge-Kutta 4 (RK4), 3 = Explicit Euler (EUL), 4 = exponential /
+        integrating-factor (EXP).
     segments : ndarray
         Integer array of shape (N, 2) defining start and end indices of
         contiguous valid data segments to integrate over.
@@ -339,6 +375,33 @@ def fast_run_integration(Tair, Q, tt, Twat_mod, Tice_cover, Qmedia, version, mod
             for j in range(start, end):
                 K1 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Tair[j+1], Q[j+1], Twat_mod[j], tt[j+1], Qmedia)
                 Tw_j1 = Twat_mod[j] + K1
+                if Tw_j1 < Tice_cover:
+                    Tw_j1 = Tice_cover
+                Twat_mod[j+1] = Tw_j1
+
+    elif mod_num_idx == 4: # EXP - integrating-factor / exponential step, exact for
+                           # piecewise-constant A/B. Unconditionally stable, like CRN.
+        for s in range(len(segments)):
+            start = segments[s, 0]
+            end = segments[s, 1]
+            for j in range(start, end):
+                A_j, B_j = fast_AB_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Tair[j], Q[j], tt[j], Qmedia)
+                A_j1, B_j1 = fast_AB_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Tair[j+1], Q[j+1], tt[j+1], Qmedia)
+
+                A = 0.5 * (A_j + A_j1)
+                B = 0.5 * (B_j + B_j1)
+
+                Tw_j = Twat_mod[j]
+                # Guard the B -> 0 limit with the linear fallback (Tw_j1 = Tw_j + A).
+                # Threshold is relative to the endpoint B values, not a fixed absolute
+                # cutoff, since B's own scale varies hugely across versions/parameters.
+                B_scale = max(abs(B_j), abs(B_j1), 1.0)
+                if abs(B) < 1e-8 * B_scale:
+                    Tw_j1 = Tw_j + A
+                else:
+                    expB = math.exp(-B)
+                    Tw_j1 = Tw_j * expB + (A / B) * (1.0 - expB)
+
                 if Tw_j1 < Tice_cover:
                     Tw_j1 = Tice_cover
                 Twat_mod[j+1] = Tw_j1

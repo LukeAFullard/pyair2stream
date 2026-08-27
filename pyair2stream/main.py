@@ -22,7 +22,7 @@ from .post_processing import post_process
 from .sensitivity import sensitivity_analysis
 from . import __version__
 
-from .model import call_model, aggregation, statis, funcobj, detect_segments
+from .model import call_model, aggregation, statis, funcobj, detect_segments, warn_on_stability, check_numerical_divergence
 
 def run_optimizer(data: CommonData) -> None:
     """Dispatches to the correct optimizer based on data.runmode."""
@@ -51,7 +51,9 @@ def forward(data: CommonData) -> None:
     if data.gap_tolerant and data.segments is None:
         detect_segments(data)
 
+    warn_on_stability(data, error_fraction=data.stability_error_fraction)
     call_model(data)
+    check_numerical_divergence(data, max_plausible_twat=data.max_plausible_twat)
 
     # Calculate objective function again to ensure consistency
     ei_check = funcobj(data)
@@ -186,7 +188,9 @@ def forward(data: CommonData) -> None:
     print('mean, TSS and standard deviation (validation)')
     print(f"{data.mean_obs:.5f} {data.TSS_obs:.5f} {data.std_obs:.5f}")
 
+    warn_on_stability(data, error_fraction=data.stability_error_fraction)
     call_model(data)
+    check_numerical_divergence(data, max_plausible_twat=data.max_plausible_twat)
     ei = funcobj(data)
 
     with open(param_out_path, 'a') as f:

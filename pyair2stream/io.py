@@ -36,9 +36,13 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data.version = int(config.get('version', 8))
     data.Tice_cover = np.float64(config.get('Tice_cover', 0.0))
     data.fun_obj = config.get('objective_function', 'NSE')
-    data.mod_num = config.get('integrator', 'RK4')
+    # CRN is unconditionally stable; the explicit schemes (RK4/RK2/EUL) can diverge
+    # silently on discharge different from the calibration record (audit report 02).
+    data.mod_num = config.get('integrator', 'CRN')
     data.runmode = config.get('run_mode', 'DE')
     data.prc = np.float64(config.get('prc', 1.0))
+    data.max_plausible_twat = np.float64(config.get('max_plausible_twat', 60.0))
+    data.stability_error_fraction = np.float64(config.get('stability_error_fraction', 0.10))
 
     # Paths mapping
     paths = config.get('paths', {})

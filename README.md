@@ -274,9 +274,26 @@ Fortran, found during porting and fixed with test coverage:
   `paths.calibration_metadata` rather than recomputing it. This changes
   validation-period objective values for existing non-gap-tolerant
   configurations that relied on the old (unfitted) recomputed `Qmedia`.
+- **Default integrator changed from `RK4` to `CRN` (fixed in `io.py`)**: the ODE is
+  linear in `Tw` with a discharge-dependent decay rate `B`; explicit schemes
+  (`RK4`/`RK2`/`EUL`) are only conditionally stable in `B` and can diverge silently
+  — no NaN, no error — at discharge different from the calibration record, even
+  when stable at calibration (see `docs/audit/02_numerical_integration.md`). `CRN`
+  is unconditionally stable and matches the new `EXP` integrator to well under
+  0.1 °C on every case tested. `pyair2stream` also now raises
+  `NumericalDivergenceError` in `main.forward()`, `forward_mode()`, and
+  `sensitivity_analysis()` if a simulated water temperature is non-finite or
+  exceeds `max_plausible_twat` (default 60 °C), and warns (erroring above
+  `stability_error_fraction`) when a pre-flight check finds `B` exceeding the
+  chosen integrator's stability limit. This changes results for any run that
+  relied on the previous `RK4` default; set `integrator: "RK4"` explicitly to
+  keep the old behaviour. `RK4`/`RK2`/`EUL` remain available and are unchanged
+  — they still match the golden Fortran tests exactly.
 
-None of these affect the core forward-simulation physics (governing equations,
-integrators) validated by the golden Fortran tests — they affect calibration
+Only the integrator-default change above touches the core forward-simulation
+physics, and only insofar as it changes *which* integrator runs when none is
+specified — the governing equations and each integrator's own numerics are
+unchanged and still validated by the golden Fortran tests. The rest affect calibration
 robustness and diagnostic plotting.
 
 ## Validation against published literature

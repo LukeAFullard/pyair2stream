@@ -11,6 +11,197 @@ import math
 import pandas as pd
 from .config import CommonData, PI, TTT
 
+# Sanity bound on simulated water temperature (degC). See docs/audit/02_numerical_integration.md:
+# explicit integrators (RK4/RK2/EUL) can diverge silently on scenario discharge that differs
+# from the calibration record, producing either huge or plausible-but-wrong numbers with no
+# error/NaN. This is the default for `max_plausible_twat`.
+TWAT_SANITY_MAX = 60.0
+
+# One-step amplification-factor stability limits for B = (a3 + a8*theta)/theta**a4, i.e. the
+# ODE's linear decay rate (1/day) times the fixed dt=1 day step. CRN and EXP are unconditionally
+# stable. See docs/audit/02_numerical_integration.md for the derivation.
+STABILITY_LIMITS = {'EUL': 2.0, 'RK2': 2.0, 'RK4': 2.785, 'CRN': np.inf, 'EXP': np.inf}
+
+# "Error if more than a small fraction of days exceed [the stability limit]" (report 02, 2.2).
+# This screening criterion is conservative, not exact (isolated high-theta days often simulate
+# fine); it is a companion to the divergence guard (check_numerical_divergence), not a
+# replacement for it.
+STABILITY_ERROR_FRACTION = 0.10
+
+
+class NumericalDivergenceError(RuntimeError):
+    """
+    Raised when a simulated water-temperature series is non-finite or exceeds a
+    physically implausible bound.
+
+    The air2stream ODE is linear in Tw with a discharge-dependent decay rate B; an
+    explicit integrator (RK4/RK2/EUL) stable at the calibration discharge can be
+    unstable at a different scenario discharge, producing either astronomical or
+    plausible-but-wrong output with no NaN and no warning. See
+    docs/audit/02_numerical_integration.md.
+    """
+
+
+def compute_B_series(data: CommonData) -> np.ndarray:
+    """
+    Compute B(t), the ODE's linear decay rate (1/day), for every day in `data.Q`
+    using the current `data.par`. `B * dt` (dt is fixed at 1 day) governs the
+    stability of the explicit integrators (see docs/audit/02_numerical_integration.md).
+
+    Entries where discharge is invalid (missing sentinel, non-positive) or where the
+    computation is undefined (e.g. a negative theta raised to a non-integer power)
+    come back as NaN; callers should mask on validity/finiteness.
+    """
+    p = data.par
+    a3, a4, a8 = p[2], p[3], p[7]
+
+    if data.version in (3, 5):
+        return np.full(data.Q.shape, a3, dtype=np.float64)
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        theta = data.Q / data.Qmedia
+        if data.version == 7:
+            B = a3 + a8 * theta
+        else:  # versions 4 and 8
+            DD = theta ** a4
+            if data.version == 4:
+                B = a3 / DD
+            else:
+                B = (a3 + a8 * theta) / DD
+    return B
+
+
+def stability_report(data: CommonData) -> dict:
+    """
+    Pre-flight stability screening for the explicit integrators (report 02, 2.2).
+
+    Computes B = (a3 + a8*theta)/theta**a4 (version-dependent) over the whole
+    forcing series and compares it against the current integrator's one-step
+    stability limit. This is a conservative screening heuristic, not an exact
+    verdict: isolated high-theta days often simulate fine because the transient
+    decays before it compounds. Pair it with `check_numerical_divergence`, which
+    catches actual divergence.
+    """
+    B = compute_B_series(data)
+
+    if data.version in (3, 5):
+        valid = np.ones(data.n_tot, dtype=np.bool_)
+    else:
+        valid = (data.Q != -999.0) & (data.Q > 0.0)
+    valid &= np.isfinite(B)
+
+    limit = STABILITY_LIMITS.get(data.mod_num, np.inf)
+
+    if not np.any(valid):
+        return {
+            'mod_num': data.mod_num, 'limit': limit, 'max_B': None,
+            'frac_exceeding': 0.0, 'n_exceeding': 0, 'n_valid': 0, 'worst': [],
+        }
+
+    idx_valid = np.nonzero(valid)[0]
+    B_valid = B[valid]
+    max_B = float(np.max(B_valid))
+    exceed = B_valid > limit
+    n_exceeding = int(np.sum(exceed))
+    n_valid = int(B_valid.shape[0])
+    frac_exceeding = n_exceeding / n_valid
+
+    n_worst = min(5, n_valid)
+    worst_order = np.argsort(-B_valid)[:n_worst]
+    worst = []
+    for k in worst_order:
+        i = int(idx_valid[k])
+        date = tuple(int(x) for x in data.date[i]) if data.date is not None else None
+        worst.append({'index': i, 'date': date, 'B': float(B_valid[k])})
+
+    return {
+        'mod_num': data.mod_num,
+        'limit': limit,
+        'max_B': max_B,
+        'frac_exceeding': frac_exceeding,
+        'n_exceeding': n_exceeding,
+        'n_valid': n_valid,
+        'worst': worst,
+    }
+
+
+def warn_on_stability(data: CommonData, error_fraction: float = STABILITY_ERROR_FRACTION) -> dict:
+    """
+    Run `stability_report` and print a warning (or raise `NumericalDivergenceError`
+    if too large a fraction of days exceed the limit) before a user-facing
+    simulation. See docs/audit/02_numerical_integration.md, 2.2.
+    """
+    report = stability_report(data)
+
+    if report['max_B'] is None or not np.isfinite(report['limit']):
+        return report
+
+    if report['max_B'] > report['limit']:
+        worst = report['worst'][0] if report['worst'] else None
+        worst_str = f" Worst day: {worst['date']} (B={worst['B']:.3f})." if worst else ""
+        print(
+            f"Warning: {report['n_exceeding']}/{report['n_valid']} days "
+            f"({report['frac_exceeding']:.1%}) exceed the {report['mod_num']} stability limit "
+            f"(B > {report['limit']:.3f}); max B = {report['max_B']:.3f}.{worst_str} "
+            f"This is a screening heuristic, not a verdict (see "
+            f"docs/audit/02_numerical_integration.md) -- consider CRN or EXP, especially for "
+            f"scenario runs on discharge different from the calibration record."
+        )
+        if report['frac_exceeding'] > error_fraction:
+            raise NumericalDivergenceError(
+                f"{report['frac_exceeding']:.1%} of days exceed the {report['mod_num']} "
+                f"stability limit (B > {report['limit']:.3f}), above the "
+                f"error_fraction={error_fraction:.0%} threshold. Use CRN or EXP for this run, "
+                f"or raise `stability_error_fraction` in the config if you have verified the "
+                f"simulation is stable (see docs/audit/02_numerical_integration.md)."
+            )
+
+    return report
+
+
+def check_numerical_divergence(data: CommonData, max_plausible_twat: float = None) -> None:
+    """
+    Raise `NumericalDivergenceError` if `data.Twat_mod` contains non-finite values
+    or exceeds a physically implausible sanity bound. See
+    docs/audit/02_numerical_integration.md, 2.1.
+
+    Intended for user-facing simulation paths (main.forward(), optimization.forward_mode(),
+    sensitivity_analysis()) -- NOT the optimizer hot loop, where a diverged trial parameter
+    set is a normal occurrence already handled via the NaN/penalty path in funcobj.
+    """
+    if max_plausible_twat is None:
+        max_plausible_twat = getattr(data, 'max_plausible_twat', TWAT_SANITY_MAX)
+
+    Twat_mod = data.Twat_mod
+    present = Twat_mod != -999.0
+    non_finite = ~np.isfinite(Twat_mod)
+    too_hot = np.isfinite(Twat_mod) & (Twat_mod > max_plausible_twat)
+    bad = present & (non_finite | too_hot)
+
+    if not np.any(bad):
+        return
+
+    idx = int(np.argmax(bad))
+    date = tuple(int(x) for x in data.date[idx]) if data.date is not None else None
+
+    theta = None
+    B = None
+    if data.Q is not None and data.Qmedia and data.Qmedia > 0 and data.Q[idx] not in (-999.0,):
+        theta = float(data.Q[idx] / data.Qmedia)
+        B_series = compute_B_series(data)
+        if np.isfinite(B_series[idx]):
+            B = float(B_series[idx])
+
+    raise NumericalDivergenceError(
+        f"Numerical divergence detected in the simulated water temperature at index {idx} "
+        f"(date={date}): Twat_mod={Twat_mod[idx]!r} is non-finite or exceeds the sanity bound "
+        f"max_plausible_twat={max_plausible_twat} (theta={theta}, B={B}), using integrator "
+        f"'{data.mod_num}'. Explicit schemes (RK4/RK2/EUL) can be unstable at discharge "
+        f"different from the calibration record even when stable at calibration. Use CRN "
+        f"(the default) or EXP for scenario runs. See docs/audit/02_numerical_integration.md."
+    )
+
+
 def detect_segments(data: CommonData) -> None:
     """
     Detect valid segments, handling gap-tolerant mode.
@@ -113,6 +304,7 @@ def _run_integration(data: CommonData, segments, p):
     elif mod_num == 'RK2': mod_num_idx = 1
     elif mod_num == 'RK4': mod_num_idx = 2
     elif mod_num == 'EUL': mod_num_idx = 3
+    elif mod_num == 'EXP': mod_num_idx = 4
     else: raise ValueError(f"Unknown mod_num {mod_num}")
 
     segments_arr = np.array(segments, dtype=np.int32)
