@@ -180,6 +180,11 @@ rather than duplicated as a literal string, so it cannot drift from
   published result. `PSO_mode`/`LH_mode` now also draw from a local
   `np.random.Generator` instead of mutating global `numpy.random` state via
   `np.random.seed()`.
+- `tests/test_golden.py` now covers the full `version x integrator` cross
+  product (5 versions x 4 Fortran-backed integrators = 20 cases, plus `EXP`
+  vs `CRN` for each version) over a 3-year horizon at a much tighter
+  tolerance, instead of 3 hand-picked combinations over 10 days at
+  `rtol=atol=1e-2` (audit report 08, 8.1/8.2).
 
 ### Removed
 - The `Twat_mod_p5`/`Twat_mod_p95` dual-name fallback in `post_processing.py`
@@ -187,6 +192,20 @@ rather than duplicated as a literal string, so it cannot drift from
   has never actually written (the real columns are `Twat_mod_lower`/
   `Twat_mod_p50`/`Twat_mod_upper`). Two example scripts still referenced the
   removed names and have been fixed.
+
+### Fixed
+- `tests/fortran_runner.py` (the golden-test harness that compiles and drives
+  the upstream Fortran reference) wrote its date column as `day month year`;
+  the real air2stream input format is `year month day` (confirmed against
+  `fortran/upstream/Switzerland/*_cc.txt`). This fed the day-of-month to
+  `AIR2STREAM_READ.f90`'s `year_ini=date(366,1)`, corrupting its leap-year
+  block-length bookkeeping (`tt`'s seasonal phase) for every year beyond the
+  first -- invisible in every previous golden test (all <=100 days, never
+  crossing a year boundary), and only surfaced by extending the golden matrix
+  to a 3-year horizon (docs/audit/08_testing_gaps.md, 8.2). `pyair2stream`
+  itself was not affected: its own calendar-aware `tt` construction (`io.py`)
+  was independently confirmed correct throughout. Test-infrastructure fix
+  only; no change to `pyair2stream`'s own code or behaviour.
 
 ## [0.1.0] - 2026-07-09
 

@@ -167,7 +167,19 @@ FORWARD
                 else:
                     tw = -999.0
 
-                f.write(f"{day} {month} {year} {ta:.6f} {tw:.6f} {q:.6f}\n")
+                # Column order is YEAR MONTH DAY, matching the real air2stream
+                # input format (see fortran/upstream/Switzerland/*_cc.txt and
+                # readme.txt's field description) -- NOT day-month-year. Writing
+                # them in the wrong order silently fed a bogus "year" (really the
+                # day-of-month) into AIR2STREAM_READ.f90's `year_ini=date(366,1)`,
+                # corrupting `leap_year(year_ini+i-1)`'s block-length computation
+                # for every year beyond the first. Invisible in every previous
+                # golden test (all <=100 days, i.e. within one year), only
+                # surfaced once the golden matrix was extended to a 3-year
+                # horizon spanning a real leap-year boundary (docs/audit/
+                # 08_testing_gaps.md, 8.2) -- confirmed against a debug build of
+                # the Fortran binary dumping its own `tt`/`year_ini` values.
+                f.write(f"{year} {month} {day} {ta:.6f} {tw:.6f} {q:.6f}\n")
 
         # run
         res = subprocess.run([fortran_bin], cwd=tmpdir, input="go\n", capture_output=True, text=True)
