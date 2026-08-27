@@ -16,16 +16,19 @@ import emcee
 
 import json
 from .config import CommonData
-from .model import call_model, funcobj, detect_segments, warn_on_stability, check_numerical_divergence
+from .model import call_model, funcobj, warn_on_stability, check_numerical_divergence
 from .uncertainty import estimate_ar1_rho, generate_ar1_noise
+
+# A near-perfect-fit MCMC log-likelihood is capped at this large but finite value rather
+# than returned as a literal np.inf, which poisons emcee's acceptance-ratio arithmetic
+# (inf - inf = nan). See docs/audit/03_objective_function_and_masks.md, 3.4.
+MCMC_MAX_LOG_LIKELIHOOD = 1e10
 
 def sub_1(data: CommonData) -> np.float64:
     """
     Helper function to call model and evaluate the objective function.
     Replicates SUBROUTINE sub_1
     """
-    if data.gap_tolerant and data.segments is None:
-        detect_segments(data)
     call_model(data)
     return np.float64(funcobj(data))
 
@@ -58,8 +61,6 @@ def forward_mode(data: CommonData) -> None:
         ei = sub_1(data)
     else:
         # It's a pure projection, we skip the objective evaluation.
-        if data.gap_tolerant and data.segments is None:
-            detect_segments(data)
         call_model(data)
         ei = -999.0
 
@@ -143,9 +144,6 @@ def forward_mode(data: CommonData) -> None:
                 p_vals[j] = theta[idx]
 
             data.par[:n_par] = p_vals
-
-            if data.gap_tolerant and data.segments is None:
-                detect_segments(data)
 
             call_model(data)
 
@@ -568,25 +566,28 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
                 return -np.inf
 
         data.par[:n_par] = p_vals
-        if data.gap_tolerant and data.segments is None:
-            detect_segments(data)
         call_model(data)
         eff_index = funcobj(data)
 
         if np.isnan(eff_index):
             return -np.inf
-        # Formal Concentrated Gaussian Log-Likelihood
-        valid_mask = (data.Twat_obs != -999.0)
-        if data.eval_mask is not None:
-            valid_mask &= data.eval_mask
-        mod_valid = data.Twat_mod[valid_mask]
-        obs_valid = data.Twat_obs[valid_mask]
+        # Formal Concentrated Gaussian Log-Likelihood, computed on the SAME
+        # (aggregated) series the objective function itself scores -- daily
+        # Twat_obs/Twat_mod only coincide with Twat_obs_agg/Twat_mod_agg for
+        # time_resolution: 1d. eval_mask should always be set by this point
+        # (report 03); the fallback below only matters for direct/unit-test use
+        # that bypasses read_Tseries. Without it, the warm-up transient was
+        # double-counted here even at 1d resolution.
+        eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
+        valid_mask = (data.Twat_obs_agg != -999.0) & eval_mask
+        mod_valid = data.Twat_mod_agg[valid_mask]
+        obs_valid = data.Twat_obs_agg[valid_mask]
         N = len(obs_valid)
         if N == 0:
             return -np.inf
         SSE = np.sum((mod_valid - obs_valid)**2)
         if SSE == 0:
-            return np.inf
+            return MCMC_MAX_LOG_LIKELIHOOD  # near-perfect fit; a literal inf poisons emcee
         log_L = -0.5 * N * np.log(SSE / N)
         return log_L
 
@@ -638,16 +639,16 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     # Step 5: Calculate properties for sidecar file from best_params
     print("Writing metadata sidecar...")
     data.par[:n_par] = best_params.copy()
-    if data.gap_tolerant and data.segments is None:
-        detect_segments(data)
     call_model(data)
+    funcobj(data)  # populate Twat_mod_agg for the aggregated-residual sigma below
 
-    valid_mask = (data.Twat_obs != -999.0)
-    if data.eval_mask is not None:
-        valid_mask &= data.eval_mask
+    eval_mask_for_sigma = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
+    # Sigma is estimated on the SAME (aggregated) series the objective scores, matching
+    # the MCMC likelihood (report 03, 3.4) -- daily and aggregated coincide at 1d resolution.
+    valid_mask = (data.Twat_obs_agg != -999.0) & eval_mask_for_sigma
 
-    mod_valid = data.Twat_mod[valid_mask]
-    obs_valid = data.Twat_obs[valid_mask]
+    mod_valid = data.Twat_mod_agg[valid_mask]
+    obs_valid = data.Twat_obs_agg[valid_mask]
 
     N = len(obs_valid)
     if N > 0:
@@ -699,21 +700,19 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
         data.par[:n_par] = p_vals
 
-        if data.gap_tolerant and data.segments is None:
-            detect_segments(data)
-
         call_model(data)
+        funcobj(data)  # populate Twat_mod_agg for the aggregated-residual sigma below
 
         # To build a true Prediction Interval (as opposed to just parameter confidence),
         # we must add the observation error variance back into the simulations.
-        # We estimate sigma from the residuals of this specific parameter set.
+        # We estimate sigma from the residuals of this specific parameter set, on the
+        # same (aggregated) series the objective scores (report 03, 3.4). The noise
+        # itself is still injected at daily resolution below, matching the exported
+        # daily envelope.
+        valid_mask_iter = (data.Twat_obs_agg != -999.0) & eval_mask_for_sigma
 
-        valid_mask_iter = (data.Twat_obs != -999.0)
-        if data.eval_mask is not None:
-            valid_mask_iter &= data.eval_mask
-
-        mod_valid_iter = data.Twat_mod[valid_mask_iter]
-        obs_valid_iter = data.Twat_obs[valid_mask_iter]
+        mod_valid_iter = data.Twat_mod_agg[valid_mask_iter]
+        obs_valid_iter = data.Twat_obs_agg[valid_mask_iter]
 
         N_iter = len(obs_valid_iter)
         if N_iter > 0:
@@ -767,8 +766,6 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
         data.par_best = np.zeros_like(data.par)
     data.par_best[:n_par] = best_params.copy()
 
-    if data.gap_tolerant and getattr(data, 'segments', None) is None:
-        detect_segments(data)
     call_model(data)
     data.finalfit = funcobj(data)
 
@@ -855,25 +852,23 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
                 return -np.inf
 
         data.par[:n_par] = p_vals
-        if data.gap_tolerant and data.segments is None:
-            detect_segments(data)
         call_model(data)
         eff_index = funcobj(data)
 
         if np.isnan(eff_index):
             return -np.inf
-        # Formal Concentrated Gaussian Log-Likelihood
-        valid_mask = (data.Twat_obs != -999.0)
-        if data.eval_mask is not None:
-            valid_mask &= data.eval_mask
-        mod_valid = data.Twat_mod[valid_mask]
-        obs_valid = data.Twat_obs[valid_mask]
+        # Formal Concentrated Gaussian Log-Likelihood, computed on the SAME
+        # (aggregated) series the objective function itself scores (report 03, 3.4).
+        eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
+        valid_mask = (data.Twat_obs_agg != -999.0) & eval_mask
+        mod_valid = data.Twat_mod_agg[valid_mask]
+        obs_valid = data.Twat_obs_agg[valid_mask]
         N = len(obs_valid)
         if N == 0:
             return -np.inf
         SSE = np.sum((mod_valid - obs_valid)**2)
         if SSE == 0:
-            return np.inf
+            return MCMC_MAX_LOG_LIKELIHOOD  # near-perfect fit; a literal inf poisons emcee
         log_L = -0.5 * N * np.log(SSE / N)
         return log_L
 
@@ -925,16 +920,15 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     # Calculate properties for sidecar file from best_params
     print("Writing metadata sidecar...")
     data.par[:n_par] = best_params.copy()
-    if data.gap_tolerant and data.segments is None:
-        detect_segments(data)
     call_model(data)
+    funcobj(data)  # populate Twat_mod_agg for the aggregated-residual sigma below
 
-    valid_mask = (data.Twat_obs != -999.0)
-    if data.eval_mask is not None:
-        valid_mask &= data.eval_mask
+    eval_mask_for_sigma = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
+    # Sigma is estimated on the SAME (aggregated) series the objective scores (report 03, 3.4).
+    valid_mask = (data.Twat_obs_agg != -999.0) & eval_mask_for_sigma
 
-    mod_valid = data.Twat_mod[valid_mask]
-    obs_valid = data.Twat_obs[valid_mask]
+    mod_valid = data.Twat_mod_agg[valid_mask]
+    obs_valid = data.Twat_obs_agg[valid_mask]
 
     N = len(obs_valid)
     if N > 0:
@@ -986,17 +980,15 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
         data.par[:n_par] = p_vals
 
-        if data.gap_tolerant and data.segments is None:
-            detect_segments(data)
-
         call_model(data)
+        funcobj(data)  # populate Twat_mod_agg for the aggregated-residual sigma below
 
-        valid_mask_iter = (data.Twat_obs != -999.0)
-        if data.eval_mask is not None:
-            valid_mask_iter &= data.eval_mask
+        # Sigma estimated on the aggregated series (report 03, 3.4); noise is still
+        # injected at daily resolution below, matching the exported daily envelope.
+        valid_mask_iter = (data.Twat_obs_agg != -999.0) & eval_mask_for_sigma
 
-        mod_valid_iter = data.Twat_mod[valid_mask_iter]
-        obs_valid_iter = data.Twat_obs[valid_mask_iter]
+        mod_valid_iter = data.Twat_mod_agg[valid_mask_iter]
+        obs_valid_iter = data.Twat_obs_agg[valid_mask_iter]
 
         N_iter = len(obs_valid_iter)
         if N_iter > 0:
@@ -1046,7 +1038,5 @@ def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
         data.par_best = np.zeros_like(data.par)
     data.par_best[:n_par] = best_params.copy()
 
-    if data.gap_tolerant and data.segments is None:
-        detect_segments(data)
     call_model(data)
     data.finalfit = funcobj(data)

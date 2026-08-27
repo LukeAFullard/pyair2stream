@@ -13,6 +13,7 @@ import pandas as pd
 from typing import Tuple
 
 from .config import CommonData
+from .model import prepare_evaluation
 
 def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     """
@@ -304,6 +305,11 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
             scored under the same normalisation the parameters were fitted with
             (see audit report 01).
     """
+    # Invalidate segments/eval_mask from any previous load up front: they must never
+    # be silently reused against data they were not built from (report 03, 3.2).
+    data.segments = None
+    data.eval_mask = None
+
     if p == 'c':
         period = 'calibration'
         filename = getattr(data, '_input_data_path_cal', None)
@@ -457,3 +463,19 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
                         f"{data.calib_theta_max:.5f}]. The model is being extrapolated beyond the "
                         f"calibrated regime for these days. See docs/audit/02_numerical_integration.md."
                     )
+
+    # Rebuild segments/eval_mask for the data just loaded (report 03): this must run
+    # unconditionally, not only in gap-tolerant mode, so eval_mask is never left None
+    # (Defect B) and never stale against data it was not built from (3.2). For the
+    # validation period, a gap-tolerant record with no valid segments is not a hard
+    # error -- it means validation is skipped, exactly like the other validation-only
+    # early-returns above.
+    if p == 'v':
+        try:
+            prepare_evaluation(data)
+        except ValueError as e:
+            print(f"Validation skipped: {e}")
+            data.n_tot = 0
+            return
+    else:
+        prepare_evaluation(data)

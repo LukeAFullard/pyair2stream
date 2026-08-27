@@ -18,6 +18,16 @@
   signal entirely. This changes validation-period objective values for existing
   non-gap-tolerant configurations that relied on the old (unfitted) recomputed
   `Qmedia`.
+- **`eval_mask` is now always built, and the calibration objective/MCMC likelihood
+  are aligned with it** (audit report 03). Previously `eval_mask` was only built in
+  gap-tolerant mode, so the DE-MCMC likelihood's own daily mask double-counted the
+  warm-up block (a verbatim copy of year one) as real observations in every
+  non-gap-tolerant run. Separately, in gap-tolerant mode, `statis()` computed
+  `mean_obs`/`TSS_obs` over every window with a valid observation while `funcobj()`
+  additionally excluded windows outside `eval_mask` (warm-up plus each segment's
+  `warmup_drop_days`) -- a different, larger sample than the one actually scored.
+  This changes every reported NSE/KGE/R²/AIC/BIC in gap-tolerant mode, and the
+  MCMC posterior in every mode.
 
 ### Added
 - `NumericalDivergenceError`, raised by `main.forward()`, `optimization.forward_mode()`,

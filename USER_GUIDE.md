@@ -353,6 +353,16 @@ Everything is written to `output_dir` (or `{project_name}/output_{version}` by d
 | `cv_results.csv` | Only if `cross_validation.enabled: true` (see [§13](#13-cross-validation)). Replaces the usual forward-run/plotting outputs above for that run. |
 | `gaps_summary.txt` | Only for `gap_tolerant: true` (segment/gap diagnostics) |
 
+> **Caveat on `AIC`/`BIC`:** these assume independent residuals. Daily stream
+> temperature residuals are strongly autocorrelated in practice, which systematically
+> favours more complex model versions (more free parameters) when comparing across
+> versions 3/5/7/8. Treat AIC/BIC differences between versions as a rough guide, not a
+> statistically rigorous test, and be aware of this when comparing against externally
+> published AIC/BIC tables (e.g. `examples/validation/Switzerland/`) computed the same
+> naive way. (Also note `k` counts only the model parameters, not the residual
+> variance; this shifts every AIC value by the same constant and does not affect
+> ranking between versions with the same `k`.)
+
 ### The first 365 rows of `2_*.csv` / `3_*.csv` are not real data
 
 Every run internally prepends a duplicate of the first simulated year as a numerical warm-up, to reduce sensitivity to the initial condition. In the output CSVs, these warm-up rows are easy to spot: **`Year`, `Month`, and `Day` are all `-999`**. Ignore/filter out any row where `Year == -999` before analysing results. The real, evaluated time series starts at the first row with a genuine date.

@@ -164,24 +164,14 @@ def forward(data: CommonData) -> None:
     # 2. Validation period
     # Do not recompute Qmedia here: the validation period must be scored under
     # the same normalisation the parameters were calibrated with (report 01).
+    # read_Tseries already rebuilds segments/eval_mask for the validation data (and
+    # turns "no valid segments" in gap-tolerant mode into the same validation-skipped
+    # early return as a missing/too-short validation file -- see report 03).
     read_Tseries(data, 'v', recompute_qmedia=False)
 
     if data.n_tot < 365:
         ei = -999.0
         return
-
-    if data.gap_tolerant:
-        try:
-            detect_segments(data)
-        except ValueError as e:
-            print(f"Validation skipped: {e}")
-            data.n_tot = 0
-            return
-
-        if not data.segments:
-            print("Validation skipped: No valid segments found.")
-            data.n_tot = 0
-            return
 
     aggregation(data)
     statis(data)
