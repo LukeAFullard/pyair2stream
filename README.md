@@ -261,6 +261,19 @@ Fortran, found during porting and fixed with test coverage:
   diagnostic plots is now objective-function-aware (0.5 for NSE/KGE, 2.0 for
   RMS) instead of a single hardcoded value, which previously produced an
   empty acceptable-parameter region for NSE/KGE calibrations.
+- **Qmedia is no longer silently recomputed for validation or FORWARD runs
+  (fixed in `io.py`/`main.py`)**: the Fortran (and the initial Python port)
+  recompute `Qmedia` from whichever discharge series is currently loaded,
+  including the validation period and any `FORWARD`-mode scenario discharge.
+  Since `theta = Discharge / Qmedia` is the model's only view of discharge,
+  this silently rescales `theta` back and can fully cancel a scenario's
+  discharge signal (see `docs/audit/01_qmedia_scenario_invariance.md`).
+  `pyair2stream` now freezes `Qmedia` across the calibration/validation split
+  within a run, persists it to `calibration_metadata.json` on every run, and
+  requires `FORWARD` mode to supply an explicit `Qmedia:` or
+  `paths.calibration_metadata` rather than recomputing it. This changes
+  validation-period objective values for existing non-gap-tolerant
+  configurations that relied on the old (unfitted) recomputed `Qmedia`.
 
 None of these affect the core forward-simulation physics (governing equations,
 integrators) validated by the golden Fortran tests — they affect calibration

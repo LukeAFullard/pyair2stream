@@ -72,6 +72,11 @@ def apply_gaps(df, scenario):
 
 def create_forward_config(scenario_name, params, baseline_file):
     config_file = f'{OUT_DIR}/config_FORWARD_{scenario_name}.yaml'
+    # FORWARD mode requires an explicit Qmedia (see docs/audit/01_qmedia_scenario_invariance.md):
+    # recomputing it from whatever discharge is loaded would silently rescale theta. `baseline_file`
+    # has the same (ungapped) Discharge column the DE calibration used, so pin Qmedia to its mean.
+    qmedia = float(pd.read_csv(baseline_file)['Discharge'].pipe(
+        lambda q: q[(q != -999.0) & (q > 0.0)].mean()))
     with open(config_file, 'w') as f:
         f.write(f'''project_name: "gap_experiment"
 station_name: "{scenario_name}_FWD"
@@ -83,6 +88,7 @@ objective_function: "NSE"
 integrator: "RK4"
 run_mode: "FORWARD"
 gap_tolerant: false
+Qmedia: {qmedia}
 
 paths:
   input_data: "{baseline_file}"

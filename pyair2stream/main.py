@@ -8,6 +8,7 @@ forward simulation, cross-validation), and generating final output reports.
 
 import os
 import sys
+import json
 import time
 import argparse
 import numpy as np
@@ -68,6 +69,34 @@ def forward(data: CommonData) -> None:
     with open(param_out_path, 'w') as f:
         f.write(" ".join([f"{p:.6f}" for p in data.par_best]) + "\n")
         f.write(f"{ei_check:.6f}\n")
+
+    # Persist Qmedia (and the calibrated theta range) alongside the fitted
+    # parameters so a later FORWARD run on different discharge (e.g. a
+    # naturalised-flow or climate-projection scenario) can pin theta to the
+    # value the parameters were actually fitted under instead of silently
+    # rescaling it. See docs/audit/01_qmedia_scenario_invariance.md.
+    Q_cal = data.Q[365:data.n_tot]
+    valid_Q_cal = (Q_cal != -999.0) & (Q_cal > 0.0)
+    theta_min = theta_max = None
+    if np.any(valid_Q_cal) and data.Qmedia > 0:
+        theta_cal = Q_cal[valid_Q_cal] / data.Qmedia
+        theta_min = float(np.min(theta_cal))
+        theta_max = float(np.max(theta_cal))
+
+    calibration_metadata = {
+        "qmedia": float(data.Qmedia),
+        "qmedia_source": "user" if data.Qmedia_user is not None else "computed",
+        "n_q_valid": int(data.n_Q),
+        "theta_min": theta_min,
+        "theta_max": theta_max,
+        "version": int(data.version),
+        "integrator": data.mod_num,
+        "par_best": [float(x) for x in data.par_best],
+        "pyair2stream_version": __version__,
+    }
+    metadata_path = os.path.join(data.folder, "calibration_metadata.json")
+    with open(metadata_path, 'w') as f:
+        json.dump(calibration_metadata, f, indent=2)
 
     # Construct gap columns
     tair_gap = np.where(data.Tair == -999.0, 1, 0)
@@ -131,7 +160,9 @@ def forward(data: CommonData) -> None:
             f.write(f"T_water observations used in calibration: {data.n_dat}\n")
 
     # 2. Validation period
-    read_Tseries(data, 'v')
+    # Do not recompute Qmedia here: the validation period must be scored under
+    # the same normalisation the parameters were calibrated with (report 01).
+    read_Tseries(data, 'v', recompute_qmedia=False)
 
     if data.n_tot < 365:
         ei = -999.0

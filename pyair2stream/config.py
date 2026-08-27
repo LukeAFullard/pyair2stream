@@ -35,6 +35,8 @@ class CommonData:
     # Gap-tolerant mode fields
     gap_tolerant: bool = False
     Qmedia_user: Optional[float] = None
+    calib_theta_min: Optional[float] = None
+    calib_theta_max: Optional[float] = None
     warmup_drop_days: int = 15
     min_segment_days: int = 30
     segments: Optional[list] = None

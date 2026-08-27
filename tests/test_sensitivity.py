@@ -37,6 +37,10 @@ class TestSensitivity(unittest.TestCase):
 
             data.version = 8
             data.mod_num = 'RK4'
+            # sensitivity_analysis() re-reads the calibration data in FORWARD mode
+            # purely to restore state after a prior forward() call; pin Qmedia so
+            # the new FORWARD-mode guard (report 01) doesn't reject the reload.
+            data.Qmedia_user = 20.0
 
             # `eval_mask` is initialized in `detect_segments` or defaults.
             # We can enable gap tolerant to make it init properly, or we can mock it
@@ -86,6 +90,7 @@ class TestSensitivity(unittest.TestCase):
             data.version = 8
             data.mod_num = 'RK4'
             data.gap_tolerant = True
+            data.Qmedia_user = 20.0
             data.sensitivity_perturbations = [10.0] # 10% perturbation to force bound checks
 
             df_sens = sensitivity_analysis(data)

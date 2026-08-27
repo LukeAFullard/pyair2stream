@@ -33,9 +33,9 @@ def run_calibration():
     print(f"Historical Residual Sigma (Observation Error): {historical_sigma:.3f}")
     print(f"Historical Residual Rho (Autocorrelation): {historical_rho:.3f}\n")
 
-    return data.par_best.tolist(), historical_sigma
+    return data.par_best.tolist(), historical_sigma, float(data.Qmedia)
 
-def run_forward(best_params, historical_sigma, noise_model):
+def run_forward(best_params, historical_sigma, qmedia, noise_model):
     print(f"--- 2. Running Probabilistic Forward Projection ({noise_model}) ---")
 
     with open("examples/forward_prediction_intervals/config_forward.yaml", "r") as f:
@@ -43,6 +43,11 @@ def run_forward(best_params, historical_sigma, noise_model):
 
     config['parameters_forward'] = [float(p) for p in best_params]
     config['forward_options']['residual_sigma'] = float(historical_sigma)
+    # Pin Qmedia to the value the calibration was fitted under. `future_data.csv`
+    # has independently-drawn discharge from `historical_data.csv`, so recomputing
+    # Qmedia here would rescale theta and distort the projection — see
+    # docs/audit/01_qmedia_scenario_invariance.md.
+    config['Qmedia'] = qmedia
 
     # Enable the chosen noise model
     config['uncertainty_options'] = {
@@ -194,7 +199,7 @@ if __name__ == "__main__":
         if os.path.exists(path):
             os.remove(path)
 
-    best_params, historical_sigma = run_calibration()
-    run_forward(best_params, historical_sigma, "iid")
-    run_forward(best_params, historical_sigma, "ar1")
+    best_params, historical_sigma, qmedia = run_calibration()
+    run_forward(best_params, historical_sigma, qmedia, "iid")
+    run_forward(best_params, historical_sigma, qmedia, "ar1")
     compare_plots()

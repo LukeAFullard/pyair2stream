@@ -6,6 +6,7 @@ and reading/validating the input CSV time series data (forcing and observations)
 """
 
 import os
+import json
 import yaml
 import numpy as np
 import pandas as pd
@@ -39,20 +40,56 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data.runmode = config.get('run_mode', 'DE')
     data.prc = np.float64(config.get('prc', 1.0))
 
+    # Paths mapping
+    paths = config.get('paths', {})
+
     # Gap-tolerant mode configuration
     data.gap_tolerant = bool(config.get('gap_tolerant', False))
     qmedia_user = config.get('Qmedia')
     if qmedia_user is not None:
         data.Qmedia_user = float(qmedia_user)
+
+    # `paths.calibration_metadata` pins Qmedia (and cross-checks version/integrator)
+    # to the values a prior calibration run was fitted under. See audit report 01:
+    # recomputing Qmedia from scenario discharge rescales theta and silently cancels
+    # the discharge signal, which is fatal for scenario studies (abstraction,
+    # naturalised flow, climate projection).
+    calib_metadata_path = paths.get('calibration_metadata')
+    if calib_metadata_path is not None:
+        if not os.path.exists(calib_metadata_path):
+            raise FileNotFoundError(f"calibration_metadata file not found: {calib_metadata_path}")
+        with open(calib_metadata_path, 'r') as f:
+            calib_metadata = json.load(f)
+
+        meta_version = int(calib_metadata['version'])
+        if meta_version != data.version:
+            raise ValueError(
+                f"calibration_metadata version ({meta_version}) does not match "
+                f"the configured version ({data.version})."
+            )
+        meta_integrator = calib_metadata['integrator']
+        if meta_integrator != data.mod_num:
+            raise ValueError(
+                f"calibration_metadata integrator ('{meta_integrator}') does not match "
+                f"the configured integrator ('{data.mod_num}')."
+            )
+        meta_qmedia = float(calib_metadata['qmedia'])
+        if qmedia_user is not None and abs(float(qmedia_user) - meta_qmedia) > 1e-9:
+            raise ValueError(
+                f"Both `Qmedia:` ({qmedia_user}) and `paths.calibration_metadata` "
+                f"(qmedia={meta_qmedia}) were supplied and disagree. Provide only one, "
+                f"or make sure they match."
+            )
+        data.Qmedia_user = meta_qmedia
+        data.calib_theta_min = calib_metadata.get('theta_min')
+        data.calib_theta_max = calib_metadata.get('theta_max')
+
     data.warmup_drop_days = int(config.get('warmup_drop_days', 15))
     data.min_segment_days = int(config.get('min_segment_days', 30))
     data.sensitivity_analysis = config.get('sensitivity_analysis', False)
 
     sens_pert = config.get('sensitivity_perturbations', [1.0])
     data.sensitivity_perturbations = [float(x) for x in sens_pert] if isinstance(sens_pert, list) else [float(sens_pert)]
-
-    # Paths mapping
-    paths = config.get('paths', {})
 
     data.forward_options = config.get('forward_options', {})
 
@@ -251,12 +288,17 @@ def compute_doy_climatology(data: CommonData) -> None:
         data.doy_climatology = df_clim_extended.iloc[366:2*366].values
 
 
-def read_Tseries(data: CommonData, p: str) -> None:
+def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> None:
     """
     Reads the time series data from a CSV file and replicates the first year.
     Args:
         data: CommonData instance to update.
         p: 'c' for calibration, 'v' for validation.
+        recompute_qmedia: whether to (re)compute Qmedia (and the DOY climatology)
+            from the data just loaded. Pass False to freeze `data.Qmedia` at its
+            current value, e.g. when loading the validation period so it is
+            scored under the same normalisation the parameters were fitted with
+            (see audit report 01).
     """
     if p == 'c':
         period = 'calibration'
@@ -369,6 +411,45 @@ def read_Tseries(data: CommonData, p: str) -> None:
         data.tt[i] = np.float64(doy / float(days_in_year))
 
     # Initial Qmedia and DOY climatology calculations
-    compute_qmedia(data, verbose=True)
-    if data.gap_tolerant and p == 'c':
-        compute_doy_climatology(data)
+    if recompute_qmedia:
+        # FORWARD mode runs externally-supplied (already fitted) parameters, often
+        # on different discharge than the run that fitted them (a naturalised-flow
+        # or climate-projection scenario). theta = Q / Qmedia is the model's only
+        # window onto discharge, so silently recomputing Qmedia here rescales theta
+        # and cancels the scenario signal (audit report 01). Versions 3 and 5 pin
+        # every discharge-related parameter to zero and never evaluate theta, so
+        # the guard does not apply to them.
+        if (
+            data.runmode == 'FORWARD'
+            and data.Qmedia_user is None
+            and data.version not in (3, 5)
+        ):
+            raise ValueError(
+                "FORWARD mode requires an explicit `Qmedia:` in the config (or a "
+                "`calibration_metadata.json` via `paths.calibration_metadata`). "
+                "Recomputing Qmedia from scenario discharge rescales theta and cancels "
+                "the discharge signal. See docs/audit/01_qmedia_scenario_invariance.md."
+            )
+        compute_qmedia(data, verbose=True)
+        if data.gap_tolerant and p == 'c':
+            compute_doy_climatology(data)
+
+        if (
+            data.runmode == 'FORWARD'
+            and p == 'c'
+            and data.calib_theta_min is not None
+            and data.calib_theta_max is not None
+            and data.Qmedia > 0
+        ):
+            Q_period = data.Q[365:data.n_tot]
+            valid_Q = (Q_period != -999.0) & (Q_period > 0.0)
+            if np.any(valid_Q):
+                theta = Q_period[valid_Q] / data.Qmedia
+                frac_outside = float(np.mean((theta < data.calib_theta_min) | (theta > data.calib_theta_max)))
+                if frac_outside > 0.01:
+                    print(
+                        f"Warning: {frac_outside:.1%} of days in this run have theta = Q/Qmedia "
+                        f"outside the calibrated range [{data.calib_theta_min:.5f}, "
+                        f"{data.calib_theta_max:.5f}]. The model is being extrapolated beyond the "
+                        f"calibrated regime for these days. See docs/audit/02_numerical_integration.md."
+                    )

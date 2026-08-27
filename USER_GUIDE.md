@@ -170,6 +170,9 @@ paths:
   input_data: "data/calibration_data.csv"        # required
   validation_data: "data/validation_data.csv"    # optional (validation is skipped if absent)
   output_dir: "output"                            # default: "{project_name}/output_{version}"
+  calibration_metadata: "output/calibration_metadata.json"  # optional, FORWARD-mode only: pins
+                                                   # Qmedia/version/integrator to a prior calibration
+                                                   # run (see "Qmedia is a calibrated model constant" below)
 
 parameter_bounds:           # required for DE/PSO/LATHYP/DE-MCMC; 8 values each (unused
   min: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # parameters for your chosen version are ignored)
@@ -192,7 +195,8 @@ optimization:
 # --- Gap-tolerant mode (see §10) ---
 gap_tolerant: false
 Qmedia: 15.3               # optional: supply a known long-term mean discharge instead of
-                            # computing it from (possibly gappy) data
+                            # computing it from (possibly gappy) data. Required for `FORWARD`
+                            # runs unless `paths.calibration_metadata` is set — see below.
 warmup_drop_days: 15
 min_segment_days: 30
 
@@ -241,6 +245,44 @@ Treat these as a wide starting range, not universal defaults. Narrow them once y
 | `DE-CV-MCMC` | Runs cross-validation to inform initial walker spread, then samples with MCMC | You want robust uncertainty envelopes for parameters and predictions |
 | `FORWARD` | Runs the model once with a fixed parameter set (`parameters_forward`), no calibration | You already know the parameters (e.g. from a previous calibration) and just want to simulate |
 
+### Qmedia is a calibrated model constant, not a data-cleaning convenience
+
+`air2stream` never sees discharge directly — every discharge term in the governing
+equation goes through `theta = Discharge / Qmedia`. This means the model is
+**exactly invariant to any rescaling of `Discharge` that is matched by the same
+rescaling of `Qmedia`**. A fitted parameter set is only meaningful paired with the
+`Qmedia` value it was fitted under.
+
+This matters as soon as you run the fitted model on *different* discharge than it
+was calibrated on — comparing naturalised vs. observed flow (water-abstraction
+studies), or driving with projected future flow (climate-projection studies). If
+`Qmedia` is silently recomputed from the new discharge, `theta` gets rescaled right
+back, and the discharge signal you are trying to measure is partly or wholly
+cancelled — with **no error or warning**. For a spatially/temporally uniform
+change in flow the cancellation is exact:
+
+```
+mean dT (naturalised - observed), Qmedia auto-recomputed : -0.0000 degC
+mean dT (naturalised - observed), Qmedia pinned          : -0.9600 degC
+```
+
+Both runs used the same fitted parameters on flow scaled by 1.5×. Only the pinned
+run shows the actual temperature response to the flow change.
+
+To avoid this, `FORWARD` mode **requires** one of:
+
+- an explicit `Qmedia:` in the config, equal to the value the parameters were
+  calibrated under, or
+- `paths.calibration_metadata` pointing at the `calibration_metadata.json`
+  written by that calibration run (see [§8](#8-understanding-the-output-files)).
+  This also cross-checks `version` and `integrator` against the current config
+  and warns if the scenario's `theta` range falls outside the calibrated range.
+
+Running `FORWARD` without either raises an error rather than silently
+recomputing `Qmedia`. Any scenario comparison — abstraction, naturalised flow,
+climate projection — must reuse the calibration `Qmedia`, never recompute it from
+the scenario data.
+
 ## 7. Running the model
 
 ```bash
@@ -281,6 +323,7 @@ Everything is written to `output_dir` (or `{project_name}/output_{version}` by d
 | `parameters.txt` | The parameter bounds actually used (after fixing version-inactive parameters to 0) |
 | `0_*.csv` | Every parameter set tried during optimization, with its objective score. This serves as the raw material for dotty plots. |
 | `1_*.out` | Best-fit parameters, plus the final efficiency index (calibration, then validation if run) |
+| `calibration_metadata.json` | The calibration `Qmedia`, its source, the calibrated theta range, version/integrator, and best-fit parameters. Written by every run (any `run_mode`). Feed this back in via `paths.calibration_metadata` for a later `FORWARD` scenario run — see [§6](#6-configuration-reference) and the note below. |
 | `2_*.csv` | Full simulated vs. observed time series for the **calibration** period |
 | `3_*.csv` | Same, for the **validation** period (only created if validation data was supplied) |
 | `goodness_of_fit_calibration_*.csv`, `goodness_of_fit_validation_*.csv`, `goodness_of_fit_full_simulation_*.csv` | R², RMSE, MAE, AIC, BIC (one file per period, each named after the plot it accompanies) |
