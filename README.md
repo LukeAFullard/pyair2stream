@@ -289,12 +289,52 @@ Fortran, found during porting and fixed with test coverage:
   relied on the previous `RK4` default; set `integrator: "RK4"` explicitly to
   keep the old behaviour. `RK4`/`RK2`/`EUL` remain available and are unchanged
   — they still match the golden Fortran tests exactly.
+- **`eval_mask` is now always set, and `statis()`/`aggregation()` are aligned with
+  `funcobj()` (fixed in `model.py`/`io.py`)**: `eval_mask` (the mask excluding the
+  warm-up block and, in gap-tolerant mode, each segment's `warmup_drop_days`) was
+  previously only ever built when `gap_tolerant: true`; in the default workflow it
+  stayed `None` for the whole run. This meant the DE-MCMC likelihood's own daily
+  mask double-counted the warm-up block (a verbatim copy of year one) as real
+  observations, inflating its effective sample size by up to 33% and sharpening
+  the posterior incorrectly. Separately, in gap-tolerant mode, `aggregation()`
+  emitted every window with a valid observation while `funcobj()` additionally
+  skipped windows failing `eval_mask` — so `statis()` computed `mean_obs`/`TSS_obs`
+  from a different, larger sample than the one actually scored, inflating NSE,
+  and (non-monotonically) shifting KGE/R²/AIC/BIC. `pyair2stream` now builds
+  `eval_mask` unconditionally on every data load, has `aggregation()` refuse to
+  emit a window with no `eval_mask`-eligible day, and scores the MCMC likelihood
+  on the same aggregated series `funcobj()` uses (see
+  `docs/audit/03_objective_function_and_masks.md`). This changes every reported
+  NSE/KGE/R²/AIC/BIC in gap-tolerant mode, and the MCMC posterior in every mode.
+- **CLI/I-O correctness fixes (`main.py`/`io.py`/`optimization.py`/`post_processing.py`,
+  audit report 05)**: `pyair2stream --config ...` in `FORWARD` mode called
+  `aggregation()`/`statis()` unconditionally before dispatching to any run mode,
+  so a pure projection with no `T_water` at all — the package's headline
+  climate-projection use case — crashed with `n_dat is 0` before ever reaching
+  `forward_mode()`'s own correct handling of that case; this is now gated on
+  `run_mode != 'FORWARD'`. A validation period shorter than one year returned
+  from `read_Tseries` before `data.n_tot` was overwritten, so it silently kept
+  the calibration value and passed `main.forward()`'s length guard, re-running
+  "validation" on the calibration arrays and appending a bogus efficiency line
+  to `1_*.out`; gated instead on an explicit `data.validation_available` flag.
+  Every output CSV (`2_*.csv`, `3_*.csv`, `MCMC_envelopes_*.csv`,
+  `Forward_Prediction_Envelopes_*.csv`) is no longer written with the 365-day
+  warm-up block (`Year=-999`) prepended — anyone reading these files directly
+  previously got 365 junk rows and a `pd.to_datetime` crash. Added an explicit
+  `calendar: "standard" | "noleap" | "360_day"` config key so GCM output on a
+  non-standard calendar computes the seasonal term's phase from row position
+  against the declared calendar instead of from (potentially padded, silently
+  misaligning) Gregorian dates; the 1-January start requirement is also relaxed
+  for `FORWARD` mode. Removed the `Twat_mod_p5`/`Twat_mod_p95` dual-name
+  fallback in `post_processing.py` — a compatibility shim for a column name the
+  code has never actually written — and fixed the two example scripts that
+  still referenced it.
 
-Only the integrator-default change above touches the core forward-simulation
-physics, and only insofar as it changes *which* integrator runs when none is
-specified — the governing equations and each integrator's own numerics are
-unchanged and still validated by the golden Fortran tests. The rest affect calibration
-robustness and diagnostic plotting.
+Only the integrator-default change and the eval_mask/aggregation fix above touch
+the core forward-simulation physics or the calibration objective's sample
+selection; the governing equations and each integrator's own numerics are
+unchanged and still validated by the golden Fortran tests. The rest affect
+calibration robustness, output file layout, and diagnostic plotting.
 
 ## Validation against published literature
 

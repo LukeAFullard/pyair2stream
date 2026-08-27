@@ -11,7 +11,7 @@ import os
 import matplotlib.pyplot as plt
 
 from .config import CommonData
-from .model import call_model, detect_segments, warn_on_stability, check_numerical_divergence
+from .model import call_model, warn_on_stability, check_numerical_divergence
 from .io import read_Tseries
 
 def sensitivity_analysis(data: CommonData):
@@ -26,14 +26,14 @@ def sensitivity_analysis(data: CommonData):
     n_par = 8
     sensitivities = []
 
-    # Restore the calibration data
-    # (Since `forward` may have loaded validation data and altered `data.n_tot`)
+    # Restore the calibration data. read_Tseries also rebuilds data.segments/eval_mask
+    # for it (report 03) -- a previous `data.segments is None` cache here masked a
+    # confirmed bug where a FORWARD-mode validation run's stale segments survived into
+    # the sensitivity analysis (see report 06).
     read_Tseries(data, 'c')
 
     # Ensure baseline is run
     data.par[:] = data.par_best[:]
-    if data.gap_tolerant and data.segments is None:
-        detect_segments(data)
     warn_on_stability(data, error_fraction=data.stability_error_fraction)
     call_model(data)
     check_numerical_divergence(data, max_plausible_twat=data.max_plausible_twat)

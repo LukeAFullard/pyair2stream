@@ -45,6 +45,14 @@ class CommonData:
     mcmc_walkers: int = 32
     mcmc_steps: int = 2000
 
+    # Set True by read_Tseries only once a validation period has been fully and
+    # successfully loaded (file present, >= 1 year, valid gap-tolerant segments if
+    # applicable). main.forward() must gate the validation block on this flag, not
+    # on data.n_tot -- a too-short validation period returns before data.n_tot is
+    # overwritten, so it stays at the calibration value (see
+    # docs/audit/05_cli_and_io_correctness.md, Defect B).
+    validation_available: bool = False
+
     # Forward options
     forward_options: Optional[dict] = None
 
@@ -69,6 +77,12 @@ class CommonData:
     # Numerical-stability guard settings (see docs/audit/02_numerical_integration.md)
     max_plausible_twat: np.float64 = np.float64(60.0)
     stability_error_fraction: np.float64 = np.float64(0.10)
+
+    # Declared calendar for the forcing series: 'standard' (real Gregorian dates,
+    # the only calendar the daily-continuity check validates against), 'noleap'
+    # (365 days every year, no Feb 29), or '360_day' (12 uniform 30-day months).
+    # See docs/audit/05_cli_and_io_correctness.md, Defect D.
+    calendar: str = 'standard'
     wmin: np.float64 = np.float64(0.0)
     wmax: np.float64 = np.float64(0.0)
 

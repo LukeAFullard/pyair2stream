@@ -128,7 +128,11 @@ def forward(data: CommonData) -> None:
         cal_df['Q_gap'] = q_gap
         cal_df['segment_id'] = segment_id
 
-    cal_df.to_csv(out_cal_path, index=False)
+    # Drop the warm-up block: it is a verbatim copy of year one with sentinel
+    # dates (Year=-999), an implementation detail that broke pd.to_datetime and
+    # row-count expectations for anyone reading the file directly (report 05,
+    # Defect C).
+    cal_df.iloc[365:].to_csv(out_cal_path, index=False)
 
     # Generate gaps_summary.txt
     if data.gap_tolerant:
@@ -164,24 +168,18 @@ def forward(data: CommonData) -> None:
     # 2. Validation period
     # Do not recompute Qmedia here: the validation period must be scored under
     # the same normalisation the parameters were calibrated with (report 01).
+    # read_Tseries already rebuilds segments/eval_mask for the validation data (and
+    # turns "no valid segments" in gap-tolerant mode into the same validation-skipped
+    # early return as a missing/too-short validation file -- see report 03).
     read_Tseries(data, 'v', recompute_qmedia=False)
 
-    if data.n_tot < 365:
-        ei = -999.0
+    # Gate on the explicit flag, not data.n_tot: a too-short (or missing, or
+    # gap-tolerant-with-no-valid-segments) validation period returns from
+    # read_Tseries before data.n_tot is overwritten, so it stays at the
+    # calibration value and would otherwise silently pass this guard, re-running
+    # "validation" on the calibration arrays (report 05, Defect B).
+    if not data.validation_available:
         return
-
-    if data.gap_tolerant:
-        try:
-            detect_segments(data)
-        except ValueError as e:
-            print(f"Validation skipped: {e}")
-            data.n_tot = 0
-            return
-
-        if not data.segments:
-            print("Validation skipped: No valid segments found.")
-            data.n_tot = 0
-            return
 
     aggregation(data)
     statis(data)
@@ -222,7 +220,7 @@ def forward(data: CommonData) -> None:
         val_df['Q_gap'] = val_q_gap
         val_df['segment_id'] = val_segment_id
 
-    val_df.to_csv(out_val_path, index=False)
+    val_df.iloc[365:].to_csv(out_val_path, index=False)  # drop the warm-up block (report 05, Defect C)
 
 
 def main():
@@ -255,11 +253,18 @@ def main():
         sys.exit(1)
 
     read_Tseries(data, 'c')
-    aggregation(data)
-    statis(data)
 
-    print('mean, TSS and standard deviation (calibration)')
-    print(f"{data.mean_obs:.5f} {data.TSS_obs:.5f} {data.std_obs:.5f}")
+    # FORWARD mode does not calibrate, so it may legitimately have no T_water
+    # observations at all (a pure projection). statis() raises when there are
+    # none, so it -- and the preceding aggregation() -- must not run
+    # unconditionally here. forward_mode() handles both cases itself via its own
+    # has_obs check (report 05, Defect A / 5.1).
+    if data.runmode != 'FORWARD':
+        aggregation(data)
+        statis(data)
+
+        print('mean, TSS and standard deviation (calibration)')
+        print(f"{data.mean_obs:.5f} {data.TSS_obs:.5f} {data.std_obs:.5f}")
 
     if getattr(data, 'cross_validation', None) and data.runmode in ('PSO', 'DE', 'LATHYP'):
         from .cross_validation import run_leave_one_year_out_cv, summarize

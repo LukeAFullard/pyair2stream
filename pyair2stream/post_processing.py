@@ -244,9 +244,8 @@ def post_process(data: CommonData, toll: float = None):
 
         df = pd.read_csv(file_path)
 
-        # First 365 is a warm up year, drop it if available
-        if len(df) > 365:
-            df = df.iloc[365:].copy()
+        # The warm-up block is dropped when this file is written (report 05,
+        # Defect C), so no positional slice is needed here any more.
 
         # Replace sentinel values with NaN
         df.replace(-999.0, np.nan, inplace=True)
@@ -354,23 +353,16 @@ def post_process(data: CommonData, toll: float = None):
         l_env = []
         if os.path.exists(env_file):
             env_df = pd.read_csv(env_file)
-            # Clip MCMC dataframe to match the visual slice
-            if len(env_df) > 365:
-                env_df = env_df.iloc[365:].copy()
+            # The warm-up block is dropped when this file is written (report 05,
+            # Defect C), so only the observation-range slice below is needed.
             if filter_to_obs and 'start_idx' in locals() and len(env_df) > end_idx:
                 env_df = env_df.iloc[start_idx:end_idx+1].copy()
 
             if len(env_df) == len(dates):
-                if 'Twat_mod_lower' in env_df.columns:
-                    env_df['Twat_mod_lower'] = np.where(env_df['Twat_mod_lower'] == -999.0, np.nan, env_df['Twat_mod_lower'])
-                    env_df['Twat_mod_upper'] = np.where(env_df['Twat_mod_upper'] == -999.0, np.nan, env_df['Twat_mod_upper'])
-                    lower_col = 'Twat_mod_lower'
-                    upper_col = 'Twat_mod_upper'
-                else:
-                    env_df['Twat_mod_p5'] = np.where(env_df['Twat_mod_p5'] == -999.0, np.nan, env_df['Twat_mod_p5'])
-                    env_df['Twat_mod_p95'] = np.where(env_df['Twat_mod_p95'] == -999.0, np.nan, env_df['Twat_mod_p95'])
-                    lower_col = 'Twat_mod_p5'
-                    upper_col = 'Twat_mod_p95'
+                env_df['Twat_mod_lower'] = np.where(env_df['Twat_mod_lower'] == -999.0, np.nan, env_df['Twat_mod_lower'])
+                env_df['Twat_mod_upper'] = np.where(env_df['Twat_mod_upper'] == -999.0, np.nan, env_df['Twat_mod_upper'])
+                lower_col = 'Twat_mod_lower'
+                upper_col = 'Twat_mod_upper'
 
                 pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
                 l_env = [ax.fill_between(dates, env_df[lower_col], env_df[upper_col], color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')]
@@ -469,21 +461,17 @@ def post_process(data: CommonData, toll: float = None):
         # When pure FORWARD, dates might be full of zeros from initialized array
         # Let's clip to actual data.n_tot if needed, though they should be filled by IO
         df_dates = pd.DataFrame({'year': data.date[:, 0], 'month': data.date[:, 1], 'day': data.date[:, 2]})
-        # Filter out bad dates (year == 0) caused by padding
+        # The warm-up block is marked with Year=-999 by read_Tseries, so this mask
+        # already excludes it -- no separate positional [365:] slice is needed or
+        # correct here. (data.date/Tair/Twat_mod/Q are the live in-memory arrays,
+        # still full-length, unlike the on-disk CSVs -- report 05, Defect C.)
         valid_dates_mask = df_dates['year'] > 0
         df_dates = df_dates[valid_dates_mask]
         dates = pd.to_datetime(df_dates)
 
-        # Clip arrays
-        if len(dates) > 365:
-            Tair = data.Tair[valid_dates_mask][365:]
-            Twat_mod = data.Twat_mod[valid_dates_mask][365:]
-            Q = data.Q[valid_dates_mask][365:]
-            dates = dates[365:]
-        else:
-            Tair = data.Tair[valid_dates_mask]
-            Twat_mod = data.Twat_mod[valid_dates_mask]
-            Q = data.Q[valid_dates_mask]
+        Tair = data.Tair[valid_dates_mask]
+        Twat_mod = data.Twat_mod[valid_dates_mask]
+        Q = data.Q[valid_dates_mask]
 
         # Replace sentinel values with NaN so they break the plot line rather than dropping to -999.0
         Tair = np.where(Tair == -999.0, np.nan, Tair)
@@ -507,21 +495,14 @@ def post_process(data: CommonData, toll: float = None):
 
         if os.path.exists(env_file):
             env_df = pd.read_csv(env_file)
-            # the env_df has the same initial padding mapping
-            env_df = env_df[valid_dates_mask]
-            if len(env_df) > 365:
-                env_df = env_df.iloc[365:].copy()
+            # env_file no longer contains the warm-up block (report 05, Defect C),
+            # so it already aligns 1:1 with the valid (non-warm-up) portion of
+            # data.date -- no mask/slice needed, just the length safety check below.
             if len(env_df) == len(dates):
-                if 'Twat_mod_lower' in env_df.columns:
-                    env_df['Twat_mod_lower'] = np.where(env_df['Twat_mod_lower'] == -999.0, np.nan, env_df['Twat_mod_lower'])
-                    env_df['Twat_mod_upper'] = np.where(env_df['Twat_mod_upper'] == -999.0, np.nan, env_df['Twat_mod_upper'])
-                    lower_col = 'Twat_mod_lower'
-                    upper_col = 'Twat_mod_upper'
-                else:
-                    env_df['Twat_mod_p5'] = np.where(env_df['Twat_mod_p5'] == -999.0, np.nan, env_df['Twat_mod_p5'])
-                    env_df['Twat_mod_p95'] = np.where(env_df['Twat_mod_p95'] == -999.0, np.nan, env_df['Twat_mod_p95'])
-                    lower_col = 'Twat_mod_p5'
-                    upper_col = 'Twat_mod_p95'
+                env_df['Twat_mod_lower'] = np.where(env_df['Twat_mod_lower'] == -999.0, np.nan, env_df['Twat_mod_lower'])
+                env_df['Twat_mod_upper'] = np.where(env_df['Twat_mod_upper'] == -999.0, np.nan, env_df['Twat_mod_upper'])
+                lower_col = 'Twat_mod_lower'
+                upper_col = 'Twat_mod_upper'
 
                 pi_val = getattr(data, 'uncertainty_options', {}).get('prediction_interval', 90.0) if hasattr(data, 'uncertainty_options') else 90.0
                 l_env = [ax.fill_between(dates, env_df[lower_col], env_df[upper_col], color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')]

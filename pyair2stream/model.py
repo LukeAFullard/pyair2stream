@@ -275,6 +275,22 @@ def detect_segments(data: CommonData) -> None:
             data.eval_mask[eval_start:end + 1] = True
 
 
+def prepare_evaluation(data: CommonData) -> None:
+    """
+    (Re)build `data.segments` and `data.eval_mask` for the currently loaded data.
+
+    This must run after every load of Tair/Q/Twat_obs/n_tot (handled by
+    `read_Tseries`), and after any later in-place mutation of those arrays (e.g.
+    cross-validation folds) -- not only in gap-tolerant mode. Report 03 found
+    `eval_mask` was previously left `None` for the whole non-gap-tolerant
+    workflow, and that a `data.segments is None` staleness check let stale
+    segments survive a later mutation of the underlying data. Idempotent and
+    cheap enough to call unconditionally rather than cached with an `is None`
+    check. See docs/audit/03_objective_function_and_masks.md.
+    """
+    detect_segments(data)
+
+
 def _run_integration(data: CommonData, segments, p):
     """
     Orchestrate the core numerical integration loop over specified segments.
@@ -363,7 +379,15 @@ def call_model(data: CommonData) -> None:
 def aggregation(data: CommonData) -> None:
     """
     Aggregation (to calibrate the model with different time scale: daily, weekly, monthly)
+
+    A day only contributes to a window if it also passes `data.eval_mask` (warm-up
+    and, in gap-tolerant mode, each segment's `warmup_drop_days`). Without this,
+    `statis()` (which sums every emitted window) and `funcobj()` (which additionally
+    skips days failing `eval_mask`) score different samples -- see
+    docs/audit/03_objective_function_and_masks.md, Defect A.
     """
+    eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
+
     pp = len(data.time_res)
     if pp == 2:
         unit = data.time_res[1]
@@ -383,7 +407,7 @@ def aggregation(data: CommonData) -> None:
         data.I_inf = np.full((n_units, 3), -999, dtype=np.int32)
 
         for i in range(365, data.n_tot):
-            if data.Twat_obs[i] != -999.0:
+            if data.Twat_obs[i] != -999.0 and eval_mask[i]:
                 # 0-indexed I_inf and I_pos.
                 # Fortran I_inf(n_inf, 2) -> Python I_inf[n_inf-1, 1]
                 data.I_inf[n_inf - 1, 1] = n_pos - 1
@@ -407,7 +431,7 @@ def aggregation(data: CommonData) -> None:
                 k = i + j
                 if k >= data.n_tot:
                     break
-                if data.Twat_obs[k] != -999.0:
+                if data.Twat_obs[k] != -999.0 and eval_mask[k]:
                     tmp += data.Twat_obs[k]
                     data.I_pos[n_pos - 1] = k
                     n_pos += 1
@@ -449,7 +473,7 @@ def aggregation(data: CommonData) -> None:
             else:
                 n_days += 1
 
-            if data.Twat_obs[i] != -999.0:
+            if data.Twat_obs[i] != -999.0 and eval_mask[i]:
                 tmp += data.Twat_obs[i]
                 data.I_pos[n_pos - 1] = i
                 n_pos += 1

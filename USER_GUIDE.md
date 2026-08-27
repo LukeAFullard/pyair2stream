@@ -130,10 +130,26 @@ Your calibration and (optional) validation CSVs need these columns:
 
 A few hard requirements the reader will enforce, taken from the original model's data conventions:
 
-- **One row per calendar day, with no missing dates.** This applies even in [gap-tolerant mode](#10-gap-tolerant-mode). Gaps must appear as `NaN`/`-999.0` *values* in an existing row, not as a skipped date.
-- **The series must start on 1 January** (unless `gap_tolerant: true`). If your real record starts later in the year, back-fill `T_air` (reconstructed if necessary) and mark `T_water` as missing for the lead-in days.
+- **One row per calendar day, with no missing dates.** This applies even in [gap-tolerant mode](#10-gap-tolerant-mode). Gaps must appear as `NaN`/`-999.0` *values* in an existing row, not as a skipped date. (This requirement only applies to `calendar: "standard"` -- see below.)
+- **The series must start on 1 January** (unless `gap_tolerant: true` or `run_mode: FORWARD`). If your real record starts later in the year, back-fill `T_air` (reconstructed if necessary) and mark `T_water` as missing for the lead-in days. `FORWARD`-mode projections rarely start on 1 January, so this is relaxed there — it only exists so the internal warm-up block's seasonal phase lines up with the real record, which doesn't matter when the parameters are already fitted.
 - **`T_air` and `Discharge` must be gap-free** (unless `gap_tolerant: true`). Only `T_water` is allowed to have missing values in the default mode.
+- **The calibration series must be at least 365 days long** (the warm-up block replicates the first year of real data).
 - Missing values can be left blank (pandas reads them as `NaN`) or written explicitly as the legacy sentinel `-999.0`.
+
+### Non-standard calendars (GCM output)
+
+By default (`calendar: "standard"`) `Date` must be a real, gap-free Gregorian calendar
+column, and the seasonal cosine term's phase (`tt`) is computed from real calendar
+day-of-year. Climate model output is often on a **`noleap`** calendar (365 days every
+year, no 29 February) or a **`360_day`** calendar (12 uniform 30-day months) — set
+`calendar: "noleap"` or `calendar: "360_day"` for these. When set, the daily-continuity
+check against real Gregorian spacing is skipped (a genuine non-standard-calendar series
+will never satisfy it), and `tt` is computed from each row's *position* against the
+declared calendar's day-count instead of from the `Date` column, so it does not matter
+whether your dates are the real (non-standard) ones or Gregorian dates you padded the
+file with to make it load. **Do not pad a non-standard-calendar file and leave
+`calendar` at `"standard"`** — the file will load, but `tt` will silently be computed
+from the (irrelevant) padded dates and drift out of phase with the real season.
 
 Example:
 
@@ -171,6 +187,9 @@ prc: 1.0                   # for time_resolution other than 1d: minimum fraction
 max_plausible_twat: 60.0   # sanity bound (°C) for the divergence guard in forward runs (§9.1)
 stability_error_fraction: 0.10   # error if more than this fraction of days exceed the
                             # integrator's stability limit in the pre-flight check (§9.1)
+calendar: "standard"       # "standard" (default, real Gregorian dates), "noleap" (365 days
+                            # every year, no Feb 29), or "360_day" (12 uniform 30-day months) --
+                            # see "Non-standard calendars" below
 
 # --- Calibration ---
 objective_function: "NSE"  # NSE, KGE, or RMS (all reported as "higher is better" internally)
@@ -352,6 +371,16 @@ Everything is written to `output_dir` (or `{project_name}/output_{version}` by d
 | `Forward_Prediction_Envelopes_*.csv` | Only for a `FORWARD` run with `forward_options.enable_prediction_intervals: true` (see [§12](#12-forward-prediction-intervals)) |
 | `cv_results.csv` | Only if `cross_validation.enabled: true` (see [§13](#13-cross-validation)). Replaces the usual forward-run/plotting outputs above for that run. |
 | `gaps_summary.txt` | Only for `gap_tolerant: true` (segment/gap diagnostics) |
+
+> **Caveat on `AIC`/`BIC`:** these assume independent residuals. Daily stream
+> temperature residuals are strongly autocorrelated in practice, which systematically
+> favours more complex model versions (more free parameters) when comparing across
+> versions 3/5/7/8. Treat AIC/BIC differences between versions as a rough guide, not a
+> statistically rigorous test, and be aware of this when comparing against externally
+> published AIC/BIC tables (e.g. `examples/validation/Switzerland/`) computed the same
+> naive way. (Also note `k` counts only the model parameters, not the residual
+> variance; this shifts every AIC value by the same constant and does not affect
+> ranking between versions with the same `k`.)
 
 ### The first 365 rows of `2_*.csv` / `3_*.csv` are not real data
 
