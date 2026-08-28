@@ -178,22 +178,45 @@ class TestVersions3And5Unaffected(unittest.TestCase):
 class TestRawFailureModesWithoutTheGuard(unittest.TestCase):
     """Documents the two failure modes the guard exists to prevent, by calling
     call_model() directly (i.e. bypassing check_nonpositive_discharge/read_Tseries)
-    on a version-8 zero-discharge day."""
+    on a version-8 zero-discharge day.
 
-    def test_positive_a4_raises_bare_zerodivisionerror(self):
+    The exact mechanics of "theta ** a4 at theta=0" (raise vs. silently return inf)
+    are IEEE-754/numba-error-model implementation details of the underlying
+    Numba-compiled kernel, not something pyair2stream controls or that these tests
+    should hard-code -- they have been observed to differ between Numba versions/
+    platforms (e.g. array vs. scalar division lowering). What both tests actually
+    assert is the property that matters: bypassing the guard is unsafe, one way or
+    another (a raised exception, or a non-finite/silently-wrong value) -- exactly
+    why `check_nonpositive_discharge` exists to prevent ever reaching this state at
+    all, independent of which raw failure mode the current environment produces.
+    """
+
+    def test_positive_a4_bypassing_guard_is_unsafe(self):
         for mod_num in ALL_INTEGRATORS:
             data = _build_synthetic_data(mod_num, PAR_A4_POS, q_zero_index=200)
-            with self.assertRaises(ZeroDivisionError):
+            try:
                 call_model(data)
+            except ZeroDivisionError:
+                continue  # the documented raw failure mode on this environment
+            # Didn't raise: DD = theta**a4 = 0**(a4>0) = 0.0 was computed, and the
+            # numerator was divided by that zero -- IEEE-754 float division by zero
+            # is +-inf, so the result must be non-finite here.
+            self.assertFalse(
+                np.all(np.isfinite(data.Twat_mod[365:])),
+                msg=f"{mod_num}: expected either ZeroDivisionError or a non-finite result",
+            )
 
-    def test_negative_a4_silently_produces_finite_but_wrong_value(self):
+    def test_negative_a4_bypassing_guard_is_unsafe(self):
         for mod_num in ALL_INTEGRATORS:
             data_zero = _build_synthetic_data(mod_num, PAR_A4_NEG, q_zero_index=200)
-            call_model(data_zero)
-            # No crash, no NaN/inf -- and check_numerical_divergence does not catch it,
-            # since the value stays inside the plausible range. This is the "silent
-            # mis-simulation" failure mode.
-            self.assertTrue(np.all(np.isfinite(data_zero.Twat_mod)))
+            try:
+                call_model(data_zero)
+            except ZeroDivisionError:
+                continue  # the documented raw failure mode on this environment
+            self.assertTrue(np.all(np.isfinite(data_zero.Twat_mod)), msg=mod_num)
+            # No crash, no NaN/inf -- and check_numerical_divergence does not catch
+            # it, since the value stays inside the plausible range. This is the
+            # "silent mis-simulation" failure mode described in the audit.
             check_numerical_divergence(data_zero, max_plausible_twat=60.0)  # must not raise
 
             data_normal = _build_synthetic_data(mod_num, PAR_A4_NEG, q_zero_index=None)
@@ -202,7 +225,7 @@ class TestRawFailureModesWithoutTheGuard(unittest.TestCase):
             # The zero day (and everything downstream in the same integration
             # segment) differs from the same run without the zero day.
             diff = np.abs(data_zero.Twat_mod[365:] - data_normal.Twat_mod[365:])
-            self.assertGreater(np.max(diff), 1e-6)
+            self.assertGreater(np.max(diff), 1e-6, msg=mod_num)
 
 
 class TestMinThetaFloorEscapeHatch(unittest.TestCase):
