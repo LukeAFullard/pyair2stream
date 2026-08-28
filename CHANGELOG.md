@@ -185,6 +185,9 @@ rather than duplicated as a literal string, so it cannot drift from
   vs `CRN` for each version) over a 3-year horizon at a much tighter
   tolerance, instead of 3 hand-picked combinations over 10 days at
   `rtol=atol=1e-2` (audit report 08, 8.1/8.2).
+- `tests/test_report08_aggregation.py`: `model.aggregation()` is now tested
+  at `'1w'`/`'2w'`/`'1m'` resolutions against independent pandas computations,
+  not just `'1d'` (audit report 08, 8.3).
 
 ### Removed
 - The `Twat_mod_p5`/`Twat_mod_p95` dual-name fallback in `post_processing.py`
@@ -194,6 +197,21 @@ rather than duplicated as a literal string, so it cannot drift from
   removed names and have been fixed.
 
 ### Fixed
+- `model.aggregation()`'s weekly (`'Nw'`) branch could raise `IndexError` (or,
+  in the original Fortran, silently write out of bounds -- `AIR2STREAM_
+  SUBROUTINES.f90`'s equivalent `pos_tmp` is equally unguarded) whenever the
+  record length was not an exact multiple of the window length, because the
+  trailing partial window's "representative position" was computed assuming
+  a full-length window. This is the common case for any real dataset, and
+  was invisible because every test in the suite used `time_res = '1d'`
+  before now. Clamped to the last valid index; only the trailing partial
+  window's position is affected (docs/audit/08_testing_gaps.md, 8.3).
+- `time_resolution` is now validated in `read_calibration` against the
+  patterns `aggregation()` actually understands (`'1d'`, or 1-2 digits plus
+  `'w'`/`'m'`), with a clear, actionable error. Previously an invalid value
+  either raised an opaque `UnboundLocalError` (e.g. `'daily'`) or silently
+  produced zero calibration data with an unrelated downstream error message
+  (e.g. `'2d'`) (docs/audit/08_testing_gaps.md, 8.3).
 - `tests/fortran_runner.py` (the golden-test harness that compiles and drives
   the upstream Fortran reference) wrote its date column as `day month year`;
   the real air2stream input format is `year month day` (confirmed against

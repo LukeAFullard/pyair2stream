@@ -7,6 +7,7 @@ and reading/validating the input CSV time series data (forcing and observations)
 
 import os
 import json
+import re
 import yaml
 import numpy as np
 import pandas as pd
@@ -34,6 +35,19 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data.water_station = config.get('water_station', config.get('station_name', 'WaterStation'))
     data.series = config.get('series', 'series')
     data.time_res = config.get('time_resolution', '1d')
+    # `aggregation()` only understands exactly '1d' (daily), or 1-2 digits
+    # followed by 'w' (weeks) or 'm' (months, e.g. '2w', '1m'). Anything else
+    # used to fail deep inside aggregation(): a value of the "wrong" length
+    # (e.g. 'daily') raised an opaque UnboundLocalError on `unit`, and a
+    # 2/3-char value with an unrecognised unit (e.g. '2d') silently printed
+    # "Error: variable time_res", left data.n_dat at 0, and raised inside
+    # statis() with an unrelated message. Validated explicitly here instead,
+    # with a clear, actionable error (docs/audit/08_testing_gaps.md, 8.3).
+    if not re.fullmatch(r'1d|\d{1,2}[wm]', data.time_res):
+        raise ValueError(
+            f"Invalid time_resolution '{data.time_res}'. Must be '1d' (daily), or "
+            "1-2 digits followed by 'w' (weeks) or 'm' (months), e.g. '1w', '2w', '1m'."
+        )
     data.version = int(config.get('version', 8))
     data.Tice_cover = np.float64(config.get('Tice_cover', 0.0))
     data.fun_obj = config.get('objective_function', 'NSE')
