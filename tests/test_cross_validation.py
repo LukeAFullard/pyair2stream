@@ -124,6 +124,11 @@ def test_cross_validation_leak_prevention(dummy_data):
 def test_run_leave_one_year_out_cv(dummy_data):
     # Seed numpy random to de-flake the stochastic optimizers with tiny particle/run counts
     np.random.seed(42)
+    # PSO_mode now draws from its own local np.random.Generator (docs/audit/
+    # 07_reproducibility_and_provenance.md, 7.1), so it must be seeded
+    # explicitly via data.random_seed rather than relying on the global numpy
+    # random state seeded above.
+    dummy_data.random_seed = 42
 
     dummy_data.gap_tolerant = False
     dummy_data.n_run = 10
@@ -186,6 +191,12 @@ def test_run_leave_one_year_out_cv(dummy_data):
 def test_run_leave_one_year_out_cv_gap_tolerant(dummy_data):
     from pyair2stream.cross_validation import run_leave_one_year_out_cv, summarize
     np.random.seed(42)
+    # PSO_mode now draws from its own local np.random.Generator (docs/audit/
+    # 07_reproducibility_and_provenance.md, 7.1) rather than the global numpy
+    # random state the line above seeds, so it must be seeded explicitly via
+    # data.random_seed (threaded through by main.run_optimizer) to de-flake
+    # this tiny-particle-count PSO run.
+    dummy_data.random_seed = 42
 
     dummy_data.gap_tolerant = True
     dummy_data.n_run = 10

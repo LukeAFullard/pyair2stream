@@ -260,7 +260,7 @@ def detect_segments(data: CommonData) -> None:
         raise ValueError("Total valid forcing days across all segments is zero.")
 
     # Optional diagnostics (avoid spamming in optimization loops)
-    if not hasattr(data, '_segment_warned'):
+    if not data._segment_warned:
         if total_valid_days < 365:
             print(f"Warning: Total valid forcing days is {total_valid_days} (< 365). Calibration results may be unreliable.")
         if len(data.segments) > 2:
@@ -425,7 +425,19 @@ def aggregation(data: CommonData) -> None:
         for i in range(365, data.n_tot, n_days):
             tmp = 0.0
             count = 0
-            pos_tmp = i + int(np.ceil(0.5 * n_days)) - 1
+            # The nominal window-midpoint position assumes a full n_days-day
+            # window. The trailing window is shorter whenever (n_tot - 365) is
+            # not an exact multiple of n_days (the common case for any real
+            # dataset), so this can point past the end of the array -- an
+            # out-of-bounds write in the original Fortran (`AIR2STREAM_
+            # SUBROUTINES.f90`'s `pos_tmp=i+CEILING(0.5*n_days)-1`, unguarded
+            # there too) that silently corrupts memory instead of the IndexError
+            # Python raises. Clamped to the last valid index, which only
+            # changes behaviour for that trailing partial window -- a full
+            # window's own `pos_tmp` is never affected (see docs/audit/
+            # 08_testing_gaps.md, 8.3, where extending aggregation test
+            # coverage to '1w'/'2w' surfaced this).
+            pos_tmp = min(i + int(np.ceil(0.5 * n_days)) - 1, data.n_tot - 1)
 
             for j in range(n_days):
                 k = i + j

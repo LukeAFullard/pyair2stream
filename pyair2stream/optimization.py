@@ -294,7 +294,7 @@ def forward_mode(data: CommonData) -> None:
         sample_indices = np.random.choice(len(chain), size=n_samples, replace=False)
         samples = chain[sample_indices]
 
-        uncertainty_options = getattr(data, 'uncertainty_options', None) or {}
+        uncertainty_options = data.uncertainty_options or {}
         sidecar_path = chain_path.replace('.csv', '_meta.json')
 
         # Resolve sigma: explicit config override first, then the sidecar written by
@@ -403,8 +403,10 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
     """
     print(f'N. particles = {data.n_particles}, N. run = {data.n_run}')
 
-    if seed is not None:
-        np.random.seed(seed)
+    # A local Generator (rather than the legacy `np.random.seed()`, which mutates
+    # global numpy random state and would interfere with any calling script) --
+    # see docs/audit/07_reproducibility_and_provenance.md, 7.1.
+    rng = np.random.default_rng(seed)
 
     n_par = 8
     n_particles = data.n_particles
@@ -428,8 +430,8 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
     dw = (data.wmax - data.wmin) / n_run
     w = data.wmax
 
-    x_rand = np.random.rand(n_par, n_particles)
-    v_rand = np.random.rand(n_par, n_particles)
+    x_rand = rng.random((n_par, n_particles))
+    v_rand = rng.random((n_par, n_particles))
 
     for j in range(n_par):
         dxmax = data.parmax[j] - data.parmin[j]
@@ -461,7 +463,7 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
             particles_to_eval = []
             eval_indices = []
             for k in range(n_particles):
-                r = np.random.rand(2 * n_par)
+                r = rng.random(2 * n_par)
                 status = 0
 
                 for j in range(n_par):
@@ -546,8 +548,10 @@ def LH_mode(data: CommonData, seed: Optional[int] = None) -> None:
     """
     print(f'N. run = {data.n_run}')
 
-    if seed is not None:
-        np.random.seed(seed)
+    # A local Generator (rather than the legacy `np.random.seed()`, which mutates
+    # global numpy random state and would interfere with any calling script) --
+    # see docs/audit/07_reproducibility_and_provenance.md, 7.1.
+    rng = np.random.default_rng(seed)
 
     n_par = 8
     n_run = data.n_run
@@ -561,11 +565,11 @@ def LH_mode(data: CommonData, seed: Optional[int] = None) -> None:
     permut = np.zeros((n_run, n_par), dtype=np.int32)
     for j in range(n_par):
         # Fix: Using numpy.random.permutation to avoid custom Shuffle
-        permut[:, j] = np.random.permutation(n_run) + 1
+        permut[:, j] = rng.permutation(n_run) + 1
 
     for i in range(n_run):
         for j in range(n_par):
-            r = np.random.rand()
+            r = rng.random()
             r = r + (float(permut[i, j]) - 1.0)
             r = r / float(n_run)
 
@@ -604,9 +608,10 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
     """
     print(f'Pop. Size (particles) = {data.n_particles}, Max Generations (runs) = {data.n_run}')
 
-    if seed is not None:
-        np.random.seed(seed)
-
+    # `seed` is passed directly to `differential_evolution` below, which accepts an
+    # explicit seed/Generator without mutating global numpy random state -- no
+    # `np.random.seed()` call needed here (docs/audit/07_reproducibility_and_provenance.md,
+    # 7.1). `minimize`'s L-BFGS-B polish phase is deterministic given its starting point.
     n_par = 8
     output_filename = os.path.join(data.folder, f"0_{data.runmode}_{data.fun_obj}_{data.station}_{data.series}_{data.time_res}.csv")
     history = []
@@ -720,7 +725,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     nsteps = data.mcmc_steps
     ndim = len(active_params)
 
-    uncertainty_options = getattr(data, 'uncertainty_options', None) or {}
+    uncertainty_options = data.uncertainty_options or {}
     noise_model = uncertainty_options.get('noise_model', 'iid')
 
     eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)

@@ -7,6 +7,7 @@ and reading/validating the input CSV time series data (forcing and observations)
 
 import os
 import json
+import re
 import yaml
 import numpy as np
 import pandas as pd
@@ -34,6 +35,19 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data.water_station = config.get('water_station', config.get('station_name', 'WaterStation'))
     data.series = config.get('series', 'series')
     data.time_res = config.get('time_resolution', '1d')
+    # `aggregation()` only understands exactly '1d' (daily), or 1-2 digits
+    # followed by 'w' (weeks) or 'm' (months, e.g. '2w', '1m'). Anything else
+    # used to fail deep inside aggregation(): a value of the "wrong" length
+    # (e.g. 'daily') raised an opaque UnboundLocalError on `unit`, and a
+    # 2/3-char value with an unrecognised unit (e.g. '2d') silently printed
+    # "Error: variable time_res", left data.n_dat at 0, and raised inside
+    # statis() with an unrelated message. Validated explicitly here instead,
+    # with a clear, actionable error (docs/audit/08_testing_gaps.md, 8.3).
+    if not re.fullmatch(r'1d|\d{1,2}[wm]', data.time_res):
+        raise ValueError(
+            f"Invalid time_resolution '{data.time_res}'. Must be '1d' (daily), or "
+            "1-2 digits followed by 'w' (weeks) or 'm' (months), e.g. '1w', '2w', '1m'."
+        )
     data.version = int(config.get('version', 8))
     data.Tice_cover = np.float64(config.get('Tice_cover', 0.0))
     data.fun_obj = config.get('objective_function', 'NSE')
@@ -42,6 +56,13 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data.mod_num = config.get('integrator', 'CRN')
     data.runmode = config.get('run_mode', 'DE')
     data.prc = np.float64(config.get('prc', 1.0))
+    # Top-level calibration seed (docs/audit/07_reproducibility_and_provenance.md,
+    # 7.1): threaded through to whichever optimizer `run_optimizer` dispatches to.
+    # Without it, two runs of the same config produce different `par_best` (DE's
+    # own global-state RNG, PSO/LATHYP's global `np.random`) with no way to
+    # reproduce a published result.
+    random_seed = config.get('random_seed', None)
+    data.random_seed = int(random_seed) if random_seed is not None else None
     data.max_plausible_twat = np.float64(config.get('max_plausible_twat', 60.0))
     data.stability_error_fraction = np.float64(config.get('stability_error_fraction', 0.10))
 
@@ -233,13 +254,16 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
             data.parmin[7] = 0.0; data.parmax[7] = 0.0; data.flag_par[7] = False
         elif data.version == 7:
             data.parmin[3] = 0.0; data.parmax[3] = 0.0; data.flag_par[3] = False
-        # Bug fix (see d78fe17 / README "Known deviations"): the legacy Fortran
-        # source had 'IF (version == 4)' duplicated, with the second block
-        # apparently intended for version == 8. That block zeroed parmin/parmax
-        # for parameters 5-8, which would silently disable the seasonal and
-        # discharge-attenuation terms for the full 8-parameter model.
-        # Version 8 is defined as using all 8 free parameters, so we
-        # intentionally do NOT reproduce that zeroing here.
+        # Note (see README "Known deviations", audit report 07 Defect B): the
+        # upstream Fortran source has a duplicated 'IF (version == 4)' block
+        # (AIR2STREAM_READ.f90:81-87) whose comment misleadingly says "8
+        # parameters". The guard is 'version == 4', not 'version == 8' -- the
+        # block is byte-identical to the one a few lines above and never
+        # executes for version 8. It is a cosmetic copy-paste typo in a
+        # comment, not a physics bug: parameters 5-8 are never zeroed for
+        # version 8 in the Fortran either. pyair2stream omits the redundant
+        # (no-op) duplicate block; version 8 uses all 8 free parameters, same
+        # as upstream.
 
         out_param_path = os.path.join(data.folder, 'parameters.txt')
         with open(out_param_path, 'w') as f:
@@ -276,7 +300,7 @@ def compute_qmedia(data: CommonData, verbose: bool = False) -> None:
         data.Qmedia = computed_qmedia
 
     if data.gap_tolerant:
-        n_tot_raw = getattr(data, '_n_tot_raw', data.n_tot - 365)
+        n_tot_raw = data._n_tot_raw if data._n_tot_raw is not None else data.n_tot - 365
         if data.Qmedia <= 0 and data.version not in [3, 5]:
             raise ValueError("Qmedia is zero or negative. Please supply Qmedia in the configuration file if the data is mostly empty.")
         if verbose and (data.n_Q / n_tot_raw) < 0.5 and data.Qmedia_user is None:
@@ -342,10 +366,10 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
 
     if p == 'c':
         period = 'calibration'
-        filename = getattr(data, '_input_data_path_cal', None)
+        filename = data._input_data_path_cal
     else:
         period = 'validation'
-        filename = getattr(data, '_input_data_path_val', None)
+        filename = data._input_data_path_val
         # Pessimistic default: only set True once validation has been fully and
         # successfully loaded below. Every early-return path in this function
         # must leave this False rather than overload data.n_tot, which stays at

@@ -5,7 +5,7 @@ from pyair2stream.optimization import DE_MCMC_mode, forward_mode
 from pyair2stream.post_processing import post_process
 import numpy as np
 
-def run_calibration():
+def run_calibration(smoke=False):
     import json
     import os
     print("--- 1. Running DE-MCMC Calibration ---")
@@ -13,6 +13,16 @@ def run_calibration():
     read_Tseries(data, 'c')
     aggregation(data)
     statis(data)
+
+    if smoke:
+        # docs/audit/08_testing_gaps.md, 8.6: a CI "does this still run end to
+        # end" check, not a real calibration -- cut the DE population/MCMC
+        # chain down to the minimum that still exercises every code path
+        # (mcmc_walkers must stay >= 2x the 8 active parameters).
+        data.n_run = 2
+        data.n_particles = 2
+        data.mcmc_walkers = 16
+        data.mcmc_steps = 20
 
     DE_MCMC_mode(data)
     post_process(data)
@@ -170,6 +180,14 @@ def compare_plots():
 
 if __name__ == "__main__":
     import os
+    import sys
+
+    # --smoke: run with a tiny DE population/MCMC chain instead of the real
+    # calibration, to check the whole pipeline still runs end to end without
+    # the multi-minute runtime of the full example (docs/audit/08_testing_gaps.md,
+    # 8.6). Not meant to produce meaningful results or figures.
+    smoke = "--smoke" in sys.argv
+
     # Clean old artifacts
     for f in ["config_forward_injected.yaml", "Forward_Prediction_Envelopes_iid.csv", "Forward_Prediction_Envelopes_ar1.csv",
               "Forward_Prediction_Ensemble_iid.npz", "Forward_Prediction_Ensemble_ar1.npz", "comparison_iid_vs_ar1.png"]:
@@ -177,7 +195,7 @@ if __name__ == "__main__":
         if os.path.exists(path):
             os.remove(path)
 
-    best_params, historical_sigma, qmedia = run_calibration()
+    best_params, historical_sigma, qmedia = run_calibration(smoke=smoke)
     run_forward(best_params, historical_sigma, qmedia, "iid")
     run_forward(best_params, historical_sigma, qmedia, "ar1")
     compare_plots()

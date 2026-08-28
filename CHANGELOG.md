@@ -1,6 +1,18 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] - 2026-08-27
+
+Version numbers previously disagreed three ways: `pyproject.toml`/`__init__.py`
+stayed at `0.1.0` while this file's newest heading said `[1.0.0]` and the CLI
+banner printed `0.1.0` (docs/audit/07_reproducibility_and_provenance.md, Defect
+D). `pyproject.toml` was in fact never bumped for that `1.0.0` heading, and
+given the P0 findings fixed by audit reports 01 and 02 above, a `1.0.0` release
+at that point would have been premature regardless. The `[1.0.0]` heading below
+has been relabelled `[0.1.0]` to match what was actually shipped, and this
+release -- everything above it in this file -- is `0.2.0`. `pyair2stream.__version__`
+is now read from installed package metadata (`importlib.metadata.version`)
+rather than duplicated as a literal string, so it cannot drift from
+`pyproject.toml` again.
 
 ### Changed
 - **Default integrator changed from `RK4` to `CRN`** (audit report 02). Explicit
@@ -159,6 +171,46 @@
   `"range"`; audit report 06, Defect E).
 - `pyair2stream.post_processing.select_dotty_data()` and `.gap_aware_acf()`,
   factored out for direct testability (audit report 06, Defects A and F).
+- New top-level config key `random_seed` (audit report 07, 7.1), threaded through
+  `run_optimizer` to whichever optimizer `run_mode` dispatches to (PSO, LATHYP, DE,
+  DE-MCMC, DE-CV-MCMC) and recorded in `calibration_metadata.json`. Previously no
+  config key seeded calibration at all -- `differential_evolution(..., seed=None)`
+  drew from global numpy random state, so two runs of the same config could
+  converge to substantially different parameter sets with no way to reproduce a
+  published result. `PSO_mode`/`LH_mode` now also draw from a local
+  `np.random.Generator` instead of mutating global `numpy.random` state via
+  `np.random.seed()`.
+- `tests/test_golden.py` now covers the full `version x integrator` cross
+  product (5 versions x 4 Fortran-backed integrators = 20 cases, plus `EXP`
+  vs `CRN` for each version) over a 3-year horizon at a much tighter
+  tolerance, instead of 3 hand-picked combinations over 10 days at
+  `rtol=atol=1e-2` (audit report 08, 8.1/8.2).
+- `tests/test_report08_aggregation.py`: `model.aggregation()` is now tested
+  at `'1w'`/`'2w'`/`'1m'` resolutions against independent pandas computations,
+  not just `'1d'` (audit report 08, 8.3).
+- CI `coverage` job: runs the suite with `NUMBA_DISABLE_JIT=1` so `model_numba.py`'s
+  `@njit` kernels are traced by `coverage.py` instead of running as invisible
+  compiled code (previously reported as ~6% covered regardless of actual
+  exercise, making the overall number meaningless; audit report 08, 8.4).
+- `tests/test_report08_e2e_cli.py`: end-to-end tests invoking the real CLI
+  entry point (`main()`) for a `DE` calibration with a full validation period
+  (asserting `1_`/`2_`/`3_` output files all exist and parse) and a
+  gap-tolerant calibration followed by sensitivity analysis. Previously
+  nothing in the suite invoked `main()` on a config exercising either path in
+  full (audit report 08, Gap E / 8.5); the other two scenarios in the report's
+  minimum set were already covered end-to-end in `tests/test_cli_and_io.py`.
+- CI `examples-smoke` job: actually *runs* the `quickstart` and
+  `forward_prediction_intervals` example scripts (the two that are
+  self-contained -- checked-in or self-generated input data), instead of
+  only parsing them. `examples/forward_prediction_intervals/run_example.py`
+  gained a `--smoke` flag that cuts the DE population/MCMC chain down to the
+  minimum needed to exercise every code path, so the job runs in seconds
+  instead of minutes (audit report 08, Gap F / 8.6). This is exactly the kind
+  of regression `tests/test_examples_smoke.py`'s static parse-only check
+  could not catch (report 05, Defect E). The remaining example scripts read
+  real station data or the Piccolroaz et al. (2016) supplementary dataset
+  that is intentionally not vendored in this repository, so there is no
+  small/fast config that makes them runnable in CI.
 
 ### Removed
 - The `Twat_mod_p5`/`Twat_mod_p95` dual-name fallback in `post_processing.py`
@@ -167,7 +219,36 @@
   `Twat_mod_p50`/`Twat_mod_upper`). Two example scripts still referenced the
   removed names and have been fixed.
 
-## [1.0.0] - 2026-07-09
+### Fixed
+- `model.aggregation()`'s weekly (`'Nw'`) branch could raise `IndexError` (or,
+  in the original Fortran, silently write out of bounds -- `AIR2STREAM_
+  SUBROUTINES.f90`'s equivalent `pos_tmp` is equally unguarded) whenever the
+  record length was not an exact multiple of the window length, because the
+  trailing partial window's "representative position" was computed assuming
+  a full-length window. This is the common case for any real dataset, and
+  was invisible because every test in the suite used `time_res = '1d'`
+  before now. Clamped to the last valid index; only the trailing partial
+  window's position is affected (docs/audit/08_testing_gaps.md, 8.3).
+- `time_resolution` is now validated in `read_calibration` against the
+  patterns `aggregation()` actually understands (`'1d'`, or 1-2 digits plus
+  `'w'`/`'m'`), with a clear, actionable error. Previously an invalid value
+  either raised an opaque `UnboundLocalError` (e.g. `'daily'`) or silently
+  produced zero calibration data with an unrelated downstream error message
+  (e.g. `'2d'`) (docs/audit/08_testing_gaps.md, 8.3).
+- `tests/fortran_runner.py` (the golden-test harness that compiles and drives
+  the upstream Fortran reference) wrote its date column as `day month year`;
+  the real air2stream input format is `year month day` (confirmed against
+  `fortran/upstream/Switzerland/*_cc.txt`). This fed the day-of-month to
+  `AIR2STREAM_READ.f90`'s `year_ini=date(366,1)`, corrupting its leap-year
+  block-length bookkeeping (`tt`'s seasonal phase) for every year beyond the
+  first -- invisible in every previous golden test (all <=100 days, never
+  crossing a year boundary), and only surfaced by extending the golden matrix
+  to a 3-year horizon (docs/audit/08_testing_gaps.md, 8.2). `pyair2stream`
+  itself was not affected: its own calendar-aware `tt` construction (`io.py`)
+  was independently confirmed correct throughout. Test-infrastructure fix
+  only; no change to `pyair2stream`'s own code or behaviour.
+
+## [0.1.0] - 2026-07-09
 
 ### Added
 - Python port of the air2stream hybrid model for river water temperature.
@@ -179,7 +260,6 @@
 - Leave-one-year-out cross-validation.
 
 ### Fixed
-- Fixed version 8 parameter zeroing bug from original Fortran implementation.
 - Fixed PSO initialization to handle NaN and use `-1e30` instead of zero.
 - Addressed stale Italian console strings in documentation.
 - Removed dead and unused functions (`_step`, `_get_RK_func`) from `model.py`.

@@ -180,10 +180,18 @@ series: "c"                          # free-text label only (see note below)
 version: 8                # required in practice: 3, 4, 5, 7, or 8 (see §4)
 integrator: "CRN"          # CRN (default, unconditionally stable), EXP, RK4, RK2, EUL -- see §4/§9.1
 Tice_cover: 0.0            # water temperature floor (°C); simulated Tw is clamped at this value
-time_resolution: "1d"      # 1d = daily; "Nw" = N weeks (e.g. "2w"); "Nm" = N months (e.g. "1m")
+time_resolution: "1d"      # 1d = daily; "Nw" = N weeks (e.g. "2w"); "Nm" = N months (e.g. "1m").
+                            # Any other value is rejected at config-load time with an error
+                            # naming the allowed patterns.
 prc: 1.0                   # for time_resolution other than 1d: minimum fraction (0-1) of days
                             # that must have valid T_water within a period for that period's
-                            # aggregate to be used in calibration
+                            # aggregate to be used in calibration. Note: a trailing partial
+                            # period (the last, shorter-than-usual week/month at the end of the
+                            # record) is compared against its own actual length, not a full
+                            # period's -- so a short trailing fragment with all its days present
+                            # is always accepted, however small a fraction of a full period it
+                            # really is. This is intentional (Fortran-equivalent) but easy to
+                            # miss if you are relying on `prc` to drop a short trailing period.
 max_plausible_twat: 60.0   # sanity bound (°C) for the divergence guard in forward runs (§9.1)
 stability_error_fraction: 0.10   # error if more than this fraction of days exceed the
                             # integrator's stability limit in the pre-flight check (§9.1)
@@ -197,6 +205,12 @@ run_mode: "DE"              # DE (default). Also: PSO, LATHYP, FORWARD, DE-MCMC,
 mineff_index: 0.0           # only parameter sets scoring >= this are kept in the "0_*.csv" history.
                              # Must be a TOP-LEVEL key (see callout below the table) (not nested)
                              # under `optimization:`, despite what the bundled example configs show.
+random_seed: 42              # optional; default: null (unseeded). Threaded through to whichever
+                             # optimizer `run_mode` dispatches to (PSO/LATHYP/DE/DE-MCMC/DE-CV-MCMC)
+                             # and recorded in `calibration_metadata.json`. Without it, two runs of
+                             # the same config can converge to different parameter sets (DE's own
+                             # global-state RNG, PSO/LATHYP's use of `numpy`'s global random state)
+                             # with no way to reproduce a published result.
 
 paths:
   input_data: "data/calibration_data.csv"        # required

@@ -69,25 +69,29 @@ class TestMain(unittest.TestCase):
     def test_run_optimizer_dispatch(self, mock_de_mcmc, mock_de, mock_lh, mock_pso, mock_fwd):
         data = CommonData()
 
+        # `run_optimizer` threads `data.random_seed` through to every optimizer
+        # entry point (docs/audit/07_reproducibility_and_provenance.md, 7.1).
+        data.random_seed = 42
+
         data.runmode = 'FORWARD'
         run_optimizer(data)
         mock_fwd.assert_called_once_with(data)
 
         data.runmode = 'PSO'
         run_optimizer(data)
-        mock_pso.assert_called_once_with(data)
+        mock_pso.assert_called_once_with(data, seed=42)
 
         data.runmode = 'LATHYP'
         run_optimizer(data)
-        mock_lh.assert_called_once_with(data)
+        mock_lh.assert_called_once_with(data, seed=42)
 
         data.runmode = 'DE'
         run_optimizer(data)
-        mock_de.assert_called_once_with(data)
+        mock_de.assert_called_once_with(data, seed=42)
 
         data.runmode = 'DE-MCMC'
         run_optimizer(data)
-        mock_de_mcmc.assert_called_once_with(data)
+        mock_de_mcmc.assert_called_once_with(data, seed=42)
 
     @patch('pyair2stream.main.call_model')
     @patch('pyair2stream.main.funcobj')

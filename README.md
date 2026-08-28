@@ -242,11 +242,6 @@ The `examples/` directory contains runnable end-to-end examples, each with its o
 These are the known, intentional behavioral differences from the original
 Fortran, found during porting and fixed with test coverage:
 
-- **Version 8 parameter zeroing (fixed in `io.py`)**: the original Fortran had
-  a duplicated `IF (version == 4)` block where the second occurrence appears
-  to have been intended for `version == 8`, causing parameters 5–8 to be
-  incorrectly zeroed in Version 8 mode. `pyair2stream` does not reproduce this
-  bug — Version 8 uses all 8 parameters. See commit `d78fe17`.
 - **PSO initialization/NaN handling (fixed in `optimization.py`)**: the initial
   Python port initialized `fitbest` to zero and did not guard against NaN
   objective values from solver overflow, causing PSO to silently return
@@ -329,6 +324,33 @@ Fortran, found during porting and fixed with test coverage:
   fallback in `post_processing.py` — a compatibility shim for a column name the
   code has never actually written — and fixed the two example scripts that
   still referenced it.
+- **PSO convergence criterion (`optimization.py`)**: the Fortran's stopping
+  condition is `IF (norm .lt. 0.0)`, which is never true for a non-negative
+  `norm` and so never fires — Fortran `PSO_mode` always runs to completion.
+  `pyair2stream` uses `norm < 1e-4`, a meaningful tolerance, so `PSO` can now
+  terminate early once particles converge on the global best. A legitimate fix
+  (see "PSO initialization/NaN handling" above), but an undocumented
+  behavioural change from the reference.
+- **Qmedia definition (`io.py`)**: the Fortran excludes only `Q == -999`
+  (missing) from the `Qmedia` average. `pyair2stream` also excludes `Q <= 0`,
+  since a non-positive discharge is physically invalid and would otherwise
+  pull the average toward zero.
+- **`tt` (seasonal-phase) construction (`io.py`)**: the Fortran walks
+  sequential day counts from `year_ini`, so `tt` implicitly assumes the record
+  starts 1 January and is gap-free. `pyair2stream` computes day-of-year from
+  the real calendar date of each row instead. The two are equivalent when the
+  Fortran's assumption holds, and more robust when it does not (e.g. a
+  `FORWARD`-mode scenario file not starting 1 January).
+- **No seeded reproducibility (fixed in `main.py`/`optimization.py`/`io.py`,
+  audit report 07, Defect A)**: no config key seeded calibration, so
+  `differential_evolution(..., seed=None)` drew from global numpy random
+  state and `PSO_mode`/`LH_mode` called `np.random.seed()` (also global) —
+  two runs of an identical config could converge to substantially different
+  parameter sets (equifinality, not just PRNG noise in the last decimal) with
+  no way to reproduce a published result. A new top-level `random_seed:`
+  config key is now threaded through to whichever optimizer is dispatched and
+  recorded in `calibration_metadata.json`; `PSO_mode`/`LH_mode` now draw from a
+  local `np.random.Generator` instead of mutating global state.
 
 Only the integrator-default change and the eval_mask/aggregation fix above touch
 the core forward-simulation physics or the calibration objective's sample

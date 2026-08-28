@@ -25,19 +25,23 @@ from . import __version__
 from .model import call_model, aggregation, statis, funcobj, detect_segments, warn_on_stability, check_numerical_divergence
 
 def run_optimizer(data: CommonData) -> None:
-    """Dispatches to the correct optimizer based on data.runmode."""
+    """
+    Dispatches to the correct optimizer based on data.runmode, passing
+    `data.random_seed` through for reproducibility (docs/audit/07, 7.1). `None`
+    (the default) reproduces the previous unseeded behaviour.
+    """
     if data.runmode == 'FORWARD':
         forward_mode(data)
     elif data.runmode == 'PSO':
-        PSO_mode(data)
+        PSO_mode(data, seed=data.random_seed)
     elif data.runmode == 'LATHYP':
-        LH_mode(data)
+        LH_mode(data, seed=data.random_seed)
     elif data.runmode == 'DE':
-        DE_mode(data)
+        DE_mode(data, seed=data.random_seed)
     elif data.runmode == 'DE-MCMC':
-        DE_MCMC_mode(data)
+        DE_MCMC_mode(data, seed=data.random_seed)
     elif data.runmode == 'DE-CV-MCMC':
-        DE_CV_MCMC_mode(data)
+        DE_CV_MCMC_mode(data, seed=data.random_seed)
 
 
 def forward(data: CommonData) -> None:
@@ -95,6 +99,7 @@ def forward(data: CommonData) -> None:
         "integrator": data.mod_num,
         "par_best": [float(x) for x in data.par_best],
         "pyair2stream_version": __version__,
+        "random_seed": data.random_seed,
     }
     metadata_path = os.path.join(data.folder, "calibration_metadata.json")
     with open(metadata_path, 'w') as f:
