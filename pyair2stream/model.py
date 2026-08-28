@@ -50,7 +50,10 @@ def compute_B_series(data: CommonData) -> np.ndarray:
 
     Entries where discharge is invalid (missing sentinel, non-positive) or where the
     computation is undefined (e.g. a negative theta raised to a non-integer power)
-    come back as NaN; callers should mask on validity/finiteness.
+    come back as NaN; callers should mask on validity/finiteness. If
+    `data.min_theta_floor` is set, theta is floored the same way the integrators
+    themselves floor it (see `check_nonpositive_discharge`), so this reports the B
+    that will actually be used, not the raw (possibly non-finite) one.
     """
     p = data.par
     a3, a4, a8 = p[2], p[3], p[7]
@@ -60,6 +63,9 @@ def compute_B_series(data: CommonData) -> np.ndarray:
 
     with np.errstate(divide='ignore', invalid='ignore'):
         theta = data.Q / data.Qmedia
+        theta_floor = getattr(data, 'min_theta_floor', None)
+        if theta_floor is not None:
+            theta = np.where(theta < theta_floor, theta_floor, theta)
         if data.version == 7:
             B = a3 + a8 * theta
         else:  # versions 4 and 8
@@ -159,6 +165,32 @@ def warn_on_stability(data: CommonData, error_fraction: float = STABILITY_ERROR_
     return report
 
 
+def _divergence_bad_mask(Twat_mod: np.ndarray, max_plausible_twat: float) -> np.ndarray:
+    """Shared "bad" definition for `check_numerical_divergence`/`is_numerically_divergent`:
+    a present (not the -999.0 missing sentinel) value that is non-finite or exceeds the
+    sanity bound."""
+    present = Twat_mod != -999.0
+    non_finite = ~np.isfinite(Twat_mod)
+    too_hot = np.isfinite(Twat_mod) & (Twat_mod > max_plausible_twat)
+    return present & (non_finite | too_hot)
+
+
+def is_numerically_divergent(data: CommonData, max_plausible_twat: float = None) -> bool:
+    """
+    Lightweight, non-raising sibling of `check_numerical_divergence`: True if
+    `data.Twat_mod` currently contains any non-finite or implausibly large (present)
+    value. Intended for a per-draw check inside an ensemble/posterior-sample loop
+    (`optimization.forward_mode`'s prediction-interval loop,
+    `optimization._run_mcmc_uncertainty`'s envelope loop), where a single bad draw
+    should be excluded (or the batch aborted, per `on_divergent_draw`) rather than
+    raising and losing the rest of the ensemble -- see
+    docs/audit/11_ensemble_divergence_handling.md.
+    """
+    if max_plausible_twat is None:
+        max_plausible_twat = getattr(data, 'max_plausible_twat', TWAT_SANITY_MAX)
+    return bool(np.any(_divergence_bad_mask(data.Twat_mod, max_plausible_twat)))
+
+
 def check_numerical_divergence(data: CommonData, max_plausible_twat: float = None) -> None:
     """
     Raise `NumericalDivergenceError` if `data.Twat_mod` contains non-finite values
@@ -173,10 +205,7 @@ def check_numerical_divergence(data: CommonData, max_plausible_twat: float = Non
         max_plausible_twat = getattr(data, 'max_plausible_twat', TWAT_SANITY_MAX)
 
     Twat_mod = data.Twat_mod
-    present = Twat_mod != -999.0
-    non_finite = ~np.isfinite(Twat_mod)
-    too_hot = np.isfinite(Twat_mod) & (Twat_mod > max_plausible_twat)
-    bad = present & (non_finite | too_hot)
+    bad = _divergence_bad_mask(Twat_mod, max_plausible_twat)
 
     if not np.any(bad):
         return
@@ -199,6 +228,65 @@ def check_numerical_divergence(data: CommonData, max_plausible_twat: float = Non
         f"'{data.mod_num}'. Explicit schemes (RK4/RK2/EUL) can be unstable at discharge "
         f"different from the calibration record even when stable at calibration. Use CRN "
         f"(the default) or EXP for scenario runs. See docs/audit/02_numerical_integration.md."
+    )
+
+
+def check_nonpositive_discharge(data: CommonData) -> None:
+    """
+    Raise `ValueError` if any non-positive discharge day (`Q <= 0`) is present in a
+    non-gap-tolerant record for a model version that evaluates `theta = Q/Qmedia`
+    (4, 7, 8): `theta ** a4` divides by zero if the currently loaded `a4 > 0`, and
+    silently evaluates to `inf` (no NaN, no error) if `a4 < 0` -- see
+    docs/audit/10_zero_discharge_handling.md. The check does not depend on the sign
+    of `a4` (or on `a4` at all) since it must hold for every parameter vector a
+    calibration search might sample, not just the one currently loaded.
+
+    Skipped when:
+    - `data.gap_tolerant` is True -- gap-tolerant mode already excludes `Q <= 0`
+      days from every integrated segment via a different (heavier) mechanism
+      (`detect_segments`); that behaviour is unchanged.
+    - `data.version` is 3 or 5 -- these never evaluate `theta`, so a non-positive
+      `Q` there is a data-quality question, not a numerical one.
+    - `data.min_theta_floor` is set -- the opt-in escape hatch clamps `theta` away
+      from zero instead of raising (applied inside the integrators themselves).
+
+    Called from `read_Tseries` for both the calibration and validation/FORWARD-mode
+    scenario record, so a naturally-occurring zero-flow day is caught once at data
+    load rather than crashing calibration on whichever DE trial first samples a
+    positive `a4`, and applies identically to a naturalised-flow/climate-projection
+    FORWARD run.
+    """
+    if data.gap_tolerant or data.version not in (4, 7, 8):
+        return
+    if data.min_theta_floor is not None:
+        return
+    if data.Q is None or data.n_tot <= 365:
+        return
+
+    # The warm-up block (indices 0..364) is a verbatim copy of the real record's
+    # first 365 rows, so checking the real record (365..n_tot) is sufficient -- any
+    # zero-flow day within the first year would already be flagged there.
+    Q = data.Q[365:data.n_tot]
+    bad = Q <= 0.0
+    n_bad = int(np.sum(bad))
+    if n_bad == 0:
+        return
+
+    first_idx = 365 + int(np.argmax(bad))
+    date = tuple(int(x) for x in data.date[first_idx]) if data.date is not None else None
+
+    raise ValueError(
+        f"Non-positive discharge (Q <= 0) found at index {first_idx} (date={date}); "
+        f"{n_bad} day(s) in total across the record. Model version {data.version} "
+        "evaluates theta = Q/Qmedia and theta**a4, which is undefined at Q=0 "
+        "regardless of the currently loaded parameter vector: a4 > 0 divides by "
+        "zero (ZeroDivisionError), a4 < 0 silently evaluates to inf with no error "
+        "or warning. Options: (1) fix or remove the offending day(s) in the input "
+        "data, (2) set `gap_tolerant: true` to exclude them via segment restart "
+        "(changes calibration semantics broadly, not just for this case), or (3) "
+        "set `min_theta_floor: <small positive epsilon>` in the config to clamp "
+        "theta away from zero instead of raising. See "
+        "docs/audit/10_zero_discharge_handling.md."
     )
 
 
@@ -324,12 +412,13 @@ def _run_integration(data: CommonData, segments, p):
     else: raise ValueError(f"Unknown mod_num {mod_num}")
 
     segments_arr = np.array(segments, dtype=np.int32)
+    theta_floor = data.min_theta_floor if data.min_theta_floor is not None else 0.0
 
     # Numba will mutate Twat_mod in place
     fast_run_integration(
         data.Tair, data.Q, data.tt, data.Twat_mod, data.Tice_cover, data.Qmedia,
         data.version, mod_num_idx, segments_arr,
-        p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]
+        p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], theta_floor
     )
 
 def call_model_segmented(data: CommonData) -> None:

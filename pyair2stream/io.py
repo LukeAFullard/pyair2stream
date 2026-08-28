@@ -14,7 +14,7 @@ import pandas as pd
 from typing import Tuple
 
 from .config import CommonData
-from .model import prepare_evaluation
+from .model import prepare_evaluation, check_nonpositive_discharge
 
 def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     """
@@ -65,6 +65,18 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data.random_seed = int(random_seed) if random_seed is not None else None
     data.max_plausible_twat = np.float64(config.get('max_plausible_twat', 60.0))
     data.stability_error_fraction = np.float64(config.get('stability_error_fraction', 0.10))
+
+    # Opt-in escape hatch for zero/negative discharge in versions 4/7/8 (which evaluate
+    # theta = Q/Qmedia and theta**a4); see `min_theta_floor` on CommonData and
+    # `model.check_nonpositive_discharge`. None (default) leaves the guard active.
+    min_theta_floor = config.get('min_theta_floor', None)
+    if min_theta_floor is not None:
+        min_theta_floor = float(min_theta_floor)
+        if min_theta_floor <= 0.0:
+            raise ValueError(
+                f"min_theta_floor must be a positive float if set, got {min_theta_floor}."
+            )
+    data.min_theta_floor = min_theta_floor
 
     data.calendar = config.get('calendar', 'standard')
     if data.calendar not in ('standard', 'noleap', '360_day'):
@@ -163,6 +175,26 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         if not (0.0 < burnin_fraction < 1.0):
             raise ValueError(f"burnin_fraction must be strictly between 0 and 1, got {burnin_fraction}")
 
+    # Per-draw divergence handling for the posterior/prediction-interval ensemble
+    # loops (forward_mode's prediction-interval block, _run_mcmc_uncertainty's
+    # envelope loop) -- see docs/audit/11_ensemble_divergence_handling.md.
+    # 'drop' (default): exclude a divergent draw from the ensemble and report the
+    # count; 'raise': fail loudly on the first divergent draw instead.
+    on_divergent_draw = uncertainty_options.get('on_divergent_draw', 'drop')
+    if on_divergent_draw not in ('drop', 'raise'):
+        raise ValueError(
+            f"Invalid on_divergent_draw: '{on_divergent_draw}'. Must be 'drop' or 'raise'."
+        )
+
+    # If more than this fraction of draws are excluded as divergent, raise rather than
+    # silently proceeding with a depleted ensemble -- mirrors the `stability_error_fraction`
+    # pattern (model.warn_on_stability).
+    max_divergent_fraction = float(uncertainty_options.get('max_divergent_fraction', 0.10))
+    if not (0.0 < max_divergent_fraction <= 1.0):
+        raise ValueError(
+            f"max_divergent_fraction must be in (0, 1], got {max_divergent_fraction}"
+        )
+
     data.uncertainty_options = {
         "noise_model": noise_model,
         "ar1_rho": ar1_rho,
@@ -170,6 +202,8 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         "save_ensemble": save_ensemble,
         "strict_convergence": strict_convergence,
         "burnin_fraction": burnin_fraction,
+        "on_divergent_draw": on_divergent_draw,
+        "max_divergent_fraction": max_divergent_fraction,
     }
 
     cv_config_dict = config.get('cross_validation', {})
@@ -570,6 +604,13 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
                         f"{data.calib_theta_max:.5f}]. The model is being extrapolated beyond the "
                         f"calibrated regime for these days. See docs/audit/02_numerical_integration.md."
                     )
+
+    # Guard against non-positive discharge for theta-using versions (4/7/8) in the
+    # non-gap-tolerant path -- applies identically to the calibration record and to
+    # a FORWARD-mode scenario record (naturalised flow, climate projection): see
+    # `check_nonpositive_discharge`. Runs once per data load rather than per
+    # calibration evaluation, since it does not depend on the currently loaded a4.
+    check_nonpositive_discharge(data)
 
     # Rebuild segments/eval_mask for the data just loaded (report 03): this must run
     # unconditionally, not only in gap-tolerant mode, so eval_mask is never left None

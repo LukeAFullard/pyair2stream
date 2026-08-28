@@ -169,7 +169,7 @@ def fast_funcobj(n_dat, n_tot, I_inf, I_pos, Twat_mod, Twat_obs_agg, eval_mask, 
     return -999.0, Twat_mod_agg, nse, r2, mae
 
 @njit
-def fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, Tw, time, Qmedia):
+def fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, Tw, time, Qmedia, theta_floor=0.0):
     """
     Evaluate the right-hand side of the air2stream ODE for a specific model version.
 
@@ -190,6 +190,14 @@ def fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, Tw, time, Q
         Current time represented as a fraction of the year (DOY / days_in_year).
     Qmedia : float
         Mean discharge used to normalize QQ (creates dimensionless term theta).
+    theta_floor : float
+        Opt-in escape hatch (`min_theta_floor` in the config) for versions 4/7/8:
+        if > 0.0, `theta = QQ / Qmedia` is clamped to at least this value before
+        `theta ** p4` is evaluated, so a zero (or negative) discharge day doesn't
+        raise `ZeroDivisionError` (p4 > 0) or silently evaluate to `inf` (p4 < 0).
+        0.0 (the default) disables flooring -- callers are expected to have
+        already guarded against non-positive discharge in that case (see
+        `model.check_nonpositive_discharge`).
 
     Returns
     -------
@@ -202,19 +210,26 @@ def fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, Tw, time, Q
         return p1 + p2 * Ta - p3 * Tw + p6 * math.cos(2.0 * PI * (time - p7))
     elif version == 8:
         theta = QQ / Qmedia
+        if theta_floor > 0.0 and theta < theta_floor:
+            theta = theta_floor
         DD = theta ** p4
         return (p1 + p2 * Ta - p3 * Tw + theta * (p5 + p6 * math.cos(2.0 * PI * (time - p7)) - p8 * Tw)) / DD
     elif version == 7:
         theta = QQ / Qmedia
+        if theta_floor > 0.0 and theta < theta_floor:
+            theta = theta_floor
         return p1 + p2 * Ta - p3 * Tw + theta * (p5 + p6 * math.cos(2.0 * PI * (time - p7)) - p8 * Tw)
     elif version == 4:
-        DD = (QQ / Qmedia) ** p4
+        theta = QQ / Qmedia
+        if theta_floor > 0.0 and theta < theta_floor:
+            theta = theta_floor
+        DD = theta ** p4
         return (p1 + p2 * Ta - p3 * Tw) / DD
     else:
         return 0.0
 
 @njit
-def fast_AB_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, time, Qmedia):
+def fast_AB_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, time, Qmedia, theta_floor=0.0):
     """
     Split the air2stream ODE right-hand side into its linear form
     dTw/dt = A - B*Tw, for a specific model version.
@@ -223,6 +238,8 @@ def fast_AB_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, time, Qmedi
     for versions 4/7/8) linear decay rate in 1/day. Used by the EXP
     (integrating-factor / exponential) integrator, which is exact for
     piecewise-constant A/B. See docs/audit/02_numerical_integration.md.
+
+    `theta_floor` has the same meaning as in `fast_rk_version`.
     """
     if version == 3:
         A = p1 + p2 * Ta
@@ -232,15 +249,22 @@ def fast_AB_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, time, Qmedi
         B = p3
     elif version == 8:
         theta = QQ / Qmedia
+        if theta_floor > 0.0 and theta < theta_floor:
+            theta = theta_floor
         DD = theta ** p4
         A = (p1 + p2 * Ta + theta * (p5 + p6 * math.cos(2.0 * PI * (time - p7)))) / DD
         B = (p3 + p8 * theta) / DD
     elif version == 7:
         theta = QQ / Qmedia
+        if theta_floor > 0.0 and theta < theta_floor:
+            theta = theta_floor
         A = p1 + p2 * Ta + theta * (p5 + p6 * math.cos(2.0 * PI * (time - p7)))
         B = p3 + p8 * theta
     elif version == 4:
-        DD = (QQ / Qmedia) ** p4
+        theta = QQ / Qmedia
+        if theta_floor > 0.0 and theta < theta_floor:
+            theta = theta_floor
+        DD = theta ** p4
         A = (p1 + p2 * Ta) / DD
         B = p3 / DD
     else:
@@ -249,7 +273,7 @@ def fast_AB_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, time, Qmedi
     return A, B
 
 @njit
-def fast_run_integration(Tair, Q, tt, Twat_mod, Tice_cover, Qmedia, version, mod_num_idx, segments, p1, p2, p3, p4, p5, p6, p7, p8):
+def fast_run_integration(Tair, Q, tt, Twat_mod, Tice_cover, Qmedia, version, mod_num_idx, segments, p1, p2, p3, p4, p5, p6, p7, p8, theta_floor=0.0):
     """
     Execute the numerical integration of the air2stream ODE over given segments.
 
@@ -279,6 +303,12 @@ def fast_run_integration(Tair, Q, tt, Twat_mod, Tice_cover, Qmedia, version, mod
         contiguous valid data segments to integrate over.
     p1, p2, p3, p4, p5, p6, p7, p8 : float
         The eight model parameters to use during integration.
+    theta_floor : float
+        Opt-in escape hatch (`min_theta_floor` in the config) for versions 4/7/8:
+        if > 0.0, `theta = Q / Qmedia` is clamped to at least this value before
+        `theta ** p4` is evaluated in every integrator branch below, so a zero
+        (or negative) discharge day doesn't raise `ZeroDivisionError` (p4 > 0) or
+        silently evaluate to `inf` (p4 < 0). 0.0 (the default) disables flooring.
 
     Returns
     -------
@@ -289,6 +319,8 @@ def fast_run_integration(Tair, Q, tt, Twat_mod, Tice_cover, Qmedia, version, mod
     if mod_num_idx == 0: # CRN
         if version in (8, 7, 4):
             theta = Q / Qmedia
+            if theta_floor > 0.0:
+                theta = np.where(theta < theta_floor, theta_floor, theta)
             DD = theta ** p4
             denom_term = 1.0 + 0.5 * p8 * theta / DD + 0.5 * p3 / DD
 
@@ -334,8 +366,8 @@ def fast_run_integration(Tair, Q, tt, Twat_mod, Tice_cover, Qmedia, version, mod
                 Tw_j = Twat_mod[j]
                 tt_j = tt[j]
 
-                K1 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta_j, Q_j, Tw_j, tt_j, Qmedia)
-                K2 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta_j1, Q_j1, Tw_j + K1, tt_j + TTT, Qmedia)
+                K1 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta_j, Q_j, Tw_j, tt_j, Qmedia, theta_floor)
+                K2 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta_j1, Q_j1, Tw_j + K1, tt_j + TTT, Qmedia, theta_floor)
 
                 Tw_j1 = Tw_j + 0.5 * (K1 + K2)
                 if Tw_j1 < Tice_cover:
@@ -358,10 +390,10 @@ def fast_run_integration(Tair, Q, tt, Twat_mod, Tice_cover, Qmedia, version, mod
                 Q_mid = 0.5 * (Q_j + Q_j1)
                 tt_mid = tt_j + 0.5 * TTT
 
-                K1 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta_j, Q_j, Tw_j, tt_j, Qmedia)
-                K2 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta_mid, Q_mid, Tw_j + 0.5 * K1, tt_mid, Qmedia)
-                K3 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta_mid, Q_mid, Tw_j + 0.5 * K2, tt_mid, Qmedia)
-                K4 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta_j1, Q_j1, Tw_j + K3, tt_j + TTT, Qmedia)
+                K1 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta_j, Q_j, Tw_j, tt_j, Qmedia, theta_floor)
+                K2 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta_mid, Q_mid, Tw_j + 0.5 * K1, tt_mid, Qmedia, theta_floor)
+                K3 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta_mid, Q_mid, Tw_j + 0.5 * K2, tt_mid, Qmedia, theta_floor)
+                K4 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta_j1, Q_j1, Tw_j + K3, tt_j + TTT, Qmedia, theta_floor)
 
                 Tw_j1 = Tw_j + (1.0 / 6.0) * (K1 + 2.0*K2 + 2.0*K3 + K4)
                 if Tw_j1 < Tice_cover:
@@ -373,7 +405,7 @@ def fast_run_integration(Tair, Q, tt, Twat_mod, Tice_cover, Qmedia, version, mod
             start = segments[s, 0]
             end = segments[s, 1]
             for j in range(start, end):
-                K1 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Tair[j+1], Q[j+1], Twat_mod[j], tt[j+1], Qmedia)
+                K1 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Tair[j+1], Q[j+1], Twat_mod[j], tt[j+1], Qmedia, theta_floor)
                 Tw_j1 = Twat_mod[j] + K1
                 if Tw_j1 < Tice_cover:
                     Tw_j1 = Tice_cover
@@ -385,8 +417,8 @@ def fast_run_integration(Tair, Q, tt, Twat_mod, Tice_cover, Qmedia, version, mod
             start = segments[s, 0]
             end = segments[s, 1]
             for j in range(start, end):
-                A_j, B_j = fast_AB_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Tair[j], Q[j], tt[j], Qmedia)
-                A_j1, B_j1 = fast_AB_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Tair[j+1], Q[j+1], tt[j+1], Qmedia)
+                A_j, B_j = fast_AB_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Tair[j], Q[j], tt[j], Qmedia, theta_floor)
+                A_j1, B_j1 = fast_AB_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Tair[j+1], Q[j+1], tt[j+1], Qmedia, theta_floor)
 
                 A = 0.5 * (A_j + A_j1)
                 B = 0.5 * (B_j + B_j1)

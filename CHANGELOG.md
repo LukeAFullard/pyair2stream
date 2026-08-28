@@ -1,5 +1,78 @@
 # Changelog
 
+## [0.3.0] - 2026-08-28
+
+Three defects found during a follow-up audit targeting the water-abstraction and
+climate-projection scenario studies: running a fitted model on discharge different
+from calibration, and propagating parameter uncertainty into a paired scenario
+comparison.
+
+### Fixed
+- **`Q == 0` no longer crashes or silently mis-simulates, in every integrator**
+  (`model.py`, `model_numba.py`, `io.py`, `config.py`). For versions 4, 7, and 8,
+  discharge only enters the ODE through `theta = Q/Qmedia`, with `theta ** a4` as a
+  divisor. At `Q == 0` this either raised a bare, uncaught `ZeroDivisionError`
+  (`a4 > 0`) or silently evaluated to `inf`, collapsing that day's (and every
+  subsequent day's, in the same segment) simulated temperature towards zero with no
+  error, no NaN, and no warning (`a4 < 0`, the sign optimizers empirically tend to
+  select) -- undetectable by `check_numerical_divergence`, since the resulting value
+  stays inside the plausible temperature range. This affected both a naturally-
+  occurring zero-flow day in the calibration record (crashing DE calibration the
+  first time it sampled a positive `a4`) and a `FORWARD`-mode scenario discharge
+  file (naturalised flow, climate projection). `read_Tseries` now raises a clear
+  `ValueError` naming the offending index/date and count for both the calibration
+  and scenario record, before any parameter vector or integrator is involved. A new
+  opt-in `min_theta_floor` config key clamps `theta` away from zero by a small,
+  documented epsilon instead, applied consistently across every integrator
+  (`CRN`/`RK2`/`RK4`/`EUL`/`EXP`) and between calibration and `FORWARD`/scenario
+  runs. Versions 3/5 (which never evaluate `theta`) are unaffected; no new
+  restriction was added for them. Gap-tolerant mode's existing (heavier) handling
+  of `Q <= 0` days -- excluding them from every segment -- is unchanged.
+- **Posterior/prediction-interval ensemble loops are now covered by a per-draw
+  divergence guard** (`optimization.py`, `model.py`). `check_numerical_divergence`
+  previously ran only on the single deterministic best-fit simulation --
+  `optimization.forward_mode()`'s prediction-interval loop and
+  `optimization._run_mcmc_uncertainty()`'s envelope loop (used by
+  `DE-MCMC`/`DE-CV-MCMC`) each call `call_model()` once per posterior draw
+  (hundreds to ~1000 times) with no divergence check at all. A single bad draw
+  either crashed the whole batch with no context, or -- if it stayed finite -- was
+  silently written into the percentile envelope CSV and the raw `.npz` ensemble
+  that `scenario.paired_difference` consumes, with nothing flagging it. A new
+  lightweight per-draw check (`model.is_numerically_divergent`) now runs inside
+  both loops: by default (`uncertainty_options.on_divergent_draw: "drop"`) a
+  divergent draw is excluded from the ensemble and the exclusion is reported on the
+  console and in the run's sidecar metadata (`MCMC_chain_*_meta.json` /
+  `Forward_Prediction_Ensemble_*_meta.json`, a new sidecar for `FORWARD` mode);
+  setting `on_divergent_draw: "raise"` fails loudly on the first divergent draw
+  instead. If the excluded fraction exceeds `uncertainty_options.
+  max_divergent_fraction` (default 10%, mirroring `stability_error_fraction`), or
+  every draw diverges, the run raises rather than silently proceeding with a
+  depleted (or empty) ensemble. The saved `.npz` ensemble already excludes flagged
+  rows (rather than requiring a separate validity mask), so it always matches the
+  reported percentile envelope. Existing well-behaved `forward_mode`/`DE_MCMC_mode`/
+  `DE_CV_MCMC_mode` runs are unaffected.
+- **Paired scenario ensembles now require matched posterior draws, enforced rather
+  than merely documented** (`optimization.py`, `scenario.py`).
+  `scenario.paired_difference(ens_a, ens_b)` is documented as requiring both
+  ensembles to have been generated from the SAME parameter draws in the SAME order,
+  but only ever checked `.shape` -- two ensembles built from unrelated draws (e.g.
+  because `forward_options.random_seed` was omitted, or set differently in two
+  config files) passed silently and produced a plausible-shaped but statistically
+  meaningless "paired" difference. `forward_mode()` (and `_run_mcmc_uncertainty()`,
+  for consistency) now persists the resolved seed, requested sample count, a
+  content hash + row count identifying the source chain, the drawn
+  `sample_indices`, and the `valid_draw_indices` that actually survived per-draw
+  divergence filtering, into the ensemble's sidecar JSON. A new
+  `forward_options.reuse_sample_indices_from: <path to prior sidecar>` config key
+  lets a second `forward_mode()` call reuse a prior run's exact indices --
+  byte-identical regardless of global random state -- instead of drawing fresh
+  ones, cross-checking the source chain and erroring on mismatch. A new
+  `scenario.paired_difference_from_files(path_a, path_b)` loads both ensembles'
+  provenance and raises `ValueError` if the source chain, requested sample count,
+  requested indices, or surviving indices do not match exactly; this is now the
+  documented recommended path. The existing shape-only `paired_difference()`
+  remains available unchanged for advanced/same-process callers.
+
 ## [0.2.0] - 2026-08-27
 
 Version numbers previously disagreed three ways: `pyproject.toml`/`__init__.py`

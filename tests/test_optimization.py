@@ -121,9 +121,16 @@ class TestOptimization(unittest.TestCase):
         self.assertTrue(len(env_ar1) > 0)
 
     def test_forward_mode_rho_priority(self):
-        # We need a dummy chain to test forward_mode envelopes
+        # We need a dummy chain to test forward_mode envelopes. Seeded (rather than
+        # the previous bare np.random.rand) so this stays a deterministic, known-
+        # non-divergent chain under RK4 -- an unseeded draw could occasionally
+        # sample a genuinely unstable RK4 parameter set, which the per-draw
+        # divergence guard (docs/audit/11_ensemble_divergence_handling.md) now
+        # correctly excludes/reports rather than silently ignoring, and this test
+        # is about the rho-resolution branches, not divergence handling.
+        rng = np.random.default_rng(123)
         chain_path = os.path.join(self.data.folder, "dummy_chain.csv")
-        pd.DataFrame(np.random.rand(10, 8), columns=[f"par_{i+1}" for i in range(8)]).to_csv(chain_path, index=False)
+        pd.DataFrame(rng.random((10, 8)), columns=[f"par_{i+1}" for i in range(8)]).to_csv(chain_path, index=False)
 
         self.data.forward_options = {
             'enable_prediction_intervals': True,

@@ -13,7 +13,7 @@ try:
 except PackageNotFoundError:
     # Running from a source checkout with no installed/editable metadata
     # (e.g. `python -c "import pyair2stream"` without `pip install -e .` first).
-    __version__ = "0.2.0"
+    __version__ = "0.3.0"
 
 from .preprocessing import merge_timeseries, read_and_resample
 from .pre_analysis import analyze_timeseries

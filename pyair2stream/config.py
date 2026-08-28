@@ -95,6 +95,15 @@ class CommonData:
     max_plausible_twat: np.float64 = np.float64(60.0)
     stability_error_fraction: np.float64 = np.float64(0.10)
 
+    # Opt-in escape hatch for a legitimate zero-flow (or negative, e.g. sensor fault)
+    # discharge day in a version that evaluates theta = Q/Qmedia (4, 7, 8). None
+    # (the default) means `check_nonpositive_discharge` raises instead -- see
+    # docs/audit/10_zero_discharge_handling.md. When set (a small positive float,
+    # e.g. 1e-6), `theta` is clamped to at least this value before `theta ** a4` is
+    # evaluated in every integrator, so the same non-gap-tolerant run can proceed
+    # instead of hitting a `ZeroDivisionError` (a4 > 0) or a silent `inf` (a4 < 0).
+    min_theta_floor: Optional[float] = None
+
     # Declared calendar for the forcing series: 'standard' (real Gregorian dates,
     # the only calendar the daily-continuity check validates against), 'noleap'
     # (365 days every year, no Feb 29), or '360_day' (12 uniform 30-day months).
