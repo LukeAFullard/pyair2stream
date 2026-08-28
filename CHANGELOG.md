@@ -199,6 +199,18 @@ rather than duplicated as a literal string, so it cannot drift from
   nothing in the suite invoked `main()` on a config exercising either path in
   full (audit report 08, Gap E / 8.5); the other two scenarios in the report's
   minimum set were already covered end-to-end in `tests/test_cli_and_io.py`.
+- CI `examples-smoke` job: actually *runs* the `quickstart` and
+  `forward_prediction_intervals` example scripts (the two that are
+  self-contained -- checked-in or self-generated input data), instead of
+  only parsing them. `examples/forward_prediction_intervals/run_example.py`
+  gained a `--smoke` flag that cuts the DE population/MCMC chain down to the
+  minimum needed to exercise every code path, so the job runs in seconds
+  instead of minutes (audit report 08, Gap F / 8.6). This is exactly the kind
+  of regression `tests/test_examples_smoke.py`'s static parse-only check
+  could not catch (report 05, Defect E). The remaining example scripts read
+  real station data or the Piccolroaz et al. (2016) supplementary dataset
+  that is intentionally not vendored in this repository, so there is no
+  small/fast config that makes them runnable in CI.
 
 ### Removed
 - The `Twat_mod_p5`/`Twat_mod_p95` dual-name fallback in `post_processing.py`

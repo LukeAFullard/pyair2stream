@@ -25,6 +25,10 @@ python examples/forward_prediction_intervals/generate_data.py
 python examples/forward_prediction_intervals/run_example.py
 ```
 
+Add `--smoke` to run with a tiny DE population/MCMC chain instead of the real
+calibration -- useful for a quick "does this still run end to end" check
+(this is what CI runs); it does not produce meaningful results or figures.
+
 This script will:
 1. Run `DE-MCMC` to calibrate against `historical_data.csv`. This automatically calculates the $\rho$ autocorrelation and saves it to a sidecar file.
 2. Extract the historical standard deviation of residuals ($\sigma$).
