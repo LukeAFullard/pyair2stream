@@ -61,3 +61,36 @@ jobs:
 
       - name: Run test suite (including Fortran golden tests) against the locked environment
         run: poetry run pytest tests/ -v
+
+  # `model_numba.py`'s integrator/objective kernels are @njit-decorated. Under
+  # coverage.py's normal trace hook, Numba-JIT-compiled code runs as compiled
+  # machine code and is invisible to it -- reported as ~6% covered even though
+  # every line is actually exercised by the golden tests, making the overall
+  # coverage number meaningless (docs/audit/08_testing_gaps.md, 8.4). Setting
+  # NUMBA_DISABLE_JIT=1 makes Numba run its decorated functions as plain
+  # Python, which coverage.py traces normally. This job reports coverage from
+  # that run; the JIT-enabled jobs above stay as the correctness/speed check
+  # (a numba dispatcher and its plain-Python fallback are not guaranteed to
+  # hit identical code paths, so this alone would not substitute for them).
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install gfortran
+        run: sudo apt-get update && sudo apt-get install -y gfortran
+
+      - name: Install package + test dependencies
+        run: pip install -e . pytest pytest-cov
+
+      - name: Run test suite with coverage (Numba JIT disabled)
+        env:
+          NUMBA_DISABLE_JIT: "1"
+        run: pytest tests/ --cov=pyair2stream --cov-report=term-missing --cov-report=xml

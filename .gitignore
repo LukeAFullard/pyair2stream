@@ -7,6 +7,9 @@ __pycache__/
 demo_output/
 test_opt_output/
 test_pp_output/
+.coverage
+coverage.xml
+htmlcov/
 
 # Allow results and plots for Hopelands example
 !examples/Hopelands/**/*.png

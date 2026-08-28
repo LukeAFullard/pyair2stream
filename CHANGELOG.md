@@ -188,6 +188,17 @@ rather than duplicated as a literal string, so it cannot drift from
 - `tests/test_report08_aggregation.py`: `model.aggregation()` is now tested
   at `'1w'`/`'2w'`/`'1m'` resolutions against independent pandas computations,
   not just `'1d'` (audit report 08, 8.3).
+- CI `coverage` job: runs the suite with `NUMBA_DISABLE_JIT=1` so `model_numba.py`'s
+  `@njit` kernels are traced by `coverage.py` instead of running as invisible
+  compiled code (previously reported as ~6% covered regardless of actual
+  exercise, making the overall number meaningless; audit report 08, 8.4).
+- `tests/test_report08_e2e_cli.py`: end-to-end tests invoking the real CLI
+  entry point (`main()`) for a `DE` calibration with a full validation period
+  (asserting `1_`/`2_`/`3_` output files all exist and parse) and a
+  gap-tolerant calibration followed by sensitivity analysis. Previously
+  nothing in the suite invoked `main()` on a config exercising either path in
+  full (audit report 08, Gap E / 8.5); the other two scenarios in the report's
+  minimum set were already covered end-to-end in `tests/test_cli_and_io.py`.
 
 ### Removed
 - The `Twat_mod_p5`/`Twat_mod_p95` dual-name fallback in `post_processing.py`
