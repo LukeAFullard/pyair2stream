@@ -114,16 +114,37 @@ Identical to `DE_MCMC_mode`, except that between steps 3 and 4 above, it runs `r
 When `run_mode: FORWARD` is used together with `forward_options.enable_prediction_intervals: true` and a path to a previously generated `MCMC_chain_*.csv`, `forward_mode()`:
 
 1. Runs the deterministic forward simulation using `parameters_forward` as usual, and — if genuine `T_water` observations are present in the forward dataset — computes the corresponding efficiency index for reporting.
-2. Reads the saved MCMC chain and draws `n_samples` (default 1000, capped at the chain length) random parameter sets from it.
+2. Reads the saved MCMC chain and either draws `n_samples` (default 1000, capped at the chain length) random parameter sets from it, or — if `forward_options.reuse_sample_indices_from` is set — reuses the exact indices a prior `forward_mode()` run saved to its own sidecar, ignoring `n_samples`/`random_seed`/global random state entirely for this draw (see Section 5.4).
 3. Resolves the residual standard deviation `sigma` to use, in priority order: (a) an explicit `forward_options.residual_sigma` override; (b) the `sigma` field of the `_meta.json` sidecar alongside `mcmc_chain_path` (written automatically by `DE-MCMC`/`DE-CV-MCMC`), mirroring the `rho` carry-forward in step 4 below. If neither yields a usable (`> 0.0`) value, `forward_mode()` raises `ValueError` rather than silently building a prediction interval with no residual term — a pure future projection typically has no observations of its own from which to estimate residual error, so silently defaulting to `sigma = 0.0` would produce an interval that reflects parameter uncertainty only, with no warning beyond a `print`.
 4. Resolves the AR(1) coefficient `rho` (only if `noise_model: ar1`) using a strict priority order:
    1. **Explicit override** — `uncertainty_options.ar1_rho`, if supplied.
    2. **Own residuals** — if the forward dataset itself contains genuine `T_water` observations, `rho` is estimated directly from this run's own residuals.
    3. **Sidecar carry-forward** — if a `_meta.json` sidecar exists alongside the supplied `mcmc_chain_path` (as automatically written by `DE-MCMC`/`DE-CV-MCMC`), `rho` is read from it.
    4. **Fallback** — `rho = 0.0` (equivalent to `iid`), with a warning.
-5. For each of the `n_samples` parameter draws, simulates the full forward series, generates noise (i.i.d. or AR(1), per the resolved `rho`), and adds it to the deterministic trajectory.
-6. Computes the requested percentile envelope across the resulting ensemble and writes it to `Forward_Prediction_Envelopes_<station>_<series>_<time_res>.csv`, masking days with no underlying deterministic value. If `uncertainty_options.save_ensemble: true`, also writes the raw ensemble matrix to `Forward_Prediction_Ensemble_<station>_<series>_<time_res>.npz`.
+5. For each parameter draw, simulates the full forward series and checks it for numerical divergence (non-finite, or exceeding `max_plausible_twat`) before adding noise (Section 5.5); a divergent draw is excluded (default) or raised on, per `uncertainty_options.on_divergent_draw`. For a draw that passes, noise (i.i.d. or AR(1), per the resolved `rho`) is generated and added to the deterministic trajectory.
+6. Computes the requested percentile envelope across the resulting (post-exclusion) ensemble and writes it to `Forward_Prediction_Envelopes_<station>_<series>_<time_res>.csv`, masking days with no underlying deterministic value. If `uncertainty_options.save_ensemble: true`, also writes the raw ensemble matrix to `Forward_Prediction_Ensemble_<station>_<series>_<time_res>.npz`, and always writes a provenance/divergence sidecar to `Forward_Prediction_Ensemble_<station>_<series>_<time_res>_meta.json` (Section 7).
 7. Restores the deterministic `parameters_forward` and re-runs the model once more, so `data.Twat_mod` reflects the single deterministic projection rather than the last noisy ensemble member evaluated.
+
+### 5.4 Pairing two scenario runs: ensemble provenance and `reuse_sample_indices_from`
+
+`scenario.paired_difference()` is only statistically meaningful if both ensembles were built from the SAME posterior parameter draws in the SAME order — the exact requirement of the water-abstraction study (observed vs. naturalised flow) and the climate-projection study (historical vs. projected flow). Relying on a shared `forward_options.random_seed` across two separate CLI invocations/config files to guarantee this is fragile: the seed is easy to omit, or to set to two different values by mistake, and nothing previously checked for it after the fact — two ensembles built from unrelated draws would pass `paired_difference()`'s shape-only check silently.
+
+Every `forward_mode()` run with `enable_prediction_intervals: true` now writes its sample provenance into the ensemble's sidecar JSON (`Forward_Prediction_Ensemble_<...>_meta.json`, Section 7): a SHA-256 content hash and row count identifying the source chain file, the resolved `random_seed`, the requested `sample_indices` (drawn or reused), and `valid_draw_indices` — the subset of those indices that actually survived the per-draw divergence check in step 5 above and therefore ended up as rows in the saved ensemble.
+
+Setting `forward_options.reuse_sample_indices_from: "<path to a prior run's sidecar>"` makes the current run skip the random draw entirely and reuse that prior run's exact `sample_indices` — byte-identical regardless of global random state — after cross-checking that both runs' `mcmc_chain_path` resolves to the same chain (by content hash and row count, not just the path string), raising `ValueError` on a mismatch. `_run_mcmc_uncertainty()` (`DE-MCMC`/`DE-CV-MCMC`) writes the same provenance fields into `MCMC_chain_*_meta.json` for consistency, but does not itself support `reuse_sample_indices_from` — the paired-scenario workflow pairs two `FORWARD` runs, not two calibration runs.
+
+`scenario.paired_difference_from_files(path_a, path_b)` (Section 7.1) is the recommended way to actually difference two such ensembles: it loads both sidecars and verifies the source chain, requested sample count, requested `sample_indices`, and `valid_draw_indices` all match exactly before differencing — `valid_draw_indices` is the authoritative check, since two runs can request identical `sample_indices` and still end up with differently-excluded (and therefore misaligned) rows if one scenario's discharge diverges on draws the other's does not.
+
+### 5.5 Per-draw divergence handling (`forward_mode()` and `_run_mcmc_uncertainty()`)
+
+Prior to this feature, `check_numerical_divergence` (the guard that catches a non-finite or implausibly large simulated water temperature) only ever ran on the single deterministic best-fit simulation — never inside either ensemble-generation loop, each of which calls `call_model()` once per posterior/parameter draw (hundreds to ~1000 times). A single bad draw (e.g. a scenario discharge the chain was never fitted under, or a divergence induced by a zero-discharge day — see the "Known deviations" section of the README) either crashed the whole batch with no context, or — if it happened to stay finite — was silently written into the percentile envelope CSV and the raw `.npz` ensemble that `scenario.paired_difference`/`paired_difference_from_files` consume.
+
+Both loops now call `model.is_numerically_divergent()` on each draw's simulated series before adding noise. The behaviour is controlled by `uncertainty_options.on_divergent_draw`:
+
+- **`"drop"` (default)**: the draw is excluded from the ensemble/percentile calculation. The number of draws excluded (and, for each, its draw index, its position in the source chain, and its parameter values) is printed to the console and recorded in the sidecar metadata (`n_divergent_draws_excluded`, `divergent_draw_fraction`, `excluded_draws`).
+- **`"raise"`**: the run raises `NumericalDivergenceError` immediately on the first divergent draw, naming it, instead of dropping it.
+
+Regardless of `on_divergent_draw`, if every draw diverges (an empty ensemble is never silently returned as a successful result), or if the excluded fraction exceeds `uncertainty_options.max_divergent_fraction` (default `0.10`, mirroring `stability_error_fraction`'s pattern for the pre-flight stability check), the run raises rather than proceeding with a depleted ensemble. The saved `.npz` ensemble (when `save_ensemble: true`) already contains only the surviving rows, so it is never out of sync with the reported percentile envelope or with `n_divergent_draws_excluded`.
 
 ## 6. Configuration
 
@@ -144,6 +165,8 @@ uncertainty_options:
   save_ensemble: false         # if true, also write the raw (n_samples, n_days) ensemble as .npz
   strict_convergence: false    # if true, insufficient chain length raises instead of warning
   burnin_fraction: null        # optional override, in (0, 1); default is adaptive (Section 3.4)
+  on_divergent_draw: "drop"    # "drop" (default) or "raise" -- per-draw divergence handling (Section 5.5)
+  max_divergent_fraction: 0.10 # raise if more than this fraction of draws are excluded as divergent
 ```
 
 `DE-CV-MCMC` additionally reads any `cross_validation:` block present in the config (Section 4); if absent, internal cross-validation defaults are used for the CV-informed initialization step only, independent of whether the user wants a full CV report.
@@ -160,11 +183,17 @@ forward_options:
   residual_sigma: 1.0          # observation error standard deviation
   n_samples: 1000
   random_seed: 42
+  # Optional: reuse a prior run's exact sample_indices instead of drawing new ones
+  # (ignores n_samples/random_seed/global random state above for this draw) --
+  # required for a statistically valid paired scenario comparison (Section 5.4):
+  # reuse_sample_indices_from: "output/scenario_a/Forward_Prediction_Ensemble_<...>_meta.json"
 
 uncertainty_options:
   noise_model: "ar1"           # or "iid"
   ar1_rho: null                 # optional explicit override, in (-1, 1)
   save_ensemble: false         # if true, also write the raw ensemble as .npz
+  on_divergent_draw: "drop"    # "drop" (default) or "raise" -- per-draw divergence handling (Section 5.5)
+  max_divergent_fraction: 0.10 # raise if more than this fraction of draws are excluded as divergent
 ```
 
 ### 6.3 Caveats Documented for This Feature
@@ -178,11 +207,12 @@ uncertainty_options:
 | File | Produced by | Contents |
 |---|---|---|
 | `MCMC_chain_<station>_<series>_<time_res>.csv` | `DE-MCMC`, `DE-CV-MCMC` | Flattened, burn-in-discarded posterior samples, one column per active parameter (`par_<j+1>`) |
-| `MCMC_chain_<station>_<series>_<time_res>_meta.json` | `DE-MCMC`, `DE-CV-MCMC` | Sidecar metadata: estimated `sigma`, `rho`, number of valid residual pairs, configured noise model, walker/step counts, seed, burn-in, mean acceptance fraction, post-burn-in mean autocorrelation time, max split-Rhat, `strict_convergence` |
+| `MCMC_chain_<station>_<series>_<time_res>_meta.json` | `DE-MCMC`, `DE-CV-MCMC` | Sidecar metadata: estimated `sigma`, `rho`, number of valid residual pairs, configured noise model, walker/step counts, seed, burn-in, mean acceptance fraction, post-burn-in mean autocorrelation time, max split-Rhat, `strict_convergence`; plus per-draw divergence handling (`on_divergent_draw`, `max_divergent_fraction`, `n_draws_requested`, `n_divergent_draws_excluded`, `divergent_draw_fraction`, `excluded_draws`) and ensemble provenance (`chain_path`, `chain_content_sha256`, `chain_n_rows`, `envelope_sample_seed`, `sample_indices`, `valid_draw_indices`) -- see Section 5.4/5.5 |
 | `MCMC_envelopes_<station>_<series>_<time_res>.csv` | `DE-MCMC`, `DE-CV-MCMC` | Percentile prediction envelope (lower/median/upper, per `prediction_interval`) over the calibration-period simulation |
-| `MCMC_ensemble_<station>_<series>_<time_res>.npz` | `DE-MCMC`, `DE-CV-MCMC` with `save_ensemble: true` | Raw `(n_samples, n_days)` matrix of noisy simulated trajectories, post-warm-up, plus `year`/`month`/`day` column dates |
+| `MCMC_ensemble_<station>_<series>_<time_res>.npz` | `DE-MCMC`, `DE-CV-MCMC` with `save_ensemble: true` | Raw `(n_samples, n_days)` matrix of noisy simulated trajectories, post-warm-up (any divergent draws already excluded, per Section 5.5), plus `year`/`month`/`day` column dates |
 | `Forward_Prediction_Envelopes_<station>_<series>_<time_res>.csv` | `FORWARD` with `enable_prediction_intervals: true` | Percentile prediction envelope over a forward/projection simulation, built from a previously saved MCMC chain |
-| `Forward_Prediction_Ensemble_<station>_<series>_<time_res>.npz` | `FORWARD` with `enable_prediction_intervals: true` and `save_ensemble: true` | Raw ensemble matrix for the forward/projection simulation, same layout as `MCMC_ensemble_*.npz` |
+| `Forward_Prediction_Ensemble_<station>_<series>_<time_res>.npz` | `FORWARD` with `enable_prediction_intervals: true` and `save_ensemble: true` | Raw ensemble matrix for the forward/projection simulation, same layout as `MCMC_ensemble_*.npz` (divergent draws already excluded) |
+| `Forward_Prediction_Ensemble_<station>_<series>_<time_res>_meta.json` | `FORWARD` with `enable_prediction_intervals: true` (always written, regardless of `save_ensemble`) | Sidecar metadata: same divergence-handling fields as `MCMC_chain_*_meta.json` above, plus provenance (`chain_path`, `chain_content_sha256`, `chain_n_rows`, `requested_seed`, `sample_indices`, `valid_draw_indices`, `reused_sample_indices_from`) -- this is what `scenario.paired_difference_from_files()` reads (Section 5.4/7.1) |
 
 ### 7.1 Working with the raw ensemble (`pyair2stream/scenario.py`)
 
@@ -196,12 +226,23 @@ ensemble, dates = scenario.load_ensemble("MCMC_ensemble_Alpha_historical_1d.npz"
 weekly_mean = scenario.aggregate(ensemble, dates, how="mean", freq="7D")
 days_above_20C = scenario.exceedance(ensemble, threshold=20.0, consecutive_days=1)
 
-# Two ensembles generated from the SAME parameter draws in the SAME order (e.g. one
-# run on observed/naturalised discharge, one on an abstraction scenario):
+# RECOMMENDED: two Forward_Prediction_Ensemble_*.npz files from the two-run workflow
+# in Section 5.4 (the second built with forward_options.reuse_sample_indices_from
+# pointing at the first's sidecar). This verifies both runs' saved provenance
+# (source chain, requested and surviving sample indices) match exactly before
+# differencing, raising ValueError naming what disagreed if they don't:
+delta = scenario.paired_difference_from_files(
+    "output/scenario_a/Forward_Prediction_Ensemble_Alpha_historical_1d.npz",
+    "output/scenario_b/Forward_Prediction_Ensemble_Alpha_historical_1d.npz",
+)
+
+# Advanced/same-process alternative: only checks that the two arrays have the same
+# shape, NOT that they came from the same draws in the same order -- use only when
+# you built both arrays yourself in this same script/session:
 delta = scenario.paired_difference(ensemble_scenario_a, ensemble_scenario_b)
 ```
 
-`paired_difference` requires both ensembles to share shape and draw order exactly (same `mcmc_chain_path`, `n_samples`, and `random_seed` for both `forward_mode()` calls); it raises `ValueError` on a shape mismatch rather than silently broadcasting or truncating.
+`paired_difference_from_files()` is the recommended way to pair two saved ensembles for anything other than same-process use: it loads each `.npz`'s provenance sidecar (Section 5.4/7) and requires the source chain, requested sample count, requested `sample_indices`, and the `valid_draw_indices` that actually survived per-draw divergence filtering (Section 5.5) to match exactly, raising `ValueError` naming what disagreed otherwise. The plain `paired_difference()` only checks `.shape` and raises `ValueError` on a mismatch there, but cannot detect two same-shaped ensembles built from different or misaligned draws -- see the water-abstraction/climate-projection workflow in USER_GUIDE.md Section 12.
 
 ## 8. Empirical Results
 
@@ -243,4 +284,4 @@ A separate worked example calibrated `DE-MCMC` (Version 8) against a synthetic h
 
 ## Appendix: Source Reference
 
-Implementation: `pyair2stream/optimization.py` (`DE_MCMC_mode`, `DE_CV_MCMC_mode`, their shared `_run_mcmc_uncertainty` phase, and the prediction-interval branch of `forward_mode`), `pyair2stream/uncertainty.py` (`estimate_ar1_rho`, `generate_ar1_noise`, `build_ar1_runs`, `ar1_whitened_stats`), `pyair2stream/scenario.py` (`load_ensemble`, `aggregate`, `exceedance`, `paired_difference`), with configuration parsing in `pyair2stream/io.py` and dispatch in `pyair2stream/main.py::run_optimizer`. Worked examples: `examples/mcmc_comparison/README.md` (DE-MCMC vs. DE-CV-MCMC) and `examples/forward_prediction_intervals/README.md` (IID vs. AR(1) forward projection). Repository: https://github.com/LukeAFullard/pyair2stream.
+Implementation: `pyair2stream/optimization.py` (`DE_MCMC_mode`, `DE_CV_MCMC_mode`, their shared `_run_mcmc_uncertainty` phase, the prediction-interval branch of `forward_mode`, and the shared `_check_ensemble_divergence`/`_hash_file` helpers), `pyair2stream/model.py` (`is_numerically_divergent`, the per-draw divergence check shared by both ensemble loops), `pyair2stream/uncertainty.py` (`estimate_ar1_rho`, `generate_ar1_noise`, `build_ar1_runs`, `ar1_whitened_stats`), `pyair2stream/scenario.py` (`load_ensemble`, `aggregate`, `exceedance`, `paired_difference`, `paired_difference_from_files`), with configuration parsing in `pyair2stream/io.py` and dispatch in `pyair2stream/main.py::run_optimizer`. Worked examples: `examples/mcmc_comparison/README.md` (DE-MCMC vs. DE-CV-MCMC) and `examples/forward_prediction_intervals/README.md` (IID vs. AR(1) forward projection). Repository: https://github.com/LukeAFullard/pyair2stream.

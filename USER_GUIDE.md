@@ -195,6 +195,10 @@ prc: 1.0                   # for time_resolution other than 1d: minimum fraction
 max_plausible_twat: 60.0   # sanity bound (°C) for the divergence guard in forward runs (§9.1)
 stability_error_fraction: 0.10   # error if more than this fraction of days exceed the
                             # integrator's stability limit in the pre-flight check (§9.1)
+min_theta_floor: null       # optional (default: null/disabled). For versions 4/7/8, a
+                            # non-positive discharge day raises an error by default (§9.2) --
+                            # set this to a small positive epsilon (e.g. 1.0e-6) to instead
+                            # clamp theta = Q/Qmedia away from zero and proceed.
 calendar: "standard"       # "standard" (default, real Gregorian dates), "noleap" (365 days
                             # every year, no Feb 29), or "360_day" (12 uniform 30-day months) --
                             # see "Non-standard calendars" below
@@ -429,6 +433,10 @@ Every run internally prepends a duplicate of the first simulated year as a numer
 | `mcmc_walkers < 2 * ndim` (`ValueError`) | `mcmc_walkers` is set too low for the number of active parameters | Set `mcmc_walkers` to at least twice the number of active parameters |
 | `NumericalDivergenceError` | The chosen integrator is numerically unstable for this discharge/parameter combination | Switch to `CRN` (the default) or `EXP` -- **not** `RK4`/`RK2`, which are the schemes that diverge. See [§9.1](#91-numerical-stability-b-and-the-choice-of-integrator) |
 | Results look implausible (e.g. temperatures diverging, oscillating wildly, or an unrealistic plateau) with no error | An explicit integrator (`RK4`/`RK2`/`EUL`) diverged and then re-stabilised, or the sanity guard is disabled | Switch to `CRN` or `EXP`; do **not** switch *to* `RK4` -- see [§9.1](#91-numerical-stability-b-and-the-choice-of-integrator) |
+| `Non-positive discharge (Q <= 0) found at index ...` | A version-4/7/8 record has a `Q <= 0` day, which makes `theta ** a4` undefined | Fix/remove the day, set `gap_tolerant: true`, or set `min_theta_floor` -- see [§9.2](#92-zero-or-negative-discharge) |
+| `Invalid on_divergent_draw` | `uncertainty_options.on_divergent_draw` was something other than `'drop'`/`'raise'` | Use `'drop'` (default) or `'raise'` |
+| A `NumericalDivergenceError` naming a specific draw index/chain row during `forward_mode`/`DE-MCMC`/`DE-CV-MCMC` | Either a single posterior draw diverged with `on_divergent_draw: "raise"`, or too many draws (or all of them) diverged | See the console warning/sidecar for which draws and why; consider `CRN`/`EXP`, tighter `parameter_bounds`, or raising `max_divergent_fraction` if the exclusions are expected -- see [§12](#12-forward-prediction-intervals) |
+| `paired_difference_from_files: ... differs between ...` (`ValueError`) | Two ensembles being paired were not drawn from the same posterior samples in the same order | Re-run the second `forward_mode()` with `forward_options.reuse_sample_indices_from` pointing at the first run's saved sidecar -- see [§12](#12-forward-prediction-intervals) |
 
 ### 9.1 Numerical stability, B, and the choice of integrator
 
@@ -472,6 +480,50 @@ accurate than `CRN` when `B` is comfortably below its limit), but **do not use t
 scenario work** -- naturalised flow, climate projection, or anything else that runs
 fitted parameters on discharge different from calibration. Use `CRN` or `EXP` there.
 
+### 9.2 Zero or negative discharge
+
+For versions 4, 7, and 8, discharge only enters the ODE through `theta = Discharge /
+Qmedia`, with `theta ** a4` as a divisor. At `Discharge == 0` this is undefined:
+depending on the currently loaded `a4`, it either raises a bare `ZeroDivisionError`
+(`a4 > 0`) or silently evaluates to `inf`, collapsing that day's (and every
+subsequent day's, within the same integration segment) simulated water temperature
+towards zero with **no error, no NaN, and no warning** (`a4 < 0`, the sign
+optimizers empirically tend to select) -- invisible to `check_numerical_divergence`,
+since the resulting value stays inside the plausible range.
+
+By default, `pyair2stream` catches this at data-load time (`read_Tseries`), before
+any parameter vector or integrator is involved, and regardless of the sign of `a4`
+(in calibration, `a4` changes every evaluation, so the check cannot depend on it) --
+so a single naturally-occurring zero-flow day (a heavily abstracted or intermittent
+stream) fails loudly and immediately with a clear error, rather than crashing
+calibration the first time it happens to sample a positive `a4`, or silently
+corrupting a `FORWARD`-mode scenario run (naturalised flow, climate projection).
+
+This check only applies to the non-gap-tolerant path. `gap_tolerant: true` already
+excludes `Q <= 0` days from every segment via a different (heavier) mechanism --
+restarting the next segment from a day-of-year climatology -- which discards more
+of the physical signal than a genuine floor would (see [§10](#10-gap-tolerant-mode)).
+It never applies to versions 3/5, which do not evaluate `theta` at all.
+
+If you have legitimate zero-flow days and want the simulation to continue through
+them rather than raise, set `min_theta_floor` to a small positive epsilon:
+
+```yaml
+min_theta_floor: 1.0e-6
+```
+
+This clamps `theta` (not the raw `Discharge` value, which is left untouched in the
+output) to at least this value before `theta ** a4` is evaluated, applied
+consistently in every integrator and identically between calibration and
+`FORWARD`/scenario runs. Treat it as a genuine numerical floor/limit, not a
+special case: a very small but nonzero `Discharge` that is itself below
+`min_theta_floor * Qmedia` is clamped to the same value a `Discharge == 0` day
+would be, so results vary continuously as real discharge approaches zero. A very
+small floor can still produce a large (but finite) temperature on the floored
+day or days, since `theta ** a4` genuinely blows up as `theta -> 0` for `a4 < 0`
+-- this is expected physical amplification from clamping close to zero, not a
+numerical error, and does not by itself indicate a problem with the floor.
+
 ## 10. Gap-tolerant mode
 
 By default `pyair2stream` requires `T_air` (and `Discharge`, if your version uses it) to be complete for the whole record. Setting `gap_tolerant: true` lets the model split the record into contiguous valid segments and calibrate across all of them together.
@@ -491,6 +543,7 @@ Before relying on it:
 - The sampler's own likelihood assumes i.i.d. residuals by default (`uncertainty_options.noise_model: "iid"`). Daily stream-temperature residuals are typically autocorrelated (lag-1 `rho` of 0.8-0.95 is common), which understates posterior/predictive width by roughly `sqrt((1+rho)/(1-rho))` if ignored. Set `uncertainty_options.noise_model: "ar1"` to use an AR(1)-aware likelihood instead (see `docs/MCMC_uncertainty.md`, Section 3.1).
 - The sidecar `MCMC_chain_*_meta.json` also reports `burnin`, post-burn-in `mean_autocorr_time`, and `max_split_rhat` (a Gelman-Rubin convergence check, warns above 1.01). Set `uncertainty_options.burnin_fraction` to override the adaptive burn-in, or `uncertainty_options.strict_convergence: true` to turn the "chain may be too short" warning into a hard error.
 - Set `uncertainty_options.save_ensemble: true` to also write the raw `(n_samples, n_days)` noisy-trajectory matrix as `MCMC_ensemble_*.npz` (or `Forward_Prediction_Ensemble_*.npz` for `FORWARD` mode). Percentile envelopes alone cannot produce aggregate statistics (a 7-day rolling mean of the 5th percentile is not the same as the 5th percentile of the 7-day rolling mean); use `pyair2stream.scenario.load_ensemble/aggregate/exceedance/paired_difference` to work with the raw ensemble for degree-days, threshold-exceedance, or paired scenario comparisons.
+- Both the `forward_mode()` prediction-interval loop and the `DE-MCMC`/`DE-CV-MCMC` envelope loop check each posterior draw individually for numerical divergence (non-finite, or exceeding `max_plausible_twat`) before adding it to the ensemble -- a single bad draw (e.g. a scenario discharge the chain was never fitted under) no longer crashes the whole batch or is silently written into the percentile envelope. By default (`uncertainty_options.on_divergent_draw: "drop"`) it is excluded and reported on the console and in the sidecar metadata (`MCMC_chain_*_meta.json` / `Forward_Prediction_Ensemble_*_meta.json`); set `on_divergent_draw: "raise"` to fail loudly on the first divergent draw instead. If the excluded fraction exceeds `uncertainty_options.max_divergent_fraction` (default 10%), or every draw diverges, the run raises rather than silently proceeding with a depleted ensemble. The saved `.npz` already excludes any flagged rows, so it always matches the reported envelope.
 
 ## 12. Forward prediction intervals
 
@@ -510,6 +563,72 @@ forward_options:
 ```
 
 `residual_sigma` is optional: if omitted (or `<= 0.0`), `pyair2stream` falls back to the `sigma` field of the `_meta.json` sidecar alongside `mcmc_chain_path` (written automatically by `DE-MCMC`/`DE-CV-MCMC`). If neither is available, `forward_mode()` raises a `ValueError` rather than silently producing an interval that reflects parameter uncertainty only.
+
+### Pairing two scenario runs (abstraction / climate-projection studies)
+
+Both the water-abstraction study (observed vs. naturalised flow) and the
+climate-projection study (historical vs. projected flow) need a *paired*
+difference between two `FORWARD` ensembles: the same posterior parameter draws,
+run once per discharge scenario, differenced draw-for-draw. `random_seed` alone
+is not a reliable way to guarantee this -- it is easy to omit, or to set two
+different values by mistake across two separate config files -- and
+`scenario.paired_difference()` only ever checked that the two arrays had the
+same *shape*, not that they came from the same draws.
+
+The supported, recommended workflow is:
+
+```yaml
+# Run 1 (scenario A -- e.g. observed/naturalised discharge):
+run_mode: "FORWARD"
+paths:
+  input_data: "data/scenario_a.csv"
+  output_dir: "output/scenario_a"
+forward_options:
+  enable_prediction_intervals: true
+  mcmc_chain_path: "output/MCMC_chain_<station>_<series>_<time_res>.csv"
+  n_samples: 1000
+uncertainty_options:
+  save_ensemble: true   # required -- this is what gets paired
+
+# Run 2 (scenario B -- e.g. abstraction/projected discharge):
+run_mode: "FORWARD"
+paths:
+  input_data: "data/scenario_b.csv"
+  output_dir: "output/scenario_b"
+forward_options:
+  enable_prediction_intervals: true
+  mcmc_chain_path: "output/MCMC_chain_<station>_<series>_<time_res>.csv"  # SAME chain
+  reuse_sample_indices_from: "output/scenario_a/Forward_Prediction_Ensemble_<...>_meta.json"
+uncertainty_options:
+  save_ensemble: true
+```
+
+`reuse_sample_indices_from` makes run 2 reuse run 1's exact `sample_indices`
+(byte-identical, regardless of global random state or what `n_samples`/
+`random_seed` run 2's config happens to set) instead of drawing a fresh,
+independent sample, and cross-checks that both runs point at the same underlying
+chain file (by content, not just path), raising `ValueError` on a mismatch.
+
+Then pair the two saved ensembles with the provenance-checked helper, rather than
+the shape-only one:
+
+```python
+from pyair2stream import scenario
+
+delta = scenario.paired_difference_from_files(
+    "output/scenario_a/Forward_Prediction_Ensemble_<...>.npz",
+    "output/scenario_b/Forward_Prediction_Ensemble_<...>.npz",
+)
+```
+
+This verifies the source chain, requested sample indices, and the indices that
+actually survived per-draw divergence filtering (see the previous section) all
+match exactly before differencing, raising a clear `ValueError` naming what
+disagreed if they don't -- rather than silently returning a plausible-shaped but
+statistically meaningless result. The shape-only `scenario.paired_difference()`
+is still available for advanced/same-process use (e.g. both ensembles already in
+memory from the same script), but `paired_difference_from_files()` is the
+recommended path for anything else, including this two-run workflow.
 
 ### Noise Models
 

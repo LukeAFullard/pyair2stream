@@ -7,6 +7,7 @@ MCMC sampling routines for uncertainty quantification.
 """
 
 import os
+import hashlib
 import numpy as np
 import pandas as pd
 from typing import Optional
@@ -16,7 +17,10 @@ import emcee
 
 import json
 from .config import CommonData
-from .model import call_model, funcobj, aggregation, statis, warn_on_stability, check_numerical_divergence
+from .model import (
+    call_model, funcobj, aggregation, statis, warn_on_stability, check_numerical_divergence,
+    is_numerically_divergent, NumericalDivergenceError,
+)
 from .uncertainty import estimate_ar1_rho, generate_ar1_noise, build_ar1_runs, ar1_whitened_stats
 
 # A near-perfect-fit MCMC log-likelihood is capped at this large but finite value rather
@@ -207,6 +211,99 @@ def _export_ensemble_outputs(data: CommonData, ensemble_simulations: np.ndarray,
             raise ValueError("save_ensemble is True but no ensemble_filename was provided.")
         _save_ensemble_npz(data, ensemble_simulations, ensemble_filename)
 
+
+def _hash_file(path: str) -> str:
+    """SHA-256 hex digest of a file's raw bytes -- used as a chain-identity check
+    (docs/audit/12_ensemble_provenance_and_pairing.md) so a paired-scenario pairing
+    check can detect "this is a different chain" even if the path string reused is
+    identical (e.g. the file was regenerated) or different (e.g. a copy)."""
+    with open(path, 'rb') as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def _check_ensemble_divergence(n_total: int, excluded: list, on_divergent_draw: str,
+                                max_divergent_fraction: float, label: str,
+                                sample_indices=None) -> dict:
+    """
+    Summarize per-draw divergence (see `model.is_numerically_divergent`) after an
+    ensemble-generation loop (`forward_mode`'s prediction-interval block,
+    `_run_mcmc_uncertainty`'s envelope loop) has finished appending its valid draws
+    and skipping/recording its divergent ones in `excluded`.
+
+    `excluded` is a list of `{"draw_index", "chain_row", "params"}` dicts, one per
+    draw excluded as numerically divergent (non-finite or exceeding
+    `max_plausible_twat`) -- see docs/audit/11_ensemble_divergence_handling.md.
+    `sample_indices` (if given) is the full array of chain rows requested for this
+    batch, in order; used to compute `valid_draw_indices` (docs/audit/
+    12_ensemble_provenance_and_pairing.md) -- the subset that actually survived
+    filtering, which is what determines the row alignment of the saved ensemble
+    and is the authoritative check for a paired-scenario comparison.
+
+    Prints a console warning if any draws were excluded, then raises
+    `NumericalDivergenceError` if either no draws were requested/available in the
+    first place, every requested draw diverged (an empty ensemble is never
+    silently returned as if it had succeeded), or the excluded fraction exceeds
+    `max_divergent_fraction` (mirroring `model.warn_on_stability`'s
+    `stability_error_fraction` pattern: a small, expected fraction of bad draws is
+    tolerated and reported, a large one is refused rather than silently proceeding
+    with a depleted ensemble).
+
+    Returns a dict of the same summary, meant to be merged into the run's sidecar
+    metadata JSON (`MCMC_chain_*_meta.json` / the FORWARD prediction-interval
+    equivalent) so the exclusion is visible without inspecting console logs.
+    """
+    if n_total == 0:
+        raise NumericalDivergenceError(
+            f"No {label} draws were requested/available (n_total=0); there is nothing "
+            f"to build an ensemble/percentile envelope from. This is not itself a "
+            f"divergence -- check `n_samples`/the source chain rather than "
+            f"`max_divergent_fraction`."
+        )
+
+    n_excluded = len(excluded)
+    frac_excluded = n_excluded / n_total
+
+    if n_excluded > 0:
+        print(
+            f"Warning: {n_excluded}/{n_total} {label} draws ({frac_excluded:.1%}) were "
+            f"excluded from the ensemble as numerically divergent (non-finite or exceeding "
+            f"max_plausible_twat). uncertainty_options.on_divergent_draw='{on_divergent_draw}'."
+        )
+
+    n_valid = n_total - n_excluded
+    if n_valid == 0:
+        raise NumericalDivergenceError(
+            f"All {n_total} {label} draws diverged (non-finite or exceeded "
+            f"max_plausible_twat); no valid draws remain to build an ensemble/percentile "
+            f"envelope. See docs/audit/11_ensemble_divergence_handling.md."
+        )
+
+    if frac_excluded > max_divergent_fraction:
+        raise NumericalDivergenceError(
+            f"{frac_excluded:.1%} of {label} draws ({n_excluded}/{n_total}) were excluded "
+            f"as numerically divergent, above the "
+            f"max_divergent_fraction={max_divergent_fraction:.0%} threshold. Investigate the "
+            f"excluded parameter draws (see the console warning above and the sidecar "
+            f"metadata), tighten `parameter_bounds`, or raise "
+            f"`uncertainty_options.max_divergent_fraction` if you have verified this is "
+            f"expected. See docs/audit/11_ensemble_divergence_handling.md."
+        )
+
+    summary = {
+        "n_draws_requested": n_total,
+        "n_divergent_draws_excluded": n_excluded,
+        "divergent_draw_fraction": frac_excluded,
+        "excluded_draws": excluded,
+    }
+
+    if sample_indices is not None:
+        excluded_positions = {d["draw_index"] for d in excluded}
+        summary["valid_draw_indices"] = [
+            int(sample_indices[i]) for i in range(n_total) if i not in excluded_positions
+        ]
+
+    return summary
+
 def sub_1(data: CommonData) -> np.float64:
     """
     Helper function to call model and evaluate the objective function.
@@ -287,11 +384,48 @@ def forward_mode(data: CommonData) -> None:
 
         chain_df = pd.read_csv(chain_path)
         chain = chain_df.values
+        chain_hash = _hash_file(chain_path)
+        chain_n_rows = len(chain)
 
-        n_samples = data.forward_options.get('n_samples', 1000)
-        n_samples = min(n_samples, len(chain))
+        # A paired scenario comparison (water abstraction: observed vs. naturalised
+        # flow; climate projection: historical vs. projected flow) requires two
+        # forward_mode() runs to draw the exact SAME posterior samples in the SAME
+        # order. Relying on a shared `random_seed` across two separate CLI
+        # invocations/config files is fragile (easy to omit, or to typo two
+        # different values) and gives no way to detect the mistake after the fact
+        # (docs/audit/12_ensemble_provenance_and_pairing.md). `reuse_sample_indices_from`
+        # instead reuses the literal indices a prior run saved, skipping the random
+        # draw (and therefore the global random state) entirely.
+        reuse_path = data.forward_options.get('reuse_sample_indices_from')
+        if reuse_path:
+            if not os.path.exists(reuse_path):
+                raise FileNotFoundError(
+                    f"forward_options.reuse_sample_indices_from file not found: {reuse_path}"
+                )
+            with open(reuse_path, 'r') as f:
+                prior_meta = json.load(f)
+            prior_hash = prior_meta.get('chain_content_sha256')
+            prior_n_rows = prior_meta.get('chain_n_rows')
+            if prior_hash != chain_hash or prior_n_rows != chain_n_rows:
+                raise ValueError(
+                    f"forward_options.reuse_sample_indices_from='{reuse_path}' was drawn "
+                    f"from a different MCMC chain (content hash={prior_hash}, "
+                    f"{prior_n_rows} rows) than the one currently loaded from "
+                    f"'{chain_path}' (content hash={chain_hash}, {chain_n_rows} rows). "
+                    "Both forward_mode() runs in a paired scenario comparison must point "
+                    "`forward_options.mcmc_chain_path` at the SAME chain file."
+                )
+            sample_indices = np.asarray(prior_meta['sample_indices'], dtype=np.int64)
+            n_samples = len(sample_indices)
+            print(
+                f"Reusing {n_samples} sample indices from {reuse_path} "
+                "(random_seed/global random state ignored for this draw)."
+            )
+        else:
+            n_samples = data.forward_options.get('n_samples', 1000)
+            n_samples = min(n_samples, len(chain))
+            sample_indices = np.random.choice(len(chain), size=n_samples, replace=False)
 
-        sample_indices = np.random.choice(len(chain), size=n_samples, replace=False)
         samples = chain[sample_indices]
 
         uncertainty_options = data.uncertainty_options or {}
@@ -306,7 +440,6 @@ def forward_mode(data: CommonData) -> None:
             sigma = float(sigma_override)
             print(f"Using explicit residual_sigma override: {sigma}")
         elif os.path.exists(sidecar_path):
-            import json
             try:
                 with open(sidecar_path, 'r') as f:
                     sidecar_data = json.load(f)
@@ -342,7 +475,6 @@ def forward_mode(data: CommonData) -> None:
                 rho_used = estimate_ar1_rho(data.Twat_mod, data.Twat_obs, eval_mask_for_rho, segments_for_rho)
                 print(f"Using rho={rho_used:.4f} estimated directly from this run's own residuals.")
             elif os.path.exists(sidecar_path):
-                import json
                 try:
                     with open(sidecar_path, 'r') as f:
                         sidecar_data = json.load(f)
@@ -358,7 +490,11 @@ def forward_mode(data: CommonData) -> None:
             rng = np.random.default_rng(seed)
 
         ensemble_simulations = []
+        excluded_draws = []
         n_par = N_PAR
+
+        on_divergent_draw = uncertainty_options.get('on_divergent_draw', 'drop')
+        max_divergent_fraction = uncertainty_options.get('max_divergent_fraction', 0.10)
 
         # Determine active params from dataframe columns
         active_cols = chain_df.columns
@@ -376,6 +512,24 @@ def forward_mode(data: CommonData) -> None:
 
             call_model(data)
 
+            # A single bad posterior draw (e.g. a scenario discharge the chain was
+            # never fitted under) must not crash the whole ensemble, nor be silently
+            # written into the percentile envelope / raw ensemble -- see
+            # docs/audit/11_ensemble_divergence_handling.md.
+            if is_numerically_divergent(data, data.max_plausible_twat):
+                chain_row = int(sample_indices[i])
+                params_dict = {f"par_{j+1}": float(p_vals[j]) for j in active_params}
+                if on_divergent_draw == 'raise':
+                    raise NumericalDivergenceError(
+                        f"Forward prediction-interval draw {i} (chain row {chain_row}, "
+                        f"params={params_dict}) diverged (non-finite or exceeded "
+                        f"max_plausible_twat). uncertainty_options.on_divergent_draw='raise'; "
+                        f"set 'drop' (the default) to exclude divergent draws instead. See "
+                        f"docs/audit/11_ensemble_divergence_handling.md."
+                    )
+                excluded_draws.append({"draw_index": i, "chain_row": chain_row, "params": params_dict})
+                continue
+
             if noise_model == 'ar1':
                 noise = generate_ar1_noise(data.n_tot, sigma, rho_used, segments_for_noise, rng)
             else:
@@ -385,6 +539,17 @@ def forward_mode(data: CommonData) -> None:
 
             ensemble_simulations.append(noisy_simulation)
 
+        # `sample_indices` is passed through so `valid_draw_indices` (the chain
+        # rows that actually survived divergence filtering, in order -- not the
+        # originally-requested `sample_indices`) ends up in the summary: that is
+        # what determines the row alignment of the ensemble saved below, and is
+        # therefore the authoritative check `scenario.paired_difference_from_files`
+        # uses (docs/audit/12_ensemble_provenance_and_pairing.md).
+        divergence_summary = _check_ensemble_divergence(
+            len(samples), excluded_draws, on_divergent_draw, max_divergent_fraction,
+            "forward prediction-interval", sample_indices=sample_indices,
+        )
+
         ensemble_simulations = np.array(ensemble_simulations)
 
         prediction_interval = uncertainty_options.get('prediction_interval', 90.0)
@@ -392,6 +557,31 @@ def forward_mode(data: CommonData) -> None:
         ensemble_filename = os.path.join(data.folder, f"Forward_Prediction_Ensemble_{data.station}_{data.series}_{data.time_res}.npz")
         save_ensemble = bool(uncertainty_options.get('save_ensemble', False))
         _export_ensemble_outputs(data, ensemble_simulations, prediction_interval, env_filename, ensemble_filename, save_ensemble)
+
+        # Sidecar metadata for the forward prediction-interval ensemble (the
+        # FORWARD-mode equivalent of MCMC_chain_*_meta.json), named to pair with the
+        # ensemble .npz (not the envelope CSV) since that is what `scenario.py`
+        # consumes. Records the divergent-draw exclusion (docs/audit/
+        # 11_ensemble_divergence_handling.md) so it is visible without inspecting
+        # console logs, plus the provenance (source chain identity, requested and
+        # surviving sample indices) `scenario.paired_difference_from_files` needs to
+        # detect a mismatched pairing between two scenario runs (docs/audit/
+        # 12_ensemble_provenance_and_pairing.md).
+        meta_filename = ensemble_filename.replace('.npz', '_meta.json')
+        meta_data = {
+            **divergence_summary,
+            "on_divergent_draw": on_divergent_draw,
+            "max_divergent_fraction": max_divergent_fraction,
+            "chain_path": chain_path,
+            "chain_content_sha256": chain_hash,
+            "chain_n_rows": chain_n_rows,
+            "requested_seed": seed,
+            "sample_indices": [int(x) for x in sample_indices],
+            "reused_sample_indices_from": reuse_path if reuse_path else None,
+        }
+        with open(meta_filename, 'w') as f:
+            json.dump(meta_data, f, indent=2, allow_nan=False)
+        print(f"Saved forward prediction-interval metadata sidecar to {meta_filename}")
 
         # Restore deterministic parameters
         data.par[:n_par] = best_params_deterministic
@@ -831,27 +1021,8 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     chain_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}.csv")
     chain_df.to_csv(chain_filename, index=False)
     print(f"Saved MCMC chain (discarded {burnin} burn-in steps) to {chain_filename}")
-
-    print("Writing metadata sidecar...")
-    sidecar_data = {
-        "rho": best_rho,
-        "sigma": best_sigma,
-        "n_valid_pairs": N,  # N valid points used for variance, proxy for pairs
-        "noise_model_used_for_this_run": noise_model,
-        "mcmc_walkers": nwalkers,
-        "mcmc_steps": nsteps,
-        "mcmc_seed": seed,
-        "burnin": burnin,
-        "mean_acceptance_fraction": mean_acc,
-        "mean_autocorr_time": mean_tau,
-        "max_split_rhat": max_rhat if (max_rhat is not None and np.isfinite(max_rhat)) else None,
-        "strict_convergence": strict_convergence,
-    }
-
-    sidecar_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}_meta.json")
-    with open(sidecar_filename, 'w') as f:
-        json.dump(sidecar_data, f, indent=4, allow_nan=False)
-    print(f"Saved MCMC metadata sidecar to {sidecar_filename}")
+    chain_hash = _hash_file(chain_filename)
+    chain_n_rows = len(chain)
 
     # Compute Predictive Uncertainty Envelopes
     print("Generating Predictive Uncertainty Envelopes...")
@@ -859,15 +1030,37 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     sample_indices = rng.choice(len(chain), size=n_samples, replace=False)
     samples = chain[sample_indices]
 
-    ensemble_simulations = []
+    on_divergent_draw = uncertainty_options.get('on_divergent_draw', 'drop')
+    max_divergent_fraction = uncertainty_options.get('max_divergent_fraction', 0.10)
 
-    for theta in samples:
+    ensemble_simulations = []
+    excluded_draws = []
+
+    for i, theta in enumerate(samples):
         p_vals = best_params.copy()
         for idx, j in enumerate(active_params):
             p_vals[j] = theta[idx]
 
         data.par[:n_par] = p_vals
         call_model(data)
+
+        # A single bad posterior draw must not crash the whole envelope-generation
+        # batch, nor be silently written into the percentile envelope / raw
+        # ensemble -- see docs/audit/11_ensemble_divergence_handling.md.
+        if is_numerically_divergent(data, data.max_plausible_twat):
+            chain_row = int(sample_indices[i])
+            params_dict = {f"par_{j+1}": float(p_vals[j]) for j in active_params}
+            if on_divergent_draw == 'raise':
+                raise NumericalDivergenceError(
+                    f"MCMC envelope draw {i} (chain row {chain_row}, params={params_dict}) "
+                    f"diverged (non-finite or exceeded max_plausible_twat). "
+                    f"uncertainty_options.on_divergent_draw='raise'; set 'drop' (the default) "
+                    f"to exclude divergent draws instead. See "
+                    f"docs/audit/11_ensemble_divergence_handling.md."
+                )
+            excluded_draws.append({"draw_index": i, "chain_row": chain_row, "params": params_dict})
+            continue
+
         funcobj(data)  # populate Twat_mod_agg for the aggregated-residual sigma below
 
         # Estimate sigma from this sample's own residuals, on the same (aggregated)
@@ -885,6 +1078,18 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
 
         ensemble_simulations.append(data.Twat_mod + noise)
 
+    # `sample_indices` is passed through so `valid_draw_indices` (the chain rows
+    # that actually survived divergence filtering, in order) ends up in the
+    # summary -- see the matching note in forward_mode() (docs/audit/
+    # 12_ensemble_provenance_and_pairing.md). DE-MCMC/DE-CV-MCMC don't themselves
+    # support `reuse_sample_indices_from` (a paired scenario comparison pairs two
+    # `forward_mode()` runs, not two calibration runs), but this provenance is
+    # still persisted for consistency/auditability.
+    divergence_summary = _check_ensemble_divergence(
+        len(samples), excluded_draws, on_divergent_draw, max_divergent_fraction,
+        "MCMC envelope", sample_indices=sample_indices,
+    )
+
     ensemble_simulations = np.array(ensemble_simulations)
 
     prediction_interval = uncertainty_options.get('prediction_interval', 90.0)
@@ -892,6 +1097,39 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     ensemble_filename = os.path.join(data.folder, f"MCMC_ensemble_{data.station}_{data.series}_{data.time_res}.npz")
     save_ensemble = bool(uncertainty_options.get('save_ensemble', False))
     _export_ensemble_outputs(data, ensemble_simulations, prediction_interval, env_filename, ensemble_filename, save_ensemble)
+
+    print("Writing metadata sidecar...")
+    sidecar_data = {
+        "rho": best_rho,
+        "sigma": best_sigma,
+        "n_valid_pairs": N,  # N valid points used for variance, proxy for pairs
+        "noise_model_used_for_this_run": noise_model,
+        "mcmc_walkers": nwalkers,
+        "mcmc_steps": nsteps,
+        "mcmc_seed": seed,
+        "burnin": burnin,
+        "mean_acceptance_fraction": mean_acc,
+        "mean_autocorr_time": mean_tau,
+        "max_split_rhat": max_rhat if (max_rhat is not None and np.isfinite(max_rhat)) else None,
+        "strict_convergence": strict_convergence,
+        "on_divergent_draw": on_divergent_draw,
+        "max_divergent_fraction": max_divergent_fraction,
+        "n_draws_requested": divergence_summary["n_draws_requested"],
+        "n_divergent_draws_excluded": divergence_summary["n_divergent_draws_excluded"],
+        "divergent_draw_fraction": divergence_summary["divergent_draw_fraction"],
+        "excluded_draws": divergence_summary["excluded_draws"],
+        "chain_path": chain_filename,
+        "chain_content_sha256": chain_hash,
+        "chain_n_rows": chain_n_rows,
+        "envelope_sample_seed": seed,
+        "sample_indices": [int(x) for x in sample_indices],
+        "valid_draw_indices": divergence_summary["valid_draw_indices"],
+    }
+
+    sidecar_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}_meta.json")
+    with open(sidecar_filename, 'w') as f:
+        json.dump(sidecar_data, f, indent=4, allow_nan=False)
+    print(f"Saved MCMC metadata sidecar to {sidecar_filename}")
 
     # Restore best parameters for forward pass and fix finalfit mismatch
     data.par[:n_par] = best_params.copy()

@@ -351,12 +351,59 @@ Fortran, found during porting and fixed with test coverage:
   config key is now threaded through to whichever optimizer is dispatched and
   recorded in `calibration_metadata.json`; `PSO_mode`/`LH_mode` now draw from a
   local `np.random.Generator` instead of mutating global state.
+- **`Q == 0` now raises a clear error by default, with an opt-in floor, instead of
+  crashing or silently mis-simulating (fixed in `model.py`/`model_numba.py`/
+  `io.py`/`config.py`)**: for versions 4, 7, and 8, discharge only enters the ODE
+  through `theta = Q/Qmedia`, with `theta ** a4` as a divisor. At `Q == 0` this
+  either raised a bare, uncaught `ZeroDivisionError` (`a4 > 0`) or silently
+  evaluated to `inf`, collapsing that day's (and every subsequent day's in the
+  same segment) simulated temperature towards zero with no error, NaN, or
+  warning (`a4 < 0`, the sign optimizers empirically tend to select) — invisible
+  to `check_numerical_divergence`, since the resulting value stays inside the
+  plausible temperature range. This could crash calibration on a naturally-
+  occurring zero-flow day the first time DE sampled a positive `a4`, and applied
+  identically to `FORWARD`-mode scenario discharge (naturalised flow, climate
+  projection). `read_Tseries` now raises a `ValueError` naming the offending
+  index/date and count before any parameter vector or integrator is involved,
+  regardless of `a4`'s sign; an opt-in `min_theta_floor` config key clamps
+  `theta` away from zero by a small, documented epsilon instead, applied
+  consistently across every integrator. Versions 3/5 (which never evaluate
+  `theta`) and gap-tolerant mode's existing handling of `Q <= 0` are unchanged.
+- **Posterior/prediction-interval ensemble loops now carry their own divergence
+  guard (fixed in `optimization.py`/`model.py`)**: `check_numerical_divergence`
+  previously ran only on the single deterministic best-fit simulation, not inside
+  `forward_mode()`'s prediction-interval loop or `_run_mcmc_uncertainty()`'s
+  envelope loop (`DE-MCMC`/`DE-CV-MCMC`), each of which calls `call_model()` once
+  per posterior draw. A single bad draw either crashed the whole batch or — if it
+  stayed finite — was silently written into the percentile envelope and raw
+  ensemble `scenario.paired_difference` consumes. A new per-draw check now
+  excludes (default) or raises on (`uncertainty_options.on_divergent_draw:
+  "raise"`) a divergent draw, reporting the exclusion on the console and in the
+  run's sidecar metadata, and raises rather than silently proceeding if the
+  excluded fraction exceeds `uncertainty_options.max_divergent_fraction` (default
+  10%) or every draw diverges.
+- **Paired scenario ensembles now enforce matched posterior draws instead of only
+  documenting the requirement (fixed in `optimization.py`/`scenario.py`)**:
+  `scenario.paired_difference` only ever checked `.shape`, so two ensembles built
+  from unrelated posterior draws (e.g. a mismatched or omitted
+  `forward_options.random_seed` across two config files) passed silently and
+  produced a statistically meaningless "paired" difference. `forward_mode()` now
+  persists each run's source-chain identity, requested sample indices, and the
+  indices that actually survived per-draw divergence filtering into a sidecar
+  JSON; a new `forward_options.reuse_sample_indices_from` config key lets a second
+  run reuse a prior run's exact indices instead of drawing new ones; and a new
+  `scenario.paired_difference_from_files()` cross-checks this provenance before
+  differencing, raising `ValueError` on any mismatch. The existing shape-only
+  `paired_difference()` remains available unchanged.
 
-Only the integrator-default change and the eval_mask/aggregation fix above touch
-the core forward-simulation physics or the calibration objective's sample
-selection; the governing equations and each integrator's own numerics are
-unchanged and still validated by the golden Fortran tests. The rest affect
-calibration robustness, output file layout, and diagnostic plotting.
+Only the integrator-default change, the eval_mask/aggregation fix, and the
+`min_theta_floor`/ensemble-divergence changes above touch the core
+forward-simulation physics, the calibration objective's sample selection, or the
+integrators themselves — and even those only change behaviour for previously
+unhandled edge cases (non-positive discharge, a divergent ensemble draw); every
+integrator's own numerics for `Q > 0` are unchanged and still validated by the
+golden Fortran tests. The rest affect calibration robustness, output file layout,
+and diagnostic plotting.
 
 ## Validation against published literature
 

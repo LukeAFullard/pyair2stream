@@ -41,6 +41,7 @@ def test_mcmc_autocorr_invalid_json():
     data.Qmedia = 0
     data.dt = 1.0
     data.missing_data_sentinel = -999.0
+    data.max_plausible_twat = 60.0
 
     with tempfile.TemporaryDirectory() as temp_dir:
         data.folder = temp_dir
