@@ -280,7 +280,7 @@ def test_forward_mode_uses_sigma_from_sidecar():
             'n_samples': 5,
             'random_seed': 42,
         }
-        data.uncertainty_options = {"noise_model": "iid", "ar1_rho": None}
+        data.uncertainty_options = {"noise_model": "iid", "ar1_rho": None, "max_divergent_fraction": 1.0}
 
         forward_mode(data)  # should not raise
 
