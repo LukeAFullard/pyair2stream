@@ -135,9 +135,13 @@ def sensitivity_analysis(data: CommonData):
             twat_minus = data.Twat_mod.copy()
 
             # Compute mean absolute difference in the time series per unit change in normalized parameter
-            # We filter out physically impossible temperatures (> 50C) that occur when RK4 numerical instability explodes
+            # We filter out physically impossible temperatures that occur when RK4 numerical instability explodes
             # due to perturbed parameter scaling terms (like p4) crossing an instability threshold.
-            stable_mask = valid_mask & (twat_plus < 50.0) & (twat_minus < 50.0)
+            stable_mask = valid_mask & (twat_plus < data.max_plausible_twat) & (twat_minus < data.max_plausible_twat)
+
+            excluded_runs = valid_mask.sum() - stable_mask.sum()
+            if excluded_runs > 0:
+                print(f"Warning: Perturbing par_{j+1} by {delta_pct}% caused numerical divergence. Excluded {excluded_runs} simulation steps.")
 
             if stable_mask.sum() > 0:
                 diff = np.abs(twat_plus[stable_mask] - twat_minus[stable_mask])

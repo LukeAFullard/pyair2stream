@@ -405,7 +405,7 @@ def fast_run_integration(Tair, Q, tt, Twat_mod, Tice_cover, Qmedia, version, mod
             start = segments[s, 0]
             end = segments[s, 1]
             for j in range(start, end):
-                K1 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Tair[j+1], Q[j+1], Twat_mod[j], tt[j+1], Qmedia, theta_floor)
+                K1 = fast_rk_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Tair[j], Q[j], Twat_mod[j], tt[j], Qmedia, theta_floor)
                 Tw_j1 = Twat_mod[j] + K1
                 if Tw_j1 < Tice_cover:
                     Tw_j1 = Tice_cover

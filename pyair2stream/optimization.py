@@ -379,8 +379,7 @@ def forward_mode(data: CommonData) -> None:
         print(f"Generating Forward Prediction Intervals from {chain_path}...")
 
         seed = data.forward_options.get('random_seed', None)
-        if seed is not None:
-            np.random.seed(seed)
+        rng = np.random.default_rng(seed)
 
         chain_df = pd.read_csv(chain_path)
         chain = chain_df.values
@@ -424,7 +423,7 @@ def forward_mode(data: CommonData) -> None:
         else:
             n_samples = data.forward_options.get('n_samples', 1000)
             n_samples = min(n_samples, len(chain))
-            sample_indices = np.random.choice(len(chain), size=n_samples, replace=False)
+            sample_indices = rng.choice(len(chain), size=n_samples, replace=False)
 
         samples = chain[sample_indices]
 
@@ -487,8 +486,6 @@ def forward_mode(data: CommonData) -> None:
                 print("Warning: No residuals available to estimate rho; falling back to rho=0.0 (equivalent to iid)")
                 rho_used = 0.0
 
-            rng = np.random.default_rng(seed)
-
         ensemble_simulations = []
         excluded_draws = []
         n_par = N_PAR
@@ -533,7 +530,7 @@ def forward_mode(data: CommonData) -> None:
             if noise_model == 'ar1':
                 noise = generate_ar1_noise(data.n_tot, sigma, rho_used, segments_for_noise, rng)
             else:
-                noise = np.random.normal(0, sigma, data.n_tot)
+                noise = rng.normal(0, sigma, data.n_tot)
 
             noisy_simulation = data.Twat_mod + noise
 
@@ -637,9 +634,8 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
             eff_index, nse_k, r2_k, mae_k = results[k]
             if not np.isnan(eff_index):
                 fitbest[k] = eff_index
-            if not np.isnan(eff_index) and eff_index >= data.mineff_index:
-                row = list(x[:, k]) + [eff_index, nse_k, r2_k, mae_k]
-                history.append(row)
+            row = list(x[:, k]) + [eff_index, nse_k, r2_k, mae_k]
+            history.append(row)
 
         # Fix: use fitbest to find initial global best instead of fit
         # Fix: use nanargmax to handle NaN efficiency values correctly
@@ -682,9 +678,8 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
             for k in eval_indices:
                 eff_index, nse_k, r2_k, mae_k = eval_results[idx]
                 fit[k] = eff_index
-                if not np.isnan(eff_index) and eff_index >= data.mineff_index:
-                    row = list(x[:, k]) + [eff_index, nse_k, r2_k, mae_k]
-                    history.append(row)
+                row = list(x[:, k]) + [eff_index, nse_k, r2_k, mae_k]
+                history.append(row)
                 idx += 1
 
             for k in range(n_particles):
@@ -712,7 +707,11 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
                 norm = 0.0
                 for j in range(n_par):
                     if data.flag_par[j]:
-                        diff = (pbest[j, k] - gbest[j]) / (data.parmax[j] - data.parmin[j])
+                        denom = data.parmax[j] - data.parmin[j]
+                        if denom > 0:
+                            diff = (pbest[j, k] - gbest[j]) / denom
+                        else:
+                            diff = 0.0
                         norm += diff ** 2
                 norm = np.sqrt(norm)
                 # Fix: meaningful tolerance instead of norm < 0.0
@@ -768,9 +767,8 @@ def LH_mode(data: CommonData, seed: Optional[int] = None) -> None:
         eff_index = sub_1(data)
         fit = eff_index
 
-        if not np.isnan(eff_index) and eff_index >= data.mineff_index:
-            row = list(data.par[:n_par]) + [eff_index, data.current_nse, data.current_r2, data.current_mae]
-            history.append(row)
+        row = list(data.par[:n_par]) + [eff_index, data.current_nse, data.current_r2, data.current_mae]
+        history.append(row)
 
         if fit > foptim:
             foptim = fit
@@ -834,9 +832,8 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
         eff_index = sub_1(data)
 
         # Record history if valid
-        if not np.isnan(eff_index) and eff_index >= data.mineff_index:
-            row = list(p_vals) + [eff_index, data.current_nse, data.current_r2, data.current_mae]
-            history.append(row)
+        row = list(p_vals) + [eff_index, data.current_nse, data.current_r2, data.current_mae]
+        history.append(row)
 
         # Return negated efficiency so scipy minimizes
         # Handle NaN by returning a large positive number
