@@ -350,9 +350,12 @@ def post_process(data: CommonData, toll: float = None):
             r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else np.nan
 
             # AIC and BIC calculation
+            # Standard least-squares formulation (assuming normally distributed errors).
+            # The +1 accounts for the estimated error variance as a parameter.
             if n > 0 and ss_res > 0:
-                aic = n * np.log(ss_res / n) + 2 * k
-                bic = n * np.log(ss_res / n) + k * np.log(n)
+                k_aic = k + 1
+                aic = n * np.log(ss_res / n) + 2 * k_aic
+                bic = n * np.log(ss_res / n) + k_aic * np.log(n)
 
             # Export Metrics Summary
             metrics_df = pd.DataFrame({

@@ -271,17 +271,20 @@ def main():
         print('mean, TSS and standard deviation (calibration)')
         print(f"{data.mean_obs:.5f} {data.TSS_obs:.5f} {data.std_obs:.5f}")
 
-    if getattr(data, 'cross_validation', None) and data.runmode in ('PSO', 'DE', 'LATHYP'):
-        from .cross_validation import run_leave_one_year_out_cv, summarize
-        results = run_leave_one_year_out_cv(data, data.cross_validation, data.runmode)
-        df = summarize(results)
-        df.to_csv(os.path.join(data.folder, "cv_results.csv"), index=False)
-        print("Cross-validation completed.")
-        print(df)
+    if getattr(data, 'cross_validation', None):
+        if data.runmode in ('PSO', 'DE', 'LATHYP'):
+            from .cross_validation import run_leave_one_year_out_cv, summarize
+            results = run_leave_one_year_out_cv(data, data.cross_validation, data.runmode)
+            df = summarize(results)
+            df.to_csv(os.path.join(data.folder, "cv_results.csv"), index=False)
+            print("Cross-validation completed.")
+            print(df)
 
-        t2 = time.time()
-        print(f"Computation time was {t2 - t1:.4f} seconds.")
-        return  # skip the normal single calibration + forward() + post_process()
+            t2 = time.time()
+            print(f"Computation time was {t2 - t1:.4f} seconds.")
+            return  # skip the normal single calibration + forward() + post_process()
+        elif data.runmode not in ('DE-MCMC', 'DE-CV-MCMC'):
+            print(f"Warning: cross_validation is enabled in config, but run mode '{data.runmode}' does not support it (or handles it internally). Ignoring cross_validation block.")
 
     run_optimizer(data)
 

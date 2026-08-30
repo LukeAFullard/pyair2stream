@@ -462,13 +462,17 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
     # Validate completeness of T_air and Discharge
     if 'T_air' not in df.columns:
         raise ValueError(f"Missing 'T_air' column in {filename}")
+
     if 'Discharge' not in df.columns:
-        raise ValueError(f"Missing 'Discharge' column in {filename}")
+        if data.version in [3, 5]:
+            df['Discharge'] = -999.0
+        else:
+            raise ValueError(f"Missing 'Discharge' column in {filename}")
 
     if not data.gap_tolerant:
         if df['T_air'].isnull().any():
             raise ValueError(f"The series of observed air temperature in {filename} must be complete. It cannot have gaps or missing data.")
-        if df['Discharge'].isnull().any():
+        if data.version not in [3, 5] and df['Discharge'].isnull().any():
             raise ValueError(f"The series of discharge in {filename} must be complete. It cannot have gaps or missing data.")
 
     # Handle missing data via -999.0
