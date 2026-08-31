@@ -11,7 +11,7 @@ import os
 import matplotlib.pyplot as plt
 
 from .config import CommonData
-from .model import call_model, warn_on_stability, check_numerical_divergence
+from .model import call_model, warn_on_stability, check_numerical_divergence, _divergence_bad_mask
 from .io import read_Tseries
 
 def sensitivity_analysis(data: CommonData):
@@ -137,7 +137,9 @@ def sensitivity_analysis(data: CommonData):
             # Compute mean absolute difference in the time series per unit change in normalized parameter
             # We filter out physically impossible temperatures that occur when RK4 numerical instability explodes
             # due to perturbed parameter scaling terms (like p4) crossing an instability threshold.
-            stable_mask = valid_mask & (twat_plus < data.max_plausible_twat) & (twat_minus < data.max_plausible_twat)
+            plus_bad = _divergence_bad_mask(twat_plus, data.max_plausible_twat)
+            minus_bad = _divergence_bad_mask(twat_minus, data.max_plausible_twat)
+            stable_mask = valid_mask & (~plus_bad) & (~minus_bad)
 
             excluded_runs = valid_mask.sum() - stable_mask.sum()
             if excluded_runs > 0:

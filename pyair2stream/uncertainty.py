@@ -48,7 +48,9 @@ def estimate_ar1_rho(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mask: np.n
         logging.warning("AR(1) rho estimation resulted in NaN. Falling back to rho=0.0.")
         return 0.0
 
-    # Clip strictly to [0.0, 0.99] as required
+    # Clip strictly to [0.0, 0.99]. Note: the lower bound of 0.0 enforces non-negative serial correlation.
+    # Hydrological water temperature residuals are typically positively autocorrelated (persistence);
+    # negative serial correlation is disallowed by design in empirical noise estimation.
     return float(np.clip(rho, 0.0, 0.99))
 
 

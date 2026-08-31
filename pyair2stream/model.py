@@ -436,10 +436,14 @@ def call_model_segmented(data: CommonData) -> None:
             data.Twat_mod[start] = data.Twat_obs[start]
         else:
             # DOY is 0-indexed in array but 1-366 in reality
-            year = data.date[start, 0]
-            month = data.date[start, 1]
-            day = data.date[start, 2]
-            doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
+            if data.calendar == 'standard':
+                year = data.date[start, 0]
+                month = data.date[start, 1]
+                day = data.date[start, 2]
+                doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
+            else:
+                days_in_year = 365 if data.calendar == 'noleap' else 360
+                doy = (start - 365) % days_in_year
             data.Twat_mod[start] = data.doy_climatology[doy]
 
     _run_integration(data, data.segments, p)

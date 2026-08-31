@@ -365,10 +365,12 @@ def post_process(data: CommonData, toll: float = None):
             metrics_csv = os.path.join(data.folder, f"goodness_of_fit_{output_name}_{data.runmode}_{data.fun_obj}_{data.station}.csv")
             metrics_df.to_csv(metrics_csv, index=False)
 
+            metrics_str = f"\nR²={r2:.3f}, RMSE={rmse:.2f}°C, MAE={mae:.2f}°C\nAIC={aic:.1f}, BIC={bic:.1f}" if (not np.isnan(r2) and not np.isnan(rmse)) else ""
         else:
             rmse = np.nan
             mae = np.nan
             r2 = np.nan
+            metrics_str = ""
 
         fig, (ax, ax_res) = plt.subplots(2, 1, figsize=(18/2.54, 14/2.54), gridspec_kw={'height_ratios': [3, 1]}, sharex=True)
 
@@ -377,18 +379,16 @@ def post_process(data: CommonData, toll: float = None):
         env_file_mcmc = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
         env_file = env_file_mcmc if os.path.exists(env_file_mcmc) else env_file_fwd
 
-        metrics_str = f"R²={r2:.3f}, RMSE={rmse:.2f}°C, MAE={mae:.2f}°C\nAIC={aic:.1f}, BIC={bic:.1f}"
-
         if os.path.exists(env_file_mcmc):
             pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
-            ax.set_title(f"Historical Calibration with {pi_val:g}% Prediction Interval\n{metrics_str}")
+            ax.set_title(f"Historical Calibration with {pi_val:g}% Prediction Interval{metrics_str}")
         else:
             pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
             title_text = f"Forward Projection with {pi_val:g}% Prediction Interval" if os.path.exists(env_file_fwd) else title_prefix
-            ax.set_title(f"{title_text}\n{metrics_str}")
+            ax.set_title(f"{title_text}{metrics_str}")
 
         if not filter_to_obs:
-            ax.set_title(f"Full Simulation Timeline (with all forcing data)\n{metrics_str}")
+            ax.set_title(f"Full Simulation Timeline (with all forcing data){metrics_str}")
 
         # Plot temperatures on primary y-axis
         l1 = ax.plot(dates, df['Tair'], '.', color=light_blue, label='Air temperature', markersize=2)
@@ -457,6 +457,8 @@ def post_process(data: CommonData, toll: float = None):
         png_path = os.path.join(data.folder, f"{output_name}_{data.runmode}_{data.fun_obj}_{data.station}.png")
         plt.savefig(pdf_path, dpi=300)
         plt.savefig(png_path, dpi=300)
+        if output_name == "forward_projection":
+            plt.savefig(os.path.join(data.folder, "forward_projection.png"), dpi=300)
         plt.close()
 
         # Generate Residual Diagnostics Plot
@@ -531,7 +533,7 @@ def post_process(data: CommonData, toll: float = None):
             plt.savefig(qq_png, dpi=300)
             plt.close()
 
-    if data.runmode == 'FORWARD':
+    if data.runmode == 'FORWARD' and not os.path.exists(file_cal):
         # We plot directly from the arrays since FORWARD mode might not save a CSV by default
         fig, ax = plt.subplots(figsize=(18/2.54, 10/2.54))
 
@@ -610,6 +612,8 @@ def post_process(data: CommonData, toll: float = None):
         plt.savefig(os.path.join(data.folder, "forward_projection.png"), dpi=300)
         plt.close()
     else:
-        plot_series(file_cal, "Calibration", "calibration")
+        cal_label = "Forward Projection" if data.runmode == 'FORWARD' else "Calibration"
+        cal_name = "forward_projection" if data.runmode == 'FORWARD' else "calibration"
+        plot_series(file_cal, cal_label, cal_name)
         plot_series(file_cal, "Full Simulation", "full_simulation", filter_to_obs=False)
         plot_series(file_val, "Validation", "validation")

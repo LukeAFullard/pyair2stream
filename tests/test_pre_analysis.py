@@ -91,6 +91,29 @@ class TestPreAnalysis(unittest.TestCase):
             # and returns a valid summary dictionary.
             self.assertIn('total_days', summary)
 
+    def test_analyze_timeseries_version_3_5_ignores_discharge_gaps(self):
+        idx = pd.date_range('2000-01-01', periods=20, freq='D')
+        df = pd.DataFrame({
+            'Date': idx,
+            'T_air': np.random.rand(20) * 10 + 10,
+            'T_water': np.random.rand(20) * 5 + 5,
+            'Discharge': np.full(20, -999.0)  # Complete gap in discharge
+        })
+
+        # Version 8 (default) needs discharge -> 0 valid segments
+        summary_v8, _ = analyze_timeseries(df, gap_tolerant=True, min_segment_days=10, version=8)
+        self.assertEqual(summary_v8['valid_segments_count'], 0)
+
+        # Version 3 does not use discharge -> 1 valid segment of length 20
+        summary_v3, _ = analyze_timeseries(df, gap_tolerant=True, min_segment_days=10, version=3)
+        self.assertEqual(summary_v3['valid_segments_count'], 1)
+        self.assertEqual(summary_v3['total_valid_days'], 20)
+
+        # Version 5 does not use discharge -> 1 valid segment of length 20
+        summary_v5, _ = analyze_timeseries(df, gap_tolerant=True, min_segment_days=10, version=5)
+        self.assertEqual(summary_v5['valid_segments_count'], 1)
+        self.assertEqual(summary_v5['total_valid_days'], 20)
+
     def test_analyze_timeseries_all_segments_too_short(self):
         idx = pd.date_range('2000-01-01', periods=20, freq='D')
         df = pd.DataFrame({

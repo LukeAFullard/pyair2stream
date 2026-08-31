@@ -109,6 +109,28 @@ def test_call_model_segmented_state_leakage():
     assert np.all(data.Twat_mod[365:415] != -999.0)
     assert np.all(data.Twat_mod[425:465] != -999.0)
 
+def test_call_model_segmented_doy_non_standard_calendar():
+    """Test that call_model_segmented and compute_doy_climatology use row-position DOY for 360_day/noleap calendars."""
+    from pyair2stream.io import compute_doy_climatology
+
+    data = get_base_data()
+    data.calendar = '360_day'
+    data.Twat_obs[365:] = 15.0
+    data.Tair[365+50:365+60] = -999.0  # Gap in forcing to create 2 segments
+
+    compute_doy_climatology(data)
+
+    detect_segments(data)
+
+    # Make Twat_obs -999 at segment start so restart uses doy_climatology
+    seg2_start = data.segments[1][0]
+    data.Twat_obs[seg2_start] = -999.0
+
+    call_model(data)
+
+    expected_doy = (seg2_start - 365) % 360
+    assert data.Twat_mod[seg2_start] == data.doy_climatology[expected_doy]
+
 def test_call_model_segmented_reseed_obs():
     """Test re-seeding uses obs if available, else climatology."""
     data = get_base_data()

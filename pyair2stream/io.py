@@ -356,10 +356,14 @@ def compute_doy_climatology(data: CommonData) -> None:
 
     for i in range(365, data.n_tot):
         if data.Twat_obs[i] != -999.0:
-            year = data.date[i, 0]
-            month = data.date[i, 1]
-            day = data.date[i, 2]
-            doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
+            if data.calendar == 'standard':
+                year = data.date[i, 0]
+                month = data.date[i, 1]
+                day = data.date[i, 2]
+                doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
+            else:
+                days_in_year = 365 if data.calendar == 'noleap' else 360
+                doy = (i - 365) % days_in_year
             doy_sums[doy] += data.Twat_obs[i]
             doy_counts[doy] += 1
 
