@@ -249,6 +249,13 @@ def paired_difference_from_files(path_a: str, path_b: str) -> np.ndarray:
             "unrelated parameter draws."
         )
 
-    ens_a, _ = load_ensemble(path_a)
-    ens_b, _ = load_ensemble(path_b)
+    ens_a, dates_a = load_ensemble(path_a)
+    ens_b, dates_b = load_ensemble(path_b)
+
+    if not dates_a.equals(dates_b):
+        raise ValueError(
+            f"paired_difference_from_files: dates do not match between '{path_a}' "
+            f"and '{path_b}'. Both ensemble files must cover the exact same date range."
+        )
+
     return paired_difference(ens_a, ens_b)

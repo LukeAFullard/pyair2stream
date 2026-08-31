@@ -133,6 +133,37 @@ class TestPostProcessing(unittest.TestCase):
 
         self.assertTrue(os.path.exists(os.path.join(self.data.folder, "forward_projection.png")))
 
+    def test_post_processing_forward_mode_with_observations_generates_diagnostics(self):
+        self.data.runmode = 'FORWARD'
+        self.data.n_tot = 380
+        self.data.date[0:365, :] = -999
+
+        # Write 2_*.csv output file as written by main.forward()
+        out_cal_path = os.path.join(self.data.folder, f"2_{self.data.runmode}_{self.data.fun_obj}_{self.data.station}_{self.data.series}c_{self.data.time_res}.csv")
+        df_out = pd.DataFrame({
+            'Year': self.data.date[365:, 0],
+            'Month': self.data.date[365:, 1],
+            'Day': self.data.date[365:, 2],
+            'Tair': self.data.Tair[365:],
+            'Twat_obs': self.data.Twat_obs[365:],
+            'Twat_mod': self.data.Twat_mod[365:],
+            'Twat_obs_agg': self.data.Twat_obs_agg[365:],
+            'Twat_mod_agg': self.data.Twat_obs_agg[365:] + 0.5, # offset by 0.5 to have non-zero residual
+            'Q': self.data.Q[365:]
+        })
+        df_out.to_csv(out_cal_path, index=False)
+
+        post_process(self.data, toll=2.0)
+
+        # Check that goodness of fit, predicted vs measured, and residual diagnostics were generated
+        gof_csv = os.path.join(self.data.folder, f"goodness_of_fit_forward_projection_{self.data.runmode}_{self.data.fun_obj}_{self.data.station}.csv")
+        pvm_png = os.path.join(self.data.folder, f"predicted_vs_measured_forward_projection_{self.data.runmode}_{self.data.fun_obj}_{self.data.station}.png")
+        res_png = os.path.join(self.data.folder, f"residual_diagnostics_forward_projection_{self.data.runmode}_{self.data.fun_obj}_{self.data.station}.png")
+
+        self.assertTrue(os.path.exists(gof_csv), f"Expected file {gof_csv} was not generated")
+        self.assertTrue(os.path.exists(pvm_png), f"Expected file {pvm_png} was not generated")
+        self.assertTrue(os.path.exists(res_png), f"Expected file {res_png} was not generated")
+
     def test_post_processing_empty_dataframe(self):
         # Create an empty CSV file with only headers (simulating no model evaluations reached mineff_index threshold)
         empty_csv = os.path.join(self.data.folder, f"0_{self.data.runmode}_{self.data.fun_obj}_{self.data.station}_{self.data.series}_{self.data.time_res}.csv")

@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import os
 
-def analyze_timeseries(df, output_plot_path=None, output_summary_path=None, gap_tolerant=True, min_segment_days=30):
+def analyze_timeseries(df, output_plot_path=None, output_summary_path=None, gap_tolerant=True, min_segment_days=30, version=8):
     """
     Analyzes a timeseries dataframe for modeling suitability.
     Identifies missing data, contiguous segments, and generates a plot and summary report.
@@ -23,6 +23,7 @@ def analyze_timeseries(df, output_plot_path=None, output_summary_path=None, gap_
         output_summary_path (str, optional): Path to save the summary text
         gap_tolerant (bool): If true, looks for segments. If false, model needs one continuous block.
         min_segment_days (int): Minimum length of a valid contiguous segment.
+        version (int): Model version (default: 8). Versions 3 and 5 do not use Discharge forcing.
 
     Returns:
         dict: A dictionary containing summary statistics.
@@ -52,10 +53,11 @@ def analyze_timeseries(df, output_plot_path=None, output_summary_path=None, gap_
                 'missing_percentage': (missing_count / total_days) * 100 if total_days > 0 else 0
             }
 
-    # Identify segments based on forcing data (T_air and Discharge if present)
+    # Identify segments based on forcing data (T_air and Discharge if used by model version)
     # pyair2stream requires valid T_air (and Discharge if used). T_water can have internal gaps (-999.0).
+    # Model versions 3 and 5 do not evaluate Discharge.
     df['is_valid_forcing'] = ~df['T_air'].isna()
-    if 'Discharge' in df.columns:
+    if version not in (3, 5) and 'Discharge' in df.columns:
         df['is_valid_forcing'] = df['is_valid_forcing'] & (~df['Discharge'].isna())
 
     # Identify contiguous blocks

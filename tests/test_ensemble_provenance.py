@@ -210,6 +210,20 @@ class TestPairedDifferenceFromFiles(unittest.TestCase):
         # difference is expected (sanity: not all-zero).
         self.assertGreater(np.max(np.abs(diff)), 1e-6)
 
+    def test_mismatched_dates_raises(self):
+        ensemble_a = self._run(self.folder_a, q_scale=1.0, n_samples=6, seed=7)
+        meta_a_path = ensemble_a.replace('.npz', '_meta.json')
+        ensemble_b = self._run(self.folder_b, q_scale=1.4, reuse_from=meta_a_path)
+
+        # Mutate dates in file b
+        with np.load(ensemble_b) as npz:
+            data_dict = dict(npz)
+        data_dict['year'] = data_dict['year'] + 1  # shift by 1 year
+        np.savez_compressed(ensemble_b, **data_dict)
+
+        with self.assertRaisesRegex(ValueError, r'dates do not match'):
+            scenario.paired_difference_from_files(ensemble_a, ensemble_b)
+
     def test_mismatched_sample_indices_raises(self):
         # Two independent draws (no reuse) will almost certainly disagree.
         ensemble_a = self._run(self.folder_a, q_scale=1.0, n_samples=6, seed=1)
