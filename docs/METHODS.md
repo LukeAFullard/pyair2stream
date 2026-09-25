@@ -287,15 +287,16 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
 2. **Likelihood** (how well a parameter set explains the data), computed on the
    same scored values as the objective (§7), assuming normally distributed errors
    of constant size (the size is estimated, not supplied):
-   - `noise_model: "iid"` (default) treats every day's error as independent:
+   - `noise_model: "iid"` treats every day's error as independent:
      log L = −(n/2)·ln(SSE/n).
-   - `noise_model: "ar1"` allows each day's error to carry over part of the
+   - `noise_model: "ar1"` (default) allows each day's error to carry over part of the
      previous day's (lag-1 autocorrelation ρ, estimated once from the DE fit's
      daily residuals, limited to 0–0.99). Errors are converted to independent
      "innovations" (e₀·√(1−ρ²); eₜ − ρ·eₜ₋₁) within each unbroken run of
      scored days, and log L = −(n/2)·ln(SSE_innovations/n) + (runs/2)·ln(1−ρ²).
    River temperature errors are usually strongly autocorrelated; `iid` then
-   understates parameter uncertainty. `ar1` is recommended for daily data. (With
+   understates parameter uncertainty, and makes intervals for multi-day
+   quantities far too narrow, which is why `ar1` is the default. (With
    weekly or monthly scoring there are no consecutive days, so `ar1` behaves like
    `iid`.)
 3. **Sampling.** `mcmc_walkers` (default 32) chains ("walkers") are started
@@ -303,9 +304,10 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    reflected back inside the bounds) and advanced together by `emcee`'s
    ensemble sampler with the differential-evolution move (ter Braak, 2006): each
    proposal moves a walker along the difference between two others, which suits
-   the strongly correlated parameters of air2stream. `DE-CV-MCMC` instead starts
-   with the parameter spread found by cross-validation (§11); this only affects
-   how fast the sampler settles, not what it converges to.
+   the strongly correlated parameters of air2stream. `DE-CV-MCMC` instead
+   scatters the starting points by the parameter spread found by
+   cross-validation (§11); this does not change what the sampler converges to
+   (validation V4: the same intervals to within 1–2% of their width).
 4. **Run length and convergence.** The sampler runs in blocks of 1,000 steps
    (at least 2,000) and stops when the chain is at least 50 times its longest
    autocorrelation time and split-R̂ is below 1.01 for every parameter, or when
@@ -449,7 +451,10 @@ change one-sided.
 `validation/run_all.py`: identical results to the original Fortran on real
 inputs for every version and Fortran integrator (to 5×10⁻⁶ °C, the precision of
 its printed output); all 30 published RMSE values of Piccolroaz et al. (2016)
-reproduced to within 0.001 °C; recovery of a known truth; calibrated intervals
+reproduced to within 0.001 °C, and their parameters recovered by recalibration
+except where the parameters trade off (versions 7 and 8 on two rivers, where
+recalibration fits slightly better with different parameters and the same
+predictions); recovery of a known truth; calibrated intervals
 on synthetic data; out-of-sample performance on three real rivers; numerical
 accuracy; gaps; and exact answers from the workflow and scenario tools. The test
 suite (`pytest tests/`) also compares against the Fortran and checks each

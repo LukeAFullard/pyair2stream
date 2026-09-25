@@ -12,7 +12,7 @@ before its result.
 | Check | Question | Why it matters |
 |---|---|---|
 | V1 | Does it compute the same temperatures as the original Fortran program, on real, variable inputs? | Shows the model equations and solution schemes were translated correctly. |
-| V2 | Given the published parameters, does it reproduce the published model errors for every model version on three Swiss rivers? Does its own calibration fit at least as well? | Ties the package to the peer-reviewed results of Piccolroaz et al. (2016). |
+| V2 | Given the published parameters, does it reproduce the published model errors for every model version on three Swiss rivers? Does its own calibration fit at least as well, and find the published parameters? | Ties the package to the peer-reviewed results of Piccolroaz et al. (2016). |
 | V3 | When data are made by the model itself from known parameters, does calibration recover them well enough to predict other years? | Only with a known truth can we tell whether calibration finds the right answer. |
 | V4 | Do the 90% uncertainty intervals contain the truth about 90% of the time? | An interval is only useful if its stated confidence is honest. |
 | V5 | On real rivers, how well does a calibrated model predict years it has not seen, compared with simple alternatives? Do its intervals contain about 90% of real measurements? | Tests the whole approach on real data, not only the code. |

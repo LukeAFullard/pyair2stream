@@ -74,13 +74,14 @@ points fall outside it.*
 
 ## Choices in the configuration
 
-- **`noise_model: "ar1"`** treats model errors as persisting from day to day, as
-  they do in practice. For a single day it gives about the same interval as the
-  default `"iid"`, but for anything spanning several days (7-day means,
+- **`noise_model: "ar1"`** (the default, written out here for clarity) treats
+  model errors as persisting from day to day, as they do in practice. For a
+  single day it gives about the same interval as the alternative, `"iid"`
+  (independent errors), but for anything spanning several days (7-day means,
   consecutive days above a limit) `"iid"` gives intervals that are far too
   narrow. On the Swiss rivers, 90% intervals for 7-day means contained only
   39–62% of observed values with `"iid"`, and 76–88% with `"ar1"`
-  ([V5](../../validation/REPORT.md#v5)). Use `"ar1"`.
+  ([V5](../../validation/REPORT.md#v5)).
 - **`random_seed`** makes the whole run repeatable.
 
 ## About the parameters

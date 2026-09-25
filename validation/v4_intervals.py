@@ -6,7 +6,8 @@ calibrated with DE-MCMC and then run in FORWARD mode with prediction intervals
 on three held-out years, exactly as a user would. Over the replicates, a 90%
 prediction interval should contain about 90% of the held-out observations,
 and the 90% credible interval of each parameter should contain its true value
-about 90% of the time.
+about 90% of the time. Two alternatives are also tested: parameter intervals
+from cross-validation (leave one year out), and DE-CV-MCMC.
 """
 
 import json
@@ -16,8 +17,10 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 import pandas as pd
 
-from common import (WORK, Result, Timer, load, mean_discharge, published_params, quiet, river_csv,
-                    AUTHORS_BOUNDS)
+from scipy import stats
+
+from common import (DE_SETTINGS, WORK, Result, Timer, calibrate, load, mean_discharge, published_params, quiet,
+                    river_csv, AUTHORS_BOUNDS)
 from v3_recovery import SIGMA, RHO, noise, truth_series
 
 # (label, true version, noise in the data, noise model used by the likelihood, replicates full / quick)
@@ -30,6 +33,7 @@ CASES = [
 PI_RANGE = (0.87, 0.93)     # accepted mean coverage of the 90% prediction interval
 PAR_MIN = 0.78              # accepted pooled coverage of the 90% parameter intervals (not clearly below 0.9)
 PAR_REQUIRED = ("A", "B")   # cases whose parameter intervals must meet PAR_MIN (version 5; see notes)
+N_JACKKNIFE = 12            # replicates of cases B and D given leave-one-year-out intervals
 
 
 def replicate(args):
@@ -125,6 +129,58 @@ def sampler_crosscheck(r):
             "largest interval-end difference (share of interval width)": float(np.max(rel))}
 
 
+def leave_one_year_out(args):
+    """90% parameter intervals from refitting with each calibration year left out in turn, for one
+    replicate: (1) the raw spread of the refitted parameters, +-1.645 SD, and (2) the delete-one-year
+    jackknife, +-t(0.95, n-1) x sqrt((n-1)/n x sum of squared deviations). Qmedia is held fixed."""
+    label, version, r = args
+    from pyair2stream.config import ACTIVE_PARAMS
+    folder = os.path.join(WORK, f"v4_{label[0]}_{r}")
+    q_cal = mean_discharge(river_csv("MAH_2369", "calibration"))
+    df = pd.read_csv(os.path.join(folder, "cal.csv"), parse_dates=["Date"])
+    full = np.array(calibrate(os.path.join(folder, "cal.csv"), version, name=f"v4jk_{label[0]}_{r}",
+                              Qmedia=q_cal).par_best)
+    folds = []
+    for year in sorted(df.Date.dt.year.unique()):
+        csv = os.path.join(folder, f"without_{year}.csv")
+        df.assign(T_water=df.T_water.where(df.Date.dt.year != year)).to_csv(csv, index=False, date_format="%Y-%m-%d")
+        folds.append(calibrate(csv, version, name=f"v4jk_{label[0]}_{r}_{year}", Qmedia=q_cal).par_best)
+    folds = np.array(folds)
+    n = len(folds)
+    se = np.sqrt((n - 1) / n * np.sum((folds - folds.mean(0)) ** 2, axis=0))
+    t = stats.t.ppf(0.95, n - 1)
+    truth = np.array(published_params(version, "MAH_2369"))
+    chain = pd.read_csv(os.path.join(folder, "out", "MCMC_chain_S_c_1d.csv"))
+    rows = []
+    for j in ACTIVE_PARAMS[version]:
+        lo, hi = np.percentile(chain[f"par_{j + 1}"], [5, 95])
+        err = abs(full[j] - truth[j])
+        spread = 1.645 * folds[:, j].std(ddof=1)
+        rows.append({"case": label.split(":")[0], "parameter": f"a{j + 1}",
+                     "raw spread covers": err <= spread, "jackknife covers": err <= t * se[j],
+                     "MCMC covers": lo <= truth[j] <= hi, "raw spread width": 2 * spread,
+                     "jackknife width": 2 * t * se[j], "MCMC width": hi - lo})
+    return rows
+
+
+def cv_mcmc_comparison(mode):
+    """DE-MCMC or DE-CV-MCMC on the real Mentue record (version 8, ar1)."""
+    import pyair2stream.optimization as opt
+    cal = river_csv("MAH_2369", "calibration")
+    out = os.path.join(WORK, f"v4_{mode}", "out")
+    cfg = {"version": 8, "integrator": "CRN", "run_mode": mode, "objective_function": "NSE", "random_seed": 1,
+           "Qmedia": mean_discharge(cal), "parameter_bounds": AUTHORS_BOUNDS,
+           "optimization": {**DE_SETTINGS, "mcmc_walkers": 32, "mcmc_steps": 20000},
+           "uncertainty_options": {"noise_model": "ar1"}, "paths": {"input_data": cal, "output_dir": out}}
+    data = load(cfg, f"v4_{mode}")
+    with quiet():
+        (opt.DE_MCMC_mode if mode == "DE-MCMC" else opt.DE_CV_MCMC_mode)(data, seed=1)
+    meta = json.load(open(os.path.join(out, "MCMC_chain_S_c_1d_meta.json")))
+    chain = pd.read_csv(os.path.join(out, "MCMC_chain_S_c_1d.csv"))
+    return {"mode": mode, "steps": meta["steps_run"],
+            "intervals": {c: np.percentile(chain[c], [5, 95]).tolist() for c in chain.columns}}
+
+
 def run(ctx) -> Result:
     res = Result(
         code="V4", title="Uncertainty intervals are calibrated",
@@ -150,6 +206,10 @@ def run(ctx) -> Result:
         with ProcessPoolExecutor(max_workers=ctx.workers) as ex:
             rows = list(ex.map(replicate, jobs))
             checks = [] if ctx.quick else list(ex.map(sampler_crosscheck, (0, 1)))
+            jk_jobs = [] if ctx.quick else [(label, v, r) for label, v, *_ in CASES if label[0] in "BD"
+                                            for r in range(N_JACKKNIFE)]
+            jk = pd.DataFrame([x for rows_ in ex.map(leave_one_year_out, jk_jobs) for x in rows_])
+            cvm = [] if ctx.quick else list(ex.map(cv_mcmc_comparison, ("DE-MCMC", "DE-CV-MCMC")))
     df = pd.DataFrame(rows)
     summary_rows, per_param_rows = [], []
     ok = True
@@ -223,5 +283,42 @@ def run(ctx) -> Result:
         if (ck.iloc[:, -1] > 0.10).any():
             res.passed = False
             res.notes.append("The two samplers disagree by more than 10% of an interval's width.")
+    if len(jk):
+        by_case = jk.groupby("case").agg(**{
+            "raw spread of the leave-one-year-out fits": ("raw spread covers", "mean"),
+            "jackknife": ("jackknife covers", "mean"), "MCMC": ("MCMC covers", "mean")})
+        width = (jk["jackknife width"] / jk["MCMC width"]).groupby(jk.case).median()
+        raw_width = (jk["raw spread width"] / jk["MCMC width"]).groupby(jk.case).median()
+        by_case = by_case.map(lambda x: f"{x:.0%}")
+        by_case["median width, jackknife / MCMC"] = width.round(1)
+        by_case["median width, raw spread / MCMC"] = raw_width.round(1)
+        res.tables.append((f"Parameter intervals from leaving one year out, {N_JACKKNIFE} replicates per case: "
+                           "share containing the true value (90% intervals)", by_case.reset_index()))
+        res.notes.append(
+            "Leaving one year out and refitting (as cross-validation does) shows how much the parameters move "
+            "between years, but that spread is not itself a confidence interval: every refit shares most of "
+            f"its data with the others, so the raw spread contained the true values only "
+            f"{jk['raw spread covers'][jk.case == 'B'].mean():.0%} (version 5) and "
+            f"{jk['raw spread covers'][jk.case == 'D'].mean():.0%} (version 8) of the time. Scaled correctly (the "
+            f"delete-one-year jackknife), it gave {jk['jackknife covers'][jk.case == 'B'].mean():.0%} for version 5, "
+            f"with intervals about {width['B']:.1f} times as wide as MCMC's. For version 8 the jackknife "
+            f"intervals were about {width['D']:.0f} times as wide as MCMC's yet contained the truth only "
+            f"{jk['jackknife covers'][jk.case == 'D'].mean():.0%} of the time: along version 8's ridge of "
+            f"equally good fits, each refit lands somewhere different. Neither method gives dependable "
+            f"intervals for individual version 8 parameters.")
+    if cvm:
+        (m1, a), (m2, b) = [(x["mode"], x) for x in cvm]
+        diffs = {c: max(abs(a["intervals"][c][k] - b["intervals"][c][k]) for k in (0, 1))
+                 / (a["intervals"][c][1] - a["intervals"][c][0]) for c in a["intervals"]}
+        cmp = pd.DataFrame([{"parameter": f"a{c.split('_')[1]}",
+                             "DE-MCMC 90% interval": "{:.3f} to {:.3f}".format(*a["intervals"][c]),
+                             "DE-CV-MCMC 90% interval": "{:.3f} to {:.3f}".format(*b["intervals"][c]),
+                             "largest difference (share of width)": f"{d:.1%}"} for c, d in diffs.items()])
+        res.tables.append((f"DE-MCMC ({a['steps']} steps) and DE-CV-MCMC ({b['steps']} steps) on the Mentue, "
+                           f"version 8, same seed", cmp))
+        res.notes.append(
+            f"DE-CV-MCMC uses the spread of the leave-one-year-out fits only to scatter the sampler's starting "
+            f"points. It gave the same parameter intervals as DE-MCMC to within {max(diffs.values()):.1%} of "
+            f"their width (table above).")
     res.figure_data = df.drop(columns=["per_param"], errors="ignore")
     return res

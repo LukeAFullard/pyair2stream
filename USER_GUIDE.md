@@ -425,7 +425,7 @@ optimization:
   mcmc_walkers: 32
   mcmc_steps: 20000             # the most steps it may take; it stops once converged
 uncertainty_options:
-  noise_model: "ar1"            # recommended; the default is "iid" (see below)
+  noise_model: "ar1"            # the default; "iid" is also available (see below)
   prediction_interval: 90       # % width of the band
   save_ensemble: false          # true: also save every simulated series (.npz)
   strict_convergence: true      # default: stop with an error if not converged
@@ -452,7 +452,7 @@ walks through this):
   day, `"iid"` and `"ar1"` give bands of about the same width. For anything
   spanning several days they do not: on the Swiss rivers, 90% bands for 7-day
   means contained 39–62% of observed values with `"iid"` and 76–88% with
-  `"ar1"` ([validation V5](validation/REPORT.md#v5)). Use `"ar1"`.
+  `"ar1"` ([validation V5](validation/REPORT.md#v5)). Keep the default `"ar1"`.
 - **Parameters.** For versions with many parameters (especially 8), several
   combinations fit almost equally well. Their intervals are then too narrow
   ([V4](validation/REPORT.md#v4)), and with `"ar1"` they can be centred away
@@ -465,9 +465,10 @@ Outputs: `MCMC_chain_*.csv` (parameter samples), `MCMC_chain_*_meta.json`
 `parameter_significance_*.csv` (mean, SD and 95% interval of each parameter)
 and `parameter_correlation_*.png`.
 
-`DE-CV-MCMC` does the same but starts the sampler with the parameter spread from
-cross-validation (§13). This can shorten the time to converge; it does not
-change the answer.
+`DE-CV-MCMC` does the same, but first runs a cross-validation (§13) and uses the
+spread of its parameters only to scatter the sampler's starting points. It gives
+the same intervals as `DE-MCMC` and takes longer
+([validation V4](validation/REPORT.md#v4)).
 
 ### Sensitivity analysis
 
@@ -515,7 +516,8 @@ the error is added after the simulation.
 must be computed from the individual simulations, not from the daily band:
 set `uncertainty_options.save_ensemble: true` and use `pyair2stream.scenario`
 (`load_ensemble`, `aggregate`, `exceedance`). This is where `noise_model: "ar1"`
-matters: it keeps each simulated error series realistically persistent.
+(the default) matters: it keeps each simulated error series realistically
+persistent.
 Example [03](examples/03_compliance/README.md) computes the probability that a
 7-day mean limit was exceeded.
 
@@ -568,7 +570,11 @@ With the defaults, the first two years are always used for training only. The ru
 writes `cv_results.csv` (one row per held-out year with NSE, KGE, RMSE on daily
 values and the fitted parameters, plus `mean`, `std` and `pooled` rows) instead
 of the usual outputs. Large differences in parameters between years mean the
-data do not pin them down well. Cross-validation is ignored (with a warning) in
+data do not pin them down well. The spread of the parameters between folds is
+not a confidence interval: each fold shares most of its data with the others, so
+the spread is much smaller than the real uncertainty (in a test with known
+parameters it contained the true values only about half the time,
+[validation V4](validation/REPORT.md#v4)). Cross-validation is ignored (with a warning) in
 other run modes, except that `DE-CV-MCMC` uses these settings internally.
 
 ## 14. Checklist for results that support a decision
@@ -586,7 +592,7 @@ decision, check:
    nominal level, ideally on validation data. Bands for new years are usually
    slightly narrow (85–89% for 90% bands on the Swiss rivers,
    [validation V5](validation/REPORT.md#v5)). For 7-day means, runs of days or
-   other multi-day quantities, use `noise_model: "ar1"` and compute them from
+   other multi-day quantities, keep `noise_model: "ar1"` (the default) and compute them from
    the saved simulations (§12). Report probabilities with their ranges, not as
    a yes or no.
 5. **Scope**: the model gives **daily means**. A limit on daily maxima or on

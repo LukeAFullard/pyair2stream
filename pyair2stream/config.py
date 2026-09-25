@@ -31,6 +31,12 @@ VALID_VERSIONS = tuple(ACTIVE_PARAMS)
 VALID_RUN_MODES = ('DE', 'PSO', 'LATHYP', 'FORWARD', 'DE-MCMC', 'DE-CV-MCMC')
 VALID_INTEGRATORS = ('CRN', 'EXP', 'RK4', 'RK2', 'EUL')
 VALID_OBJECTIVES = ('NSE', 'KGE', 'RMS')
+# Residual-error model for DE-MCMC and prediction intervals. AR(1) is the default:
+# real model errors persist from day to day, and with independent (iid) errors the
+# intervals for multi-day quantities (e.g. 7-day means) are far too narrow
+# (validation/REPORT.md, V5).
+DEFAULT_NOISE_MODEL = 'ar1'
+
 
 @dataclass
 class CommonData:

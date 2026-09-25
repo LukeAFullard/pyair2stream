@@ -16,7 +16,7 @@ from scipy.optimize import differential_evolution, minimize
 import emcee
 
 import json
-from .config import CommonData
+from .config import CommonData, DEFAULT_NOISE_MODEL
 from .model import (
     call_model, funcobj, aggregation, statis, warn_on_stability, check_numerical_divergence,
     is_numerically_divergent, NumericalDivergenceError,
@@ -588,7 +588,7 @@ def forward_mode(data: CommonData) -> None:
                 "not a prediction interval (docs/METHODS.md §13)."
             )
 
-        noise_model = uncertainty_options.get('noise_model', 'iid')
+        noise_model = uncertainty_options.get('noise_model', DEFAULT_NOISE_MODEL)
         rho_used = 0.0
 
         if noise_model == 'ar1':
@@ -1052,7 +1052,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     ndim = len(active_params)
 
     uncertainty_options = data.uncertainty_options or {}
-    noise_model = uncertainty_options.get('noise_model', 'iid')
+    noise_model = uncertainty_options.get('noise_model', DEFAULT_NOISE_MODEL)
 
     eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
     segments = _segments_for(data)

@@ -58,7 +58,7 @@ your runs.
 - A `DE-MCMC` run with `cross_validation.enabled` now warns that the block is ignored.
 - **Validation suite** (`validation/run_all.py`, results in
   `validation/REPORT.md`): Fortran equivalence on real inputs, the published
-  results of Piccolroaz et al. (2016), known-truth recovery, interval
+  results and parameters of Piccolroaz et al. (2016), known-truth recovery, interval
   calibration, real-river prediction, numerical accuracy, gaps, and exact
   workflow and scenario answers.
 - FORWARD runs without `parameters_forward` use the calibrated parameters in
@@ -69,6 +69,11 @@ your runs.
 - The Fortran comparison tests now include discharge that varies from day to day.
 
 ### Changed
+- ⚠ **The default `noise_model` is now `"ar1"`** (was `"iid"`). Real model
+  errors persist from day to day; with `"iid"`, 90% intervals for 7-day means
+  contained only 39–62% of observed values on the Swiss rivers, against 76–88%
+  with `"ar1"` (validation V5). Daily intervals are about the same width
+  either way. Set `noise_model: "iid"` to get the previous behaviour.
 - ⚠ **DE-MCMC sampling.** The sampler uses the differential-evolution move
   instead of emcee's default stretch move (3–4 times faster on air2stream's
   correlated parameters). It runs until converged (at least 50 autocorrelation

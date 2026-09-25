@@ -14,7 +14,7 @@ import pandas as pd
 from typing import Tuple
 
 from .config import (
-    CommonData, ACTIVE_PARAMS, VALID_VERSIONS, VALID_RUN_MODES, VALID_INTEGRATORS,
+    CommonData, DEFAULT_NOISE_MODEL, ACTIVE_PARAMS, VALID_VERSIONS, VALID_RUN_MODES, VALID_INTEGRATORS,
     VALID_OBJECTIVES,
 )
 from .model import prepare_evaluation, check_nonpositive_discharge
@@ -172,7 +172,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
 
     # Parse uncertainty_options
     uncertainty_options = config.get('uncertainty_options', {})
-    noise_model = uncertainty_options.get('noise_model', 'iid')
+    noise_model = uncertainty_options.get('noise_model', DEFAULT_NOISE_MODEL)
     ar1_rho = uncertainty_options.get('ar1_rho', None)
 
     if noise_model not in ["iid", "ar1"]:

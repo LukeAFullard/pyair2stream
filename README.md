@@ -147,7 +147,11 @@ The [validation suite](validation/README.md) checks this, and its results are in
 - **Reproduces the published results.** For three Swiss rivers (Piccolroaz et
   al., 2016), the published parameters give the published calibration and
   validation errors, all 30 of them to within 0.001 °C. Recalibrating with `DE`
-  fits at least as well as the published calibration.
+  returns the published parameters for versions 3, 4 and 5 (to within 1% of
+  their ranges, apart from one flat trade-off on the Rhône) and for versions 7
+  and 8 on the Dischmabach. For versions 7 and 8 on the other two rivers it
+  finds a slightly better fit than the published one, with different
+  parameters but the same predictions (to 0.002 °C).
 - **Finds a known truth.** On data made by the model from known parameters,
   calibration predicts other years to within 0.04 °C of the truth (0.06 °C
   with typical gaps in the data).
@@ -156,7 +160,7 @@ The [validation suite](validation/README.md) checks this, and its results are in
   85–89% of daily values in years not used for calibration, so they are slightly
   optimistic (one case falls just below the report's 85% threshold, so that
   check is marked as failed). For multi-day quantities such as 7-day means, use
-  `noise_model: "ar1"`; the default `"iid"` makes those intervals far too narrow.
+  `noise_model: "ar1"` (the default); `"iid"` makes those intervals far too narrow.
 - **Scenario tools give exact answers** where the answer is known.
 
 To run the tests and the validation suite (needs `gfortran`):
