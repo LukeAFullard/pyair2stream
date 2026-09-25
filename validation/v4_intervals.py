@@ -160,7 +160,7 @@ def run(ctx) -> Result:
         conv = g[g.converged]
         s = {"case": label, "replicates": len(g), "converged": int(g.converged.sum()),
              "mean held-out coverage": round(conv["held-out coverage"].mean(), 3) if len(conv) else None,
-             "range": (f"{conv['held-out coverage'].min():.2f}-{conv['held-out coverage'].max():.2f}"
+             "range": (f"{conv['held-out coverage'].min():.0%}-{conv['held-out coverage'].max():.0%}"
                        if len(conv) else ""),
              "mean calibration coverage": round(conv["calibration coverage"].mean(), 3) if len(conv) else None,
              "parameter coverage": round(float(np.average(conv["parameters inside 90% interval"],
@@ -188,22 +188,28 @@ def run(ctx) -> Result:
     res.summary = "; ".join(f"{r['case'].split(':')[0]}: prediction {r['mean held-out coverage']:.0%}, "
                             f"parameters {r['parameter coverage']:.0%}" for _, r in summ.iterrows()
                             if r["mean held-out coverage"] is not None)
-    res.tables += [("Coverage of 90% intervals (means over replicates)", summ)]
+    max_check = float(pd.DataFrame(checks).iloc[:, -1].max()) if checks else float("nan")
+    fmt = ["mean held-out coverage", "mean calibration coverage", "parameter coverage"]
+    shown = summ.copy()
+    for col in fmt:
+        shown[col] = shown[col].map(lambda x: f"{x:.1%}" if pd.notna(x) else "")
+    res.tables += [("Coverage of 90% intervals (means over replicates)", shown)]
     if len(pp):
         spread = pp.pivot(index="parameter", columns="case", values="replicate spread / posterior SD")
         cover = pp.pivot(index="parameter", columns="case", values="coverage")
         res.tables += [("Parameter-interval coverage, by parameter", cover.map(lambda x: f"{x:.0%}" if pd.notna(x) else "").reset_index()),
                        ("Spread of estimates between replicates / posterior standard deviation (1 = calibrated)",
                         spread.round(2).reset_index())]
-        d = pp[pp.case == "D"]
+        d = pp[(pp.case == "D") & (pp.coverage < PAR_MIN)]
         if len(d):
             res.notes.append(
                 f"Version 8 parameter intervals (case D) contain the true value {summ.loc[summ.case.str.startswith('D'), 'parameter coverage'].iloc[0]:.0%} "
-                f"of the time rather than 90%: between replicates the estimates vary "
+                f"of the time rather than 90%. For the parameters that miss most often "
+                f"({', '.join(d.parameter)}), the estimates vary "
                 f"{d['replicate spread / posterior SD'].min():.1f}-{d['replicate spread / posterior SD'].max():.1f} "
-                f"times as much as the posterior's own standard deviation. The sampler was cross-checked "
-                f"on two replicates with a different sampler (emcee's stretch move, table above): the intervals "
-                f"agree. The same code gives calibrated "
+                f"times as much between replicates as the posterior's own standard deviation. The sampler was "
+                f"cross-checked on two replicates with a different sampler (emcee's stretch move, table "
+                f"below): the interval ends agree to within {max_check:.0%} of the interval width. The same code gives calibrated "
                 f"intervals for version 5. The cause is version 8's parameters trading off against each "
                 f"other (several combinations fit almost equally well), which makes the posterior strongly "
                 f"non-Gaussian; Bayesian parameter intervals are then not guaranteed to have their nominal "
