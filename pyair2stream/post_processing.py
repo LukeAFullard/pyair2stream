@@ -245,7 +245,7 @@ def post_process(data: CommonData, toll: float = None):
 
     # 1c. MCMC Parameter Significance & Correlation
     chain_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}.csv")
-    if data.runmode in ('DE-MCMC', 'DE-CV-MCMC') and os.path.exists(chain_filename):
+    if data.runmode == 'DE-MCMC' and os.path.exists(chain_filename):
         chain_df = pd.read_csv(chain_filename)
 
         # Calculate statistics

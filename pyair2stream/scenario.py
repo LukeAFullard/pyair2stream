@@ -227,7 +227,7 @@ def paired_difference_from_files(path_a: str, path_b: str) -> np.ndarray:
             raise ValueError(
                 f"paired_difference_from_files: {label} differs between '{path_a}' "
                 f"({meta_a.get(key)!r}) and '{path_b}' ({meta_b.get(key)!r}). Both runs "
-                "must be forward_mode() (or DE-MCMC/DE-CV-MCMC envelope) calls against "
+                "must be forward_mode() (or DE-MCMC envelope) calls against "
                 "the SAME posterior chain -- see docs/METHODS.md §13."
             )
 

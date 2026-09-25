@@ -68,6 +68,14 @@ your runs.
   they can be inaccurate even when stable.
 - The Fortran comparison tests now include discharge that varies from day to day.
 
+### Removed
+- **`run_mode: "DE-CV-MCMC"`.** It ran a cross-validation only to choose where
+  the MCMC sampler starts, and gave the same parameter and prediction intervals
+  as `DE-MCMC` (to within 1.5% of their width on the Mentue; validation report
+  at commit b48b6dc) while taking longer. A config that asks for it now stops
+  with a message pointing to `DE-MCMC`. Cross-validation itself is unchanged;
+  note that the spread of its parameters is not a confidence interval.
+
 ### Changed
 - ⚠ **The default `noise_model` is now `"ar1"`** (was `"iid"`). Real model
   errors persist from day to day; with `"iid"`, 90% intervals for 7-day means

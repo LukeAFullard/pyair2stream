@@ -263,9 +263,9 @@ LATHYP:
    because the model needs earlier data to start from. Later years become folds
    (one year each, or blocks of `n_years_per_fold`). Folds with fewer than
    `min_valid_obs` observations are skipped.
-3. For each fold: its water-temperature observations are hidden; `Qmedia` (and,
-   in gap-tolerant mode, the day-of-year climatology) is recomputed without the
-   fold; the model is calibrated on the rest; the full record is simulated; and
+3. For each fold: its water-temperature observations are hidden; `Qmedia`
+   (unless set with `Qmedia:`) and, in gap-tolerant mode, the day-of-year
+   climatology are recomputed without the fold; the model is calibrated on the rest; the full record is simulated; and
    NSE, KGE and RMSE are computed on the hidden days only (daily values).
    In gap-tolerant mode the fold's air temperature and discharge are also hidden
    during calibration, so the fold becomes a gap.
@@ -273,8 +273,11 @@ LATHYP:
    standard deviation across folds and "pooled" scores over all held-out days.
 
 Large variation of the parameters between folds means they are poorly determined
-by the data (equifinality). A cross-validation run does not also produce a
-single final calibration.
+by the data (equifinality). The spread of the parameters between folds is not a
+confidence interval: the folds share most of their data, so it understates the
+uncertainty (in validation V4 it contained the true values only about half the
+time). Use DE-MCMC (§12) for parameter uncertainty. A cross-validation run does
+not also produce a single final calibration.
 
 ## 12. Parameter and prediction uncertainty (DE-MCMC)
 
@@ -304,10 +307,7 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    reflected back inside the bounds) and advanced together by `emcee`'s
    ensemble sampler with the differential-evolution move (ter Braak, 2006): each
    proposal moves a walker along the difference between two others, which suits
-   the strongly correlated parameters of air2stream. `DE-CV-MCMC` instead
-   scatters the starting points by the parameter spread found by
-   cross-validation (§11); this does not change what the sampler converges to
-   (validation V4: the same intervals to within 1–2% of their width).
+   the strongly correlated parameters of air2stream.
 4. **Run length and convergence.** The sampler runs in blocks of 1,000 steps
    (at least 2,000) and stops when the chain is at least 50 times its longest
    autocorrelation time and split-R̂ is below 1.01 for every parameter, or when

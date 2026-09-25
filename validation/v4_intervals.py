@@ -6,8 +6,8 @@ calibrated with DE-MCMC and then run in FORWARD mode with prediction intervals
 on three held-out years, exactly as a user would. Over the replicates, a 90%
 prediction interval should contain about 90% of the held-out observations,
 and the 90% credible interval of each parameter should contain its true value
-about 90% of the time. Two alternatives are also tested: parameter intervals
-from cross-validation (leave one year out), and DE-CV-MCMC.
+about 90% of the time. Parameter intervals from leaving one year out (as
+cross-validation does) are also tested.
 """
 
 import json
@@ -19,7 +19,7 @@ import pandas as pd
 
 from scipy import stats
 
-from common import (DE_SETTINGS, WORK, Result, Timer, calibrate, load, mean_discharge, published_params, quiet,
+from common import (WORK, Result, Timer, calibrate, load, mean_discharge, published_params, quiet,
                     river_csv, AUTHORS_BOUNDS)
 from v3_recovery import SIGMA, RHO, noise, truth_series
 
@@ -163,24 +163,6 @@ def leave_one_year_out(args):
     return rows
 
 
-def cv_mcmc_comparison(mode):
-    """DE-MCMC or DE-CV-MCMC on the real Mentue record (version 8, ar1)."""
-    import pyair2stream.optimization as opt
-    cal = river_csv("MAH_2369", "calibration")
-    out = os.path.join(WORK, f"v4_{mode}", "out")
-    cfg = {"version": 8, "integrator": "CRN", "run_mode": mode, "objective_function": "NSE", "random_seed": 1,
-           "Qmedia": mean_discharge(cal), "parameter_bounds": AUTHORS_BOUNDS,
-           "optimization": {**DE_SETTINGS, "mcmc_walkers": 32, "mcmc_steps": 20000},
-           "uncertainty_options": {"noise_model": "ar1"}, "paths": {"input_data": cal, "output_dir": out}}
-    data = load(cfg, f"v4_{mode}")
-    with quiet():
-        (opt.DE_MCMC_mode if mode == "DE-MCMC" else opt.DE_CV_MCMC_mode)(data, seed=1)
-    meta = json.load(open(os.path.join(out, "MCMC_chain_S_c_1d_meta.json")))
-    chain = pd.read_csv(os.path.join(out, "MCMC_chain_S_c_1d.csv"))
-    return {"mode": mode, "steps": meta["steps_run"],
-            "intervals": {c: np.percentile(chain[c], [5, 95]).tolist() for c in chain.columns}}
-
-
 def run(ctx) -> Result:
     res = Result(
         code="V4", title="Uncertainty intervals are calibrated",
@@ -209,7 +191,6 @@ def run(ctx) -> Result:
             jk_jobs = [] if ctx.quick else [(label, v, r) for label, v, *_ in CASES if label[0] in "BD"
                                             for r in range(N_JACKKNIFE)]
             jk = pd.DataFrame([x for rows_ in ex.map(leave_one_year_out, jk_jobs) for x in rows_])
-            cvm = [] if ctx.quick else list(ex.map(cv_mcmc_comparison, ("DE-MCMC", "DE-CV-MCMC")))
     df = pd.DataFrame(rows)
     summary_rows, per_param_rows = [], []
     ok = True
@@ -306,19 +287,5 @@ def run(ctx) -> Result:
             f"{jk['jackknife covers'][jk.case == 'D'].mean():.0%} of the time: along version 8's ridge of "
             f"equally good fits, each refit lands somewhere different. Neither method gives dependable "
             f"intervals for individual version 8 parameters.")
-    if cvm:
-        (m1, a), (m2, b) = [(x["mode"], x) for x in cvm]
-        diffs = {c: max(abs(a["intervals"][c][k] - b["intervals"][c][k]) for k in (0, 1))
-                 / (a["intervals"][c][1] - a["intervals"][c][0]) for c in a["intervals"]}
-        cmp = pd.DataFrame([{"parameter": f"a{c.split('_')[1]}",
-                             "DE-MCMC 90% interval": "{:.3f} to {:.3f}".format(*a["intervals"][c]),
-                             "DE-CV-MCMC 90% interval": "{:.3f} to {:.3f}".format(*b["intervals"][c]),
-                             "largest difference (share of width)": f"{d:.1%}"} for c, d in diffs.items()])
-        res.tables.append((f"DE-MCMC ({a['steps']} steps) and DE-CV-MCMC ({b['steps']} steps) on the Mentue, "
-                           f"version 8, same seed", cmp))
-        res.notes.append(
-            f"DE-CV-MCMC uses the spread of the leave-one-year-out fits only to scatter the sampler's starting "
-            f"points. It gave the same parameter intervals as DE-MCMC to within {max(diffs.values()):.1%} of "
-            f"their width (table above).")
     res.figure_data = df.drop(columns=["per_param"], errors="ignore")
     return res

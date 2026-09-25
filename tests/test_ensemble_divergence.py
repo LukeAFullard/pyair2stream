@@ -17,7 +17,7 @@ stayed finite) was silently written into the percentile envelope and raw ensembl
    reported in the new `Forward_Prediction_Envelopes_*_meta.json` sidecar, without
    crashing the run.
 3. `uncertainty_options.on_divergent_draw: "raise"` makes the same scenario raise.
-4. Existing forward_mode/DE-MCMC/DE-CV-MCMC behaviour on well-behaved input is
+4. Existing forward_mode/DE-MCMC behaviour on well-behaved input is
    unchanged (covered by the full existing suite; see tests/test_optimization.py).
 """
 

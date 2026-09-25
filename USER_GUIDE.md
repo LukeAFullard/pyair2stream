@@ -167,7 +167,7 @@ min_theta_floor: null       # e.g. 1.0e-6 to allow zero-flow days (§9.2)
 Qmedia: null                # mean discharge used to scale flow; required for FORWARD (below)
 
 # --- Calibration ---
-run_mode: "DE"              # DE, PSO, LATHYP, DE-MCMC, DE-CV-MCMC or FORWARD (below)
+run_mode: "DE"              # DE, PSO, LATHYP, DE-MCMC or FORWARD (below)
 objective_function: "NSE"   # NSE, KGE or RMS (docs/METHODS.md §7)
 time_resolution: "1d"       # "1d" daily, "Nw" N-week means (e.g. "2w"), "1m" monthly means
 prc: 1.0                    # weekly/monthly: minimum fraction of days with an observation
@@ -239,7 +239,6 @@ start; if a calibrated value ends up exactly on a bound, widen that bound.
 | `PSO` | Particle Swarm Optimisation, as in the original Fortran. Less reliable: check it converged. |
 | `LATHYP` | Latin Hypercube sampling of the bounds (exploration, not optimisation). |
 | `DE-MCMC` | `DE`, then parameter and prediction uncertainty (§11). |
-| `DE-CV-MCMC` | As `DE-MCMC`, starting the sampler from the spread found by cross-validation. |
 | `FORWARD` | No calibration: runs given parameters, e.g. on a scenario (§12). |
 
 ### Qmedia: keep it fixed when discharge changes
@@ -465,10 +464,6 @@ Outputs: `MCMC_chain_*.csv` (parameter samples), `MCMC_chain_*_meta.json`
 `parameter_significance_*.csv` (mean, SD and 95% interval of each parameter)
 and `parameter_correlation_*.png`.
 
-`DE-CV-MCMC` does the same, but first runs a cross-validation (§13) and uses the
-spread of its parameters only to scatter the sampler's starting points. It gives
-the same intervals as `DE-MCMC` and takes longer
-([validation V4](validation/REPORT.md#v4)).
 
 ### Sensitivity analysis
 
@@ -574,8 +569,8 @@ data do not pin them down well. The spread of the parameters between folds is
 not a confidence interval: each fold shares most of its data with the others, so
 the spread is much smaller than the real uncertainty (in a test with known
 parameters it contained the true values only about half the time,
-[validation V4](validation/REPORT.md#v4)). Cross-validation is ignored (with a warning) in
-other run modes, except that `DE-CV-MCMC` uses these settings internally.
+[validation V4](validation/REPORT.md#v4)). For parameter uncertainty use `DE-MCMC`
+(§11). Cross-validation is ignored (with a warning) in other run modes.
 
 ## 14. Checklist for results that support a decision
 

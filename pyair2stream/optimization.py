@@ -152,7 +152,7 @@ def _estimate_autocorr(sampler, discard: int):
 
 def _make_sampler(nwalkers: int, ndim: int, log_prob, seed: Optional[int]) -> emcee.EnsembleSampler:
     """
-    The ensemble sampler used for DE-MCMC/DE-CV-MCMC.
+    The ensemble sampler used for DE-MCMC.
 
     Proposals use emcee's differential-evolution move (ter Braak, 2006), which
     mixes 3-4x faster than emcee's default stretch move on the strongly
@@ -561,7 +561,7 @@ def forward_mode(data: CommonData) -> None:
                   "prediction intervals built from it are not reliable.")
 
         # Resolve sigma: explicit config override first, then the sidecar written by
-        # DE-MCMC/DE-CV-MCMC (mirroring the `rho` resolution below), matching `rho`'s
+        # DE-MCMC (mirroring the `rho` resolution below), matching `rho`'s
         # existing carry-forward instead of silently defaulting to 0.0 behind a print.
         sigma_override = data.forward_options.get('residual_sigma')
         if sigma_override is not None and float(sigma_override) > 0.0:
@@ -1037,15 +1037,12 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
     df.to_csv(output_filename, index=False)
 
 def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np.ndarray,
-                           active_params: list, init_scale, n_par: int = N_PAR) -> None:
+                           active_params: list, n_par: int = N_PAR) -> None:
     """
-    Shared Phase 3+ implementation for `DE_MCMC_mode` and `DE_CV_MCMC_mode`: builds the
-    walker ensemble, runs `emcee`, computes convergence diagnostics, and writes the
-    chain/sidecar/envelope (and optional raw ensemble) outputs.
-
-    `init_scale` is either `None` (the two-mode-agnostic default: a ball scaled to each
-    active parameter's bound width) or an explicit per-dimension array of standard
-    deviations (the `DE-CV-MCMC` cross-validation-informed spread).
+    Phase 3 of `DE_MCMC_mode`: builds the walker ensemble (a small ball around the DE
+    optimum, scaled to each active parameter's bound width), runs `emcee` until
+    converged, computes the diagnostics, and writes the chain/sidecar/envelope (and
+    optional raw ensemble) outputs.
     """
     nwalkers = data.mcmc_walkers
     nsteps = data.mcmc_steps
@@ -1102,7 +1099,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     initial = np.array([best_params[j] for j in active_params])
     lo = np.array([data.parmin[j] for j in active_params])
     hi = np.array([data.parmax[j] for j in active_params])
-    scale = (1e-3 * (hi - lo)) if init_scale is None else np.asarray(init_scale, dtype=np.float64)
+    scale = 1e-3 * (hi - lo)
 
     rng = np.random.default_rng(seed)
     p0 = _reflected_walker_init(initial, scale, lo, hi, nwalkers, rng)
@@ -1215,7 +1212,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
 
     # `sample_indices` is passed through so `valid_draw_indices` (the chain rows
     # that actually survived divergence filtering, in order) ends up in the
-    # summary -- see the matching note in forward_mode(). DE-MCMC/DE-CV-MCMC don't themselves
+    # summary -- see the matching note in forward_mode(). DE-MCMC doesn't itself
     # support `reuse_sample_indices_from` (a paired scenario comparison pairs two
     # `forward_mode()` runs, not two calibration runs), but this provenance is
     # still persisted for consistency/auditability.
@@ -1306,65 +1303,5 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     # Walker ball scaled to each active parameter's bound width,
     # rather than the previous fixed 1e-4, which is negligible for a wide parameter
     # and can collapse the ensemble's effective spread relative to the posterior.
-    _run_mcmc_uncertainty(data, seed, best_params, active_params, init_scale=None, n_par=n_par)
+    _run_mcmc_uncertainty(data, seed, best_params, active_params, n_par=n_par)
 
-
-def DE_CV_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
-    """
-    Differential Evolution + L-BFGS-B followed by Cross-Validation to inform MCMC initialization.
-    """
-    print("Starting DE-CV-MCMC Calibration Mode")
-
-    n_par = N_PAR
-    nwalkers = data.mcmc_walkers
-
-    active_params = _active_params(data, n_par)
-    ndim = len(active_params)
-
-    if ndim > 0 and nwalkers < 2 * ndim:
-        raise ValueError(
-            f"mcmc_walkers ({nwalkers}) must be at least 2x the number of "
-            f"active parameters ({ndim} active -> need >= {2*ndim}). "
-            "Increase mcmc_walkers in your config."
-        )
-
-    print("Phase 1 & 2: Finding best parameters using DE + L-BFGS-B")
-
-    # Run the standard DE mode first to find best parameters
-    # DE_mode sets data.par_best and data.finalfit
-    DE_mode(data, seed)
-
-    if ndim == 0:
-        print("Warning: No active parameters for MCMC. Skipping MCMC phase.")
-        return
-
-    print("Phase 3: Cross-Validation to estimate parameter standard deviations")
-    from .cross_validation import CVConfig, run_leave_one_year_out_cv
-
-    cv_config = data.cross_validation
-    if cv_config is None:
-        cv_config = CVConfig()
-
-    # Run CV using DE. We override n_run and n_particles to keep it fast
-    # or just use whatever is in cv_config.optimizer_overrides
-    results = run_leave_one_year_out_cv(data, cv_config, 'DE')
-
-    # Extract standard deviations from CV folds
-    if len(results) > 1:
-        cv_params = np.array([r.par_best for r in results])
-        stds = np.std(cv_params, axis=0, ddof=1)
-    else:
-        stds = np.full(n_par, np.nan)
-
-    # Calculate active standard deviations for walkers
-    std_active = np.zeros(ndim)
-    for idx, j in enumerate(active_params):
-        val = stds[j]
-        if np.isnan(val) or val <= 0.0:
-            std_active[idx] = 1e-4
-        else:
-            std_active[idx] = val
-
-    print("Phase 4: MCMC Uncertainty Analysis (with CV-informed spread)")
-    best_params = data.par_best[:n_par].copy()
-    _run_mcmc_uncertainty(data, seed, best_params, active_params, init_scale=std_active, n_par=n_par)

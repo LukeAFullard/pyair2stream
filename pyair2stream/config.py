@@ -28,7 +28,7 @@ ACTIVE_PARAMS = {
     8: (0, 1, 2, 3, 4, 5, 6, 7),
 }
 VALID_VERSIONS = tuple(ACTIVE_PARAMS)
-VALID_RUN_MODES = ('DE', 'PSO', 'LATHYP', 'FORWARD', 'DE-MCMC', 'DE-CV-MCMC')
+VALID_RUN_MODES = ('DE', 'PSO', 'LATHYP', 'FORWARD', 'DE-MCMC')
 VALID_INTEGRATORS = ('CRN', 'EXP', 'RK4', 'RK2', 'EUL')
 VALID_OBJECTIVES = ('NSE', 'KGE', 'RMS')
 # Residual-error model for DE-MCMC and prediction intervals. AR(1) is the default:

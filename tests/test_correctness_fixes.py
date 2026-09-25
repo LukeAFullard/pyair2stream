@@ -211,6 +211,12 @@ def test_missing_validation_file_is_an_error(tmp_path):
     assert data.n_tot == 0
 
 
+def test_removed_de_cv_mcmc_run_mode_explains_itself(tmp_path):
+    _csv(tmp_path / 'cal.csv')
+    with pytest.raises(ValueError, match="'DE-CV-MCMC' has been removed.*'DE-MCMC'"):
+        _load(tmp_path, run_mode='DE-CV-MCMC')
+
+
 def test_default_noise_model_is_ar1(tmp_path):
     # Real model errors persist from day to day; with iid errors, intervals for
     # multi-day quantities are far too narrow (validation V5).

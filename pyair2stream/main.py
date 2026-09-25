@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from .io import read_calibration, read_Tseries
-from .optimization import forward_mode, PSO_mode, LH_mode, DE_mode, DE_MCMC_mode, DE_CV_MCMC_mode
+from .optimization import forward_mode, PSO_mode, LH_mode, DE_mode, DE_MCMC_mode
 from .config import CommonData
 from .post_processing import post_process
 from .sensitivity import sensitivity_analysis
@@ -40,8 +40,6 @@ def run_optimizer(data: CommonData) -> None:
         DE_mode(data, seed=data.random_seed)
     elif data.runmode == 'DE-MCMC':
         DE_MCMC_mode(data, seed=data.random_seed)
-    elif data.runmode == 'DE-CV-MCMC':
-        DE_CV_MCMC_mode(data, seed=data.random_seed)
 
 
 def _write_calibration_metadata(data: CommonData) -> None:
@@ -291,7 +289,7 @@ def main():
             t2 = time.time()
             print(f"Computation time was {t2 - t1:.4f} seconds.")
             return  # skip the normal single calibration + forward() + post_process()
-        elif data.runmode != 'DE-CV-MCMC':  # DE-CV-MCMC uses the block internally
+        else:
             print(f"Warning: cross_validation is enabled in config, but run mode '{data.runmode}' does not support it. Ignoring cross_validation block.")
 
     run_optimizer(data)
