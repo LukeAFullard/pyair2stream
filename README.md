@@ -154,7 +154,8 @@ The [validation suite](validation/README.md) checks this, and its results are in
 - **Honest intervals, with known limits.** On such data, 90% prediction
   intervals contain 89–90% of new observations. On the real rivers they contain
   85–89% of daily values in years not used for calibration, so they are slightly
-  optimistic. For multi-day quantities such as 7-day means, use
+  optimistic (one case falls just below the report's 85% threshold, so that
+  check is marked as failed). For multi-day quantities such as 7-day means, use
   `noise_model: "ar1"`; the default `"iid"` makes those intervals far too narrow.
 - **Scenario tools give exact answers** where the answer is known.
 
