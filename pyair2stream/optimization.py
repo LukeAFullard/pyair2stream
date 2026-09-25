@@ -31,6 +31,15 @@ MCMC_MAX_LOG_LIKELIHOOD = 1e10
 # Number of physical model parameters (a1..a8 in the Fortran reference).
 N_PAR = 8
 
+# MCMC convergence rule (docs/METHODS.md §12): the chain is extended in blocks of
+# MCMC_CHECK_INTERVAL steps (after at least MCMC_MIN_STEPS) until it is at least
+# MCMC_TAU_FACTOR times the autocorrelation time long and split-Rhat is below
+# MCMC_MAX_RHAT, or `mcmc_steps` (the maximum) is reached.
+MCMC_CHECK_INTERVAL = 1000
+MCMC_MIN_STEPS = 2000
+MCMC_TAU_FACTOR = 50
+MCMC_MAX_RHAT = 1.01
+
 
 def _active_params(data: CommonData, n_par: int = N_PAR) -> list:
     """Indices of parameters that are both flagged active and non-degenerate (parmin != parmax)."""
@@ -129,21 +138,73 @@ def _estimate_autocorr(sampler, discard: int):
     """
     Estimate the per-parameter integrated autocorrelation time on the chain with the
     first `discard` steps removed. Returns `(tau_array_or_None, mean_tau_or_None)`.
-    Failures (chain too short, non-finite estimate) are reported as a warning rather
-    than raised; convergence is only fatal via the explicit `strict_convergence` gate.
+    emcee's own "chain too short" check is switched off (tol=0): whether the chain is
+    long enough is decided by `_mcmc_diagnostics` against MCMC_TAU_FACTOR.
     """
     try:
-        tau = sampler.get_autocorr_time(discard=discard, quiet=True)
-        if np.any(np.isnan(tau)) or np.any(~np.isfinite(tau)):
-            raise ValueError("autocorrelation time not reliably estimated")
+        tau = sampler.get_autocorr_time(discard=discard, tol=0)
+        if not np.all(np.isfinite(tau)):
+            return None, None
         return tau, float(np.mean(tau))
-    except (ValueError, emcee.autocorr.AutocorrError):
-        print("Warning: autocorrelation time could not be reliably estimated; "
-              "chain may be too short to assess convergence.")
+    except Exception:
         return None, None
-    except Exception as e:
-        print(f"Warning: failed to compute autocorrelation time ({e}).")
-        return None, None
+
+
+def _make_sampler(nwalkers: int, ndim: int, log_prob, seed: Optional[int]) -> emcee.EnsembleSampler:
+    """
+    The ensemble sampler used for DE-MCMC/DE-CV-MCMC.
+
+    Proposals use emcee's differential-evolution move (ter Braak, 2006), which
+    mixes 3-4x faster than emcee's default stretch move on the strongly
+    correlated air2stream posteriors and samples a known correlated Gaussian
+    correctly (tests/test_mcmc_sampler.py). emcee's DESnookerMove is deliberately
+    not used: in emcee 3.1.6 it fails that known-answer test.
+    """
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, log_prob, moves=emcee.moves.DEMove())
+    if seed is not None:
+        # emcee draws its moves from a private RandomState copied from numpy's
+        # *global* state (seeded from system entropy in every new process), so it
+        # must be seeded explicitly for `random_seed` to make the chain reproducible.
+        sampler.random_state = np.random.RandomState(seed).get_state()
+    return sampler
+
+
+def _mcmc_diagnostics(sampler, uncertainty_options: dict) -> dict:
+    """Burn-in, autocorrelation time, split-Rhat and the convergence verdict for the chain so far."""
+    n = sampler.iteration
+    tau_rough, _ = _estimate_autocorr(sampler, discard=0)
+    burnin = _resolve_burnin(n, tau_rough, uncertainty_options)
+    tau, mean_tau = _estimate_autocorr(sampler, discard=burnin)
+    rhat = _split_rhat(sampler.get_chain(discard=burnin))
+    finite = rhat[np.isfinite(rhat)]
+    max_rhat = float(np.max(finite)) if len(finite) == len(rhat) and len(rhat) > 0 else None
+    max_tau = float(np.max(tau)) if tau is not None else None
+    converged = (max_tau is not None and max_rhat is not None
+                 and n >= MCMC_TAU_FACTOR * max_tau and max_rhat < MCMC_MAX_RHAT)
+    return {"steps": n, "burnin": burnin, "tau": tau, "mean_tau": mean_tau, "max_tau": max_tau,
+            "max_rhat": max_rhat, "converged": bool(converged)}
+
+
+def _run_until_converged(sampler, p0, max_steps: int, uncertainty_options: dict) -> dict:
+    """
+    Run `sampler` in blocks of MCMC_CHECK_INTERVAL steps until `_mcmc_diagnostics`
+    reports convergence or `max_steps` is reached. Returns the final diagnostics.
+    """
+    state = p0
+    diag = None
+    while sampler.iteration < max_steps:
+        state = sampler.run_mcmc(state, min(MCMC_CHECK_INTERVAL, max_steps - sampler.iteration), progress=False)
+        if sampler.iteration < min(MCMC_MIN_STEPS, max_steps):
+            continue
+        diag = _mcmc_diagnostics(sampler, uncertainty_options)
+        tau_txt = f"{diag['max_tau']:.1f}" if diag['max_tau'] is not None else "n/a"
+        rhat_txt = f"{diag['max_rhat']:.4f}" if diag['max_rhat'] is not None else "n/a"
+        print(f"  {diag['steps']} steps: max autocorrelation time {tau_txt}, max split-Rhat {rhat_txt}")
+        if diag["converged"]:
+            break
+    if diag is None:
+        diag = _mcmc_diagnostics(sampler, uncertainty_options)
+    return diag
 
 
 def _resolve_burnin(nsteps: int, tau_rough, uncertainty_options: dict) -> int:
@@ -482,6 +543,17 @@ def forward_mode(data: CommonData) -> None:
         uncertainty_options = data.uncertainty_options or {}
         sidecar_path = chain_path.replace('.csv', '_meta.json')
 
+        source_chain_converged = None
+        if os.path.exists(sidecar_path):
+            try:
+                with open(sidecar_path, 'r') as f:
+                    source_chain_converged = json.load(f).get('converged')
+            except Exception:
+                source_chain_converged = None
+        if source_chain_converged is False:
+            print(f"Warning: the MCMC chain {chain_path} did NOT converge (see {sidecar_path}); "
+                  "prediction intervals built from it are not reliable.")
+
         # Resolve sigma: explicit config override first, then the sidecar written by
         # DE-MCMC/DE-CV-MCMC (mirroring the `rho` resolution below), matching `rho`'s
         # existing carry-forward instead of silently defaulting to 0.0 behind a print.
@@ -622,6 +694,7 @@ def forward_mode(data: CommonData) -> None:
             "requested_seed": seed,
             "sample_indices": [int(x) for x in sample_indices],
             "reused_sample_indices_from": reuse_path if reuse_path else None,
+            "source_chain_converged": source_chain_converged,
         }
         with open(meta_filename, 'w') as f:
             json.dump(meta_data, f, indent=2, allow_nan=False)
@@ -1015,61 +1088,59 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     rng = np.random.default_rng(seed)
     p0 = _reflected_walker_init(initial, scale, lo, hi, nwalkers, rng)
 
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability)
-    if seed is not None:
-        # emcee draws its moves from a private RandomState copied from numpy's
-        # *global* state (seeded from system entropy in every new process), so it
-        # must be seeded explicitly for `random_seed` to make the chain reproducible.
-        sampler.random_state = np.random.RandomState(seed).get_state()
+    sampler = _make_sampler(nwalkers, ndim, log_probability, seed)
 
-    print(f"Running MCMC for {nsteps} steps with {nwalkers} walkers...")
-    sampler.run_mcmc(p0, nsteps, progress=True)
-
-    # A rough, full-chain autocorrelation estimate sizes the burn-in; the diagnostic
-    # actually reported is then recomputed on the post-burn-in chain below.
-    tau_rough, _ = _estimate_autocorr(sampler, discard=0)
-    burnin = _resolve_burnin(nsteps, tau_rough, uncertainty_options)
-
-    tau_final, mean_tau = _estimate_autocorr(sampler, discard=burnin)
-    if tau_final is not None:
-        print(f"Estimated autocorrelation time per parameter (post burn-in): {tau_final}")
-
-    strict_convergence = bool(uncertainty_options.get('strict_convergence', False))
-    if tau_final is not None and nsteps < 50 * np.max(tau_final):
-        msg = (f"chain length ({nsteps}) is less than 50x the estimated post-burn-in "
-               f"autocorrelation time ({np.max(tau_final):.1f}).")
-        if strict_convergence:
-            raise RuntimeError(
-                f"MCMC did not converge: {msg} Increase mcmc_steps, or unset "
-                "uncertainty_options.strict_convergence to downgrade this to a warning."
-            )
-        print(f"Warning: {msg} Consider increasing mcmc_steps.")
-
+    print(f"Running MCMC with {nwalkers} walkers until converged (at most {nsteps} steps)...")
+    diag = _run_until_converged(sampler, p0, nsteps, uncertainty_options)
+    burnin = diag["burnin"]
+    tau_final, mean_tau, max_rhat = diag["tau"], diag["mean_tau"], diag["max_rhat"]
+    converged = diag["converged"]
     mean_acc = float(np.mean(sampler.acceptance_fraction))
     print(f"Mean acceptance fraction: {mean_acc:.3f}")
 
-    max_rhat = None
-    try:
-        raw_chain = sampler.get_chain(discard=burnin, flat=False)
-        rhat = _split_rhat(raw_chain)
-        finite_rhat = rhat[np.isfinite(rhat)]
-        if len(finite_rhat) > 0:
-            max_rhat = float(np.max(finite_rhat))
-            print(f"Split-Rhat per parameter: {rhat}")
-            if max_rhat >= 1.01:
-                print(f"Warning: split-Rhat ({max_rhat:.4f}) exceeds 1.01; chain may not have converged.")
-    except Exception as e:
-        print(f"Warning: failed to compute split-Rhat ({e}).")
-
-    # Save raw MCMC chain (flattened, removing burnin)
-    chain = sampler.get_chain(discard=burnin, flat=True)
+    # Keep roughly every (tau/2)-th step after burn-in: consecutive steps are highly
+    # correlated, so this loses no information and keeps the chain file small.
+    thin = max(1, int(0.5 * np.min(tau_final))) if tau_final is not None else 1
+    chain = sampler.get_chain(discard=burnin, thin=thin, flat=True)
     chain_df = pd.DataFrame(chain, columns=[f"par_{j+1}" for j in active_params])
 
     chain_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}.csv")
     chain_df.to_csv(chain_filename, index=False)
-    print(f"Saved MCMC chain (discarded {burnin} burn-in steps) to {chain_filename}")
+    print(f"Saved MCMC chain ({diag['steps']} steps, {burnin} discarded as burn-in, "
+          f"every {thin}th step kept) to {chain_filename}")
     chain_hash = _hash_file(chain_filename)
     chain_n_rows = len(chain)
+
+    convergence = {
+        "converged": converged,
+        "steps_run": diag["steps"],
+        "max_steps": nsteps,
+        "burnin": burnin,
+        "thin": thin,
+        "mean_autocorr_time": mean_tau,
+        "max_autocorr_time": diag["max_tau"],
+        "max_split_rhat": max_rhat,
+        "convergence_rule": f"steps >= {MCMC_TAU_FACTOR} x autocorrelation time and split-Rhat < {MCMC_MAX_RHAT}",
+        "mean_acceptance_fraction": mean_acc,
+        "sampler_move": "emcee.moves.DEMove",
+    }
+    sidecar_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}_meta.json")
+    strict_convergence = bool(uncertainty_options.get('strict_convergence', True))
+    if not converged:
+        msg = (f"MCMC did not converge within {nsteps} steps (rule: "
+               f"{convergence['convergence_rule']}; reached max autocorrelation time "
+               f"{diag['max_tau']}, max split-Rhat {max_rhat}).")
+        if strict_convergence:
+            with open(sidecar_filename, 'w') as f:
+                json.dump({**convergence, "chain_path": chain_filename}, f, indent=4, allow_nan=False)
+            raise RuntimeError(
+                f"{msg} No prediction interval was produced. Increase optimization.mcmc_steps, "
+                "or use a simpler model version (a posterior that will not converge usually "
+                "means the data cannot pin down all the parameters), or set "
+                "uncertainty_options.strict_convergence: false to produce results marked as "
+                f"not converged. Diagnostics: {sidecar_filename}"
+            )
+        print(f"Warning: {msg} Results are marked as NOT CONVERGED.")
 
     # Compute Predictive Uncertainty Envelopes
     print("Generating Predictive Uncertainty Envelopes...")
@@ -1146,12 +1217,8 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         "n_valid_pairs": N,  # N valid points used for variance, proxy for pairs
         "noise_model_used_for_this_run": noise_model,
         "mcmc_walkers": nwalkers,
-        "mcmc_steps": nsteps,
         "mcmc_seed": seed,
-        "burnin": burnin,
-        "mean_acceptance_fraction": mean_acc,
-        "mean_autocorr_time": mean_tau,
-        "max_split_rhat": max_rhat if (max_rhat is not None and np.isfinite(max_rhat)) else None,
+        **convergence,
         "strict_convergence": strict_convergence,
         "on_divergent_draw": on_divergent_draw,
         "max_divergent_fraction": max_divergent_fraction,
@@ -1168,7 +1235,6 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         **coverage,
     }
 
-    sidecar_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}_meta.json")
     with open(sidecar_filename, 'w') as f:
         json.dump(sidecar_data, f, indent=4, allow_nan=False)
     print(f"Saved MCMC metadata sidecar to {sidecar_filename}")

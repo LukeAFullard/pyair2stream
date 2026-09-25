@@ -24,7 +24,7 @@ def test_mcmc_autocorr_invalid_json():
     data.Twat_mod = np.array([1, 2, 3])
     data.eval_mask = None
     data.gap_tolerant = False
-    data.uncertainty_options = {}
+    data.uncertainty_options = {'strict_convergence': False}
     data.date = np.array([[2000, 1, 1], [2000, 1, 2], [2000, 1, 3]])
     data.station = "test"
     data.series = "test"
@@ -49,12 +49,15 @@ def test_mcmc_autocorr_invalid_json():
         class MockSampler:
             def __init__(self, *args, **kwargs):
                 self.acceptance_fraction = np.array([0.5])
-            def run_mcmc(self, *args, **kwargs):
-                pass
-            def get_autocorr_time(self, quiet=False):
+                self.iteration = 0
+                self.random_state = None
+            def run_mcmc(self, state, nsteps, **kwargs):
+                self.iteration += nsteps
+                return state
+            def get_autocorr_time(self, **kwargs):
                 return np.array([np.nan] * 8)
-            def get_chain(self, discard=0, flat=False):
-                return np.zeros((10, 8))
+            def get_chain(self, discard=0, thin=1, flat=False):
+                return np.zeros((80, 8)) if flat else np.zeros((10, 8, 8))
 
         with patch('emcee.EnsembleSampler', MockSampler), \
              patch('pyair2stream.optimization.DE_mode'), \

@@ -213,6 +213,7 @@ def test_mcmc_reproducible_across_processes(tmp_path):
     for run in range(2):
         cfg = _config(tmp_path, name=f'c{run}.yaml', version=3, run_mode='DE-MCMC', random_seed=7,
                       optimization={'n_run': 3, 'n_particles': 3, 'mcmc_walkers': 8, 'mcmc_steps': 40},
+                      uncertainty_options={'strict_convergence': False},
                       paths={'input_data': str(tmp_path / 'cal.csv'), 'output_dir': str(tmp_path / f'o{run}')})
         subprocess.run([sys.executable, '-c', script, cfg], check=True, capture_output=True)
         chains.append(pd.read_csv(tmp_path / f'o{run}' / 'MCMC_chain_S_c_1d.csv').values)

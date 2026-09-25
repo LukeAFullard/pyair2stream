@@ -182,7 +182,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         raise ValueError(f"prediction_interval must be strictly between 0 and 100, got {prediction_interval}")
 
     save_ensemble = bool(uncertainty_options.get('save_ensemble', False))
-    strict_convergence = bool(uncertainty_options.get('strict_convergence', False))
+    strict_convergence = bool(uncertainty_options.get('strict_convergence', True))
 
     # Burn-in override for DE-MCMC/DE-CV-MCMC. Left unset (None), burn-in defaults to
     # max(0.3*mcmc_steps, 5*max(tau)), where tau is the autocorrelation time.
@@ -272,7 +272,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     elif data.runmode in ['DE-MCMC', 'DE-CV-MCMC']:
         data.n_particles = int(opt_config.get('n_particles', 50)) # Using n_particles as population size for initial DE
         data.mcmc_walkers = int(opt_config.get('mcmc_walkers', 32))
-        data.mcmc_steps = int(opt_config.get('mcmc_steps', 1000))
+        data.mcmc_steps = int(opt_config.get('mcmc_steps', 20000))  # maximum; stops earlier once converged
 
     # Bounds must list all 8 parameters when given. The optimizers refuse to run
     # if no parameter is free (e.g. bounds omitted), rather than "calibrating" zeros.

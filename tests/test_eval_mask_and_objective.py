@@ -177,6 +177,7 @@ class TestEvalMaskAndObjective(unittest.TestCase):
         data.n_run = 2
         data.mcmc_walkers = 4
         data.mcmc_steps = 3
+        data.uncertainty_options = {'strict_convergence': False}  # tiny chain: tests other behaviour, not convergence
         data.mineff_index = -1e30
 
         prepare_evaluation(data)
