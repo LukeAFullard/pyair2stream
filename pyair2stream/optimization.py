@@ -237,6 +237,12 @@ def _daily_residual_sigma(data: CommonData, eval_mask: np.ndarray) -> float:
     return float(np.sqrt(np.mean((data.Twat_mod[m] - data.Twat_obs[m]) ** 2)))
 
 
+def _draw_rng(chain_hash: str, chain_row: int) -> np.random.Generator:
+    """Random generator for the residual noise of one posterior draw in a FORWARD run,
+    determined by the chain's content hash and the draw's row in the chain."""
+    return np.random.default_rng([int(chain_hash[:16], 16), int(chain_row)])
+
+
 def _noisy_member(Twat_mod: np.ndarray, noise: np.ndarray) -> np.ndarray:
     """One ensemble member: simulation plus residual noise, NaN where not simulated (gaps)."""
     member = Twat_mod + noise
@@ -588,23 +594,28 @@ def forward_mode(data: CommonData) -> None:
         if noise_model == 'ar1':
             ar1_rho_override = uncertainty_options.get('ar1_rho')
 
+            # Like sigma, rho comes from the calibration run when it is known, so the
+            # interval does not depend on the data being predicted and two scenario runs
+            # use the same noise (their paired difference then cancels it exactly).
+            sidecar_rho = None
+            if os.path.exists(sidecar_path):
+                try:
+                    with open(sidecar_path, 'r') as f:
+                        sidecar_rho = json.load(f).get('rho')
+                except Exception as e:
+                    print(f"Warning: Failed to read rho from sidecar {sidecar_path} ({e}).")
             if ar1_rho_override is not None:
                 rho_used = ar1_rho_override
                 print(f"Using explicit ar1_rho override: {rho_used}")
+            elif sidecar_rho is not None:
+                rho_used = float(sidecar_rho)
+                print(f"Using rho={rho_used:.4f} carried from calibration run {sidecar_path}")
             elif has_obs:
                 eval_mask_for_rho = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=bool)
                 segments_for_rho = _segments_for(data)
                 rho_used = estimate_ar1_rho(data.Twat_mod, data.Twat_obs, eval_mask_for_rho, segments_for_rho)
-                print(f"Using rho={rho_used:.4f} estimated directly from this run's own residuals.")
-            elif os.path.exists(sidecar_path):
-                try:
-                    with open(sidecar_path, 'r') as f:
-                        sidecar_data = json.load(f)
-                    rho_used = sidecar_data.get('rho', 0.0)
-                    print(f"Using rho={rho_used:.4f} carried from calibration run {sidecar_path}")
-                except Exception as e:
-                    print(f"Warning: Failed to read sidecar {sidecar_path} ({e}). Falling back to rho=0.0.")
-                    rho_used = 0.0
+                print(f"Using rho={rho_used:.4f} estimated from this run's own residuals "
+                      "(no rho recorded with the chain).")
             else:
                 print("Warning: No residuals available to estimate rho; falling back to rho=0.0 (equivalent to iid)")
                 rho_used = 0.0
@@ -649,10 +660,15 @@ def forward_mode(data: CommonData) -> None:
                 excluded_draws.append({"draw_index": i, "chain_row": chain_row, "params": params_dict})
                 continue
 
+            # The residual noise of a draw comes from a random stream fixed by the chain
+            # and the chain row, not from this run's generator: two scenario runs that
+            # use the same draws then add the same noise on the same days, so it cancels
+            # in their paired difference, which reflects parameter uncertainty only.
+            draw_rng = _draw_rng(chain_hash, int(sample_indices[i]))
             if noise_model == 'ar1':
-                noise = generate_ar1_noise(data.n_tot, sigma, rho_used, segments_for_noise, rng)
+                noise = generate_ar1_noise(data.n_tot, sigma, rho_used, segments_for_noise, draw_rng)
             else:
-                noise = rng.normal(0, sigma, data.n_tot)
+                noise = draw_rng.normal(0, sigma, data.n_tot)
 
             ensemble_simulations.append(_noisy_member(data.Twat_mod, noise))
 
@@ -695,6 +711,9 @@ def forward_mode(data: CommonData) -> None:
             "sample_indices": [int(x) for x in sample_indices],
             "reused_sample_indices_from": reuse_path if reuse_path else None,
             "source_chain_converged": source_chain_converged,
+            "noise_model": noise_model,
+            "residual_sigma": sigma,
+            "rho": float(rho_used),
         }
         with open(meta_filename, 'w') as f:
             json.dump(meta_data, f, indent=2, allow_nan=False)
@@ -727,7 +746,7 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
     # fitbest must NOT be initialized to zero: the objective function (e.g. NSE)
     # can be strongly negative for poor initial random parameter draws, so a
     # zero-initialized fitbest is never beaten and PSO silently returns the
-    # all-zero initial parameters (see examples/validation/Switzerland/README.md).
+    # all-zero initial parameters.
     fitbest = np.full(n_particles, -1e30, dtype=np.float64)
 
     # We output history to CSV instead of binary

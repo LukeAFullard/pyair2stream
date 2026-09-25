@@ -54,7 +54,8 @@ it. Discharge is held constant so `Qmedia` is trivially exact on both sides
 given -- see `tests/fortran_runner.py`) and every version/integrator stays
 comfortably inside its stability limit (`docs/audit/02_numerical_integration.md`),
 isolating the comparison to the seasonal/calendar terms and each integrator's
-own arithmetic.
+own arithmetic. `test_golden_variable_discharge` (end of file) covers discharge
+that varies from day to day, for the versions that use it.
 """
 
 import os
@@ -274,3 +275,43 @@ def test_funcobj_matches_manual_nse():
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+
+# Discharge varying from day to day, so theta = Q/Qmedia != 1 and the discharge terms
+# (theta**a4, a5, a8) are compared against the Fortran too; the matrix above holds
+# discharge constant. Inputs are rounded to the 6 decimals the Fortran input file
+# carries, and Qmedia is the mean discharge of the record, which is what the Fortran
+# driver computes from the file it is given.
+DISCHARGE_VERSIONS = (4, 7, 8)
+
+
+@pytest.mark.parametrize('version', DISCHARGE_VERSIONS)
+@pytest.mark.parametrize('mod_num', FORTRAN_INTEGRATORS)
+def test_golden_variable_discharge(tmp_path, version, mod_num):
+    day_idx = np.arange(N_TOT_RAW)
+    Tair = np.round(12.0 + 9.0 * np.sin(2.0 * PI * day_idx / 365.25) + 2.0 * np.sin(day_idx * 0.9), 6)
+    Q = np.round(QMEDIA * (1.0 + 0.6 * np.cos(2.0 * PI * (day_idx - 120) / 365.25)
+                           + 0.3 * np.sin(day_idx * 0.37) ** 2), 6)
+    qmedia = float(np.mean(Q))
+
+    input_csv = tmp_path / 'input.csv'
+    dates = pd.date_range('2000-01-01', periods=N_TOT_RAW, freq='D')
+    pd.DataFrame({'Date': dates, 'T_air': Tair, 'Discharge': Q}).to_csv(input_csv, index=False)
+    par = _par_for_version(version)
+    config = {'project_name': 'golden_q', 'station_name': 'GoldenStation', 'run_mode': 'FORWARD',
+              'version': version, 'integrator': mod_num, 'objective_function': 'NSE', 'Qmedia': qmedia,
+              'parameters_forward': [float(x) for x in par],
+              'paths': {'input_data': str(input_csv), 'output_dir': str(tmp_path / 'output')}}
+    config_path = tmp_path / 'config.yaml'
+    with open(config_path, 'w') as f:
+        yaml.safe_dump(config, f)
+    data = read_calibration(config_file=str(config_path))
+    read_Tseries(data, 'c')
+    call_model(data)
+
+    golden = run_fortran_model(version=version, mod_num=mod_num, n_tot_raw=N_TOT_RAW, Tair=Tair, Q=Q,
+                               par=par, Qmedia=qmedia, Twat_initial=4.0)
+    np.testing.assert_allclose(
+        data.Twat_mod[365:], golden, rtol=1e-7, atol=6e-6,
+        err_msg=f"Twat_mod mismatch with variable discharge for version={version}, integrator={mod_num}",
+    )

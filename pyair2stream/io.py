@@ -71,6 +71,10 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     # silently on discharge different from the calibration record (USER_GUIDE §9.1).
     data.mod_num = config.get('integrator', 'CRN')
     _check_choice('integrator', data.mod_num, VALID_INTEGRATORS)
+    if data.mod_num in ('RK4', 'RK2', 'EUL'):
+        print(f"Note: integrator {data.mod_num} is kept to reproduce the original Fortran. With a "
+              "one-day step it can be inaccurate even when stable (by up to about 1 degC for EUL); "
+              "use CRN (the default) unless you need Fortran-identical results (USER_GUIDE §9.1).")
     data.runmode = config.get('run_mode', 'DE')
     _check_choice('run_mode', data.runmode, VALID_RUN_MODES)
     data.prc = np.float64(config.get('prc', 1.0))
@@ -119,6 +123,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     # the discharge signal, which is fatal for scenario studies (abstraction,
     # naturalised flow, climate projection).
     calib_metadata_path = paths.get('calibration_metadata')
+    calib_par_best = None
     if calib_metadata_path is not None:
         if not os.path.exists(calib_metadata_path):
             raise FileNotFoundError(f"calibration_metadata file not found: {calib_metadata_path}")
@@ -145,6 +150,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
                 f"or make sure they match."
             )
         data.Qmedia_user = meta_qmedia
+        calib_par_best = calib_metadata.get('par_best')
         data.calib_theta_min = calib_metadata.get('theta_min')
         data.calib_theta_max = calib_metadata.get('theta_max')
 
@@ -259,7 +265,17 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data.flag_par = np.ones(n_par, dtype=np.bool_)
 
     if data.runmode == 'FORWARD':
-        data.par[:] = _read_8_values(config.get('parameters_forward'), 'parameters_forward')
+        # Without parameters_forward, use the calibrated parameters recorded with the
+        # calibration (no copying by hand).
+        par_forward = config.get('parameters_forward')
+        if par_forward is None and calib_par_best is not None:
+            par_forward = calib_par_best
+            print(f"Using the calibrated parameters recorded in {calib_metadata_path}.")
+        if par_forward is None:
+            raise ValueError("FORWARD mode needs parameters: give parameters_forward (8 numbers), or "
+                             "paths.calibration_metadata pointing at a calibration's "
+                             "calibration_metadata.json to use its calibrated parameters.")
+        data.par[:] = _read_8_values(par_forward, 'parameters_forward')
     elif data.runmode == 'PSO':
         data.n_particles = int(opt_config.get('n_particles', 50))
         data.c1 = np.float64(opt_config.get('c1', 2.0))

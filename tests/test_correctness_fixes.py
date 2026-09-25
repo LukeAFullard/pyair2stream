@@ -15,6 +15,8 @@ error:
 - daily prediction intervals used the residual SD of weekly/monthly means;
 - saved ensembles held ~-999 values on gap days;
 - a FORWARD run overwrote the calibration's `calibration_metadata.json`.
+
+It also covers FORWARD runs taking their parameters from `calibration_metadata.json`.
 """
 
 import json
@@ -177,6 +179,21 @@ def test_forward_run_does_not_overwrite_calibration_metadata(tmp_path):
     forward_mode(data)
     forward(data)
     assert json.loads((out / 'calibration_metadata.json').read_text()) == sentinel
+
+
+def test_forward_takes_parameters_from_calibration_metadata(tmp_path):
+    # Without parameters_forward, a FORWARD run uses the calibrated parameters
+    # recorded in calibration_metadata.json, so nobody has to copy them by hand.
+    _csv(tmp_path / 'cal.csv')
+    meta = {'qmedia': 4.5, 'version': 8, 'integrator': 'CRN', 'par_best': PAR}
+    (tmp_path / 'meta.json').write_text(json.dumps(meta))
+    paths = {'input_data': str(tmp_path / 'cal.csv'), 'output_dir': str(tmp_path / 'out'),
+             'calibration_metadata': str(tmp_path / 'meta.json')}
+    data = _load(tmp_path, run_mode='FORWARD', paths=paths)
+    np.testing.assert_array_equal(data.par, PAR)
+    assert data.Qmedia == 4.5
+    with pytest.raises(ValueError, match='FORWARD mode needs parameters'):
+        _load(tmp_path, run_mode='FORWARD', Qmedia=4.5)
 
 
 # --- Calibration --------------------------------------------------------------
