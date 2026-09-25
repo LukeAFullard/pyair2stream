@@ -430,13 +430,14 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
         # the calibration value on some of those paths.
         data.validation_available = False
 
+    if not filename and p == 'v':
+        print('No validation_data given: validation is skipped.')
+        data.n_tot = 0
+        return
     if not filename or not os.path.exists(filename):
-        if p == 'v':
-            print(f'Validation file not found --> validation is skipped')
-            data.n_tot = 0
-            return
-        else:
-            raise FileNotFoundError(f"Missing required {period} data file: {filename}")
+        # A validation file that was asked for but is missing (e.g. a typo in the
+        # path) must not silently skip validation.
+        raise FileNotFoundError(f"Missing {period} data file: {filename}")
 
     # Read the data using pandas. Expecting columns Date, T_air, T_water, Discharge
     df = pd.read_csv(filename)

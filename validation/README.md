@@ -25,8 +25,8 @@ before its result.
 From the repository root, with the package installed (`pip install -e .`):
 
 ```bash
-python validation/run_all.py            # full suite, about an hour on 4 cores
-python validation/run_all.py --quick    # reduced version of every check, a few minutes
+python validation/run_all.py            # full suite, about 30 minutes on 4 cores
+python validation/run_all.py --quick    # reduced version of every check, about 2 minutes
 python validation/run_all.py --only V2 V6
 ```
 

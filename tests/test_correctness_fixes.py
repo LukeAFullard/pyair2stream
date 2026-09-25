@@ -16,7 +16,8 @@ error:
 - saved ensembles held ~-999 values on gap days;
 - a FORWARD run overwrote the calibration's `calibration_metadata.json`.
 
-It also covers FORWARD runs taking their parameters from `calibration_metadata.json`.
+It also covers FORWARD runs taking their parameters from `calibration_metadata.json`,
+and a missing validation file stopping the run instead of skipping validation.
 """
 
 import json
@@ -194,6 +195,20 @@ def test_forward_takes_parameters_from_calibration_metadata(tmp_path):
     assert data.Qmedia == 4.5
     with pytest.raises(ValueError, match='FORWARD mode needs parameters'):
         _load(tmp_path, run_mode='FORWARD', Qmedia=4.5)
+
+
+def test_missing_validation_file_is_an_error(tmp_path):
+    # A validation_data path that does not exist (e.g. a typo) must not silently
+    # skip validation; leaving validation_data out still skips it.
+    _csv(tmp_path / 'cal.csv')
+    paths = {'input_data': str(tmp_path / 'cal.csv'), 'output_dir': str(tmp_path / 'out'),
+             'validation_data': str(tmp_path / 'typo.csv')}
+    data = _load(tmp_path, paths=paths)
+    with pytest.raises(FileNotFoundError, match='typo.csv'):
+        read_Tseries(data, 'v')
+    data = _load(tmp_path)
+    read_Tseries(data, 'v')
+    assert data.n_tot == 0
 
 
 # --- Calibration --------------------------------------------------------------

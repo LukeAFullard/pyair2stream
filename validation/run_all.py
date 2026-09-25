@@ -1,8 +1,8 @@
 """
 Run the validation suite and write validation/REPORT.md.
 
-    python validation/run_all.py            # full suite (about an hour on 4 cores)
-    python validation/run_all.py --quick    # reduced version of every check (a few minutes)
+    python validation/run_all.py            # full suite (about 30 minutes on 4 cores)
+    python validation/run_all.py --quick    # reduced version of every check (about 2 minutes)
     python validation/run_all.py --only V2 V6
 
 The report, its tables (validation/results/*.csv) and figures
@@ -33,18 +33,23 @@ CHECKS = [("V1", "v1_fortran"), ("V2", "v2_published"), ("V3", "v3_recovery"), (
           ("V5", "v5_real_rivers"), ("V6", "v6_numerics"), ("V7", "v7_gaps"), ("V8", "v8_workflow")]
 
 
-def environment(quick: bool, seconds: float) -> list:
+def git_state() -> str:
+    """The commit being validated, and whether tracked files differ from it."""
     def git(*args):
         try:
             return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True).stdout.strip()
         except OSError:
             return ""
+    dirty = " (with uncommitted changes)" if git("status", "--porcelain", "--untracked-files=no") else ""
+    return f"commit {git('rev-parse', '--short', 'HEAD')}{dirty}"
+
+
+def environment(quick: bool, seconds: float, state: str) -> list:
     import emcee, numba, scipy
     import pyair2stream
-    dirty = " (with uncommitted changes)" if git("status", "--porcelain", "--untracked-files=no") else ""
     return [
         ("Date", datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")),
-        ("pyair2stream", f"{pyair2stream.__version__}, commit {git('rev-parse', '--short', 'HEAD')}{dirty}"),
+        ("pyair2stream", f"{pyair2stream.__version__}, {state} at the start of the run"),
         ("Mode", "quick (reduced)" if quick else "full"),
         ("Run time", f"{seconds / 60:.1f} minutes"),
         ("Python", platform.python_version()),
@@ -193,6 +198,7 @@ def main():
             if not args.only or f.split("_")[0] in {c for c, _ in selected}:
                 os.remove(os.path.join(folder, f))
     results = []
+    state = git_state()
     t0 = datetime.datetime.now()
     for code, module in selected:
         print(f"{code} ...", flush=True)
@@ -207,7 +213,7 @@ def main():
             r.notes.append("Figure failed: " + traceback.format_exc(limit=1))
         print(f"{code} {status(r)} ({r.seconds / 60:.1f} min): {r.summary}", flush=True)
         results.append(r)
-    env = environment(args.quick, (datetime.datetime.now() - t0).total_seconds())
+    env = environment(args.quick, (datetime.datetime.now() - t0).total_seconds(), state)
     write_report(results, env, args.quick)
     failed = [r.code for r in results if r.passed is False]
     print("All checks passed." if not failed else f"FAILED: {', '.join(failed)}")
