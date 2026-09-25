@@ -155,7 +155,9 @@ The [validation suite](validation/README.md) checks this, and its results are in
   parameters but the same predictions (to 0.002 °C). Those published values
   cannot be reproduced exactly by anyone: the original program itself, run with
   its distributed settings, returns different parameters on every run there,
-  because its optimiser stops at a different point each time.
+  because its optimiser stops at a different point each time. The published
+  parameters belong to the Crank–Nicolson scheme the paper used: with RK4 most
+  of them are unstable.
 - **Finds a known truth.** On data made by the model from known parameters,
   calibration predicts other years to within 0.04 °C of the truth (0.06 °C
   with typical gaps in the data).

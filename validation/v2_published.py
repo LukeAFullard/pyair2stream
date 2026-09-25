@@ -41,8 +41,9 @@ UPSTREAM = os.path.join(REPO, "fortran", "upstream")
 
 
 def _original_pso(args):
-    """One calibration by the original Fortran program, set up exactly as its Swiss example."""
-    st, v, run = args
+    """One calibration by the original Fortran program, set up exactly as its Swiss example
+    (optionally with another integrator, e.g. RK4 as listed in the program's readme)."""
+    st, v, run, integ = (*args, "CRN")[:4]
     sys.path.insert(0, REPO)
     from tests.fortran_runner import _build_fortran_binary
     air, water = st.split("_")
@@ -52,28 +53,28 @@ def _original_pso(args):
         for f in (f"{st}_cc.txt", f"{st}_cv.txt", "parameters.txt"):
             shutil.copy(os.path.join(UPSTREAM, "Switzerland", f), os.path.join(d, "Switzerland", f))
         with open(os.path.join(d, "input.txt"), "w") as f:
-            f.write(f"! Main input\nSwitzerland\n{air}\n{water}\nc\n1d\n{v}\n0\nRMS\nCRN\nPSO\n0.60\n"
+            f.write(f"! Main input\nSwitzerland\n{air}\n{water}\nc\n1d\n{v}\n0\nRMS\n{integ}\nPSO\n0.60\n"
                     f"{PSO_SETTINGS['n_run']}\n0\n")
         with open(os.path.join(d, "PSO.txt"), "w") as f:
             f.write(f"! PSO parameters\n{PSO_SETTINGS['n_particles']}\n{PSO_SETTINGS['c1']} {PSO_SETTINGS['c2']}\n"
                     f"{PSO_SETTINGS['wmax']} {PSO_SETTINGS['wmin']}\n")
         subprocess.run(["./air2stream"], cwd=d, input="go\n", capture_output=True, text=True, check=True)
         lines = open(os.path.join(d, "Switzerland", f"output_{v}", f"1_PSO_RMS_{st}_c_1d.out")).read().split("\n")
-    return {"method": "original program (Fortran PSO)", "station": st, "version": v, "run": run,
-            "par": [float(x) for x in lines[0].split()], "calibration RMSE": -float(lines[1])}
+    return {"method": "original program (Fortran PSO)", "integrator": integ, "station": st, "version": v,
+            "run": run, "par": [float(x) for x in lines[0].split()], "calibration RMSE": -float(lines[1])}
 
 
 def _package_pso(args):
     """One calibration by pyair2stream's PSO with the same settings."""
-    st, v, run = args
+    st, v, run, integ = (*args, "CRN")[:4]
     from pyair2stream.optimization import PSO_mode
-    cfg = {"version": v, "integrator": "CRN", "run_mode": "PSO", "objective_function": "RMS", "random_seed": run,
+    cfg = {"version": v, "integrator": integ, "run_mode": "PSO", "objective_function": "RMS", "random_seed": run,
            "parameter_bounds": AUTHORS_BOUNDS, "optimization": dict(PSO_SETTINGS),
            "paths": {"input_data": river_csv(st, "calibration")}}
-    data = load(cfg, f"v2pso_{st}_{v}_{run}")
+    data = load(cfg, f"v2pso_{st}_{v}_{run}_{integ}")
     with quiet():
         PSO_mode(data, seed=run)
-    return {"method": "pyair2stream PSO", "station": st, "version": v, "run": run,
+    return {"method": "pyair2stream PSO", "integrator": integ, "station": st, "version": v, "run": run,
             "par": [float(x) for x in data.par_best], "calibration RMSE": float(-data.finalfit)}
 
 
@@ -173,6 +174,74 @@ def _sim_rmse(csv, v, par, qmedia) -> float:
     return float(np.sqrt(np.mean((sim[m] - obs[m]) ** 2)))
 
 
+# Part E: the same with the RK4 scheme instead of Crank-Nicolson. pyair2stream's PSO is slow, so
+# it is run only for the Mentue's versions 7 and 8, where the parameters trade off.
+RK4_PACKAGE_CASES = (("MAH_2369", 7), ("MAH_2369", 8))
+
+
+def _score_with(args):
+    """RMSE of the published parameters when simulated with CRN and with RK4."""
+    st, v = args
+    cal = river_csv(st, "calibration")
+    out = {}
+    for integ in ("CRN", "RK4"):
+        d = simulate(cal, v, published_params(v, st), integ, mean_discharge(cal), objective="RMS", name=f"v2e_{st}_{v}")
+        obs, sim = d.Twat_obs[365:], d.Twat_mod[365:]
+        m = obs != -999.0
+        ok = np.all(np.isfinite(sim)) and np.max(np.abs(sim)) < 100
+        out[integ] = float(np.sqrt(np.mean((sim[m] - obs[m]) ** 2))) if ok else None
+    return st, v, out
+
+
+def _de_rk4(args):
+    st, v = args
+    d = calibrate(river_csv(st, "calibration"), v, objective="RMS", integrator="RK4", name=f"v2e_de_{st}_{v}")
+    return st, v, list(d.par_best), _rmse(d)
+
+
+def _part_e(ctx):
+    from pyair2stream.config import ACTIVE_PARAMS
+    from v1_fortran import fortran_available
+    cases = [(st, v) for st in RIVERS for v in VERSIONS]
+    with ProcessPoolExecutor(max_workers=ctx.workers) as ex:
+        package = ex.map(_package_pso, [(st, v, run, "RK4") for st, v in RK4_PACKAGE_CASES
+                                        for run in range(1, PSO_RUNS + 1)])
+        original = (ex.map(_original_pso, [(st, v, run, "RK4") for st, v in cases for run in range(1, PSO_RUNS + 1)])
+                    if fortran_available() else [])
+        scores = {(st, v): out for st, v, out in ex.map(_score_with, cases)}
+        de = {(st, v): (par, rmse) for st, v, par, rmse in ex.map(_de_rk4, cases)}
+        runs = list(original) + list(package)
+    fmt = lambda x: "diverged" if x is None else f"{x:.4f}"
+    summary, values = [], []
+    for st, v in cases:
+        act = list(ACTIVE_PARAMS[v])
+        pub = np.array(published_params(v, st), float)
+        diff = lambda par: 100 * float(np.max(np.abs(np.array(par)[act] - pub[act]) / RANGE[act]))
+        row = {"river": RIVERS[st], "version": v,
+               "published parameters, RMSE with CRN": fmt(scores[(st, v)]["CRN"]),
+               "published parameters, RMSE with RK4": fmt(scores[(st, v)]["RK4"]),
+               "DE with RK4: RMSE": round(de[(st, v)][1], 4),
+               "DE with RK4: largest difference from published (% of range)": round(diff(de[(st, v)][0]), 1)}
+        here = [r for r in runs if r["station"] == st and r["version"] == v]
+        for method, short in (("original program (Fortran PSO)", "original program, PSO with RK4"),
+                              ("pyair2stream PSO", "pyair2stream PSO with RK4")):
+            rs = [r for r in here if r["method"] == method]
+            if rs:
+                row[f"{short}: RMSE of each run"] = ", ".join(f"{r['calibration RMSE']:.4f}" for r in rs)
+                row[f"{short}: runs reproducing the published parameters"] = \
+                    f"{sum(diff(r['par']) <= 100 * MATCH for r in rs)} of {len(rs)}"
+        summary.append(row)
+        if st == "MAH_2369":
+            sets = [("published", pub, scores[(st, v)]["CRN"]), ("DE with RK4", np.array(de[(st, v)][0]), de[(st, v)][1])]
+            sets += [(f"{r['method']} with RK4, run {r['run']}", np.array(r["par"]), r["calibration RMSE"]) for r in here]
+            for name, par, rmse in sets:
+                values.append({"river": RIVERS[st], "version": v, "parameters": name,
+                               **{f"a{j + 1}": (f"{par[j]:.3f}" if j in act else "") for j in range(8)},
+                               "calibration RMSE": fmt(rmse), "largest difference from published (% of range)":
+                                   "" if name == "published" else round(diff(par), 1)})
+    return pd.DataFrame(summary), pd.DataFrame(values)
+
+
 def run(ctx) -> Result:
     res = Result(
         code="V2", title="Reproduces published results",
@@ -195,12 +264,16 @@ def run(ctx) -> Result:
                f"Crank-Nicolson, the same parameter ranges; the paper itself does not state the swarm size or "
                f"iterations), {PSO_RUNS} times per river and version, since it seeds its random numbers from "
                f"the clock. pyair2stream's PSO is run {PSO_RUNS} times with the same settings on the Mentue "
-               f"(it is much slower than the Fortran).",
+               f"(it is much slower than the Fortran). (E) The same with the RK4 scheme instead of "
+               f"Crank-Nicolson (the original program's readme lists RK4 in its example): the published "
+               f"parameters are simulated with both schemes, each version is recalibrated by DE with RK4, the "
+               f"original program's PSO is run {PSO_RUNS} times per case with RK4, and pyair2stream's PSO with "
+               f"RK4 for the Mentue's versions 7 and 8.",
         criterion=f"(A) all 30 published RMSE reproduced to within {TOL_A} °C. "
                   f"(B) DE calibration RMSE no worse than published + {TOL_B} °C in all 15 cases. "
                   f"(C) Wherever a recalibrated parameter differs from the published value by more than "
                   f"{MATCH:.0%} of its range, the two parameter sets predict the validation years with RMSE "
-                  f"within {TOL_C} °C of each other. (D) is descriptive.")
+                  f"within {TOL_C} °C of each other. (D) and (E) are descriptive.")
     rows_a, rows_b, rows_c = [], [], []
     de_par = {}
     with Timer() as t:
@@ -227,6 +300,7 @@ def run(ctx) -> Result:
                 rows_c.append(_compare_parameters(st, v, par, d.par_best))
                 de_par[(st, v)] = (list(d.par_best), _rmse(d), rows_c[-1]["calibration RMSE, published"])
         d_summary, d_values = (None, None) if ctx.quick else _part_d(ctx, de_par)
+        e_summary, e_values = (None, None) if ctx.quick else _part_e(ctx)
     a, b, c = pd.DataFrame(rows_a), pd.DataFrame(rows_b), pd.DataFrame(rows_c)
     # The parameter values themselves: published and recalibrated, one column per parameter.
     names = [f"a{j}" for j in range(1, 9)]
@@ -301,5 +375,25 @@ def run(ctx) -> Result:
                 "such run, and cannot be reproduced exactly by anyone, including with the original program. "
                 "pyair2stream's PSO behaves in the same way; its DE calibration (part B) finds a better fit than "
                 "these runs, repeatably.")
+    if e_summary is not None:
+        res.tables += [("E. With the RK4 scheme: the published parameters scored with each scheme, and "
+                        "recalibration with RK4 (RMSE in °C)", e_summary),
+                       ("E. Mentue: parameter values from calibration with RK4", e_values)]
+        crn = e_summary["published parameters, RMSE with CRN"]
+        rk4 = e_summary["published parameters, RMSE with RK4"]
+        n_div = int((rk4 == "diverged").sum())
+        close = e_summary[e_summary["DE with RK4: largest difference from published (% of range)"] <= 100 * MATCH]
+        res.summary += (f" (E) The published parameters are Crank-Nicolson parameters: with RK4 they diverge in "
+                        f"{n_div} of {len(e_summary)} cases and give a different error in the rest. Calibrating "
+                        f"with RK4 returns parameters within {MATCH:.0%} of range of the published ones in "
+                        f"{len(close)} of {len(e_summary)} cases.")
+        res.notes.append(
+            "Part E: the published errors are reproduced exactly with Crank-Nicolson (part A), the scheme the "
+            "paper states, and not with RK4. Where the water temperature responds slowly (the Mentue, versions "
+            "3-5) RK4 and Crank-Nicolson behave alike, so calibrating with RK4 gives parameters close to the "
+            "published ones, though with a different error. Where it responds faster, RK4 becomes unstable "
+            "for the published parameters (it needs the relaxation rate below 2.785 per day), and calibration "
+            "with RK4 is forced to different parameters. Parameters are specific to the scheme they were "
+            "calibrated with (V6).")
     res.figure_data = a
     return res
