@@ -1,0 +1,25 @@
+# Example 06: leave-one-year-out cross-validation of model version 8.
+# From the repository's top folder:
+#   pyair2stream --config examples/06_cross_validation/version8.yaml
+project_name: "cross_validation"
+station_name: "Mentue"
+series: "c"
+time_resolution: "1d"
+version: 8
+integrator: "CRN"
+objective_function: "NSE"
+run_mode: "DE"
+random_seed: 42
+
+paths:
+  input_data: "data/switzerland/MAH_2369_calibration.csv"       # 2002-2009
+  output_dir: "examples/06_cross_validation/output/version8"
+
+parameter_bounds:
+  min: [-5, -5, -5, -1, 0,  0,  0, -1]
+  max: [15, 1.5, 5,  1, 20, 10, 1,  5]
+
+cross_validation:
+  enabled: true
+  unit: "year"             # hide one calendar year at a time
+  skip_first_year: true    # 2002 and 2003 are always used for calibration

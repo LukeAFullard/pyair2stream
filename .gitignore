@@ -11,41 +11,20 @@ test_pp_output/
 coverage.xml
 htmlcov/
 
-# Allow results and plots for Hopelands example
-!examples/Hopelands/**/*.png
-!examples/Hopelands/**/*.out
-# Explicitly keep CSVs ignored in Hopelands
-examples/Hopelands/**/*.csv
 venv/
 *.egg-info/
 dist/
 
-# Allow results and plots for Gap experiment
-!examples/gap_experiment/**/*.png
-!examples/gap_experiment/**/*.out
-# Keep CSVs ignored in Gap experiment
-examples/gap_experiment/**/*.csv
+# Data files are tracked (CSV is ignored elsewhere)
+!data/**/*.csv
+!examples/*/data/*.csv
 
-# Allow results and plots for forward prediction interval example
-!examples/forward_prediction_intervals/**/*.png
-!examples/forward_prediction_intervals/**/*.out
-!examples/forward_prediction_intervals/**/*.json
-# Keep CSVs ignored
-examples/forward_prediction_intervals/**/*.csv
+# Example run outputs are regenerated, never committed; only the figures an
+# example's README shows are kept (examples/<name>/figures/)
+examples/*/output/
+!examples/*/figures/*.png
 
-# Allow specific quickstart inputs
-!examples/quickstart/data/*.csv
-
-# Allow results and plots for Switzerland validation example
-!examples/validation/Switzerland/*.png
-
-# Allow results and plots for optimizer comparison example
-!examples/optimizer_comparison/**/*.png
-!examples/optimizer_comparison/**/*.out
-examples/optimizer_comparison/**/*.csv
-
-# Allow results and plots for MCMC comparison example
-!examples/mcmc_comparison/**/*.png
-!examples/mcmc_comparison/**/*.out
-!examples/mcmc_comparison/**/*.json
-examples/mcmc_comparison/**/*.csv
+# Validation evidence: the report's figures and summary tables are committed
+validation/work/
+!validation/figures/*.png
+!validation/results/*.csv

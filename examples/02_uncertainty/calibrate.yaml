@@ -1,0 +1,24 @@
+# Example 02, step 1: calibrate and measure uncertainty (DE-MCMC).
+# Run from the repository's top folder:
+#   pyair2stream --config examples/02_uncertainty/calibrate.yaml
+project_name: "uncertainty"
+station_name: "Mentue"
+series: "c"
+time_resolution: "1d"
+version: 8
+integrator: "CRN"
+objective_function: "NSE"
+run_mode: "DE-MCMC"        # DE calibration, then MCMC sampling of all plausible parameter sets
+random_seed: 42
+
+paths:
+  input_data: "data/switzerland/MAH_2369_calibration.csv"       # 2002-2009
+  output_dir: "examples/02_uncertainty/output/calibration"
+
+parameter_bounds:
+  min: [-5, -5, -5, -1, 0,  0,  0, -1]
+  max: [15, 1.5, 5,  1, 20, 10, 1,  5]
+
+uncertainty_options:
+  noise_model: "ar1"       # model errors persist from day to day (see README)
+  prediction_interval: 90  # per cent

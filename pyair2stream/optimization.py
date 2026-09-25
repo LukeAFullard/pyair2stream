@@ -1114,6 +1114,9 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     burnin = diag["burnin"]
     tau_final, mean_tau, max_rhat = diag["tau"], diag["mean_tau"], diag["max_rhat"]
     converged = diag["converged"]
+    if converged:
+        print(f"MCMC converged after {diag['steps']} steps (at least {MCMC_TAU_FACTOR} x the "
+              f"autocorrelation time, split-Rhat below {MCMC_MAX_RHAT}).")
     mean_acc = float(np.mean(sampler.acceptance_fraction))
     print(f"Mean acceptance fraction: {mean_acc:.3f}")
 

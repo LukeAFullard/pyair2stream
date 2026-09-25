@@ -1,0 +1,21 @@
+# Calibrate air2stream on the Mentue, a small Swiss river, and test it on later
+# years. Run from the repository's top folder:
+#   pyair2stream --config examples/01_quickstart/config.yaml
+project_name: "quickstart"
+station_name: "Mentue"
+series: "c"
+time_resolution: "1d"
+version: 8                 # the full model (uses air temperature and discharge)
+integrator: "CRN"          # default; stable for any discharge
+objective_function: "NSE"
+run_mode: "DE"             # calibration by Differential Evolution
+random_seed: 42            # makes the calibration exactly repeatable
+
+paths:
+  input_data: "data/switzerland/MAH_2369_calibration.csv"       # 2002-2009
+  validation_data: "data/switzerland/MAH_2369_validation.csv"   # 2010-2012
+  output_dir: "examples/01_quickstart/output"
+
+parameter_bounds:          # ranges used by the original model's authors
+  min: [-5, -5, -5, -1, 0,  0,  0, -1]
+  max: [15, 1.5, 5,  1, 20, 10, 1,  5]

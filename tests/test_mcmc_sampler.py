@@ -23,7 +23,7 @@ from pyair2stream.io import read_calibration, read_Tseries
 from pyair2stream.model import aggregation, statis
 from pyair2stream.optimization import DE_MCMC_mode, _make_sampler, _run_until_converged
 
-QUICKSTART = os.path.join(os.path.dirname(__file__), "..", "examples", "quickstart", "data", "calibration_data.csv")
+MENTUE = os.path.join(os.path.dirname(__file__), "..", "data", "switzerland", "MAH_2369_calibration.csv")
 
 
 # Mean, standard deviations and correlations of the Mentue (MAH-2369) version-8
@@ -81,12 +81,12 @@ def test_adaptive_run_stops_once_converged():
     assert diag["max_rhat"] < optimization.MCMC_MAX_RHAT
 
 
-def _quickstart_data(tmp_path, **uncertainty):
+def _mentue_data(tmp_path, **uncertainty):
     cfg = {"station_name": "S", "version": 3, "run_mode": "DE-MCMC", "random_seed": 1,
            "optimization": {"n_run": 3, "n_particles": 3, "mcmc_walkers": 8, "mcmc_steps": 50},
            "parameter_bounds": {"min": [-5, -5, -5, -1, 0, 0, 0, -1], "max": [15, 1.5, 5, 1, 20, 10, 1, 5]},
            "uncertainty_options": uncertainty,
-           "paths": {"input_data": QUICKSTART, "output_dir": str(tmp_path / "out")}}
+           "paths": {"input_data": MENTUE, "output_dir": str(tmp_path / "out")}}
     with open(tmp_path / "c.yaml", "w") as f:
         yaml.safe_dump(cfg, f)
     data = read_calibration(str(tmp_path / "c.yaml"))
@@ -97,7 +97,7 @@ def _quickstart_data(tmp_path, **uncertainty):
 
 
 def test_unconverged_run_stops_by_default_and_keeps_diagnostics(tmp_path):
-    data = _quickstart_data(tmp_path)
+    data = _mentue_data(tmp_path)
     with pytest.raises(RuntimeError, match="did not converge"):
         DE_MCMC_mode(data, seed=1)
     meta = json.load(open(tmp_path / "out" / "MCMC_chain_S_series_1d_meta.json"))
@@ -106,7 +106,7 @@ def test_unconverged_run_stops_by_default_and_keeps_diagnostics(tmp_path):
 
 
 def test_unconverged_run_can_opt_out_and_is_marked(tmp_path):
-    data = _quickstart_data(tmp_path, strict_convergence=False)
+    data = _mentue_data(tmp_path, strict_convergence=False)
     DE_MCMC_mode(data, seed=1)
     meta = json.load(open(tmp_path / "out" / "MCMC_chain_S_series_1d_meta.json"))
     assert meta["converged"] is False
@@ -114,10 +114,11 @@ def test_unconverged_run_can_opt_out_and_is_marked(tmp_path):
 
 
 def test_saved_chain_is_thinned(tmp_path):
-    data = _quickstart_data(tmp_path, strict_convergence=False)
+    data = _mentue_data(tmp_path, strict_convergence=False)
     data.mcmc_steps = 3000
     DE_MCMC_mode(data, seed=1)
     meta = json.load(open(tmp_path / "out" / "MCMC_chain_S_series_1d_meta.json"))
     rows = len(pd.read_csv(tmp_path / "out" / "MCMC_chain_S_series_1d.csv"))
     assert meta["thin"] >= 1
-    assert rows == (meta["steps_run"] - meta["burnin"] + meta["thin"] - 1) // meta["thin"] * 8
+    # emcee keeps steps burnin + thin - 1, burnin + 2 * thin - 1, ... (8 walkers each)
+    assert rows == (meta["steps_run"] - meta["burnin"]) // meta["thin"] * 8
