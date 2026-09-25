@@ -1,7 +1,7 @@
 """
 Run the validation suite and write validation/REPORT.md.
 
-    python validation/run_all.py            # full suite (about 15 minutes on 4 cores)
+    python validation/run_all.py            # full suite (about 25 minutes on 4 cores)
     python validation/run_all.py --quick    # reduced version of every check (about 2 minutes)
     python validation/run_all.py --only V2 V6
 
