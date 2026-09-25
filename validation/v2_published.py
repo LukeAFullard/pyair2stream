@@ -5,10 +5,12 @@ Part A: the published parameters of every air2stream version, run through
 pyair2stream, must give the published calibration and validation RMSE.
 Part B: calibrating from scratch with DE must fit at least as well as the
 published calibration.
-Part C: the recalibrated parameters are compared with the published ones.
+Part C: the recalibrated parameters are compared with the published ones, and
+the original Fortran program scores both sets.
 Part D: the original calibration method, run as distributed (the Fortran
 program's PSO with the authors' example settings), and pyair2stream's PSO with
 the same settings.
+Part E: the same with the RK4 scheme instead of Crank-Nicolson.
 """
 
 import os
@@ -29,6 +31,7 @@ TOL_A = 0.001    # °C; the published RMSE are rounded to 3 decimals
 TOL_B = 0.002    # °C; DE may not beat the published fit by more than rounding
 MATCH = 0.01     # parameters "match" when each is within 1% of its range of the published value
 TOL_C = 0.01     # °C; where parameters differ, both sets must predict the validation years this closely
+TOL_REF = 1e-4   # °C; the original program's RMSE of a parameter set must equal pyair2stream's this closely
 RANGE = np.array(AUTHORS_BOUNDS["max"], float) - np.array(AUTHORS_BOUNDS["min"], float)
 
 # Part D. The calibration settings distributed with the original code and its Swiss example
@@ -40,10 +43,9 @@ PACKAGE_PSO_STATIONS = ("MAH_2369",)   # pyair2stream's PSO is much slower than 
 UPSTREAM = os.path.join(REPO, "fortran", "upstream")
 
 
-def _original_pso(args):
-    """One calibration by the original Fortran program, set up exactly as its Swiss example
-    (optionally with another integrator, e.g. RK4 as listed in the program's readme)."""
-    st, v, run, integ = (*args, "CRN")[:4]
+def _run_original(st, v, integ, runmode, par=None):
+    """Run the original Fortran program on its own copy of the Swiss example data, set up as
+    distributed; returns the lines of its result file (parameters, then -RMSE)."""
     sys.path.insert(0, REPO)
     from tests.fortran_runner import _build_fortran_binary
     air, water = st.split("_")
@@ -52,16 +54,64 @@ def _original_pso(args):
         os.makedirs(os.path.join(d, "Switzerland"))
         for f in (f"{st}_cc.txt", f"{st}_cv.txt", "parameters.txt"):
             shutil.copy(os.path.join(UPSTREAM, "Switzerland", f), os.path.join(d, "Switzerland", f))
+        if par is not None:
+            with open(os.path.join(d, "Switzerland", "parameters_forward.txt"), "w") as f:
+                f.write(" ".join(f"{x:.12f}" for x in par) + "\n")
         with open(os.path.join(d, "input.txt"), "w") as f:
-            f.write(f"! Main input\nSwitzerland\n{air}\n{water}\nc\n1d\n{v}\n0\nRMS\n{integ}\nPSO\n0.60\n"
+            f.write(f"! Main input\nSwitzerland\n{air}\n{water}\nc\n1d\n{v}\n0\nRMS\n{integ}\n{runmode}\n0.60\n"
                     f"{PSO_SETTINGS['n_run']}\n0\n")
         with open(os.path.join(d, "PSO.txt"), "w") as f:
             f.write(f"! PSO parameters\n{PSO_SETTINGS['n_particles']}\n{PSO_SETTINGS['c1']} {PSO_SETTINGS['c2']}\n"
                     f"{PSO_SETTINGS['wmax']} {PSO_SETTINGS['wmin']}\n")
         subprocess.run(["./air2stream"], cwd=d, input="go\n", capture_output=True, text=True, check=True)
-        lines = open(os.path.join(d, "Switzerland", f"output_{v}", f"1_PSO_RMS_{st}_c_1d.out")).read().split("\n")
+        return open(os.path.join(d, "Switzerland", f"output_{v}", f"1_{runmode}_RMS_{st}_c_1d.out")).read().split("\n")
+
+
+def _original_pso(args):
+    """One calibration by the original Fortran program, set up exactly as its Swiss example
+    (optionally with another integrator, e.g. RK4 as listed in the program's readme)."""
+    st, v, run, integ = (*args, "CRN")[:4]
+    lines = _run_original(st, v, integ, "PSO")
     return {"method": "original program (Fortran PSO)", "integrator": integ, "station": st, "version": v,
             "run": run, "par": [float(x) for x in lines[0].split()], "calibration RMSE": -float(lines[1])}
+
+
+def _original_rmse(args):
+    """Calibration RMSE of a parameter set, computed by the original program (FORWARD mode, CRN)."""
+    st, v, par = args
+    from pyair2stream.config import ACTIVE_PARAMS
+    p = np.zeros(8)
+    p[list(ACTIVE_PARAMS[v])] = np.asarray(par, float)[list(ACTIVE_PARAMS[v])]
+    return -float(_run_original(st, v, "CRN", "FORWARD", p)[1])
+
+
+def _referee(ctx, rows_c):
+    """Part C: the original program scores the published and the recalibrated parameters."""
+    from pyair2stream.config import ACTIVE_PARAMS
+    inv = {river: st for st, river in RIVERS.items()}
+    sets = []
+    for r in rows_c:
+        for source in ("published", "recalibrated"):
+            par = np.zeros(8)
+            for name, x in r[source].items():
+                par[int(name[1]) - 1] = x
+            sets.append((inv[r["river"]], r["version"], par))
+    with ProcessPoolExecutor(max_workers=ctx.workers) as ex:
+        scores = list(ex.map(_original_rmse, sets))
+    rows = []
+    for i, r in enumerate(rows_c):
+        f_pub, f_rec = scores[2 * i], scores[2 * i + 1]
+        gap = f_pub - f_rec
+        rows.append({"river": r["river"], "version": r["version"], "parameters match": r["match"],
+                     "original program: published parameters": round(f_pub, 5),
+                     "original program: recalibrated parameters": round(f_rec, 5),
+                     "pyair2stream: recalibrated parameters": r["calibration RMSE, recalibrated"],
+                     "largest difference, pyair2stream vs original program": round(max(
+                         abs(f_pub - r["calibration RMSE, published"]),
+                         abs(f_rec - r["calibration RMSE, recalibrated"])), 6),
+                     "better fit, by the original program": ("tie" if abs(gap) <= TOL_REF
+                                                             else ("recalibrated" if gap > 0 else "published"))})
+    return pd.DataFrame(rows)
 
 
 def _package_pso(args):
@@ -258,7 +308,9 @@ def run(ctx) -> Result:
                "parameter ranges). (C) The recalibrated parameters are compared with the published ones. "
                "Where they differ, a local search (L-BFGS-B) is started from the published parameters to "
                "see whether their fit can be improved, and both parameter sets predict the validation "
-               "years (with the calibration Qmedia). (D) The paper calibrated with Particle Swarm Optimisation "
+               "years (with the calibration Qmedia). As an independent referee, the original Fortran program "
+               "(FORWARD mode, with its own copy of the data) computes the calibration RMSE of both parameter "
+               "sets. (D) The paper calibrated with Particle Swarm Optimisation "
                "(PSO). The original Fortran program is run in calibration mode exactly as distributed with its "
                "Swiss example (PSO, 500 particles, 500 iterations, c1 = c2 = 2, inertia 0.9 to 0.4, RMSE, "
                f"Crank-Nicolson, the same parameter ranges; the paper itself does not state the swarm size or "
@@ -273,7 +325,9 @@ def run(ctx) -> Result:
                   f"(B) DE calibration RMSE no worse than published + {TOL_B} °C in all 15 cases. "
                   f"(C) Wherever a recalibrated parameter differs from the published value by more than "
                   f"{MATCH:.0%} of its range, the two parameter sets predict the validation years with RMSE "
-                  f"within {TOL_C} °C of each other. (D) and (E) are descriptive.")
+                  f"within {TOL_C} °C of each other; and, where gfortran is available, the original program "
+                  f"computes the same calibration RMSE as pyair2stream for both parameter sets, to within "
+                  f"{TOL_REF} °C. (D) and (E) are descriptive.")
     rows_a, rows_b, rows_c = [], [], []
     de_par = {}
     with Timer() as t:
@@ -299,6 +353,8 @@ def run(ctx) -> Result:
                                "parameters at a bound": ", ".join(params_at_bounds(d.par_best, v)) or "none"})
                 rows_c.append(_compare_parameters(st, v, par, d.par_best))
                 de_par[(st, v)] = (list(d.par_best), _rmse(d), rows_c[-1]["calibration RMSE, published"])
+        from v1_fortran import fortran_available
+        referee = _referee(ctx, rows_c) if fortran_available() else None
         d_summary, d_values = (None, None) if ctx.quick else _part_d(ctx, de_par)
         e_summary, e_values = (None, None) if ctx.quick else _part_e(ctx)
     a, b, c = pd.DataFrame(rows_a), pd.DataFrame(rows_b), pd.DataFrame(rows_c)
@@ -318,6 +374,8 @@ def run(ctx) -> Result:
     differ = c[~c["match"]]
     ok_c = bool(differ.empty or ((differ["validation RMSE, published"]
                                   - differ["validation RMSE, recalibrated"]).abs() <= TOL_C).all())
+    if referee is not None:
+        ok_c &= bool((referee["largest difference, pyair2stream vs original program"] <= TOL_REF).all())
     res.passed = ok_a and ok_b and ok_c
     res.seconds = t.seconds
     res.summary = (f"(A) {'All' if ok_a else 'Not all'} {2 * len(a)} published RMSE values reproduced "
@@ -342,6 +400,34 @@ def run(ctx) -> Result:
             "published parameters were not at the best fit of the calibration data. The two sets predict the "
             "validation years equally well. Individual parameter values of these versions should therefore not "
             "be interpreted on their own (see also V4).")
+    if referee is not None:
+        worst = referee["largest difference, pyair2stream vs original program"].max()
+        res.summary += (f" The original program, scoring both sets itself, gives the same RMSE as pyair2stream "
+                        f"(largest difference {worst:.6f} °C)" if worst <= TOL_REF else
+                        f" The original program's RMSE differs from pyair2stream's by up to {worst:.6f} °C "
+                        f"(see table)")
+        ref = referee[~referee["parameters match"]]
+        if len(ref):
+            verdict = ref["better fit, by the original program"].value_counts()
+            res.summary += (f"; where the parameters differ, it finds the recalibrated parameters the better fit "
+                            f"in {verdict.get('recalibrated', 0)} of {len(ref)} cases")
+            if verdict.get("tie", 0):
+                res.summary += f", a tie (within {TOL_REF} °C) in {verdict['tie']}"
+            if verdict.get("published", 0):
+                res.summary += f", and a worse fit in {verdict['published']}"
+            res.summary += "."
+            if worst <= TOL_REF and not verdict.get("published", 0):
+                res.notes.append(
+                    "Bug or optimiser? The table 'C. The original program as referee' separates the two. A bug in "
+                    "the model, the data handling or the error calculation would show up in part A, where no "
+                    "optimiser is involved; none does. A bug that made a calibration only look better would be "
+                    "exposed by an independent scorer: the original program, given the recalibrated parameters, "
+                    "computes the same RMSE as pyair2stream and agrees that they fit better than the published "
+                    f"ones, or equally well to within {TOL_REF} °C. The differences in the parameters are therefore "
+                    "where the optimisers stopped along a "
+                    "flat valley, not a difference in how the model or its error is computed.")
+        else:
+            res.summary += "."
     worst = (a["val, calibration Qmedia"] - a["published val"]).abs().max()
     res.notes.append(f"With pyair2stream's default of keeping the calibration Qmedia for the validation period, "
                      f"validation RMSE differs from the published value by at most {worst:.3f} °C (only "
@@ -353,6 +439,15 @@ def run(ctx) -> Result:
                    ("C. Recalibrated vs published parameters: fit and predictions", c),
                    ("C. Parameter values, published and recalibrated (blank: not used by the version; "
                     "'NO': a parameter differs by more than 1% of its range)", values)]
+    if referee is not None:
+        res.tables += [("C. The original program as referee: calibration RMSE (°C) of the published and the "
+                        "recalibrated parameters, computed by the original Fortran program from its own copy "
+                        "of the data", referee.assign(**{
+                            col: referee[col].map(lambda x, n=n: f"{x:.{n}f}")
+                            for col, n in (("original program: published parameters", 5),
+                                           ("original program: recalibrated parameters", 5),
+                                           ("pyair2stream: recalibrated parameters", 5),
+                                           ("largest difference, pyair2stream vs original program", 6))}))]
     if d_summary is not None:
         res.tables += [(f"D. Calibration by the original method (PSO, authors' example settings): calibration "
                         f"RMSE (°C) of each run, and runs whose parameters are within {MATCH:.0%} of their range "

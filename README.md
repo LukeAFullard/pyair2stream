@@ -152,10 +152,12 @@ The [validation suite](validation/README.md) checks this, and its results are in
   their ranges, apart from one flat trade-off on the Rhône) and for versions 7
   and 8 on the Dischmabach. For versions 7 and 8 on the other two rivers it
   finds a slightly better fit than the published one, with different
-  parameters but the same predictions (to 0.002 °C). Those published values
-  cannot be reproduced exactly by anyone: the original program itself, run with
-  its distributed settings, returns different parameters on every run there,
-  because its optimiser stops at a different point each time. The published
+  parameters but the same predictions (to 0.002 °C). The original program,
+  given both sets, computes the same errors as pyair2stream and agrees that
+  the new ones fit better, so the difference is not a bug. Those published
+  values cannot be reproduced exactly by anyone: the original program itself,
+  run with its distributed settings, returns different parameters on every run
+  there, because its optimiser stops at a different point each time. The published
   parameters belong to the Crank–Nicolson scheme the paper used: with RK4, 8 of
   the 15 sets are unstable and the rest give different errors. Calibrating with
   RK4 comes close to the published parameters (within 1% of their ranges) only
