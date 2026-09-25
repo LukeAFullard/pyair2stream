@@ -269,7 +269,7 @@ def run(ctx) -> Result:
                 f"{d['replicate spread / posterior SD'].min():.1f}-{d['replicate spread / posterior SD'].max():.1f} "
                 f"times as much between replicates as the posterior's own standard deviation. The sampler was "
                 f"cross-checked on two replicates with a different sampler (emcee's stretch move, table "
-                f"below): the interval ends agree to within {max_check:.0%} of the interval width. The same code gives calibrated "
+                f"above): the interval ends agree to within {max_check:.0%} of the interval width. The same code gives calibrated "
                 f"intervals for version 5. The cause is version 8's parameters trading off against each "
                 f"other (several combinations fit almost equally well), which makes the posterior strongly "
                 f"non-Gaussian; Bayesian parameter intervals are then not guaranteed to have their nominal "
