@@ -1,0 +1,16 @@
+river,version,"published parameters, RMSE with CRN","published parameters, RMSE with RK4",DE with RK4: RMSE,DE with RK4: largest difference from published (% of range),"original program, PSO with RK4: RMSE of each run","original program, PSO with RK4: runs reproducing the published parameters",pyair2stream PSO with RK4: RMSE of each run,pyair2stream PSO with RK4: runs reproducing the published parameters
+Mentue,3,0.7927,0.7755,0.775,0.4,"0.7750, 0.7750, 0.7750",3 of 3,,
+Mentue,4,0.7850,0.7683,0.7677,0.6,"0.7677, 0.7677, 0.7677",3 of 3,,
+Mentue,5,0.6664,0.6484,0.6476,0.6,"0.6476, 0.6476, 0.6476",3 of 3,,
+Mentue,7,0.6371,1.7291,0.6236,11.2,"0.6288, 0.6236, 0.6236",0 of 3,"0.6236, 0.6236, 0.6236",0 of 3
+Mentue,8,0.6450,diverged,0.6152,14.4,"0.6185, 0.6164, 0.6165",0 of 3,"0.6152, 0.6155, 0.6155",0 of 3
+Rhône,3,0.9072,0.9177,0.9084,16.5,"0.9084, 0.9084, 0.9084",0 of 3,,
+Rhône,4,0.9065,diverged,0.9,18.0,"0.9000, 0.9000, 0.9001",0 of 3,,
+Rhône,5,0.8707,diverged,0.8755,29.1,"0.8755, 0.8755, 0.8755",0 of 3,,
+Rhône,7,0.5787,diverged,0.6093,65.2,"0.6193, 0.6296, 0.6187",0 of 3,,
+Rhône,8,0.5792,diverged,0.581,57.5,"0.6163, 0.5822, 0.5964",0 of 3,,
+Dischmabach,3,0.9369,0.8990,0.8904,3.2,"0.8904, 0.8904, 0.8904",0 of 3,,
+Dischmabach,4,0.9328,diverged,0.8793,28.9,"0.8793, 0.8793, 0.8793",0 of 3,,
+Dischmabach,5,0.7407,diverged,0.6978,37.6,"0.6978, 0.6978, 0.6978",0 of 3,,
+Dischmabach,7,0.6349,diverged,0.6377,69.2,"0.6424, 0.6385, 0.6382",0 of 3,,
+Dischmabach,8,0.6316,4.7963,0.6057,50.9,"0.6079, 0.6057, 0.6058",0 of 3,,
