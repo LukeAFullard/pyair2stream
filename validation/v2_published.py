@@ -6,13 +6,23 @@ pyair2stream, must give the published calibration and validation RMSE.
 Part B: calibrating from scratch with DE must fit at least as well as the
 published calibration.
 Part C: the recalibrated parameters are compared with the published ones.
+Part D: the original calibration method, run as distributed (the Fortran
+program's PSO with the authors' example settings), and pyair2stream's PSO with
+the same settings.
 """
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 
-from common import (AUTHORS_BOUNDS, RIVERS, VERSIONS, Result, Timer, calibrate, load, mean_discharge,
+from common import (REPO, AUTHORS_BOUNDS, RIVERS, VERSIONS, Result, Timer, calibrate, load, mean_discharge,
                     params_at_bounds, published_params, published_rmse, quiet, river_csv, simulate)
 
 TOL_A = 0.001    # °C; the published RMSE are rounded to 3 decimals
@@ -20,6 +30,88 @@ TOL_B = 0.002    # °C; DE may not beat the published fit by more than rounding
 MATCH = 0.01     # parameters "match" when each is within 1% of its range of the published value
 TOL_C = 0.01     # °C; where parameters differ, both sets must predict the validation years this closely
 RANGE = np.array(AUTHORS_BOUNDS["max"], float) - np.array(AUTHORS_BOUNDS["min"], float)
+
+# Part D. The calibration settings distributed with the original code and its Swiss example
+# (fortran/upstream: input.txt, PSO.txt, Switzerland/parameters.txt): PSO with 500 particles and
+# 500 iterations, c1 = c2 = 2, inertia 0.9 -> 0.4, RMSE, Crank-Nicolson, the bounds used here.
+PSO_SETTINGS = {"n_particles": 500, "n_run": 500, "c1": 2.0, "c2": 2.0, "wmax": 0.9, "wmin": 0.4}
+PSO_RUNS = 3            # the original program seeds its random numbers from the clock: every run differs
+PACKAGE_PSO_STATIONS = ("MAH_2369",)   # pyair2stream's PSO is much slower than the Fortran; one river
+UPSTREAM = os.path.join(REPO, "fortran", "upstream")
+
+
+def _original_pso(args):
+    """One calibration by the original Fortran program, set up exactly as its Swiss example."""
+    st, v, run = args
+    sys.path.insert(0, REPO)
+    from tests.fortran_runner import _build_fortran_binary
+    air, water = st.split("_")
+    with tempfile.TemporaryDirectory() as d:
+        shutil.copy(_build_fortran_binary(), os.path.join(d, "air2stream"))
+        os.makedirs(os.path.join(d, "Switzerland"))
+        for f in (f"{st}_cc.txt", f"{st}_cv.txt", "parameters.txt"):
+            shutil.copy(os.path.join(UPSTREAM, "Switzerland", f), os.path.join(d, "Switzerland", f))
+        with open(os.path.join(d, "input.txt"), "w") as f:
+            f.write(f"! Main input\nSwitzerland\n{air}\n{water}\nc\n1d\n{v}\n0\nRMS\nCRN\nPSO\n0.60\n"
+                    f"{PSO_SETTINGS['n_run']}\n0\n")
+        with open(os.path.join(d, "PSO.txt"), "w") as f:
+            f.write(f"! PSO parameters\n{PSO_SETTINGS['n_particles']}\n{PSO_SETTINGS['c1']} {PSO_SETTINGS['c2']}\n"
+                    f"{PSO_SETTINGS['wmax']} {PSO_SETTINGS['wmin']}\n")
+        subprocess.run(["./air2stream"], cwd=d, input="go\n", capture_output=True, text=True, check=True)
+        lines = open(os.path.join(d, "Switzerland", f"output_{v}", f"1_PSO_RMS_{st}_c_1d.out")).read().split("\n")
+    return {"method": "original program (Fortran PSO)", "station": st, "version": v, "run": run,
+            "par": [float(x) for x in lines[0].split()], "calibration RMSE": -float(lines[1])}
+
+
+def _package_pso(args):
+    """One calibration by pyair2stream's PSO with the same settings."""
+    st, v, run = args
+    from pyair2stream.optimization import PSO_mode
+    cfg = {"version": v, "integrator": "CRN", "run_mode": "PSO", "objective_function": "RMS", "random_seed": run,
+           "parameter_bounds": AUTHORS_BOUNDS, "optimization": dict(PSO_SETTINGS),
+           "paths": {"input_data": river_csv(st, "calibration")}}
+    data = load(cfg, f"v2pso_{st}_{v}_{run}")
+    with quiet():
+        PSO_mode(data, seed=run)
+    return {"method": "pyair2stream PSO", "station": st, "version": v, "run": run,
+            "par": [float(x) for x in data.par_best], "calibration RMSE": float(-data.finalfit)}
+
+
+def _part_d(ctx, de_par):
+    """Tables for part D. `de_par` maps (station, version) to the DE recalibration."""
+    from pyair2stream.config import ACTIVE_PARAMS
+    from v1_fortran import fortran_available
+    jobs = [(st, v, run) for st in RIVERS for v in VERSIONS for run in range(1, PSO_RUNS + 1)]
+    with ProcessPoolExecutor(max_workers=ctx.workers) as ex:
+        package = ex.map(_package_pso, [j for j in jobs if j[0] in PACKAGE_PSO_STATIONS])
+        runs = list(ex.map(_original_pso, jobs)) if fortran_available() else []
+        runs += list(package)
+    summary, values = [], []
+    for st, river in RIVERS.items():
+        for v in VERSIONS:
+            act = list(ACTIVE_PARAMS[v])
+            pub = np.array(published_params(v, st), float)
+            here = [r for r in runs if r["station"] == st and r["version"] == v]
+            row = {"river": river, "version": v, "published parameters": round(de_par[(st, v)][2], 4)}
+            for method, short in (("original program (Fortran PSO)", "original program"),
+                                  ("pyair2stream PSO", "pyair2stream PSO")):
+                rs = [r for r in here if r["method"] == method]
+                if not rs:
+                    continue
+                diffs = [100 * np.max(np.abs(np.array(r["par"])[act] - pub[act]) / RANGE[act]) for r in rs]
+                row[f"{short}: RMSE of each run"] = ", ".join(f"{r['calibration RMSE']:.4f}" for r in rs)
+                row[f"{short}: runs reproducing the published parameters"] = f"{sum(d <= 100 * MATCH for d in diffs)} of {len(rs)}"
+            row["pyair2stream DE"] = round(de_par[(st, v)][1], 4)
+            summary.append(row)
+            if any(100 * np.max(np.abs(np.array(r["par"])[act] - pub[act]) / RANGE[act]) > 100 * MATCH for r in here):
+                sets = [("published", pub, de_par[(st, v)][2])]
+                sets += [(f"{r['method']}, run {r['run']}", np.array(r["par"]), r["calibration RMSE"]) for r in here]
+                sets.append(("pyair2stream DE", np.array(de_par[(st, v)][0]), de_par[(st, v)][1]))
+                for name, par, rmse in sets:
+                    values.append({"river": river, "version": v, "parameters": name,
+                                   **{f"a{j + 1}": (f"{par[j]:.3f}" if j in act else "") for j in range(8)},
+                                   "calibration RMSE": f"{rmse:.4f}"})
+    return pd.DataFrame(summary), pd.DataFrame(values)
 
 
 def _rmse_function(csv, v, qmedia):
@@ -97,13 +189,20 @@ def run(ctx) -> Result:
                "parameter ranges). (C) The recalibrated parameters are compared with the published ones. "
                "Where they differ, a local search (L-BFGS-B) is started from the published parameters to "
                "see whether their fit can be improved, and both parameter sets predict the validation "
-               "years (with the calibration Qmedia).",
+               "years (with the calibration Qmedia). (D) The paper calibrated with Particle Swarm Optimisation "
+               "(PSO). The original Fortran program is run in calibration mode exactly as distributed with its "
+               "Swiss example (PSO, 500 particles, 500 iterations, c1 = c2 = 2, inertia 0.9 to 0.4, RMSE, "
+               f"Crank-Nicolson, the same parameter ranges; the paper itself does not state the swarm size or "
+               f"iterations), {PSO_RUNS} times per river and version, since it seeds its random numbers from "
+               f"the clock. pyair2stream's PSO is run {PSO_RUNS} times with the same settings on the Mentue "
+               f"(it is much slower than the Fortran).",
         criterion=f"(A) all 30 published RMSE reproduced to within {TOL_A} °C. "
                   f"(B) DE calibration RMSE no worse than published + {TOL_B} °C in all 15 cases. "
                   f"(C) Wherever a recalibrated parameter differs from the published value by more than "
                   f"{MATCH:.0%} of its range, the two parameter sets predict the validation years with RMSE "
-                  f"within {TOL_C} °C of each other.")
+                  f"within {TOL_C} °C of each other. (D) is descriptive.")
     rows_a, rows_b, rows_c = [], [], []
+    de_par = {}
     with Timer() as t:
         for st, river in RIVERS.items():
             cal, val = river_csv(st, "calibration"), river_csv(st, "validation")
@@ -126,6 +225,8 @@ def run(ctx) -> Result:
                                "difference": round(_rmse(d) - pc, 4),
                                "parameters at a bound": ", ".join(params_at_bounds(d.par_best, v)) or "none"})
                 rows_c.append(_compare_parameters(st, v, par, d.par_best))
+                de_par[(st, v)] = (list(d.par_best), _rmse(d), rows_c[-1]["calibration RMSE, published"])
+        d_summary, d_values = (None, None) if ctx.quick else _part_d(ctx, de_par)
     a, b, c = pd.DataFrame(rows_a), pd.DataFrame(rows_b), pd.DataFrame(rows_c)
     # The parameter values themselves: published and recalibrated, one column per parameter.
     names = [f"a{j}" for j in range(1, 9)]
@@ -178,5 +279,27 @@ def run(ctx) -> Result:
                    ("C. Recalibrated vs published parameters: fit and predictions", c),
                    ("C. Parameter values, published and recalibrated (blank: not used by the version; "
                     "'NO': a parameter differs by more than 1% of its range)", values)]
+    if d_summary is not None:
+        res.tables += [(f"D. Calibration by the original method (PSO, authors' example settings): calibration "
+                        f"RMSE (°C) of each run, and runs whose parameters are within {MATCH:.0%} of their range "
+                        f"of the published ones", d_summary)]
+        if len(d_values):
+            res.tables += [("D. Parameter values of every run, where any run differs from the published "
+                            "parameters", d_values)]
+        orig = [c for c in d_summary.columns if c.startswith("original program: runs")]
+        if orig:
+            n_all = d_summary[orig[0]].str.startswith(f"{PSO_RUNS} of").sum()
+            res.summary += (f" (D) The original program, run as distributed, reproduced the published parameters "
+                            f"in all {PSO_RUNS} runs in {n_all} of {len(d_summary)} cases; elsewhere its own runs "
+                            f"differ from each other.")
+            res.notes.append(
+                "Part D answers whether the published results can be reproduced with the original method and "
+                "settings. Where the best fit is sharp, every run of the original program returns the published "
+                "parameters. Where it is flat (the parameters trade off), the original program does not reproduce "
+                "itself: each run stops at a different point along the valley, with a different fit, because PSO "
+                "runs a fixed number of iterations and is seeded from the clock. The published values are one "
+                "such run, and cannot be reproduced exactly by anyone, including with the original program. "
+                "pyair2stream's PSO behaves in the same way; its DE calibration (part B) finds a better fit than "
+                "these runs, repeatably.")
     res.figure_data = a
     return res

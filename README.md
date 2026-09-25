@@ -152,7 +152,10 @@ The [validation suite](validation/README.md) checks this, and its results are in
   their ranges, apart from one flat trade-off on the Rhône) and for versions 7
   and 8 on the Dischmabach. For versions 7 and 8 on the other two rivers it
   finds a slightly better fit than the published one, with different
-  parameters but the same predictions (to 0.002 °C).
+  parameters but the same predictions (to 0.002 °C). Those published values
+  cannot be reproduced exactly by anyone: the original program itself, run with
+  its distributed settings, returns different parameters on every run there,
+  because its optimiser stops at a different point each time.
 - **Finds a known truth.** On data made by the model from known parameters,
   calibration predicts other years to within 0.04 °C of the truth (0.06 °C
   with typical gaps in the data).

@@ -58,7 +58,8 @@ your runs.
 - A `DE-MCMC` run with `cross_validation.enabled` now warns that the block is ignored.
 - **Validation suite** (`validation/run_all.py`, results in
   `validation/REPORT.md`): Fortran equivalence on real inputs, the published
-  results and parameters of Piccolroaz et al. (2016), known-truth recovery, interval
+  results and parameters of Piccolroaz et al. (2016) (including runs of the
+  original program's own calibration), known-truth recovery, interval
   calibration, real-river prediction, numerical accuracy, gaps, and exact
   workflow and scenario answers.
 - **Parameter confidence intervals from cross-validation**: `cv_results.csv`

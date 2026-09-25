@@ -468,7 +468,8 @@ its printed output); all 30 published RMSE values of Piccolroaz et al. (2016)
 reproduced to within 0.001 °C, and their parameters recovered by recalibration
 except where the parameters trade off (versions 7 and 8 on two rivers, where
 recalibration fits slightly better with different parameters and the same
-predictions); recovery of a known truth; calibrated intervals
+predictions, and where the original program itself returns different
+parameters on every run); recovery of a known truth; calibrated intervals
 on synthetic data; out-of-sample performance on three real rivers; numerical
 accuracy; gaps; and exact answers from the workflow and scenario tools. The test
 suite (`pytest tests/`) also compares against the Fortran and checks each
