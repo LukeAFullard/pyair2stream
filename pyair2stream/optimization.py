@@ -25,7 +25,7 @@ from .uncertainty import estimate_ar1_rho, generate_ar1_noise, build_ar1_runs, a
 
 # A near-perfect-fit MCMC log-likelihood is capped at this large but finite value rather
 # than returned as a literal np.inf, which poisons emcee's acceptance-ratio arithmetic
-# (inf - inf = nan). See docs/audit/03_objective_function_and_masks.md, 3.4.
+# (inf - inf = nan).
 MCMC_MAX_LOG_LIKELIHOOD = 1e10
 
 # Number of physical model parameters (a1..a8 in the Fortran reference).
@@ -37,13 +37,22 @@ def _active_params(data: CommonData, n_par: int = N_PAR) -> list:
     return [j for j in range(n_par) if data.flag_par[j] and data.parmin[j] != data.parmax[j]]
 
 
+def _require_free_parameters(data: CommonData) -> None:
+    """Refuse to calibrate when no parameter can vary (e.g. `parameter_bounds` missing)."""
+    if not _active_params(data):
+        raise ValueError(
+            "No parameter is free to calibrate (every parameter has min == max). Set "
+            "`parameter_bounds` (min and max, 8 values each) in the config."
+        )
+
+
 def _segments_for(data: CommonData) -> list:
     """Segments to treat as independent adjacency/AR(1) runs: gap-tolerant segments, or the whole series."""
     return data.segments if data.gap_tolerant else [(0, data.n_tot - 1)]
 
 
 def _iid_log_likelihood(mod_valid: np.ndarray, obs_valid: np.ndarray) -> float:
-    """Concentrated Gaussian log-likelihood assuming iid residuals (docs/audit/04, pre-existing form)."""
+    """Concentrated Gaussian log-likelihood assuming iid residuals."""
     N = len(obs_valid)
     if N == 0:
         return -np.inf
@@ -56,7 +65,7 @@ def _iid_log_likelihood(mod_valid: np.ndarray, obs_valid: np.ndarray) -> float:
 def _ar1_log_likelihood(residuals: np.ndarray, rho: float, runs: list) -> float:
     """
     Concentrated Gaussian log-likelihood accounting for AR(1)-correlated residuals
-    (docs/audit/04_uncertainty_and_mcmc.md, Defect A / 4.1). `rho` is treated as fixed
+. `rho` is treated as fixed
     (estimated once at the DE optimum, not sampled). Each independent run contributes
     its own `0.5*log(1-rho**2)` term, so the correction scales with the number of runs.
     """
@@ -74,8 +83,7 @@ def _reflected_walker_init(initial: np.ndarray, scale: np.ndarray, lo: np.ndarra
     Build the initial emcee walker ball around `initial`, reflecting draws back inside
     `[lo, hi]` instead of clipping them to the bound. Clipping collapses the ensemble's
     spread in any dimension where the DE optimum sits exactly on a bound -- emcee's
-    stretch move cannot generate spread from a degenerate ensemble (docs/audit/04,
-    Defect D / 4.4). Raises if any dimension still ends up with zero spread.
+    stretch move cannot generate spread from a degenerate ensemble. Raises if any dimension still ends up with zero spread.
     """
     ndim = len(initial)
     raw = initial[None, :] + scale[None, :] * rng.standard_normal((nwalkers, ndim))
@@ -90,7 +98,7 @@ def _reflected_walker_init(initial: np.ndarray, scale: np.ndarray, lo: np.ndarra
         raise ValueError(
             "MCMC walker initialisation collapsed to zero spread in active-parameter "
             f"position(s) {list(collapsed)}; emcee's stretch move cannot explore from a "
-            "degenerate ensemble (docs/audit/04_uncertainty_and_mcmc.md, Defect D)."
+            "degenerate ensemble."
         )
     return p0
 
@@ -100,7 +108,7 @@ def _split_rhat(chain: np.ndarray) -> np.ndarray:
     Gelman-Rubin split-Rhat per parameter, from a raw (non-flattened) emcee chain of
     shape (n_iter, n_walkers, n_dim). Splitting each walker's chain in half along the
     iteration axis also flags within-walker non-stationarity, not just between-walker
-    disagreement (docs/audit/04_uncertainty_and_mcmc.md, 4.6).
+    disagreement.
     """
     n_iter, n_chains, n_dim = chain.shape
     n = n_iter // 2
@@ -143,7 +151,7 @@ def _resolve_burnin(nsteps: int, tau_rough, uncertainty_options: dict) -> int:
     Burn-in length in steps. An explicit `uncertainty_options.burnin_fraction` overrides
     everything; otherwise default to `max(0.3*nsteps, 5*max(tau))` when a rough
     autocorrelation estimate is available, else the historical flat 30%
-    (docs/audit/04_uncertainty_and_mcmc.md, 4.6).
+.
     """
     frac = uncertainty_options.get('burnin_fraction')
     if frac is not None:
@@ -153,6 +161,26 @@ def _resolve_burnin(nsteps: int, tau_rough, uncertainty_options: dict) -> int:
     else:
         burnin = int(0.3 * nsteps)
     return int(np.clip(burnin, 0, max(nsteps - 1, 0)))
+
+
+def _daily_residual_sigma(data: CommonData, eval_mask: np.ndarray) -> float:
+    """
+    Root-mean-square of the daily residuals (simulated - observed) on scored days
+    that have an observation. Used as the standard deviation of the daily noise
+    added to prediction intervals, which are produced at daily resolution even
+    when calibration scored weekly/monthly means.
+    """
+    m = eval_mask & (data.Twat_obs != -999.0) & (data.Twat_mod != -999.0)
+    if not np.any(m):
+        return 0.0
+    return float(np.sqrt(np.mean((data.Twat_mod[m] - data.Twat_obs[m]) ** 2)))
+
+
+def _noisy_member(Twat_mod: np.ndarray, noise: np.ndarray) -> np.ndarray:
+    """One ensemble member: simulation plus residual noise, NaN where not simulated (gaps)."""
+    member = Twat_mod + noise
+    member[Twat_mod == -999.0] = np.nan
+    return member
 
 
 def _percentile_envelope(data: CommonData, ensemble_simulations: np.ndarray, prediction_interval: float) -> pd.DataFrame:
@@ -181,7 +209,7 @@ def _percentile_envelope(data: CommonData, ensemble_simulations: np.ndarray, pre
 def _save_ensemble_npz(data: CommonData, ensemble_simulations: np.ndarray, filename: str) -> None:
     """
     Write the raw (n_samples, n_days) ensemble matrix, post-warm-up, as compressed
-    npz (docs/audit/04_uncertainty_and_mcmc.md, 4.2 / Defect B). Percentile bands alone
+    npz. Percentile bands alone
     cannot produce aggregate statistics (a rolling mean of the p5 series is not the p5
     of the rolling mean), so the raw ensemble is needed for degree-days, threshold
     exceedance, and paired scenario differences -- see `pyair2stream/scenario.py`.
@@ -203,7 +231,7 @@ def _export_ensemble_outputs(data: CommonData, ensemble_simulations: np.ndarray,
                               save_ensemble: bool = False) -> None:
     """Write the percentile envelope CSV and, if requested, the raw ensemble npz (both post-warm-up)."""
     env_df = _percentile_envelope(data, ensemble_simulations, prediction_interval)
-    env_df.iloc[365:].to_csv(env_filename, index=False)  # drop the warm-up block (report 05, Defect C)
+    env_df.iloc[365:].to_csv(env_filename, index=False)  # drop the warm-up block
     print(f"Saved predictive uncertainty envelopes to {env_filename}")
 
     if save_ensemble:
@@ -214,7 +242,7 @@ def _export_ensemble_outputs(data: CommonData, ensemble_simulations: np.ndarray,
 
 def _hash_file(path: str) -> str:
     """SHA-256 hex digest of a file's raw bytes -- used as a chain-identity check
-    (docs/audit/12_ensemble_provenance_and_pairing.md) so a paired-scenario pairing
+ so a paired-scenario pairing
     check can detect "this is a different chain" even if the path string reused is
     identical (e.g. the file was regenerated) or different (e.g. a copy)."""
     with open(path, 'rb') as f:
@@ -232,10 +260,9 @@ def _check_ensemble_divergence(n_total: int, excluded: list, on_divergent_draw: 
 
     `excluded` is a list of `{"draw_index", "chain_row", "params"}` dicts, one per
     draw excluded as numerically divergent (non-finite or exceeding
-    `max_plausible_twat`) -- see docs/audit/11_ensemble_divergence_handling.md.
+    `max_plausible_twat`)
     `sample_indices` (if given) is the full array of chain rows requested for this
-    batch, in order; used to compute `valid_draw_indices` (docs/audit/
-    12_ensemble_provenance_and_pairing.md) -- the subset that actually survived
+    batch, in order; used to compute `valid_draw_indices` -- the subset that actually survived
     filtering, which is what determines the row alignment of the saved ensemble
     and is the authoritative check for a paired-scenario comparison.
 
@@ -275,7 +302,7 @@ def _check_ensemble_divergence(n_total: int, excluded: list, on_divergent_draw: 
         raise NumericalDivergenceError(
             f"All {n_total} {label} draws diverged (non-finite or exceeded "
             f"max_plausible_twat); no valid draws remain to build an ensemble/percentile "
-            f"envelope. See docs/audit/11_ensemble_divergence_handling.md."
+            f"envelope. See docs/METHODS.md §12."
         )
 
     if frac_excluded > max_divergent_fraction:
@@ -286,7 +313,7 @@ def _check_ensemble_divergence(n_total: int, excluded: list, on_divergent_draw: 
             f"excluded parameter draws (see the console warning above and the sidecar "
             f"metadata), tighten `parameter_bounds`, or raise "
             f"`uncertainty_options.max_divergent_fraction` if you have verified this is "
-            f"expected. See docs/audit/11_ensemble_divergence_handling.md."
+            f"expected. See docs/METHODS.md §12."
         )
 
     summary = {
@@ -321,8 +348,7 @@ def eval_particle_worker(args):
     `current_r2`/`current_mae` as a side effect inside this (child) process; only
     the explicit return value crosses the process boundary back to the parent, so
     those metrics must be returned here rather than read from `data` afterward --
-    the parent's own `data.current_*` are untouched defaults otherwise (audit
-    report 06, Defect C).
+    the parent's own `data.current_*` are untouched defaults otherwise.
     """
     data, p_vals, n_par = args
     # When passed to a new process via executor.map, 'data' is already a local deserialized copy.
@@ -338,7 +364,7 @@ def forward_mode(data: CommonData) -> None:
     # FORWARD mode does not calibrate, so it may legitimately have no T_water
     # observations at all (a pure climate-projection/scenario run). main() no
     # longer calls aggregation()/statis() unconditionally before dispatching
-    # here (report 05, Defect A) -- statis() raises when there are no
+    # here -- statis() raises when there are no
     # observations, so it must only run when there are some.
     has_obs = False
     for val in data.Twat_obs:
@@ -392,7 +418,7 @@ def forward_mode(data: CommonData) -> None:
         # order. Relying on a shared `random_seed` across two separate CLI
         # invocations/config files is fragile (easy to omit, or to typo two
         # different values) and gives no way to detect the mistake after the fact
-        # (docs/audit/12_ensemble_provenance_and_pairing.md). `reuse_sample_indices_from`
+        #. `reuse_sample_indices_from`
         # instead reuses the literal indices a prior run saved, skipping the random
         # draw (and therefore the global random state) entirely.
         reuse_path = data.forward_options.get('reuse_sample_indices_from')
@@ -432,8 +458,7 @@ def forward_mode(data: CommonData) -> None:
 
         # Resolve sigma: explicit config override first, then the sidecar written by
         # DE-MCMC/DE-CV-MCMC (mirroring the `rho` resolution below), matching `rho`'s
-        # existing carry-forward instead of silently defaulting to 0.0 behind a print
-        # (docs/audit/04_uncertainty_and_mcmc.md, Defect C / 4.3).
+        # existing carry-forward instead of silently defaulting to 0.0 behind a print.
         sigma_override = data.forward_options.get('residual_sigma')
         if sigma_override is not None and float(sigma_override) > 0.0:
             sigma = float(sigma_override)
@@ -456,7 +481,7 @@ def forward_mode(data: CommonData) -> None:
                 "enable_prediction_intervals is True but residual_sigma is 0.0/unavailable "
                 f"(no forward_options.residual_sigma override, and no usable 'sigma' in "
                 f"sidecar {sidecar_path}). A prediction interval with no residual term is "
-                "not a prediction interval -- docs/audit/04_uncertainty_and_mcmc.md, Defect C."
+                "not a prediction interval (docs/METHODS.md §13)."
             )
 
         noise_model = uncertainty_options.get('noise_model', 'iid')
@@ -511,8 +536,7 @@ def forward_mode(data: CommonData) -> None:
 
             # A single bad posterior draw (e.g. a scenario discharge the chain was
             # never fitted under) must not crash the whole ensemble, nor be silently
-            # written into the percentile envelope / raw ensemble -- see
-            # docs/audit/11_ensemble_divergence_handling.md.
+            # written into the percentile envelope / raw ensemble.
             if is_numerically_divergent(data, data.max_plausible_twat):
                 chain_row = int(sample_indices[i])
                 params_dict = {f"par_{j+1}": float(p_vals[j]) for j in active_params}
@@ -522,7 +546,7 @@ def forward_mode(data: CommonData) -> None:
                         f"params={params_dict}) diverged (non-finite or exceeded "
                         f"max_plausible_twat). uncertainty_options.on_divergent_draw='raise'; "
                         f"set 'drop' (the default) to exclude divergent draws instead. See "
-                        f"docs/audit/11_ensemble_divergence_handling.md."
+                        f"docs/METHODS.md §12."
                     )
                 excluded_draws.append({"draw_index": i, "chain_row": chain_row, "params": params_dict})
                 continue
@@ -532,16 +556,14 @@ def forward_mode(data: CommonData) -> None:
             else:
                 noise = rng.normal(0, sigma, data.n_tot)
 
-            noisy_simulation = data.Twat_mod + noise
-
-            ensemble_simulations.append(noisy_simulation)
+            ensemble_simulations.append(_noisy_member(data.Twat_mod, noise))
 
         # `sample_indices` is passed through so `valid_draw_indices` (the chain
         # rows that actually survived divergence filtering, in order -- not the
         # originally-requested `sample_indices`) ends up in the summary: that is
         # what determines the row alignment of the ensemble saved below, and is
         # therefore the authoritative check `scenario.paired_difference_from_files`
-        # uses (docs/audit/12_ensemble_provenance_and_pairing.md).
+        # uses.
         divergence_summary = _check_ensemble_divergence(
             len(samples), excluded_draws, on_divergent_draw, max_divergent_fraction,
             "forward prediction-interval", sample_indices=sample_indices,
@@ -558,12 +580,10 @@ def forward_mode(data: CommonData) -> None:
         # Sidecar metadata for the forward prediction-interval ensemble (the
         # FORWARD-mode equivalent of MCMC_chain_*_meta.json), named to pair with the
         # ensemble .npz (not the envelope CSV) since that is what `scenario.py`
-        # consumes. Records the divergent-draw exclusion (docs/audit/
-        # 11_ensemble_divergence_handling.md) so it is visible without inspecting
+        # consumes. Records the divergent-draw exclusion so it is visible without inspecting
         # console logs, plus the provenance (source chain identity, requested and
         # surviving sample indices) `scenario.paired_difference_from_files` needs to
-        # detect a mismatched pairing between two scenario runs (docs/audit/
-        # 12_ensemble_provenance_and_pairing.md).
+        # detect a mismatched pairing between two scenario runs.
         meta_filename = ensemble_filename.replace('.npz', '_meta.json')
         meta_data = {
             **divergence_summary,
@@ -588,11 +608,11 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
     """
     Replicates SUBROUTINE PSO_mode
     """
+    _require_free_parameters(data)
     print(f'N. particles = {data.n_particles}, N. run = {data.n_run}')
 
     # A local Generator (rather than the legacy `np.random.seed()`, which mutates
-    # global numpy random state and would interfere with any calling script) --
-    # see docs/audit/07_reproducibility_and_provenance.md, 7.1.
+    # global numpy random state and would interfere with any calling script)
     rng = np.random.default_rng(seed)
 
     n_par = 8
@@ -735,11 +755,11 @@ def LH_mode(data: CommonData, seed: Optional[int] = None) -> None:
     """
     Replicates SUBROUTINE LH_mode
     """
+    _require_free_parameters(data)
     print(f'N. run = {data.n_run}')
 
     # A local Generator (rather than the legacy `np.random.seed()`, which mutates
-    # global numpy random state and would interfere with any calling script) --
-    # see docs/audit/07_reproducibility_and_provenance.md, 7.1.
+    # global numpy random state and would interfere with any calling script)
     rng = np.random.default_rng(seed)
 
     n_par = 8
@@ -794,12 +814,12 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
     Differential Evolution + L-BFGS-B hybrid optimization.
     Replaces PSO for a more robust global search followed by a local polish.
     """
+    _require_free_parameters(data)
     print(f'Pop. Size (particles) = {data.n_particles}, Max Generations (runs) = {data.n_run}')
 
     # `seed` is passed directly to `differential_evolution` below, which accepts an
     # explicit seed/Generator without mutating global numpy random state -- no
-    # `np.random.seed()` call needed here (docs/audit/07_reproducibility_and_provenance.md,
-    # 7.1). `minimize`'s L-BFGS-B polish phase is deterministic given its starting point.
+    # `np.random.seed()` call needed here. `minimize`'s L-BFGS-B polish phase is deterministic given its starting point.
     n_par = 8
     output_filename = os.path.join(data.folder, f"0_{data.runmode}_{data.fun_obj}_{data.station}_{data.series}_{data.time_res}.csv")
     history = []
@@ -877,8 +897,9 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
     print(f"L-BFGS-B Finished. Best internal negated objective: {result_bfgs.fun:.6f}")
 
-    # Finalize
-    best_params = result_bfgs.x
+    # Keep the DE solution if the local polish did not improve on it (e.g. an
+    # abnormal L-BFGS-B termination).
+    best_params = result_bfgs.x if result_bfgs.fun <= result_de.fun else result_de.x.copy()
 
     # Ensure fixed parameters are exactly at their fixed values (removing the 1e-12 epsilon if it was added)
     for j in range(n_par):
@@ -905,8 +926,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
 
     `init_scale` is either `None` (the two-mode-agnostic default: a ball scaled to each
     active parameter's bound width) or an explicit per-dimension array of standard
-    deviations (the `DE-CV-MCMC` cross-validation-informed spread) -- see
-    docs/audit/04_uncertainty_and_mcmc.md, 3.3/4.4.
+    deviations (the `DE-CV-MCMC` cross-validation-informed spread).
     """
     nwalkers = data.mcmc_walkers
     nsteps = data.mcmc_steps
@@ -927,14 +947,13 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     best_rho = estimate_ar1_rho(data.Twat_mod, data.Twat_obs, eval_mask, segments)
 
     valid_mask_agg = (data.Twat_obs_agg != -999.0) & eval_mask
-    mod_valid = data.Twat_mod_agg[valid_mask_agg]
-    obs_valid = data.Twat_obs_agg[valid_mask_agg]
-    N = len(obs_valid)
-    best_sigma = float(np.sqrt(np.sum((mod_valid - obs_valid) ** 2) / N)) if N > 0 else 0.0
+    N = int(np.sum(valid_mask_agg))
+    # Daily residual SD at the best fit: the noise level carried to FORWARD runs.
+    best_sigma = _daily_residual_sigma(data, eval_mask)
 
     # Reused across every likelihood evaluation below: observations (and therefore the
     # valid/AR(1)-run structure) do not change while theta is being explored, only the
-    # simulated series does (docs/audit/04_uncertainty_and_mcmc.md, 4.1).
+    # simulated series does.
     ar1_runs = build_ar1_runs(valid_mask_agg, segments) if noise_model == 'ar1' else None
 
     def log_probability(theta):
@@ -952,7 +971,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
             return -np.inf
 
         # Computed on the SAME (aggregated) series the objective function itself scores
-        # (report 03, 3.4) -- daily and aggregated coincide at 1d resolution.
+        # -- daily and aggregated coincide at 1d resolution.
         if noise_model == 'ar1':
             residuals = data.Twat_mod_agg - data.Twat_obs_agg
             return _ar1_log_likelihood(residuals, best_rho, ar1_runs)
@@ -970,13 +989,17 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     p0 = _reflected_walker_init(initial, scale, lo, hi, nwalkers, rng)
 
     sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability)
+    if seed is not None:
+        # emcee draws its moves from a private RandomState copied from numpy's
+        # *global* state (seeded from system entropy in every new process), so it
+        # must be seeded explicitly for `random_seed` to make the chain reproducible.
+        sampler.random_state = np.random.RandomState(seed).get_state()
 
     print(f"Running MCMC for {nsteps} steps with {nwalkers} walkers...")
     sampler.run_mcmc(p0, nsteps, progress=True)
 
     # A rough, full-chain autocorrelation estimate sizes the burn-in; the diagnostic
-    # actually reported is then recomputed on the post-burn-in chain below
-    # (docs/audit/04_uncertainty_and_mcmc.md, 4.6).
+    # actually reported is then recomputed on the post-burn-in chain below.
     tau_rough, _ = _estimate_autocorr(sampler, discard=0)
     burnin = _resolve_burnin(nsteps, tau_rough, uncertainty_options)
 
@@ -1043,7 +1066,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
 
         # A single bad posterior draw must not crash the whole envelope-generation
         # batch, nor be silently written into the percentile envelope / raw
-        # ensemble -- see docs/audit/11_ensemble_divergence_handling.md.
+        # ensemble
         if is_numerically_divergent(data, data.max_plausible_twat):
             chain_row = int(sample_indices[i])
             params_dict = {f"par_{j+1}": float(p_vals[j]) for j in active_params}
@@ -1053,32 +1076,26 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
                     f"diverged (non-finite or exceeded max_plausible_twat). "
                     f"uncertainty_options.on_divergent_draw='raise'; set 'drop' (the default) "
                     f"to exclude divergent draws instead. See "
-                    f"docs/audit/11_ensemble_divergence_handling.md."
+                    f"docs/METHODS.md §12."
                 )
             excluded_draws.append({"draw_index": i, "chain_row": chain_row, "params": params_dict})
             continue
 
-        funcobj(data)  # populate Twat_mod_agg for the aggregated-residual sigma below
-
-        # Estimate sigma from this sample's own residuals, on the same (aggregated)
-        # series the objective scores (report 03, 3.4). The noise itself is still
-        # injected at daily resolution, matching the exported daily envelope.
-        mod_iter = data.Twat_mod_agg[valid_mask_agg]
-        obs_iter = data.Twat_obs_agg[valid_mask_agg]
-        N_iter = len(obs_iter)
-        sigma_iter = float(np.sqrt(np.sum((mod_iter - obs_iter) ** 2) / N_iter)) if N_iter > 0 else 0.0
+        # Residual SD of this draw's own daily residuals: the envelope is daily, so
+        # the noise added to it must be at daily scale (at time_resolution 1d this
+        # equals the RMSE of the scored series).
+        sigma_iter = _daily_residual_sigma(data, eval_mask)
 
         if noise_model == 'ar1':
             noise = generate_ar1_noise(data.n_tot, sigma_iter, best_rho, segments, rng)
         else:
             noise = rng.normal(0, sigma_iter, data.n_tot)
 
-        ensemble_simulations.append(data.Twat_mod + noise)
+        ensemble_simulations.append(_noisy_member(data.Twat_mod, noise))
 
     # `sample_indices` is passed through so `valid_draw_indices` (the chain rows
     # that actually survived divergence filtering, in order) ends up in the
-    # summary -- see the matching note in forward_mode() (docs/audit/
-    # 12_ensemble_provenance_and_pairing.md). DE-MCMC/DE-CV-MCMC don't themselves
+    # summary -- see the matching note in forward_mode(). DE-MCMC/DE-CV-MCMC don't themselves
     # support `reuse_sample_indices_from` (a paired scenario comparison pairs two
     # `forward_mode()` runs, not two calibration runs), but this provenance is
     # still persisted for consistency/auditability.
@@ -1170,7 +1187,7 @@ def DE_MCMC_mode(data: CommonData, seed: Optional[int] = None) -> None:
     print("Phase 3: MCMC Uncertainty Analysis")
     best_params = data.par_best[:n_par].copy()
 
-    # Walker ball scaled to each active parameter's bound width (docs/audit/04, 4.4),
+    # Walker ball scaled to each active parameter's bound width,
     # rather than the previous fixed 1e-4, which is negligible for a wide parameter
     # and can collapse the ensemble's effective spread relative to the posterior.
     _run_mcmc_uncertainty(data, seed, best_params, active_params, init_scale=None, n_par=n_par)

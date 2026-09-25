@@ -73,6 +73,9 @@ parameter_bounds:
         data.name = self.proj_dir
         data.station = "AirStation"
         data.series = "c"
+        # Version 5 does not use discharge, so a missing discharge day is allowed
+        # outside gap-tolerant mode (versions 4/7/8 reject it).
+        data.version = 5
 
         # Create mock Tseries file
         ts_file = os.path.join(self.proj_dir, f"input_timeseries.csv")

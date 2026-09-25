@@ -16,15 +16,25 @@ from .io import read_Tseries
 
 def sensitivity_analysis(data: CommonData):
     """
-    Perform a One-At-A-Time (OAT) local sensitivity analysis.
-    For each parameter, we perturb it by the given percentages of its valid range,
-    and measure the mean absolute change in the predicted water temperatures.
+    One-at-a-time (OAT) local sensitivity analysis around the best-fit parameters.
+
+    Each active parameter a_j is moved to a_j + delta and a_j - delta (clipped to
+    its bounds), with delta = p% of the parameter's own value ('value' mode) or of
+    its bound range ('range' mode), for each p in `sensitivity_perturbations`. The
+    index is
+
+        index = mean|Tw(a_j + delta) - Tw(a_j - delta)| * scale / (actual step)
+
+    (mean over observed, scored days; scale = |a_j| or the bound range; actual
+    step = 2*delta unless clipped). It is the change in simulated water
+    temperature (degC) per 100% change of the parameter ('value') or per one
+    full bound range ('range'). For a p% change, multiply the index by p/100.
     """
     perturbations = data.sensitivity_perturbations if data.sensitivity_perturbations else [1.0]
     # 'value' (default) matches every prior release: delta scales with the parameter's
     # own calibrated value. 'range' scales with (parmax - parmin) instead -- comparable
     # across parameters and immune to the near-zero-value problem, but not backward
-    # compatible, so it is opt-in (docs/audit/06_diagnostics_and_plots.md, Defect E).
+    # compatible, so it is opt-in.
     perturbation_mode = getattr(data, 'sensitivity_perturbation_mode', 'value')
     mode_desc = "each parameter's own calibrated value" if perturbation_mode == 'value' else "each parameter's bound range (parmax - parmin)"
     print(f"Starting Local Sensitivity Analysis (perturbations = {perturbations}% of {mode_desc})...")
@@ -33,9 +43,9 @@ def sensitivity_analysis(data: CommonData):
     sensitivities = []
 
     # Restore the calibration data. read_Tseries also rebuilds data.segments/eval_mask
-    # for it (report 03) -- a previous `data.segments is None` cache here masked a
+    # for it -- a previous `data.segments is None` cache here masked a
     # confirmed bug where a FORWARD-mode validation run's stale segments survived into
-    # the sensitivity analysis (see report 06).
+    # the sensitivity analysis.
     read_Tseries(data, 'c')
 
     # Ensure baseline is run
@@ -99,8 +109,7 @@ def sensitivity_analysis(data: CommonData):
 
             # Track whether clipping made the difference one-sided (only one side hit a
             # bound): the estimate is then first-order rather than second-order, which
-            # is worth flagging rather than silently reporting as a normal "Active" row
-            # (docs/audit/06_diagnostics_and_plots.md, Defect E).
+            # is worth flagging rather than silently reporting as a normal "Active" row.
             plus_clipped = p_plus > data.parmax[j]
             minus_clipped = p_minus < data.parmin[j]
             one_sided_clip = plus_clipped != minus_clipped
@@ -223,11 +232,10 @@ def _plot_sensitivity(data: CommonData, df_sens: pd.DataFrame):
 
     # State the normalisation explicitly: the index is a mean absolute change in
     # simulated water temperature per unit of *normalized* perturbation, and that
-    # normalization differs by mode -- it is not simply an absolute degC scale
-    # (docs/audit/06_diagnostics_and_plots.md, Defect E).
+    # normalization differs by mode -- it is not simply an absolute degC scale.
     mode = getattr(data, 'sensitivity_perturbation_mode', 'value')
-    norm_desc = "% of parameter value" if mode == 'value' else "% of parameter bound range"
-    ax.set_ylabel(f'Sensitivity Index [\u00B0C per {norm_desc}]')
+    norm_desc = "100% change in parameter" if mode == 'value' else "one bound range"
+    ax.set_ylabel(f'Sensitivity index [\u00B0C per {norm_desc}]')
     ax.set_title('Local Parameter Sensitivity')
     ax.set_xticks(x)
     ax.set_xticklabels(parameters, rotation=45)

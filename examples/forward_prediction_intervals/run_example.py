@@ -15,8 +15,7 @@ def run_calibration(smoke=False):
     statis(data)
 
     if smoke:
-        # docs/audit/08_testing_gaps.md, 8.6: a CI "does this still run end to
-        # end" check, not a real calibration -- cut the DE population/MCMC
+        # A CI "does this still run end to end" check, not a real calibration -- cut the DE population/MCMC
         # chain down to the minimum that still exercises every code path
         # (mcmc_walkers must stay >= 2x the 8 active parameters).
         data.n_run = 2
@@ -56,7 +55,7 @@ def run_forward(best_params, historical_sigma, qmedia, noise_model):
     # Pin Qmedia to the value the calibration was fitted under. `future_data.csv`
     # has independently-drawn discharge from `historical_data.csv`, so recomputing
     # Qmedia here would rescale theta and distort the projection — see
-    # docs/audit/01_qmedia_scenario_invariance.md.
+    # USER_GUIDE.md §6 (Qmedia).
     config['Qmedia'] = qmedia
 
     # Enable the chosen noise model. save_ensemble additionally writes the raw
@@ -184,8 +183,7 @@ if __name__ == "__main__":
 
     # --smoke: run with a tiny DE population/MCMC chain instead of the real
     # calibration, to check the whole pipeline still runs end to end without
-    # the multi-minute runtime of the full example (docs/audit/08_testing_gaps.md,
-    # 8.6). Not meant to produce meaningful results or figures.
+    # the multi-minute runtime of the full example. Not meant to produce meaningful results or figures.
     smoke = "--smoke" in sys.argv
 
     # Clean old artifacts

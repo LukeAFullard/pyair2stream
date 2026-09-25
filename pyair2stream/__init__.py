@@ -6,9 +6,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 try:
     # Single source of truth: `pyproject.toml`'s `[tool.poetry].version`, read via
-    # installed package metadata rather than duplicated as a literal string here
-    # (docs/audit/07_reproducibility_and_provenance.md, 7.5 -- the two had drifted
-    # out of sync with each other and with CHANGELOG.md).
+    # installed package metadata rather than duplicated as a literal string here.
     __version__ = version("pyair2stream")
 except PackageNotFoundError:
     # Running from a source checkout with no installed/editable metadata

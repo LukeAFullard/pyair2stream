@@ -9,9 +9,9 @@ the heavy numeric lifting to the Numba-compiled functions.
 import numpy as np
 import math
 import pandas as pd
-from .config import CommonData, PI, TTT
+from .config import CommonData, PI, TTT, ACTIVE_PARAMS
 
-# Sanity bound on simulated water temperature (degC). See docs/audit/02_numerical_integration.md:
+# Sanity bound on simulated water temperature (degC) -- see USER_GUIDE.md §9.1:
 # explicit integrators (RK4/RK2/EUL) can diverge silently on scenario discharge that differs
 # from the calibration record, producing either huge or plausible-but-wrong numbers with no
 # error/NaN. This is the default for `max_plausible_twat`.
@@ -19,10 +19,10 @@ TWAT_SANITY_MAX = 60.0
 
 # One-step amplification-factor stability limits for B = (a3 + a8*theta)/theta**a4, i.e. the
 # ODE's linear decay rate (1/day) times the fixed dt=1 day step. CRN and EXP are unconditionally
-# stable. See docs/audit/02_numerical_integration.md for the derivation.
+# stable. See USER_GUIDE.md §9.1.
 STABILITY_LIMITS = {'EUL': 2.0, 'RK2': 2.0, 'RK4': 2.785, 'CRN': np.inf, 'EXP': np.inf}
 
-# "Error if more than a small fraction of days exceed [the stability limit]" (report 02, 2.2).
+# "Error if more than a small fraction of days exceed [the stability limit]".
 # This screening criterion is conservative, not exact (isolated high-theta days often simulate
 # fine); it is a companion to the divergence guard (check_numerical_divergence), not a
 # replacement for it.
@@ -38,7 +38,7 @@ class NumericalDivergenceError(RuntimeError):
     explicit integrator (RK4/RK2/EUL) stable at the calibration discharge can be
     unstable at a different scenario discharge, producing either astronomical or
     plausible-but-wrong output with no NaN and no warning. See
-    docs/audit/02_numerical_integration.md.
+    USER_GUIDE.md §9.1.
     """
 
 
@@ -46,7 +46,7 @@ def compute_B_series(data: CommonData) -> np.ndarray:
     """
     Compute B(t), the ODE's linear decay rate (1/day), for every day in `data.Q`
     using the current `data.par`. `B * dt` (dt is fixed at 1 day) governs the
-    stability of the explicit integrators (see docs/audit/02_numerical_integration.md).
+    stability of the explicit integrators.
 
     Entries where discharge is invalid (missing sentinel, non-positive) or where the
     computation is undefined (e.g. a negative theta raised to a non-integer power)
@@ -79,7 +79,7 @@ def compute_B_series(data: CommonData) -> np.ndarray:
 
 def stability_report(data: CommonData) -> dict:
     """
-    Pre-flight stability screening for the explicit integrators (report 02, 2.2).
+    Pre-flight stability screening for the explicit integrators.
 
     Computes B = (a3 + a8*theta)/theta**a4 (version-dependent) over the whole
     forcing series and compares it against the current integrator's one-step
@@ -135,7 +135,7 @@ def warn_on_stability(data: CommonData, error_fraction: float = STABILITY_ERROR_
     """
     Run `stability_report` and print a warning (or raise `NumericalDivergenceError`
     if too large a fraction of days exceed the limit) before a user-facing
-    simulation. See docs/audit/02_numerical_integration.md, 2.2.
+    simulation.
     """
     report = stability_report(data)
 
@@ -150,7 +150,7 @@ def warn_on_stability(data: CommonData, error_fraction: float = STABILITY_ERROR_
             f"({report['frac_exceeding']:.1%}) exceed the {report['mod_num']} stability limit "
             f"(B > {report['limit']:.3f}); max B = {report['max_B']:.3f}.{worst_str} "
             f"This is a screening heuristic, not a verdict (see "
-            f"docs/audit/02_numerical_integration.md) -- consider CRN or EXP, especially for "
+            f"USER_GUIDE.md §9.1) -- consider CRN or EXP, especially for "
             f"scenario runs on discharge different from the calibration record."
         )
         if report['frac_exceeding'] > error_fraction:
@@ -159,7 +159,7 @@ def warn_on_stability(data: CommonData, error_fraction: float = STABILITY_ERROR_
                 f"stability limit (B > {report['limit']:.3f}), above the "
                 f"error_fraction={error_fraction:.0%} threshold. Use CRN or EXP for this run, "
                 f"or raise `stability_error_fraction` in the config if you have verified the "
-                f"simulation is stable (see docs/audit/02_numerical_integration.md)."
+                f"simulation is stable (see USER_GUIDE.md §9.1)."
             )
 
     return report
@@ -183,8 +183,7 @@ def is_numerically_divergent(data: CommonData, max_plausible_twat: float = None)
     (`optimization.forward_mode`'s prediction-interval loop,
     `optimization._run_mcmc_uncertainty`'s envelope loop), where a single bad draw
     should be excluded (or the batch aborted, per `on_divergent_draw`) rather than
-    raising and losing the rest of the ensemble -- see
-    docs/audit/11_ensemble_divergence_handling.md.
+    raising and losing the rest of the ensemble (docs/METHODS.md §12).
     """
     if max_plausible_twat is None:
         max_plausible_twat = getattr(data, 'max_plausible_twat', TWAT_SANITY_MAX)
@@ -194,8 +193,7 @@ def is_numerically_divergent(data: CommonData, max_plausible_twat: float = None)
 def check_numerical_divergence(data: CommonData, max_plausible_twat: float = None) -> None:
     """
     Raise `NumericalDivergenceError` if `data.Twat_mod` contains non-finite values
-    or exceeds a physically implausible sanity bound. See
-    docs/audit/02_numerical_integration.md, 2.1.
+    or exceeds a physically implausible sanity bound. See USER_GUIDE.md §9.1.
 
     Intended for user-facing simulation paths (main.forward(), optimization.forward_mode(),
     sensitivity_analysis()) -- NOT the optimizer hot loop, where a diverged trial parameter
@@ -227,7 +225,7 @@ def check_numerical_divergence(data: CommonData, max_plausible_twat: float = Non
         f"max_plausible_twat={max_plausible_twat} (theta={theta}, B={B}), using integrator "
         f"'{data.mod_num}'. Explicit schemes (RK4/RK2/EUL) can be unstable at discharge "
         f"different from the calibration record even when stable at calibration. Use CRN "
-        f"(the default) or EXP for scenario runs. See docs/audit/02_numerical_integration.md."
+        f"(the default) or EXP for scenario runs. See USER_GUIDE.md §9.1."
     )
 
 
@@ -237,7 +235,7 @@ def check_nonpositive_discharge(data: CommonData) -> None:
     non-gap-tolerant record for a model version that evaluates `theta = Q/Qmedia`
     (4, 7, 8): `theta ** a4` divides by zero if the currently loaded `a4 > 0`, and
     silently evaluates to `inf` (no NaN, no error) if `a4 < 0` -- see
-    docs/audit/10_zero_discharge_handling.md. The check does not depend on the sign
+    USER_GUIDE.md §9.2. The check does not depend on the sign
     of `a4` (or on `a4` at all) since it must hold for every parameter vector a
     calibration search might sample, not just the one currently loaded.
 
@@ -286,7 +284,7 @@ def check_nonpositive_discharge(data: CommonData) -> None:
         "(changes calibration semantics broadly, not just for this case), or (3) "
         "set `min_theta_floor: <small positive epsilon>` in the config to clamp "
         "theta away from zero instead of raising. See "
-        "docs/audit/10_zero_discharge_handling.md."
+        "USER_GUIDE.md §9.2."
     )
 
 
@@ -374,7 +372,7 @@ def prepare_evaluation(data: CommonData) -> None:
     workflow, and that a `data.segments is None` staleness check let stale
     segments survive a later mutation of the underlying data. Idempotent and
     cheap enough to call unconditionally rather than cached with an `is None`
-    check. See docs/audit/03_objective_function_and_masks.md.
+    check.
     """
     detect_segments(data)
 
@@ -410,6 +408,12 @@ def _run_integration(data: CommonData, segments, p):
     elif mod_num == 'EUL': mod_num_idx = 3
     elif mod_num == 'EXP': mod_num_idx = 4
     else: raise ValueError(f"Unknown mod_num {mod_num}")
+
+    # Zero the parameters this version does not use. The CRN branch evaluates the
+    # full 8-parameter equation (as the Fortran does), so a stray non-zero unused
+    # parameter would otherwise change the physics for CRN but not for RK4/EXP.
+    active = ACTIVE_PARAMS[data.version]
+    p = np.array([p[0]] + [p[j + 1] if j in active else 0.0 for j in range(8)], dtype=np.float64)
 
     segments_arr = np.array(segments, dtype=np.int32)
     theta_floor = data.min_theta_floor if data.min_theta_floor is not None else 0.0
@@ -476,8 +480,7 @@ def aggregation(data: CommonData) -> None:
     A day only contributes to a window if it also passes `data.eval_mask` (warm-up
     and, in gap-tolerant mode, each segment's `warmup_drop_days`). Without this,
     `statis()` (which sums every emitted window) and `funcobj()` (which additionally
-    skips days failing `eval_mask`) score different samples -- see
-    docs/audit/03_objective_function_and_masks.md, Defect A.
+    skips days failing `eval_mask`) would score different samples.
     """
     eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
 
@@ -527,9 +530,7 @@ def aggregation(data: CommonData) -> None:
             # there too) that silently corrupts memory instead of the IndexError
             # Python raises. Clamped to the last valid index, which only
             # changes behaviour for that trailing partial window -- a full
-            # window's own `pos_tmp` is never affected (see docs/audit/
-            # 08_testing_gaps.md, 8.3, where extending aggregation test
-            # coverage to '1w'/'2w' surfaced this).
+            # window's own `pos_tmp` is never affected.
             pos_tmp = min(i + int(np.ceil(0.5 * n_days)) - 1, data.n_tot - 1)
 
             for j in range(n_days):

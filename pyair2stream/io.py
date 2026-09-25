@@ -13,8 +13,27 @@ import numpy as np
 import pandas as pd
 from typing import Tuple
 
-from .config import CommonData
+from .config import (
+    CommonData, ACTIVE_PARAMS, VALID_VERSIONS, VALID_RUN_MODES, VALID_INTEGRATORS,
+    VALID_OBJECTIVES,
+)
 from .model import prepare_evaluation, check_nonpositive_discharge
+
+
+def _check_choice(name: str, value, allowed) -> None:
+    if value not in allowed:
+        raise ValueError(f"Invalid {name} {value!r}. Must be one of: {', '.join(map(str, allowed))}.")
+
+
+def _read_8_values(values, name: str) -> np.ndarray:
+    """Return a list of exactly 8 numbers from the config as a float array."""
+    if not isinstance(values, (list, tuple)) or len(values) != 8:
+        raise ValueError(
+            f"{name} must be a list of exactly 8 numbers (a1..a8), got {values!r}. "
+            "Give a value for every parameter; the ones your model version does not "
+            "use are set to zero automatically."
+        )
+    return np.array([np.float64(x) for x in values], dtype=np.float64)
 
 def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     """
@@ -34,30 +53,28 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data.air_station = config.get('station_name', 'AirStation')
     data.water_station = config.get('water_station', config.get('station_name', 'WaterStation'))
     data.series = config.get('series', 'series')
-    data.time_res = config.get('time_resolution', '1d')
-    # `aggregation()` only understands exactly '1d' (daily), or 1-2 digits
-    # followed by 'w' (weeks) or 'm' (months, e.g. '2w', '1m'). Anything else
-    # used to fail deep inside aggregation(): a value of the "wrong" length
-    # (e.g. 'daily') raised an opaque UnboundLocalError on `unit`, and a
-    # 2/3-char value with an unrecognised unit (e.g. '2d') silently printed
-    # "Error: variable time_res", left data.n_dat at 0, and raised inside
-    # statis() with an unrelated message. Validated explicitly here instead,
-    # with a clear, actionable error (docs/audit/08_testing_gaps.md, 8.3).
-    if not re.fullmatch(r'1d|\d{1,2}[wm]', data.time_res):
+    data.time_res = str(config.get('time_resolution', '1d'))
+    # `aggregation()` understands exactly '1d' (daily), 'Nw' (N = 1-99 weeks) and
+    # '1m' (calendar months). Like the Fortran, the monthly branch ignores N, so
+    # e.g. '2m' would silently be scored as '1m' -- it is rejected instead.
+    if not re.fullmatch(r'1d|\d{1,2}w|1m', data.time_res) or data.time_res in ('0w', '00w'):
         raise ValueError(
-            f"Invalid time_resolution '{data.time_res}'. Must be '1d' (daily), or "
-            "1-2 digits followed by 'w' (weeks) or 'm' (months), e.g. '1w', '2w', '1m'."
+            f"Invalid time_resolution '{data.time_res}'. Must be '1d' (daily), "
+            "'Nw' (N weeks, e.g. '1w', '2w') or '1m' (monthly)."
         )
     data.version = int(config.get('version', 8))
+    _check_choice('version', data.version, VALID_VERSIONS)
     data.Tice_cover = np.float64(config.get('Tice_cover', 0.0))
     data.fun_obj = config.get('objective_function', 'NSE')
+    _check_choice('objective_function', data.fun_obj, VALID_OBJECTIVES)
     # CRN is unconditionally stable; the explicit schemes (RK4/RK2/EUL) can diverge
-    # silently on discharge different from the calibration record (audit report 02).
+    # silently on discharge different from the calibration record (USER_GUIDE §9.1).
     data.mod_num = config.get('integrator', 'CRN')
+    _check_choice('integrator', data.mod_num, VALID_INTEGRATORS)
     data.runmode = config.get('run_mode', 'DE')
+    _check_choice('run_mode', data.runmode, VALID_RUN_MODES)
     data.prc = np.float64(config.get('prc', 1.0))
-    # Top-level calibration seed (docs/audit/07_reproducibility_and_provenance.md,
-    # 7.1): threaded through to whichever optimizer `run_optimizer` dispatches to.
+    # Top-level calibration seed: threaded through to whichever optimizer `run_optimizer` dispatches to.
     # Without it, two runs of the same config produce different `par_best` (DE's
     # own global-state RNG, PSO/LATHYP's global `np.random`) with no way to
     # reproduce a published result.
@@ -84,7 +101,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
             f"Invalid calendar '{data.calendar}'. Must be one of: 'standard', 'noleap', "
             "'360_day'. GCM output on a non-standard calendar (no leap days, or 12 "
             "uniform 30-day months) must declare it explicitly rather than being padded "
-            "to fake Gregorian dates -- see docs/audit/05_cli_and_io_correctness.md."
+            "to fake Gregorian dates -- see USER_GUIDE.md §5."
         )
 
     # Paths mapping
@@ -97,7 +114,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         data.Qmedia_user = float(qmedia_user)
 
     # `paths.calibration_metadata` pins Qmedia (and cross-checks version/integrator)
-    # to the values a prior calibration run was fitted under. See audit report 01:
+    # to the values a prior calibration run was fitted under (USER_GUIDE.md §6):
     # recomputing Qmedia from scenario discharge rescales theta and silently cancels
     # the discharge signal, which is fatal for scenario studies (abstraction,
     # naturalised flow, climate projection).
@@ -168,7 +185,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     strict_convergence = bool(uncertainty_options.get('strict_convergence', False))
 
     # Burn-in override for DE-MCMC/DE-CV-MCMC. Left unset (None), burn-in defaults to
-    # max(0.3*mcmc_steps, 5*max(tau)) -- see docs/audit/04_uncertainty_and_mcmc.md, 4.6.
+    # max(0.3*mcmc_steps, 5*max(tau)), where tau is the autocorrelation time.
     burnin_fraction = uncertainty_options.get('burnin_fraction', None)
     if burnin_fraction is not None:
         burnin_fraction = float(burnin_fraction)
@@ -177,7 +194,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
 
     # Per-draw divergence handling for the posterior/prediction-interval ensemble
     # loops (forward_mode's prediction-interval block, _run_mcmc_uncertainty's
-    # envelope loop) -- see docs/audit/11_ensemble_divergence_handling.md.
+    # envelope loop)
     # 'drop' (default): exclude a divergent draw from the ensemble and report the
     # count; 'raise': fail loudly on the first divergent draw instead.
     on_divergent_draw = uncertainty_options.get('on_divergent_draw', 'drop')
@@ -221,9 +238,8 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
 
     opt_config = config.get('optimization', {})
     data.n_run = int(opt_config.get('n_run', opt_config.get('n_runs', 100)))
-    # mineff_index is read from the config root, NOT nested under `optimization:`
-    # — this matches USER_GUIDE.md. An earlier version incorrectly looked for it
-    # under opt_config, which meant it silently always fell back to its default.
+    # Accepted for compatibility with Fortran-style configs but not used: the
+    # 0_*.csv history always records every evaluated parameter set.
     data.mineff_index = np.float64(config.get('mineff_index', 0.0))
 
     data.station = data.air_station
@@ -243,10 +259,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data.flag_par = np.ones(n_par, dtype=np.bool_)
 
     if data.runmode == 'FORWARD':
-        forward_params = config.get('parameters_forward', [])
-        if len(forward_params) > 0:
-            vals = [np.float64(x) for x in forward_params]
-            data.par[:min(len(vals), n_par)] = vals[:min(len(vals), n_par)]
+        data.par[:] = _read_8_values(config.get('parameters_forward'), 'parameters_forward')
     elif data.runmode == 'PSO':
         data.n_particles = int(opt_config.get('n_particles', 50))
         data.c1 = np.float64(opt_config.get('c1', 2.0))
@@ -261,49 +274,36 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         data.mcmc_walkers = int(opt_config.get('mcmc_walkers', 32))
         data.mcmc_steps = int(opt_config.get('mcmc_steps', 1000))
 
-    bounds = config.get('parameter_bounds', {})
-    vals_min = bounds.get('min', [])
-    vals_max = bounds.get('max', [])
+    # Bounds must list all 8 parameters when given. The optimizers refuse to run
+    # if no parameter is free (e.g. bounds omitted), rather than "calibrating" zeros.
+    bounds = config.get('parameter_bounds') or {}
+    if bounds:
+        data.parmin[:] = _read_8_values(bounds.get('min'), 'parameter_bounds.min')
+        data.parmax[:] = _read_8_values(bounds.get('max'), 'parameter_bounds.max')
+        bad = [j + 1 for j in range(n_par) if data.parmin[j] > data.parmax[j]]
+        if bad:
+            raise ValueError(f"parameter_bounds: min > max for parameter(s) a{bad}.")
 
-    if len(vals_min) > 0:
-        data.parmin[:min(len(vals_min), n_par)] = [np.float64(x) for x in vals_min[:min(len(vals_min), n_par)]]
-    if len(vals_max) > 0:
-        data.parmax[:min(len(vals_max), n_par)] = [np.float64(x) for x in vals_max[:min(len(vals_max), n_par)]]
+    # Parameters the chosen version does not use are fixed at zero (as in the
+    # Fortran). This includes `parameters_forward`: the CRN integrator evaluates
+    # the full 8-parameter equation and relies on unused parameters being zero,
+    # so a non-zero value there would otherwise change the physics.
+    inactive = [j for j in range(n_par) if j not in ACTIVE_PARAMS[data.version]]
+    data.parmin[inactive] = 0.0
+    data.parmax[inactive] = 0.0
+    data.flag_par[inactive] = False
+    if data.runmode == 'FORWARD':
+        ignored = [j + 1 for j in inactive if data.par[j] != 0.0]
+        if ignored:
+            print(f"Warning: version {data.version} does not use parameter(s) a{ignored}; "
+                  "their values in parameters_forward are ignored (set to 0).")
+        data.par[inactive] = 0.0
 
-    if data.runmode in ['PSO', 'LATHYP', 'DE', 'DE-MCMC', 'DE-CV-MCMC', 'FORWARD']:
-        # NOTE: 0-indexed in Python vs 1-indexed in Fortran
-        # Fortran: parmin(4)=0 -> Python: parmin[3]=0
-
-        if data.version == 3:
-            data.parmin[3:8] = 0.0
-            data.parmax[3:8] = 0.0
-            data.flag_par[3:8] = False
-        elif data.version == 4:
-            data.parmin[4:8] = 0.0
-            data.parmax[4:8] = 0.0
-            data.flag_par[4:8] = False
-        elif data.version == 5:
-            data.parmin[3] = 0.0; data.parmax[3] = 0.0; data.flag_par[3] = False
-            data.parmin[4] = 0.0; data.parmax[4] = 0.0; data.flag_par[4] = False
-            data.parmin[7] = 0.0; data.parmax[7] = 0.0; data.flag_par[7] = False
-        elif data.version == 7:
-            data.parmin[3] = 0.0; data.parmax[3] = 0.0; data.flag_par[3] = False
-        # Note (see README "Known deviations", audit report 07 Defect B): the
-        # upstream Fortran source has a duplicated 'IF (version == 4)' block
-        # (AIR2STREAM_READ.f90:81-87) whose comment misleadingly says "8
-        # parameters". The guard is 'version == 4', not 'version == 8' -- the
-        # block is byte-identical to the one a few lines above and never
-        # executes for version 8. It is a cosmetic copy-paste typo in a
-        # comment, not a physics bug: parameters 5-8 are never zeroed for
-        # version 8 in the Fortran either. pyair2stream omits the redundant
-        # (no-op) duplicate block; version 8 uses all 8 free parameters, same
-        # as upstream.
-
-        out_param_path = os.path.join(data.folder, 'parameters.txt')
-        with open(out_param_path, 'w') as f:
-            f.write(f"{n_par}   !number of parameters\n")
-            f.write(" ".join(f"{x:.5f}" for x in data.parmin) + "\n")
-            f.write(" ".join(f"{x:.5f}" for x in data.parmax) + "\n")
+    out_param_path = os.path.join(data.folder, 'parameters.txt')
+    with open(out_param_path, 'w') as f:
+        f.write(f"{n_par}   !number of parameters\n")
+        f.write(" ".join(f"{x:.5f}" for x in data.parmin) + "\n")
+        f.write(" ".join(f"{x:.5f}" for x in data.parmax) + "\n")
 
     # Store paths in data to pass to read_Tseries
     data._input_data_path_cal = paths.get('input_data', None)
@@ -395,10 +395,10 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
             from the data just loaded. Pass False to freeze `data.Qmedia` at its
             current value, e.g. when loading the validation period so it is
             scored under the same normalisation the parameters were fitted with
-            (see audit report 01).
+.
     """
     # Invalidate segments/eval_mask from any previous load up front: they must never
-    # be silently reused against data they were not built from (report 03, 3.2).
+    # be silently reused against data they were not built from.
     data.segments = None
     data.eval_mask = None
 
@@ -411,7 +411,7 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
         # Pessimistic default: only set True once validation has been fully and
         # successfully loaded below. Every early-return path in this function
         # must leave this False rather than overload data.n_tot, which stays at
-        # the calibration value on some of those paths (report 05, Defect B).
+        # the calibration value on some of those paths.
         data.validation_available = False
 
     if not filename or not os.path.exists(filename):
@@ -431,11 +431,9 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
 
     date_col = pd.to_datetime(df['Date'])
 
-    # Validate Start Date. A projection period rarely starts on 1 January -- the
-    # constraint exists only so the warm-up block's tt values (hardcoded to
-    # (j+1)/365.0) line up with the real record; FORWARD mode's own parameters
-    # are already fitted, so this alignment does not matter there (report 05,
-    # Defect D).
+    # Calibration/validation records must start on 1 January (as in the Fortran).
+    # FORWARD runs may start on any date; the warm-up block's seasonal phase is then
+    # taken from the rows it copies (see the tt construction below).
     if (
         not data.gap_tolerant
         and data.runmode != 'FORWARD'
@@ -472,6 +470,13 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
             df['Discharge'] = -999.0
         else:
             raise ValueError(f"Missing 'Discharge' column in {filename}")
+
+    # A blank cell and the legacy -999 marker both mean "missing". Normalise to
+    # NaN first so the completeness checks below catch both; otherwise a -999 in
+    # T_air would be simulated as an air temperature of -999 degC.
+    for col in ('T_air', 'T_water', 'Discharge'):
+        if col in df.columns:
+            df[col] = df[col].replace(-999.0, np.nan)
 
     if not data.gap_tolerant:
         if df['T_air'].isnull().any():
@@ -535,11 +540,8 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
     data.Twat_obs[0:365] = Twat_obs[:365]
     data.Q[0:365] = Q[:365]
 
-    # Rewrite tt calculation to use calendar dates.
-    # The first 365 days (warm-up) keep existing logic: 1..365 / 365.0. Left
-    # unchanged regardless of `calendar` -- the warm-up-block design is out of
-    # scope for report 05 (it is Fortran-equivalent and the golden tests depend
-    # on it).
+    # Seasonal phase tt = day-of-year / days-in-year. Warm-up block: (j+1)/365,
+    # as in the Fortran (re-aligned below if the record does not start on 1 Jan).
     for j in range(365):
         data.tt[j] = np.float64((j + 1) / 365.0)
 
@@ -561,13 +563,21 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
         # noleap / 360_day: compute tt from ROW POSITION against the declared
         # calendar's fixed day-count, not from the (possibly padded/fake)
         # Gregorian dates in `Date` -- those would silently misalign the
-        # seasonal cosine term against the true day of year (report 05, Defect
-        # D). Row 365 (the first real day) restarts the annual cycle at day 1,
+        # seasonal cosine term against the true day of year. Row 365 (the first real day) restarts the annual cycle at day 1,
         # matching the warm-up block's own convention above.
         days_in_year = 365 if data.calendar == 'noleap' else 360
         for i in range(365, n_tot):
             doy = ((i - 365) % days_in_year) + 1
             data.tt[i] = np.float64(doy / float(days_in_year))
+
+    # The warm-up block copies the first 365 rows of forcing, so it must also copy
+    # their seasonal phase. The Fortran's (j+1)/365 is only correct for a record
+    # that starts on 1 January of the standard calendar (kept in that case for
+    # exact equivalence); otherwise the seasonal term would be out of phase with
+    # the copied forcing and bias the first weeks of the simulation.
+    starts_jan1 = date_col.iloc[0].month == 1 and date_col.iloc[0].day == 1
+    if data.calendar != 'standard' or not starts_jan1:
+        data.tt[0:365] = data.tt[365:730]
 
     # Initial Qmedia and DOY climatology calculations
     if recompute_qmedia:
@@ -575,7 +585,7 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
         # on different discharge than the run that fitted them (a naturalised-flow
         # or climate-projection scenario). theta = Q / Qmedia is the model's only
         # window onto discharge, so silently recomputing Qmedia here rescales theta
-        # and cancels the scenario signal (audit report 01). Versions 3 and 5 pin
+        # and cancels the scenario signal. Versions 3 and 5 pin
         # every discharge-related parameter to zero and never evaluate theta, so
         # the guard does not apply to them.
         if (
@@ -587,7 +597,7 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
                 "FORWARD mode requires an explicit `Qmedia:` in the config (or a "
                 "`calibration_metadata.json` via `paths.calibration_metadata`). "
                 "Recomputing Qmedia from scenario discharge rescales theta and cancels "
-                "the discharge signal. See docs/audit/01_qmedia_scenario_invariance.md."
+                "the discharge signal. See USER_GUIDE.md §6 (Qmedia)."
             )
         compute_qmedia(data, verbose=True)
         if data.gap_tolerant and p == 'c':
@@ -610,7 +620,7 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
                         f"Warning: {frac_outside:.1%} of days in this run have theta = Q/Qmedia "
                         f"outside the calibrated range [{data.calib_theta_min:.5f}, "
                         f"{data.calib_theta_max:.5f}]. The model is being extrapolated beyond the "
-                        f"calibrated regime for these days. See docs/audit/02_numerical_integration.md."
+                        f"calibrated regime for these days."
                     )
 
     # Guard against non-positive discharge for theta-using versions (4/7/8) in the
@@ -620,9 +630,9 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
     # calibration evaluation, since it does not depend on the currently loaded a4.
     check_nonpositive_discharge(data)
 
-    # Rebuild segments/eval_mask for the data just loaded (report 03): this must run
+    # Rebuild segments/eval_mask for the data just loaded: this must run
     # unconditionally, not only in gap-tolerant mode, so eval_mask is never left None
-    # (Defect B) and never stale against data it was not built from (3.2). For the
+    # and never stale against data it was not built from. For the
     # validation period, a gap-tolerant record with no valid segments is not a hard
     # error -- it means validation is skipped, exactly like the other validation-only
     # early-returns above.

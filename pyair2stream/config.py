@@ -18,6 +18,20 @@ PI: np.float64 = np.float64(math.pi) # ACOS(0.d0)*2.d0 is math.pi
 TTT: np.float64 = np.float64(1.0 / 365.0)
 MISSING_DATA_SENTINEL: np.float64 = np.float64(-999.0)
 
+# 0-based indices of the parameters (a1..a8 -> 0..7) each model version uses.
+# Every other parameter is fixed at zero for that version.
+ACTIVE_PARAMS = {
+    3: (0, 1, 2),
+    4: (0, 1, 2, 3),
+    5: (0, 1, 2, 5, 6),
+    7: (0, 1, 2, 4, 5, 6, 7),
+    8: (0, 1, 2, 3, 4, 5, 6, 7),
+}
+VALID_VERSIONS = tuple(ACTIVE_PARAMS)
+VALID_RUN_MODES = ('DE', 'PSO', 'LATHYP', 'FORWARD', 'DE-MCMC', 'DE-CV-MCMC')
+VALID_INTEGRATORS = ('CRN', 'EXP', 'RK4', 'RK2', 'EUL')
+VALID_OBJECTIVES = ('NSE', 'KGE', 'RMS')
+
 @dataclass
 class CommonData:
     """
@@ -42,11 +56,9 @@ class CommonData:
     segments: Optional[list] = None
     sensitivity_analysis: bool = False
     sensitivity_perturbations: Optional[list] = None
-    # 'value' (default, unchanged behaviour): perturb by delta_pct% of the parameter's
-    # own calibrated value. 'range': perturb by delta_pct% of (parmax - parmin) instead,
-    # which is comparable across parameters and immune to the near-zero-value problem
-    # but is not what earlier releases computed -- see docs/audit/06_diagnostics_and_plots.md,
-    # Defect E.
+    # 'value' (default): perturb by delta_pct% of the parameter's own calibrated
+    # value. 'range': perturb by delta_pct% of (parmax - parmin) instead, which is
+    # comparable across parameters and immune to the near-zero-value problem.
     sensitivity_perturbation_mode: str = 'value'
     mcmc_walkers: int = 32
     mcmc_steps: int = 2000
@@ -55,8 +67,7 @@ class CommonData:
     # successfully loaded (file present, >= 1 year, valid gap-tolerant segments if
     # applicable). main.forward() must gate the validation block on this flag, not
     # on data.n_tot -- a too-short validation period returns before data.n_tot is
-    # overwritten, so it stays at the calibration value (see
-    # docs/audit/05_cli_and_io_correctness.md, Defect B).
+    # overwritten, so it stays at the calibration value.
     validation_available: bool = False
 
     # Forward options
@@ -66,11 +77,10 @@ class CommonData:
     # config (noise_model, ar1_rho, prediction_interval, save_ensemble,
     # strict_convergence, burnin_fraction). Declared explicitly (rather than set
     # only by assignment in io.py) so it is visible to type checkers and callers
-    # don't need `getattr(data, 'uncertainty_options', {})` (docs/audit/07, Defect G).
+    # don't need `getattr(data, 'uncertainty_options', {})`.
     uncertainty_options: Optional[dict] = None
 
-    # Top-level calibration seed (docs/audit/07_reproducibility_and_provenance.md,
-    # 7.1). None reproduces the previous unseeded behaviour.
+    # Top-level calibration seed. None reproduces the previous unseeded behaviour.
     random_seed: Optional[int] = None
 
     # Cross Validation
@@ -91,14 +101,14 @@ class CommonData:
     finalfit: np.float64 = np.float64(0.0)
     c1: np.float64 = np.float64(0.0)
     c2: np.float64 = np.float64(0.0)
-    # Numerical-stability guard settings (see docs/audit/02_numerical_integration.md)
+    # Numerical-stability guard settings
     max_plausible_twat: np.float64 = np.float64(60.0)
     stability_error_fraction: np.float64 = np.float64(0.10)
 
     # Opt-in escape hatch for a legitimate zero-flow (or negative, e.g. sensor fault)
     # discharge day in a version that evaluates theta = Q/Qmedia (4, 7, 8). None
     # (the default) means `check_nonpositive_discharge` raises instead -- see
-    # docs/audit/10_zero_discharge_handling.md. When set (a small positive float,
+    # USER_GUIDE.md §9.2. When set (a small positive float,
     # e.g. 1e-6), `theta` is clamped to at least this value before `theta ** a4` is
     # evaluated in every integrator, so the same non-gap-tolerant run can proceed
     # instead of hitting a `ZeroDivisionError` (a4 > 0) or a silent `inf` (a4 < 0).
@@ -107,27 +117,24 @@ class CommonData:
     # Declared calendar for the forcing series: 'standard' (real Gregorian dates,
     # the only calendar the daily-continuity check validates against), 'noleap'
     # (365 days every year, no Feb 29), or '360_day' (12 uniform 30-day months).
-    # See docs/audit/05_cli_and_io_correctness.md, Defect D.
     calendar: str = 'standard'
     wmin: np.float64 = np.float64(0.0)
     wmax: np.float64 = np.float64(0.0)
 
     # Input data file paths, stashed by `read_calibration` for `read_Tseries` to
-    # consume. Declared explicitly rather than set only by assignment
-    # (docs/audit/07_reproducibility_and_provenance.md, Defect G).
+    # consume. Declared explicitly rather than set only by assignment.
     _input_data_path_cal: Optional[str] = None
     _input_data_path_val: Optional[str] = None
 
     # Raw (pre-warm-up-padding) row count of the most recently loaded series, used by
     # `compute_qmedia` to report the fraction of missing discharge. Declared
-    # explicitly rather than set only by assignment (docs/audit/07, Defect G).
+    # explicitly rather than set only by assignment.
     _n_tot_raw: Optional[int] = None
 
     # Set True once `detect_segments` has printed its one-time fragmentation
     # diagnostics for the current data load, so repeated calls inside the
     # optimizer hot loop don't spam the same warning. Declared explicitly rather
-    # than tested via `hasattr` (docs/audit/07_reproducibility_and_provenance.md,
-    # Defect G).
+    # than tested via `hasattr`.
     _segment_warned: bool = False
 
     # Strings

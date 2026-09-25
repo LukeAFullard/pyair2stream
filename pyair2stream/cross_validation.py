@@ -13,11 +13,13 @@ Summary of the design:
 - This module does NOT touch the ODE integrator (model.py) or optimizer
   internals (optimization.py). It reuses the existing missing-observation
   pathway (Twat_obs == -999.0, already consumed by aggregation()/funcobj())
-  to hide a fold's T_water targets from calibration while leaving T_air/Q
-  forcing untouched -- so the ODE state integrates continuously through and
-  past the held-out period, with no re-spin-up required.
-- Only data.Twat_obs is ever mutated, and only transiently (masked, then
-  restored via try/finally before the next fold or on error).
+  to hide a fold's T_water targets from calibration. In the default mode
+  T_air/Q forcing is left untouched, so the ODE integrates continuously
+  through the held-out period. In gap-tolerant mode the fold's forcing is
+  also masked during calibration, so it becomes a gap in the segmentation.
+- Only data.Twat_obs (plus data.Tair/data.Q in gap-tolerant mode) is ever
+  mutated, and only transiently (masked, then restored via try/finally
+  before the next fold or on error).
 - The first eligible calendar year is strictly enforced to never be a
   candidate fold, as there is no prior year of valid data to use for
   model spin-up. If `skip_first_year` is False, `min_train_years` must
@@ -306,11 +308,12 @@ def run_leave_one_year_out_cv(
     """
     Full leave-one-year-out (or leave-N-years-out) CV driver.
 
-    Per fold: mask -> aggregate/statis -> (rebuild segments if
-    gap_tolerant) -> optimize -> simulate full series -> score held-out
-    window against the original obs -> restore. See module docstring for the full rationale.
+    Per fold: mask -> recompute Qmedia (and climatology) without the fold ->
+    (rebuild segments if gap_tolerant) -> aggregate/statis -> optimize ->
+    simulate full series -> score held-out window against the original obs ->
+    restore. See module docstring for the full rationale.
 
-    Every fold reuses the same data.Tair/data.Q; only data.Twat_obs is ever
+    Only data.Twat_obs (and, in gap-tolerant mode, data.Tair/data.Q) is ever
     mutated, and only for the duration of that fold's block below.
     """
     folds = build_folds(data, cv_config)
@@ -344,12 +347,15 @@ def run_leave_one_year_out_cv(
                 if not data.gap_tolerant:
                     data.Q[idx] = orig_q
 
-                aggregation(data)
-                statis(data)
-
+                # Re-segment BEFORE aggregating: aggregation()/statis() must use the
+                # eval_mask of the masked record (including the warm-up days after
+                # the held-out gap), the same one funcobj() scores against.
                 if data.gap_tolerant:
                     data.segments = None
                     detect_segments(data)
+
+                aggregation(data)
+                statis(data)
 
                 _run_optimizer(data, run_mode, cv_config.optimizer_overrides)
                 data.par[:] = data.par_best[:]

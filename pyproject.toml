@@ -18,11 +18,8 @@ exclude = [
 # the CI matrix job) resolves against these bounds and can pick very different
 # dependency sets on Python 3.9 vs 3.12 as a result -- for a package intended
 # for reproducible science, the CI "locked-env" job installs the exact,
-# pinned versions from `poetry.lock` instead (see .github/workflows/tests.yml
-# and docs/audit/07_reproducibility_and_provenance.md, 7.7). The audited/tested
-# environment for the example outputs bundled in this repository is documented
-# in docs/audit/00_INDEX.md: Python 3.12, numpy 2.4.4, scipy 1.17.1,
-# pandas 3.0.2, numba 0.67.0, emcee 3.1.6.
+# pinned versions from `poetry.lock` instead (see .github/workflows/tests.yml).
+# Record `pip freeze` (or use `poetry.lock`) alongside any result you publish.
 [tool.poetry.dependencies]
 python = ">=3.9"
 numpy = ">=1.20.0"
