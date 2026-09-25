@@ -48,8 +48,8 @@ def _compare_parameters(st, v, pub, de):
     q = mean_discharge(cal)
     f_cal, f_val = _rmse_function(cal, v, q), _rmse_function(val, v, q)
     row = {"river": RIVERS[st], "version": v,
-           "published parameters": " ".join(f"{pub[j]:.3f}" for j in act),
-           "recalibrated parameters": " ".join(f"{de[j]:.3f}" for j in act),
+           "published": {f"a{j + 1}": float(pub[j]) for j in act},
+           "recalibrated": {f"a{j + 1}": float(de[j]) for j in act},
            "largest difference (% of range)": round(100 * diff, 2), "match": diff <= MATCH,
            "calibration RMSE, published": round(f_cal(pub), 5), "calibration RMSE, recalibrated": round(f_cal(de), 5)}
     if diff > MATCH:
@@ -127,6 +127,17 @@ def run(ctx) -> Result:
                                "parameters at a bound": ", ".join(params_at_bounds(d.par_best, v)) or "none"})
                 rows_c.append(_compare_parameters(st, v, par, d.par_best))
     a, b, c = pd.DataFrame(rows_a), pd.DataFrame(rows_b), pd.DataFrame(rows_c)
+    # The parameter values themselves: published and recalibrated, one column per parameter.
+    names = [f"a{j}" for j in range(1, 9)]
+    values = []
+    for r in rows_c:
+        for source in ("published", "recalibrated"):
+            values.append({"river": r["river"], "version": r["version"], "parameters": source,
+                           **{n: (f"{r[source][n]:.3f}" if n in r[source] else "") for n in names},
+                           "same as published": ("" if source == "published"
+                                                 else ("yes" if r["match"] else "NO"))})
+    values = pd.DataFrame(values)
+    c = c.drop(columns=["published", "recalibrated"])
     ok_a = bool((a["max |diff|"] <= TOL_A).all())
     ok_b = bool((b["difference"] <= TOL_B).all())
     differ = c[~c["match"]]
@@ -164,6 +175,8 @@ def run(ctx) -> Result:
         res.notes.append("Some DE optima lie on the authors' parameter bounds (last column): the best fit "
                          "would lie outside those ranges. The fit is still valid within the stated bounds.")
     res.tables += [("A. Published parameters: RMSE (°C)", a), ("B. DE recalibration: calibration RMSE (°C)", b),
-                   ("C. Recalibrated vs published parameters (active parameters, in order a1..a8)", c)]
+                   ("C. Recalibrated vs published parameters: fit and predictions", c),
+                   ("C. Parameter values, published and recalibrated (blank: not used by the version; "
+                    "'NO': a parameter differs by more than 1% of its range)", values)]
     res.figure_data = a
     return res

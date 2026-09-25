@@ -27,7 +27,8 @@ whether a site is likely to meet a temperature limit, with an uncertainty band.
 - **Runs scenarios** with fixed parameters (`FORWARD`), and compares two
   scenarios with an uncertainty band on the difference.
 - Handles **gaps** in air temperature or discharge (gap-tolerant mode),
-  **cross-validation** by year, and **sensitivity analysis**.
+  **cross-validation** by year (with confidence intervals for the parameters), and
+  **sensitivity analysis**.
 - Uses a **YAML config file and CSV files**, and writes CSV results and plots.
 
 ## Install

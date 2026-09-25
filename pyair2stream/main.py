@@ -24,6 +24,14 @@ from . import __version__
 from .model import (call_model, aggregation, statis, funcobj, detect_segments, warn_on_stability,
                     check_numerical_divergence, check_segment_warmup)
 
+JACKKNIFE_NOTE = (
+    "The rows jackknife_90_lower/upper are approximate 90% intervals for the parameters (in "
+    "validation they contained the true values somewhat less than 90% of the time; "
+    "validation/REPORT.md, V4). The 'std' row is only the spread between folds: it is far too "
+    "small to use as an uncertainty."
+)
+
+
 def run_optimizer(data: CommonData) -> None:
     """
     Dispatches to the correct optimizer based on data.runmode, passing
@@ -279,12 +287,15 @@ def main():
 
     if getattr(data, 'cross_validation', None):
         if data.runmode in ('PSO', 'DE', 'LATHYP'):
-            from .cross_validation import run_leave_one_year_out_cv, summarize
-            results = run_leave_one_year_out_cv(data, data.cross_validation, data.runmode)
-            df = summarize(results)
+            from .cross_validation import cross_validate
+            if data.version in (4, 7, 8) and data.Qmedia_user is None:
+                print("Note: Qmedia is recomputed for each fold. Set Qmedia: in the config so every "
+                      "fold uses the same discharge scaling; otherwise the parameters also move with it.")
+            df = cross_validate(data, data.runmode)
             df.to_csv(os.path.join(data.folder, "cv_results.csv"), index=False)
             print("Cross-validation completed.")
             print(df)
+            print(JACKKNIFE_NOTE)
 
             t2 = time.time()
             print(f"Computation time was {t2 - t1:.4f} seconds.")

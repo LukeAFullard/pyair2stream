@@ -4,7 +4,8 @@ import pytest
 from datetime import date
 from pyair2stream.config import CommonData
 from pyair2stream.cross_validation import (
-    CVConfig, assign_year_groups, build_folds, run_leave_one_year_out_cv
+    CVConfig, assign_year_groups, build_folds, run_leave_one_year_out_cv,
+    count_blocks, jackknife_rows, summarize, FoldResult
 )
 
 @pytest.fixture
@@ -306,3 +307,39 @@ def test_run_leave_one_year_out_cv_rejects_first_year(dummy_data):
     import pytest
     with pytest.raises(ValueError, match="The first year cannot be a candidate fold"):
         run_leave_one_year_out_cv(dummy_data, config, 'PSO')
+
+
+def test_jackknife_reduces_to_the_standard_jackknife_when_every_block_is_held_out():
+    from scipy import stats
+    rng = np.random.default_rng(0)
+    par = rng.normal(size=(6, 8))
+    se, lower, upper = jackknife_rows(par, n_blocks=6)
+    n = 6
+    standard = np.sqrt((n - 1) / n * np.sum((par - par.mean(0)) ** 2, axis=0))
+    np.testing.assert_allclose([se[f"p{i + 1}"] for i in range(8)], standard)
+    t = stats.t.ppf(0.95, n - 1)
+    np.testing.assert_allclose([upper[f"p{i + 1}"] for i in range(8)], par.mean(0) + t * standard)
+    np.testing.assert_allclose([lower[f"p{i + 1}"] for i in range(8)], par.mean(0) - t * standard)
+    assert lower["fold"] == "jackknife_90_lower" and upper["fold"] == "jackknife_90_upper"
+
+
+def test_jackknife_scales_up_when_some_blocks_are_never_held_out():
+    # 6 folds from a record of 8 blocks: SE^2 = (n-1)/m * sum of squares, with n = 8, m = 6
+    par = np.random.default_rng(1).normal(size=(6, 8))
+    se = jackknife_rows(par, n_blocks=8)[0]
+    ss = np.sum((par - par.mean(0)) ** 2, axis=0)
+    np.testing.assert_allclose([se[f"p{i + 1}"] for i in range(8)], np.sqrt(7 / 6 * ss))
+
+
+def test_summarize_adds_jackknife_rows_and_count_blocks(dummy_data):
+    config = CVConfig(unit="year")
+    assert count_blocks(dummy_data, config) == 4          # 2010-2013
+    results = []
+    for k, year in enumerate((2012, 2013)):
+        results.append(FoldResult(fold_id=k, label=str(year), held_out_start=pd.Timestamp(f"{year}-01-01"),
+                                  held_out_end=pd.Timestamp(f"{year}-12-31"), n_obs_held_out=365,
+                                  nse=0.9, kge=0.9, rmse=0.5, par_best=np.arange(8) + k,
+                                  obs_held_out=np.ones(3), sim_held_out=np.ones(3)))
+    df = summarize(results, n_blocks=4).set_index("fold")
+    assert {"jackknife_se", "jackknife_90_lower", "jackknife_90_upper"} <= set(df.index)
+    assert "jackknife_se" not in summarize(results).set_index("fold").index

@@ -17,9 +17,7 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 import pandas as pd
 
-from scipy import stats
-
-from common import (WORK, Result, Timer, calibrate, load, mean_discharge, published_params, quiet,
+from common import (DE_SETTINGS, WORK, Result, Timer, load, mean_discharge, published_params, quiet,
                     river_csv, AUTHORS_BOUNDS)
 from v3_recovery import SIGMA, RHO, noise, truth_series
 
@@ -33,7 +31,9 @@ CASES = [
 PI_RANGE = (0.87, 0.93)     # accepted mean coverage of the 90% prediction interval
 PAR_MIN = 0.78              # accepted pooled coverage of the 90% parameter intervals (not clearly below 0.9)
 PAR_REQUIRED = ("A", "B")   # cases whose parameter intervals must meet PAR_MIN (version 5; see notes)
-N_JACKKNIFE = 12            # replicates of cases B and D given leave-one-year-out intervals
+N_JACKKNIFE = 12            # replicates per version for the cross-validation parameter intervals
+JACKKNIFE_VERSIONS = (3, 4, 5, 7, 8)
+JACKKNIFE_OK = 0.80         # a version's jackknife intervals count as dependable at this coverage or more
 
 
 def replicate(args):
@@ -130,36 +130,47 @@ def sampler_crosscheck(r):
 
 
 def leave_one_year_out(args):
-    """90% parameter intervals from refitting with each calibration year left out in turn, for one
-    replicate: (1) the raw spread of the refitted parameters, +-1.645 SD, and (2) the delete-one-year
-    jackknife, +-t(0.95, n-1) x sqrt((n-1)/n x sum of squared deviations). Qmedia is held fixed."""
-    label, version, r = args
+    """Cross-validation through the package (`cross_validation.cross_validate`, as a run with a
+    `cross_validation:` block does) on one synthetic replicate with AR(1) noise, and whether its
+    90% parameter intervals contain the true parameters: (1) the fold mean +- 1.645 x the spread
+    between folds ('std' row), and (2) the jackknife interval (jackknife_90 rows). For versions 5
+    and 8 the replicate is the one of case B / D, so the MCMC interval can be compared."""
+    version, r = args
     from pyair2stream.config import ACTIVE_PARAMS
-    folder = os.path.join(WORK, f"v4_{label[0]}_{r}")
+    from pyair2stream.cross_validation import cross_validate
     q_cal = mean_discharge(river_csv("MAH_2369", "calibration"))
-    df = pd.read_csv(os.path.join(folder, "cal.csv"), parse_dates=["Date"])
-    full = np.array(calibrate(os.path.join(folder, "cal.csv"), version, name=f"v4jk_{label[0]}_{r}",
-                              Qmedia=q_cal).par_best)
-    folds = []
-    for year in sorted(df.Date.dt.year.unique()):
-        csv = os.path.join(folder, f"without_{year}.csv")
-        df.assign(T_water=df.T_water.where(df.Date.dt.year != year)).to_csv(csv, index=False, date_format="%Y-%m-%d")
-        folds.append(calibrate(csv, version, name=f"v4jk_{label[0]}_{r}_{year}", Qmedia=q_cal).par_best)
-    folds = np.array(folds)
-    n = len(folds)
-    se = np.sqrt((n - 1) / n * np.sum((folds - folds.mean(0)) ** 2, axis=0))
-    t = stats.t.ppf(0.95, n - 1)
     truth = np.array(published_params(version, "MAH_2369"))
-    chain = pd.read_csv(os.path.join(folder, "out", "MCMC_chain_S_c_1d.csv"))
+    case = {5: "B", 8: "D"}.get(version)
+    if case:
+        folder = os.path.join(WORK, f"v4_{case}_{r}")
+    else:
+        folder = os.path.join(WORK, f"v4_jk{version}_{r}")
+        os.makedirs(folder, exist_ok=True)
+        src, clean = truth_series(version, truth, "calibration", q_cal, tag=f"v4_jk{version}_{r}")
+        rng = np.random.default_rng(50000 + 100 * version + r)
+        src.assign(T_water=np.round(clean + noise(len(clean), "ar1", rng), 3)).to_csv(
+            os.path.join(folder, "cal.csv"), index=False)
+    cfg = {"version": version, "integrator": "CRN", "run_mode": "DE", "objective_function": "NSE",
+           "random_seed": r + 1, "Qmedia": q_cal, "parameter_bounds": AUTHORS_BOUNDS,
+           "optimization": dict(DE_SETTINGS), "cross_validation": {"enabled": True, "unit": "year"},
+           "paths": {"input_data": os.path.join(folder, "cal.csv"), "output_dir": os.path.join(folder, "cv")}}
+    data = load(cfg, f"v4jk_{version}_{r}")
+    with quiet():
+        table = cross_validate(data, "DE").set_index("fold")
+    chain_file = os.path.join(folder, "out", "MCMC_chain_S_c_1d.csv")
+    chain = pd.read_csv(chain_file) if case and os.path.exists(chain_file) else None
     rows = []
     for j in ACTIVE_PARAMS[version]:
-        lo, hi = np.percentile(chain[f"par_{j + 1}"], [5, 95])
-        err = abs(full[j] - truth[j])
-        spread = 1.645 * folds[:, j].std(ddof=1)
-        rows.append({"case": label.split(":")[0], "parameter": f"a{j + 1}",
-                     "raw spread covers": err <= spread, "jackknife covers": err <= t * se[j],
-                     "MCMC covers": lo <= truth[j] <= hi, "raw spread width": 2 * spread,
-                     "jackknife width": 2 * t * se[j], "MCMC width": hi - lo})
+        col = f"p{j + 1}"
+        centre, spread = table.loc["mean", col], 1.645 * table.loc["std", col]
+        lo, hi = table.loc["jackknife_90_lower", col], table.loc["jackknife_90_upper", col]
+        row = {"version": version, "parameter": f"a{j + 1}",
+               "raw spread covers": abs(centre - truth[j]) <= spread, "jackknife covers": lo <= truth[j] <= hi,
+               "raw spread width": 2 * spread, "jackknife width": hi - lo}
+        if chain is not None:
+            m_lo, m_hi = np.percentile(chain[f"par_{j + 1}"], [5, 95])
+            row.update({"MCMC covers": m_lo <= truth[j] <= m_hi, "MCMC width": m_hi - m_lo})
+        rows.append(row)
     return rows
 
 
@@ -188,8 +199,7 @@ def run(ctx) -> Result:
         with ProcessPoolExecutor(max_workers=ctx.workers) as ex:
             rows = list(ex.map(replicate, jobs))
             checks = [] if ctx.quick else list(ex.map(sampler_crosscheck, (0, 1)))
-            jk_jobs = [] if ctx.quick else [(label, v, r) for label, v, *_ in CASES if label[0] in "BD"
-                                            for r in range(N_JACKKNIFE)]
+            jk_jobs = [] if ctx.quick else [(v, r) for v in JACKKNIFE_VERSIONS for r in range(N_JACKKNIFE)]
             jk = pd.DataFrame([x for rows_ in ex.map(leave_one_year_out, jk_jobs) for x in rows_])
     df = pd.DataFrame(rows)
     summary_rows, per_param_rows = [], []
@@ -265,27 +275,39 @@ def run(ctx) -> Result:
             res.passed = False
             res.notes.append("The two samplers disagree by more than 10% of an interval's width.")
     if len(jk):
-        by_case = jk.groupby("case").agg(**{
-            "raw spread of the leave-one-year-out fits": ("raw spread covers", "mean"),
-            "jackknife": ("jackknife covers", "mean"), "MCMC": ("MCMC covers", "mean")})
-        width = (jk["jackknife width"] / jk["MCMC width"]).groupby(jk.case).median()
-        raw_width = (jk["raw spread width"] / jk["MCMC width"]).groupby(jk.case).median()
-        by_case = by_case.map(lambda x: f"{x:.0%}")
-        by_case["median width, jackknife / MCMC"] = width.round(1)
-        by_case["median width, raw spread / MCMC"] = raw_width.round(1)
-        res.tables.append((f"Parameter intervals from leaving one year out, {N_JACKKNIFE} replicates per case: "
-                           "share containing the true value (90% intervals)", by_case.reset_index()))
-        res.notes.append(
-            "Leaving one year out and refitting (as cross-validation does) shows how much the parameters move "
-            "between years, but that spread is not itself a confidence interval: every refit shares most of "
-            f"its data with the others, so the raw spread contained the true values only "
-            f"{jk['raw spread covers'][jk.case == 'B'].mean():.0%} (version 5) and "
-            f"{jk['raw spread covers'][jk.case == 'D'].mean():.0%} (version 8) of the time. Scaled correctly (the "
-            f"delete-one-year jackknife), it gave {jk['jackknife covers'][jk.case == 'B'].mean():.0%} for version 5, "
-            f"with intervals about {width['B']:.1f} times as wide as MCMC's. For version 8 the jackknife "
-            f"intervals were about {width['D']:.0f} times as wide as MCMC's yet contained the truth only "
-            f"{jk['jackknife covers'][jk.case == 'D'].mean():.0%} of the time: along version 8's ridge of "
-            f"equally good fits, each refit lands somewhere different. Neither method gives dependable "
-            f"intervals for individual version 8 parameters.")
+        for col in ("raw spread covers", "jackknife covers", "MCMC covers"):
+            if col in jk:
+                jk[col] = jk[col].astype(float)          # True/False, NaN where there is no MCMC
+        g = jk.groupby("version")
+        by_version = pd.DataFrame({
+            "raw spread (fold mean +- 1.645 x std)": g["raw spread covers"].mean(),
+            "jackknife": g["jackknife covers"].mean()})
+        if "MCMC covers" in jk:
+            by_version["MCMC (same replicates)"] = g["MCMC covers"].mean()
+            ratio = (jk["jackknife width"] / jk["MCMC width"]).groupby(jk.version).median()
+        shown = by_version.map(lambda x: f"{x:.0%}" if pd.notna(x) else "")
+        if "MCMC covers" in jk:
+            shown["median width, jackknife / MCMC"] = ratio.round(1).map(lambda x: "" if pd.isna(x) else x)
+        res.tables.append((f"Parameter intervals from cross-validation (cross_validation.cross_validate, leave one "
+                           f"year out), {N_JACKKNIFE} replicates per version with AR(1) noise: share of 90% "
+                           f"intervals containing the true value", shown.reset_index()))
+        cover = by_version["jackknife"]
+        raw = by_version["raw spread (fold mean +- 1.645 x std)"]
+        low = [v for v in JACKKNIFE_VERSIONS if cover[v] < JACKKNIFE_OK]
+        note = (f"Cross-validation's spread of the parameters between folds is not a confidence interval: the folds "
+                f"share most of their data, so the spread (fold mean +- 1.645 x std) contained the true values only "
+                f"{raw.min():.0%}-{raw.max():.0%} of the time. The jackknife intervals in cv_results.csv scale the "
+                f"spread for that overlap; they contained the true values {cover.min():.0%}-{cover.max():.0%} of the "
+                f"time across versions {', '.join(map(str, JACKKNIFE_VERSIONS))}, so they are approximate 90% "
+                f"intervals, a little narrow for some versions.")
+        if "MCMC covers" in jk and pd.notna(by_version.loc[8, "MCMC (same replicates)"]):
+            note += (f" For version 8 they were closer to 90% than the MCMC parameter intervals on the same "
+                     f"replicates ({cover[8]:.0%} against {by_version.loc[8, 'MCMC (same replicates)']:.0%}), and "
+                     f"about {ratio[8]:.1f} times as wide.")
+        if low:
+            note += f" For versions {', '.join(map(str, low))} they fell below {JACKKNIFE_OK:.0%}."
+        note += (f" With {N_JACKKNIFE} replicates per version, each share is uncertain by several percentage "
+                 f"points.")
+        res.notes.append(note)
     res.figure_data = df.drop(columns=["per_param"], errors="ignore")
     return res

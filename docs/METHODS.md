@@ -273,11 +273,25 @@ LATHYP:
    standard deviation across folds and "pooled" scores over all held-out days.
 
 Large variation of the parameters between folds means they are poorly determined
-by the data (equifinality). The spread of the parameters between folds is not a
-confidence interval: the folds share most of their data, so it understates the
-uncertainty (in validation V4 it contained the true values only about half the
-time). Use DE-MCMC (§12) for parameter uncertainty. A cross-validation run does
-not also produce a single final calibration.
+by the data (equifinality). The spread between folds (`std`) is not a confidence
+interval: the folds share most of their data, so it understates the uncertainty
+(in validation V4 it contained the true values only 35–56% of the time).
+
+`cv_results.csv` therefore also gives **jackknife intervals** for the parameters.
+With θᵢ the parameters fitted without block i (m folds), θ̄ their mean, and n the
+number of blocks in the whole record (years, or groups of `n_years_per_fold`):
+
+  SE² = (n − 1)/m · Σᵢ (θᵢ − θ̄)²,  interval = θ̄ ± t₀.₉₅,ₘ₋₁ · SE.
+
+When every block is held out (m = n) this is the standard delete-one-block
+jackknife; the first years are never held out, so the sum over n blocks is
+estimated as n/m times the sum over the m folds. In validation V4 these 90%
+intervals contained the true parameters 83–94% of the time for every version,
+closer to 90% than the MCMC parameter intervals for version 8 (85% against
+75%), at about 1.8 times their width. For versions 4, 7 and 8 set `Qmedia`
+explicitly, so that every fold uses the same discharge scaling.
+
+A cross-validation run does not also produce a single final calibration.
 
 ## 12. Parameter and prediction uncertainty (DE-MCMC)
 

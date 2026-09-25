@@ -456,7 +456,9 @@ walks through this):
   combinations fit almost equally well. Their intervals are then too narrow
   ([V4](validation/REPORT.md#v4)), and with `"ar1"` they can be centred away
   from the DE best fit, which assumes independent errors. The predictions are
-  hardly affected. Rely on predictions, not on individual parameter values.
+  hardly affected. Rely on predictions, not on individual parameter values; if
+  you need parameter confidence intervals, the cross-validation jackknife
+  (§13) was closer to its stated 90% for version 8.
 
 Outputs: `MCMC_chain_*.csv` (parameter samples), `MCMC_chain_*_meta.json`
 (settings, diagnostics, residual σ and ρ, coverage), `MCMC_envelopes_*.csv`
@@ -565,12 +567,20 @@ With the defaults, the first two years are always used for training only. The ru
 writes `cv_results.csv` (one row per held-out year with NSE, KGE, RMSE on daily
 values and the fitted parameters, plus `mean`, `std` and `pooled` rows) instead
 of the usual outputs. Large differences in parameters between years mean the
-data do not pin them down well. The spread of the parameters between folds is
-not a confidence interval: each fold shares most of its data with the others, so
-the spread is much smaller than the real uncertainty (in a test with known
-parameters it contained the true values only about half the time,
-[validation V4](validation/REPORT.md#v4)). For parameter uncertainty use `DE-MCMC`
-(§11). Cross-validation is ignored (with a warning) in other run modes.
+data do not pin them down well.
+
+**Parameter confidence intervals.** The rows `jackknife_90_lower` and
+`jackknife_90_upper` give approximate 90% intervals for each parameter, worked
+out from how much the parameters move between folds (the delete-one-year
+jackknife, [docs/METHODS.md §11](docs/METHODS.md#11-cross-validation)). In a
+test with known parameters they contained the true values 83–94% of the time,
+for every model version ([validation V4](validation/REPORT.md#v4)). Do not use
+the `std` row for this: each fold shares most of its data with the others, so
+that spread is far smaller than the real uncertainty (it contained the true
+values only 35–56% of the time). For versions 4, 7 and 8, set `Qmedia:` in the
+config so that every fold uses the same discharge scaling; otherwise the
+parameters also move with it. Cross-validation is ignored (with a warning) in
+other run modes.
 
 ## 14. Checklist for results that support a decision
 

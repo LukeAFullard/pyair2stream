@@ -61,6 +61,12 @@ your runs.
   results and parameters of Piccolroaz et al. (2016), known-truth recovery, interval
   calibration, real-river prediction, numerical accuracy, gaps, and exact
   workflow and scenario answers.
+- **Parameter confidence intervals from cross-validation**: `cv_results.csv`
+  now includes delete-one-year jackknife rows (`jackknife_se`,
+  `jackknife_90_lower`, `jackknife_90_upper`). In validation (V4) they contained
+  the true parameters 83–94% of the time for every model version; the plain
+  spread between folds (`std`), by contrast, is far too small to use as an
+  uncertainty (35–56%).
 - FORWARD runs without `parameters_forward` use the calibrated parameters in
   `paths.calibration_metadata`, so they need not be copied by hand.
 - The FORWARD ensemble's `_meta.json` records the noise model, σ and ρ used.
