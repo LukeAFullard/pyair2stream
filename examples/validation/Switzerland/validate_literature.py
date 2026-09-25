@@ -4,7 +4,7 @@ import os
 import matplotlib.pyplot as plt
 
 def create_forward_config(station, params, in_file, val_file):
-    # FORWARD mode requires an explicit Qmedia (see docs/audit/01_qmedia_scenario_invariance.md):
+    # FORWARD mode requires an explicit Qmedia (see USER_GUIDE.md §6, Qmedia):
     # recomputing it from whatever discharge is loaded would silently rescale theta. This replays
     # the same calibration discharge, so pin Qmedia to that series' own mean.
     qmedia = float(pd.read_csv(f"examples/validation/Switzerland/{in_file}")['Discharge'].pipe(

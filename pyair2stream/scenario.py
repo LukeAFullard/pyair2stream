@@ -9,7 +9,7 @@ a 7-day rolling mean is not the 7-day rolling mean of the p5 series -- so anythi
 downstream that needs degree-days, threshold-exceedance counts, or a paired
 scenario comparison must operate on the raw ensemble instead.
 
-See docs/audit/04_uncertainty_and_mcmc.md, Defect B / 4.2.
+See docs/METHODS.md §13.
 """
 
 import json
@@ -123,8 +123,7 @@ def paired_difference(ens_a: np.ndarray, ens_b: np.ndarray) -> np.ndarray:
     Requires both ensembles to have been generated from the SAME parameter draws in
     the SAME order (e.g. two `forward_mode` runs against the same
     `mcmc_chain_path`/`n_samples`/`random_seed`, one on observed/naturalised
-    discharge and one on an abstraction scenario) -- see
-    docs/audit/09_study_design_notes.md. This is the function both the water
+    discharge and one on an abstraction scenario). This is the function both the water
     abstraction and climate projection studies actually need: a credible interval on
     a *difference*, not just on each scenario separately.
 
@@ -135,8 +134,7 @@ def paired_difference(ens_a: np.ndarray, ens_b: np.ndarray) -> np.ndarray:
     `paired_difference_from_files()`**, which additionally verifies the two runs'
     saved provenance (source chain, requested sample indices, and the indices that
     actually survived per-draw divergence filtering) before differencing --
-    see docs/audit/12_ensemble_provenance_and_pairing.md and
-    docs/MCMC_uncertainty.md. Use this shape-only function directly only when you
+    see docs/METHODS.md §13. Use this shape-only function directly only when you
     are certain both arrays came from the same in-process draw (e.g. you built both
     yourself in the same script from the same `sample_indices` array).
 
@@ -161,8 +159,7 @@ def _load_ensemble_provenance(ensemble_path: str) -> dict:
     `optimization.forward_mode()`'s prediction-interval block (or
     `optimization._run_mcmc_uncertainty()`) next to the ensemble file, e.g.
     `Forward_Prediction_Ensemble_<station>_<series>_<time_res>_meta.json` for
-    `Forward_Prediction_Ensemble_<station>_<series>_<time_res>.npz`. See
-    docs/audit/12_ensemble_provenance_and_pairing.md.
+    `Forward_Prediction_Ensemble_<station>_<series>_<time_res>.npz`.
     """
     meta_path = ensemble_path.replace('.npz', '_meta.json')
     if not os.path.exists(meta_path):
@@ -192,13 +189,12 @@ def paired_difference_from_files(path_a: str, path_b: str) -> np.ndarray:
     scenario B with `forward_options.reuse_sample_indices_from` pointing at
     scenario A's saved sidecar (rather than relying on matching `random_seed`
     across two separate config files/processes), then pair the two saved ensembles
-    with this function. See docs/audit/12_ensemble_provenance_and_pairing.md and
-    docs/MCMC_uncertainty.md for the full workflow.
+    with this function. See docs/METHODS.md §13 for the full workflow.
 
     Checks, in order: the two runs' source MCMC/posterior chain (content hash and
     row count), the number of samples requested, the exact `sample_indices` drawn,
     and `valid_draw_indices` -- the subset of those indices that actually survived
-    per-draw divergence filtering (docs/audit/11_ensemble_divergence_handling.md)
+    per-draw divergence filtering
     and therefore ended up as rows in the saved ensemble. `valid_draw_indices` is
     the authoritative check: two runs can request identical `sample_indices` and
     still end up with differently-excluded (and therefore misaligned) rows if one
@@ -227,7 +223,7 @@ def paired_difference_from_files(path_a: str, path_b: str) -> np.ndarray:
                 f"paired_difference_from_files: {label} differs between '{path_a}' "
                 f"({meta_a.get(key)!r}) and '{path_b}' ({meta_b.get(key)!r}). Both runs "
                 "must be forward_mode() (or DE-MCMC/DE-CV-MCMC envelope) calls against "
-                "the SAME posterior chain -- see docs/MCMC_uncertainty.md."
+                "the SAME posterior chain -- see docs/METHODS.md §13."
             )
 
     if meta_a.get('sample_indices') != meta_b.get('sample_indices'):

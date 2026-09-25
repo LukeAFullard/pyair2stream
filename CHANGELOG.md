@@ -1,5 +1,63 @@
 # Changelog
 
+## [0.4.0] - 2026-09-25
+
+A correctness review found several defects that gave wrong results **without
+any error**. If you used an earlier version, check the items marked ⚠ against
+your runs.
+
+### Fixed
+- ⚠ **`-999` in `T_air` was used as an air temperature of −999 °C** in the
+  default (non-gap-tolerant) mode, pulling water temperature to 0 °C. `-999` is
+  now treated as missing everywhere, like an empty cell (so an incomplete `T_air`
+  or `Discharge` now stops with an error, as documented).
+- ⚠ **FORWARD runs used non-zero values of unused parameters** in
+  `parameters_forward` with the default `CRN` integrator (e.g. `a6` for version
+  3), changing results by up to several °C. Unused parameters are now always zero.
+- ⚠ **Validation plots showed the calibration period's prediction band**,
+  titled as a prediction interval. Bands are now matched by date and drawn only
+  where they were computed; a FORWARD run uses its own band.
+- ⚠ **`R2` in `goodness_of_fit_*.csv` and plot titles was actually NSE.** Both
+  are now reported: `NSE`, and `R2` as the squared correlation.
+- ⚠ **FORWARD runs not starting on 1 January** began with a wrongly phased
+  warm-up year (2–3 °C error in the first days, fading over weeks).
+- ⚠ **Gap-tolerant cross-validation** computed the NSE denominator from slightly
+  more days than it scored, inflating NSE.
+- ⚠ **Prediction intervals with weekly/monthly `time_resolution`** added daily
+  noise with the (smaller) spread of weekly/monthly means. They now use the
+  daily residual spread (no change at `1d`).
+- **DE-MCMC was not reproducible** with `random_seed` set (the sampler's random
+  generator was not seeded).
+- Saved ensembles (`save_ensemble`) held values near −999 on gap days; now NaN.
+- A FORWARD run overwrote `calibration_metadata.json` when it shared the
+  calibration's output folder; FORWARD runs no longer write this file.
+- The sensitivity plot's unit label was wrong by a factor of 100 (the index is
+  °C per 100% change in the parameter).
+- DE now keeps its own best result if the L-BFGS-B polish ends worse.
+- Invalid `version`, `run_mode`, `integrator`, `objective_function`, bounds that
+  are not 8 values or have min > max, and `time_resolution` values such as `2m`
+  (silently treated as monthly) are now rejected with a clear message. The
+  optimizers refuse to run when no parameter is free (e.g. bounds missing).
+- Messages no longer point to documents that do not exist.
+
+### Added
+- Prediction-interval **coverage check**: the share of observed days inside the
+  band is printed and saved in the `_meta.json` sidecar.
+- Gap-tolerant runs warn when `warmup_drop_days` is too short for the calibrated
+  model to forget each segment's approximate start value.
+- `goodness_of_fit_*.csv` now also reports `N` and `NSE`.
+- A `DE-MCMC` run with `cross_validation.enabled` now warns that the block is ignored.
+
+### Changed
+- The quick-start example uses the recommended seeded `DE` + `CRN` (it used
+  unseeded PSO + RK4, whose NSE varied from 0.43 to 0.98 between runs).
+- Documentation rewritten for clarity: README, USER_GUIDE, and a single
+  step-by-step methods description, `docs/METHODS.md`, which replaces the five
+  separate topic documents in `docs/`.
+
+Entries below cite review reports under `docs/audit/`, which have since been
+removed from the repository (they remain in the git history).
+
 ## [0.3.0] - 2026-08-28
 
 Three defects found during a follow-up audit targeting the water-abstraction and

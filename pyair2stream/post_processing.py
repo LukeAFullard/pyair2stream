@@ -12,7 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
-from .config import CommonData
+from .config import CommonData, ACTIVE_PARAMS
 
 
 def select_dotty_data(df_0: pd.DataFrame) -> tuple:
@@ -22,8 +22,7 @@ def select_dotty_data(df_0: pd.DataFrame) -> tuple:
     columns (`par_1`..`par_8`, `eff_index`, `NSE`, `R2`, `MAE` --
     `optimization.py`'s `PSO_mode`/`DE_mode`/`LH_mode` history rows), so a
     positional `[:-1]`/`[-1]` split silently treated `NSE`/`R2` as parameter
-    columns and `MAE` as the plotted "efficiency" (docs/audit/06_diagnostics_and_plots.md,
-    Defect A).
+    columns and `MAE` as the plotted "efficiency".
 
     Returns
     -------
@@ -44,7 +43,7 @@ def gap_aware_acf(residuals: pd.Series, max_lag: int) -> tuple:
     non-adjacent days, so its lag-k is not lag-k in time. This instead pairs day
     `t` with day `t+k` only where both are non-NaN, generalising
     `uncertainty.estimate_ar1_rho`'s lag-1 adjacency handling to arbitrary lags
-    (docs/audit/06_diagnostics_and_plots.md, Defect F).
+.
 
     Returns
     -------
@@ -71,6 +70,25 @@ def gap_aware_acf(residuals: pd.Series, max_lag: int) -> tuple:
                 acf[i] = np.corrcoef(a, b)[0, 1]
 
     return lags, acf, n_pairs
+
+
+def _envelope_on_dates(data: CommonData, dates) -> pd.DataFrame:
+    """
+    This run's prediction-interval envelope (MCMC for a calibration run, forward
+    envelope for a FORWARD run), matched to `dates` by calendar date. Returns None
+    if the envelope does not exist or covers none of `dates` -- e.g. a validation
+    period, for which no envelope is computed.
+    """
+    kind = "Forward_Prediction_Envelopes" if data.runmode == 'FORWARD' else "MCMC_envelopes"
+    env_file = os.path.join(data.folder, f"{kind}_{data.station}_{data.series}_{data.time_res}.csv")
+    if not os.path.exists(env_file):
+        return None
+    env_df = pd.read_csv(env_file).replace(-999.0, np.nan)
+    env_df.index = pd.to_datetime(env_df[['Year', 'Month', 'Day']])
+    band = env_df.reindex(pd.DatetimeIndex(dates))
+    if band['Twat_mod_lower'].notna().any():
+        return band
+    return None
 
 
 def post_process(data: CommonData, toll: float = None):
@@ -200,7 +218,7 @@ def post_process(data: CommonData, toll: float = None):
             for i in range(8):
                 # Not a for...else: that clause runs once after normal loop
                 # completion (i == 7) and blanked the par_8 panel on every run
-                # (audit report 06, Defect B). Hide only the genuinely unused
+                #. Hide only the genuinely unused
                 # panels (i >= n_par), explicitly, inside the loop.
                 if i >= n_par:
                     axes[i].axis('off')
@@ -226,9 +244,8 @@ def post_process(data: CommonData, toll: float = None):
             plt.close()
 
     # 1c. MCMC Parameter Significance & Correlation
-    env_file_mcmc = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
     chain_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}.csv")
-    if os.path.exists(chain_filename):
+    if data.runmode in ('DE-MCMC', 'DE-CV-MCMC') and os.path.exists(chain_filename):
         chain_df = pd.read_csv(chain_filename)
 
         # Calculate statistics
@@ -304,8 +321,7 @@ def post_process(data: CommonData, toll: float = None):
 
         df = pd.read_csv(file_path)
 
-        # The warm-up block is dropped when this file is written (report 05,
-        # Defect C), so no positional slice is needed here any more.
+        # The warm-up block is dropped when this file is written, so no positional slice is needed here any more.
 
         # Replace sentinel values with NaN
         df.replace(-999.0, np.nan, inplace=True)
@@ -326,9 +342,12 @@ def post_process(data: CommonData, toll: float = None):
         # df has columns: 'Year', 'Month', 'Day', 'Tair', 'Twat_obs', 'Twat_mod', 'Twat_obs_agg', 'Twat_mod_agg', 'Q'
         valid_mask = df['Twat_obs_agg'].notna() & df['Twat_mod_agg'].notna()
 
-        # Calculate number of active parameters (k)
+        # Number of fitted parameters (k): the free ones for a calibration; for a
+        # FORWARD run (parameters fitted elsewhere) all parameters the version uses.
         k = 0
-        if data.flag_par is not None and data.parmin is not None and data.parmax is not None:
+        if data.runmode == 'FORWARD' and data.version in ACTIVE_PARAMS:
+            k = len(ACTIVE_PARAMS[data.version])
+        elif data.flag_par is not None and data.parmin is not None and data.parmax is not None:
             for j in range(len(data.flag_par)):
                 if data.flag_par[j] and data.parmin[j] != data.parmax[j]:
                     k += 1
@@ -344,10 +363,14 @@ def post_process(data: CommonData, toll: float = None):
             rmse = np.sqrt(np.mean((obs - mod)**2))
             mae = np.mean(np.abs(obs - mod))
 
-            # R2 calculation
+            # NSE = 1 - SS_res/SS_tot. R2 = squared Pearson correlation between
+            # simulated and observed (the same definition as the NSE/R2 columns
+            # in 0_*.csv). NSE <= R2 always; they differ when the simulation is
+            # biased or has the wrong amplitude.
             ss_res = np.sum((obs - mod)**2)
             ss_tot = np.sum((obs - np.mean(obs))**2)
-            r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else np.nan
+            nse = 1 - (ss_res / ss_tot) if ss_tot != 0 else np.nan
+            r2 = np.corrcoef(obs, mod)[0, 1] ** 2 if (n > 1 and np.std(obs) > 0 and np.std(mod) > 0) else np.nan
 
             # AIC and BIC calculation
             # Standard least-squares formulation (assuming normally distributed errors).
@@ -359,13 +382,14 @@ def post_process(data: CommonData, toll: float = None):
 
             # Export Metrics Summary
             metrics_df = pd.DataFrame({
-                'Metric': ['R2', 'RMSE', 'MAE', 'AIC', 'BIC'],
-                'Value': [r2, rmse, mae, aic, bic]
+                'Metric': ['N', 'NSE', 'R2', 'RMSE', 'MAE', 'AIC', 'BIC'],
+                'Value': [n, nse, r2, rmse, mae, aic, bic]
             })
             metrics_csv = os.path.join(data.folder, f"goodness_of_fit_{output_name}_{data.runmode}_{data.fun_obj}_{data.station}.csv")
             metrics_df.to_csv(metrics_csv, index=False)
 
-            metrics_str = f"\nR²={r2:.3f}, RMSE={rmse:.2f}°C, MAE={mae:.2f}°C\nAIC={aic:.1f}, BIC={bic:.1f}" if (not np.isnan(r2) and not np.isnan(rmse)) else ""
+            metrics_str = (f"\nNSE={nse:.3f}, R²={r2:.3f}, RMSE={rmse:.2f}°C, MAE={mae:.2f}°C (n={n})"
+                           f"\nAIC={aic:.1f}, BIC={bic:.1f}") if (not np.isnan(nse) and not np.isnan(rmse)) else ""
         else:
             rmse = np.nan
             mae = np.nan
@@ -374,21 +398,12 @@ def post_process(data: CommonData, toll: float = None):
 
         fig, (ax, ax_res) = plt.subplots(2, 1, figsize=(18/2.54, 14/2.54), gridspec_kw={'height_ratios': [3, 1]}, sharex=True)
 
-        # Check if Forward Prediction or MCMC Envelopes exist
-        env_file_fwd = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
-        env_file_mcmc = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
-        env_file = env_file_mcmc if os.path.exists(env_file_mcmc) else env_file_fwd
-
-        if os.path.exists(env_file_mcmc):
-            pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
-            ax.set_title(f"Historical Calibration with {pi_val:g}% Prediction Interval{metrics_str}")
-        else:
-            pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
-            title_text = f"Forward Projection with {pi_val:g}% Prediction Interval" if os.path.exists(env_file_fwd) else title_prefix
-            ax.set_title(f"{title_text}{metrics_str}")
-
-        if not filter_to_obs:
-            ax.set_title(f"Full Simulation Timeline (with all forcing data){metrics_str}")
+        pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
+        band = _envelope_on_dates(data, dates)
+        title_text = title_prefix if filter_to_obs else "Full simulation (all days with forcing data)"
+        if band is not None:
+            title_text += f" with {pi_val:g}% prediction interval"
+        ax.set_title(f"{title_text}{metrics_str}")
 
         # Plot temperatures on primary y-axis
         l1 = ax.plot(dates, df['Tair'], '.', color=light_blue, label='Air temperature', markersize=2)
@@ -412,31 +427,12 @@ def post_process(data: CommonData, toll: float = None):
         ax2.set_ylabel('Discharge')
         ax2.set_ylim(bottom=0) # Discharge shouldn't be negative
 
-        # Combine legends
-        l_env = []
-        if os.path.exists(env_file):
-            env_df = pd.read_csv(env_file)
-            # The warm-up block is dropped when this file is written (report 05,
-            # Defect C), so only the observation-range slice below is needed.
-            if filter_to_obs and 'start_idx' in locals() and len(env_df) > end_idx:
-                env_df = env_df.iloc[start_idx:end_idx+1].copy()
-
-            if len(env_df) == len(dates):
-                env_df['Twat_mod_lower'] = np.where(env_df['Twat_mod_lower'] == -999.0, np.nan, env_df['Twat_mod_lower'])
-                env_df['Twat_mod_upper'] = np.where(env_df['Twat_mod_upper'] == -999.0, np.nan, env_df['Twat_mod_upper'])
-                lower_col = 'Twat_mod_lower'
-                upper_col = 'Twat_mod_upper'
-
-                pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
-                l_env = [ax.fill_between(dates, env_df[lower_col], env_df[upper_col], color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')]
-
         lines = l1 + l2 + l3 + l4
-        if l_env:
-            # We add a proxy artist for the fill_between to show up nicely in the legend
+        if band is not None:
+            ax.fill_between(dates, band['Twat_mod_lower'].values, band['Twat_mod_upper'].values,
+                            color='green', alpha=0.3)
             import matplotlib.patches as mpatches
-            pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
-            proxy = mpatches.Patch(color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')
-            lines.append(proxy)
+            lines.append(mpatches.Patch(color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval'))
 
         labels = [l.get_label() for l in lines]
         ax.legend(lines, labels, loc='lower left', fontsize='small')
@@ -480,7 +476,7 @@ def post_process(data: CommonData, toll: float = None):
 
             # Autocorrelation (ACF), computed gap-aware on the full (NaN-retaining)
             # residual series so lag-k pairs days k calendar days apart, not the
-            # k-th and (k+1)-th surviving non-missing days (audit report 06, Defect F).
+            # k-th and (k+1)-th surviving non-missing days.
             lags, acf_vals, n_pairs = gap_aware_acf(residuals, max_lag=50)
             if len(lags) > 0:
                 axes[2].bar(lags, acf_vals, width=0.8, color='steelblue')
@@ -543,7 +539,7 @@ def post_process(data: CommonData, toll: float = None):
         # The warm-up block is marked with Year=-999 by read_Tseries, so this mask
         # already excludes it -- no separate positional [365:] slice is needed or
         # correct here. (data.date/Tair/Twat_mod/Q are the live in-memory arrays,
-        # still full-length, unlike the on-disk CSVs -- report 05, Defect C.)
+        # still full-length, unlike the on-disk CSVs.)
         valid_dates_mask = df_dates['year'] > 0
         df_dates = df_dates[valid_dates_mask]
         dates = pd.to_datetime(df_dates)
@@ -559,34 +555,17 @@ def post_process(data: CommonData, toll: float = None):
 
         l1 = ax.plot(dates, Tair, '.', color=light_blue, label='Air temperature', markersize=2)
 
+        pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
+        band = _envelope_on_dates(data, dates)
         l_env = []
-        env_file_fwd = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
-        env_file_mcmc = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
-
-        env_file = env_file_mcmc if os.path.exists(env_file_mcmc) else env_file_fwd
-
-        if os.path.exists(env_file_mcmc):
-            pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
-            ax.set_title(f"Historical Calibration with {pi_val:g}% Prediction Interval")
+        if band is not None:
+            ax.set_title(f"Forward projection with {pi_val:g}% prediction interval")
+            l_env = [ax.fill_between(dates, band['Twat_mod_lower'].values, band['Twat_mod_upper'].values,
+                                     color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')]
         else:
-            pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
-            ax.set_title(f"Forward Projection with {pi_val:g}% Prediction Interval")
+            ax.set_title("Forward projection")
 
-        if os.path.exists(env_file):
-            env_df = pd.read_csv(env_file)
-            # env_file no longer contains the warm-up block (report 05, Defect C),
-            # so it already aligns 1:1 with the valid (non-warm-up) portion of
-            # data.date -- no mask/slice needed, just the length safety check below.
-            if len(env_df) == len(dates):
-                env_df['Twat_mod_lower'] = np.where(env_df['Twat_mod_lower'] == -999.0, np.nan, env_df['Twat_mod_lower'])
-                env_df['Twat_mod_upper'] = np.where(env_df['Twat_mod_upper'] == -999.0, np.nan, env_df['Twat_mod_upper'])
-                lower_col = 'Twat_mod_lower'
-                upper_col = 'Twat_mod_upper'
-
-                pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
-                l_env = [ax.fill_between(dates, env_df[lower_col], env_df[upper_col], color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')]
-
-        l3 = ax.plot(dates, Twat_mod, '-', color=orange, label='Simulated median water temp.', linewidth=1.5)
+        l3 = ax.plot(dates, Twat_mod, '-', color=orange, label='Simulated water temperature', linewidth=1.5)
 
         ax.set_xlabel('Time')
         ax.set_ylabel('Temperature [°C]')

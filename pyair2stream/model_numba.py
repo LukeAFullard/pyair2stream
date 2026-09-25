@@ -237,7 +237,7 @@ def fast_AB_version(version, p1, p2, p3, p4, p5, p6, p7, p8, Ta, QQ, time, Qmedi
     A is the state-independent forcing term; B is the (discharge-dependent,
     for versions 4/7/8) linear decay rate in 1/day. Used by the EXP
     (integrating-factor / exponential) integrator, which is exact for
-    piecewise-constant A/B. See docs/audit/02_numerical_integration.md.
+    piecewise-constant A/B.
 
     `theta_floor` has the same meaning as in `fast_rk_version`.
     """

@@ -100,8 +100,7 @@ def ar1_whitened_stats(residuals: np.ndarray, rho: float, runs: list) -> tuple:
         Total number of residuals (sum of run lengths).
     n_runs : int
         Number of runs. Each run independently contributes one
-        `0.5 * log(1 - rho**2)` term to the concentrated log-likelihood (see
-        `docs/audit/04_uncertainty_and_mcmc.md`, 4.1), so the total correction
+        `0.5 * log(1 - rho**2)` term to the concentrated log-likelihood, so the total correction
         scales with the number of runs, not just with N.
     """
     sse_u = 0.0

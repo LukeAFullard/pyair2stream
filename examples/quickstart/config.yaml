@@ -6,9 +6,10 @@ station_name: "River_Alpha"
 series: "c"
 time_resolution: "1d"
 version: 8
-integrator: "RK4"
+integrator: "CRN"          # recommended (unconditionally stable)
 objective_function: "NSE"
-run_mode: "PSO"
+run_mode: "DE"             # recommended calibration method
+random_seed: 42            # makes the calibration exactly repeatable
 
 paths:
   input_data: "examples/quickstart/data/calibration_data.csv"
@@ -16,9 +17,9 @@ paths:
   output_dir: "examples/quickstart/output"
 
 optimization:
-  n_runs: 30
-  n_particles: 20
+  n_run: 50                # maximum DE generations
+  n_particles: 5           # DE population = 5 x 8 parameters = 40 candidates
 
-parameter_bounds:
+parameter_bounds:          # ranges used by the original model's authors
   min: [-5, -5, -5, -1, 0,  0,  0, -1]
   max: [15, 1.5, 5,  1, 20, 10, 1,  5]

@@ -168,13 +168,15 @@ class TestTimeResolutionValidation:
             yaml.safe_dump(config, f)
         return str(config_path)
 
-    @pytest.mark.parametrize('time_resolution', ['1d', '1w', '2w', '12w', '1m', '9m'])
+    @pytest.mark.parametrize('time_resolution', ['1d', '1w', '2w', '12w', '1m'])
     def test_valid_time_resolutions_accepted(self, tmp_path, time_resolution):
         config_path = self.setUp_config(tmp_path, time_resolution)
         data = read_calibration(config_file=config_path)
         assert data.time_res == time_resolution
 
-    @pytest.mark.parametrize('time_resolution', ['daily', '2d', 'weekly', '1', 'w', '100w'])
+    # '2m'/'9m': the monthly aggregation (like the Fortran's) ignores the count, so
+    # these would silently be scored as '1m'. '0w' would be a zero-length window.
+    @pytest.mark.parametrize('time_resolution', ['daily', '2d', 'weekly', '1', 'w', '100w', '2m', '9m', '0w'])
     def test_invalid_time_resolutions_rejected_with_clear_error(self, tmp_path, time_resolution):
         config_path = self.setUp_config(tmp_path, time_resolution)
         with pytest.raises(ValueError, match='time_resolution'):

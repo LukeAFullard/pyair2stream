@@ -15,19 +15,19 @@ import numpy as np
 import pandas as pd
 
 from .io import read_calibration, read_Tseries
-from .model import call_model, aggregation, statis, funcobj
 from .optimization import forward_mode, PSO_mode, LH_mode, DE_mode, DE_MCMC_mode, DE_CV_MCMC_mode
 from .config import CommonData
 from .post_processing import post_process
 from .sensitivity import sensitivity_analysis
 from . import __version__
 
-from .model import call_model, aggregation, statis, funcobj, detect_segments, warn_on_stability, check_numerical_divergence
+from .model import (call_model, aggregation, statis, funcobj, detect_segments, warn_on_stability,
+                    check_numerical_divergence, check_segment_warmup)
 
 def run_optimizer(data: CommonData) -> None:
     """
     Dispatches to the correct optimizer based on data.runmode, passing
-    `data.random_seed` through for reproducibility (docs/audit/07, 7.1). `None`
+    `data.random_seed` through for reproducibility. `None`
     (the default) reproduces the previous unseeded behaviour.
     """
     if data.runmode == 'FORWARD':
@@ -44,6 +44,33 @@ def run_optimizer(data: CommonData) -> None:
         DE_CV_MCMC_mode(data, seed=data.random_seed)
 
 
+def _write_calibration_metadata(data: CommonData) -> None:
+    """Write calibration_metadata.json (Qmedia, theta range, version, integrator, parameters)."""
+    Q_cal = data.Q[365:data.n_tot]
+    valid_Q_cal = (Q_cal != -999.0) & (Q_cal > 0.0)
+    theta_min = theta_max = None
+    if np.any(valid_Q_cal) and data.Qmedia > 0:
+        theta_cal = Q_cal[valid_Q_cal] / data.Qmedia
+        theta_min = float(np.min(theta_cal))
+        theta_max = float(np.max(theta_cal))
+
+    calibration_metadata = {
+        "qmedia": float(data.Qmedia),
+        "qmedia_source": "user" if data.Qmedia_user is not None else "computed",
+        "n_q_valid": int(data.n_Q),
+        "theta_min": theta_min,
+        "theta_max": theta_max,
+        "version": int(data.version),
+        "integrator": data.mod_num,
+        "par_best": [float(x) for x in data.par_best],
+        "pyair2stream_version": __version__,
+        "random_seed": data.random_seed,
+    }
+    metadata_path = os.path.join(data.folder, "calibration_metadata.json")
+    with open(metadata_path, 'w') as f:
+        json.dump(calibration_metadata, f, indent=2)
+
+
 def forward(data: CommonData) -> None:
     """
     Replicates SUBROUTINE forward in AIR2STREAM_SUBROUTINES.f90
@@ -56,6 +83,7 @@ def forward(data: CommonData) -> None:
         detect_segments(data)
 
     warn_on_stability(data, error_fraction=data.stability_error_fraction)
+    check_segment_warmup(data)
     call_model(data)
     check_numerical_divergence(data, max_plausible_twat=data.max_plausible_twat)
 
@@ -80,30 +108,11 @@ def forward(data: CommonData) -> None:
     # parameters so a later FORWARD run on different discharge (e.g. a
     # naturalised-flow or climate-projection scenario) can pin theta to the
     # value the parameters were actually fitted under instead of silently
-    # rescaling it. See docs/audit/01_qmedia_scenario_invariance.md.
-    Q_cal = data.Q[365:data.n_tot]
-    valid_Q_cal = (Q_cal != -999.0) & (Q_cal > 0.0)
-    theta_min = theta_max = None
-    if np.any(valid_Q_cal) and data.Qmedia > 0:
-        theta_cal = Q_cal[valid_Q_cal] / data.Qmedia
-        theta_min = float(np.min(theta_cal))
-        theta_max = float(np.max(theta_cal))
-
-    calibration_metadata = {
-        "qmedia": float(data.Qmedia),
-        "qmedia_source": "user" if data.Qmedia_user is not None else "computed",
-        "n_q_valid": int(data.n_Q),
-        "theta_min": theta_min,
-        "theta_max": theta_max,
-        "version": int(data.version),
-        "integrator": data.mod_num,
-        "par_best": [float(x) for x in data.par_best],
-        "pyair2stream_version": __version__,
-        "random_seed": data.random_seed,
-    }
-    metadata_path = os.path.join(data.folder, "calibration_metadata.json")
-    with open(metadata_path, 'w') as f:
-        json.dump(calibration_metadata, f, indent=2)
+    # rescaling it (USER_GUIDE.md §6, Qmedia). Not written by a FORWARD run: it
+    # is not a calibration, and would overwrite the real calibration's file
+    # (with the scenario's theta range) when both share an output folder.
+    if data.runmode != 'FORWARD':
+        _write_calibration_metadata(data)
 
     # Construct gap columns
     tair_gap = np.where(data.Tair == -999.0, 1, 0)
@@ -135,8 +144,7 @@ def forward(data: CommonData) -> None:
 
     # Drop the warm-up block: it is a verbatim copy of year one with sentinel
     # dates (Year=-999), an implementation detail that broke pd.to_datetime and
-    # row-count expectations for anyone reading the file directly (report 05,
-    # Defect C).
+    # row-count expectations for anyone reading the file directly.
     cal_df.iloc[365:].to_csv(out_cal_path, index=False)
 
     # Generate gaps_summary.txt
@@ -172,17 +180,17 @@ def forward(data: CommonData) -> None:
 
     # 2. Validation period
     # Do not recompute Qmedia here: the validation period must be scored under
-    # the same normalisation the parameters were calibrated with (report 01).
+    # the same normalisation the parameters were calibrated with.
     # read_Tseries already rebuilds segments/eval_mask for the validation data (and
     # turns "no valid segments" in gap-tolerant mode into the same validation-skipped
-    # early return as a missing/too-short validation file -- see report 03).
+    # early return as a missing/too-short validation file).
     read_Tseries(data, 'v', recompute_qmedia=False)
 
     # Gate on the explicit flag, not data.n_tot: a too-short (or missing, or
     # gap-tolerant-with-no-valid-segments) validation period returns from
     # read_Tseries before data.n_tot is overwritten, so it stays at the
     # calibration value and would otherwise silently pass this guard, re-running
-    # "validation" on the calibration arrays (report 05, Defect B).
+    # "validation" on the calibration arrays.
     if not data.validation_available:
         return
 
@@ -225,7 +233,7 @@ def forward(data: CommonData) -> None:
         val_df['Q_gap'] = val_q_gap
         val_df['segment_id'] = val_segment_id
 
-    val_df.iloc[365:].to_csv(out_val_path, index=False)  # drop the warm-up block (report 05, Defect C)
+    val_df.iloc[365:].to_csv(out_val_path, index=False)  # drop the warm-up block
 
 
 def main():
@@ -263,7 +271,7 @@ def main():
     # observations at all (a pure projection). statis() raises when there are
     # none, so it -- and the preceding aggregation() -- must not run
     # unconditionally here. forward_mode() handles both cases itself via its own
-    # has_obs check (report 05, Defect A / 5.1).
+    # has_obs check.
     if data.runmode != 'FORWARD':
         aggregation(data)
         statis(data)
@@ -283,8 +291,8 @@ def main():
             t2 = time.time()
             print(f"Computation time was {t2 - t1:.4f} seconds.")
             return  # skip the normal single calibration + forward() + post_process()
-        elif data.runmode not in ('DE-MCMC', 'DE-CV-MCMC'):
-            print(f"Warning: cross_validation is enabled in config, but run mode '{data.runmode}' does not support it (or handles it internally). Ignoring cross_validation block.")
+        elif data.runmode != 'DE-CV-MCMC':  # DE-CV-MCMC uses the block internally
+            print(f"Warning: cross_validation is enabled in config, but run mode '{data.runmode}' does not support it. Ignoring cross_validation block.")
 
     run_optimizer(data)
 

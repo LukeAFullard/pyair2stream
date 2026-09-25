@@ -12,7 +12,7 @@ fortran_params = [3.164, 0.417, 0.829, 0.340, 1.343, 5.192, 0.574, 0.883]
 
 # Create forward config to run with python params
 def create_forward_config(params):
-    # FORWARD mode requires an explicit Qmedia (see docs/audit/01_qmedia_scenario_invariance.md):
+    # FORWARD mode requires an explicit Qmedia (see USER_GUIDE.md §6, Qmedia):
     # recomputing it from whatever discharge is loaded would silently rescale theta. This replays
     # the same calibration discharge, so pin Qmedia to that series' own mean.
     qmedia = float(pd.read_csv('examples/validation/Switzerland/DAV_2327_cc.csv')['Discharge'].pipe(

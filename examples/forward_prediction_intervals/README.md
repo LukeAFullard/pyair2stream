@@ -11,7 +11,7 @@ By providing the `MCMC_chain.csv` and the historical residual error ($\sigma$), 
 
 This example showcases the two noise generation methods available:
 * **IID (Independent and Identically Distributed):** Standard white noise. It assumes residuals have no memory.
-* **AR(1) (Autoregressive lag-1):** Time-correlated noise. Environmental data like water temperature often has strong serial correlation, meaning if today is warmer than predicted, tomorrow is likely to be as well. AR(1) preserves this structure, typically resulting in wider and more realistic prediction bounds. `pyair2stream` automatically estimates the correlation coefficient ($\rho$) from the historical residuals and passes it to the projection run via a sidecar JSON file (`_meta.json`).
+* **AR(1) (Autoregressive lag-1):** Time-correlated noise. Environmental data like water temperature often has strong serial correlation, meaning if today is warmer than predicted, tomorrow is likely to be as well. AR(1) preserves this structure. On any single day it gives the same band width as IID (both use the same error size); the difference shows up in multi-day quantities such as weekly means. `pyair2stream` automatically estimates the correlation coefficient ($\rho$) from the historical residuals and passes it to the projection run via a sidecar JSON file (`_meta.json`).
 
 ## How to Run
 
@@ -38,7 +38,7 @@ This script will:
 
 ## Example Output
 
-Check `examples/forward_prediction_intervals/comparison_iid_vs_ar1.png` to see how the temporally-correlated structure of the AR(1) noise generates more representative bounds compared to standard white noise.
+Check `examples/forward_prediction_intervals/comparison_iid_vs_ar1.png` to compare the two noise models.
 
 The generated plot features four panels that illustrate the practical difference between IID and AR(1) noise models:
 1. **Forward Projection - IID Noise**: Shows the standard 90% Prediction Interval using white noise.
@@ -52,14 +52,14 @@ The generated plot features four panels that illustrate the practical difference
 
 ### Discussion of Results
 The historical calibration run yielded the parameter uncertainty and observation noise estimates.
-- **Model Fit Parameters**: The calibration yielded an NSE of 0.9728 and an R² of 0.9728. The Mean Absolute Error (MAE) was 0.6463°C.
+- **Model Fit Parameters**: The calibration yielded an NSE of 0.9728 and a Mean Absolute Error (MAE) of 0.6463°C. (Older versions also listed an "R²" of 0.9728; that value was the NSE under another name. Current versions report R², the squared correlation, separately.)
 - **Error Structure**: The estimated residual standard deviation ($\sigma$) is 0.8185°C, closely matching the injected synthetic noise. The autocorrelation coefficient ($\rho$) is 0.5910, indicating daily memory in the water temperature residuals.
 
 #### Visual Diagnostics
-1. **Comparison Plot (`comparison_iid_vs_ar1.png`)**: This plot contrasts the prediction bounds produced using standard white noise vs. autoregressive noise. The AR(1) bounds realistically widen over multi-day periods when rolled/averaged, providing safer estimates for medium-term temperature thresholds.
-2. **Convergence Plot (`convergence_DE-MCMC_NSE_Alpha.png`)**: Illustrates the MCMC chains converging on the posterior distributions for the 8 model parameters over 1000 steps.
+1. **Comparison Plot (`comparison_iid_vs_ar1.png`)**: This plot contrasts the prediction bounds produced using standard white noise vs. autoregressive noise. When averaged over several days, the AR(1) bounds narrow much less than the IID bounds, which is realistic for multi-day temperature thresholds.
+2. **Convergence Plot (`convergence_DE-MCMC_NSE_Alpha.png`)**: The NSE, R² and MAE of every parameter set tried during the DE calibration, with the best value so far. It should flatten out. (MCMC convergence is reported in the console and in `MCMC_chain_*_meta.json`.)
 3. **Dotty Plots (`dottyplots_DE-MCMC_NSE_Alpha.png`)**: Shows the objective function space across each parameter dimension, confirming which parameters are well-identified and highlighting equifinality.
-4. **Parameter Correlation (`parameter_correlation_DE-MCMC_Alpha.png`)**: A pair-plot showing the posterior distributions of the parameters and their trade-offs.
+4. **Parameter Correlation (`parameter_correlation_DE-MCMC_Alpha.png`)**: The correlation between each pair of parameters in the MCMC sample; strong correlations show parameters that trade off against each other.
 
 
 ![Comparison Plot](comparison_iid_vs_ar1.png)
