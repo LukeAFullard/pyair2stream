@@ -90,7 +90,7 @@ class TestOptimization(unittest.TestCase):
         self.data.runmode = 'DE-MCMC'
 
         # Test default iid first
-        self.data.uncertainty_options = {"noise_model": "iid", "ar1_rho": None}
+        self.data.uncertainty_options = {"noise_model": "iid", "ar1_rho": None, "strict_convergence": False}
         DE_MCMC_mode(self.data, seed=42)
 
         chain_path = os.path.join(self.data.folder, f"MCMC_chain_test_station_test_series_1d.csv")
@@ -109,7 +109,7 @@ class TestOptimization(unittest.TestCase):
         env_iid = pd.read_csv(env_path)
 
         # Now test ar1
-        self.data.uncertainty_options = {"noise_model": "ar1", "ar1_rho": None}
+        self.data.uncertainty_options = {"noise_model": "ar1", "ar1_rho": None, "strict_convergence": False}
         DE_MCMC_mode(self.data, seed=42)
 
         with open(sidecar_path, 'r') as f:
@@ -259,6 +259,7 @@ class TestOptimization(unittest.TestCase):
         self.data.n_run = 1
         self.data.mcmc_walkers = 16
         self.data.mcmc_steps = 10
+        self.data.uncertainty_options = {'strict_convergence': False}  # tiny chain: tests other behaviour, not convergence
 
         self.data.cross_validation = CVConfig(
             min_train_years=0,

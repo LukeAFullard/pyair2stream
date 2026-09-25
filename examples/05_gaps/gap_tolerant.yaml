@@ -1,0 +1,22 @@
+# Example 05: calibrate on a record with missing air temperature, using gap-tolerant mode.
+# The input file is made by run.py. From the repository's top folder:
+#   pyair2stream --config examples/05_gaps/gap_tolerant.yaml
+project_name: "gaps"
+station_name: "Mentue"
+series: "c"
+time_resolution: "1d"
+version: 8
+integrator: "CRN"
+objective_function: "NSE"
+run_mode: "DE"
+random_seed: 42
+gap_tolerant: true         # split the record at gaps in air temperature or discharge
+
+paths:
+  input_data: "examples/05_gaps/output/gappy_calibration.csv"
+  validation_data: "data/switzerland/MAH_2369_validation.csv"
+  output_dir: "examples/05_gaps/output/gap_tolerant"
+
+parameter_bounds:
+  min: [-5, -5, -5, -1, 0,  0,  0, -1]
+  max: [15, 1.5, 5,  1, 20, 10, 1,  5]

@@ -1,0 +1,24 @@
+# Example 04, step 2: the river as it was (measured discharge), 2010-2012.
+#   pyair2stream --config examples/04_scenario/baseline.yaml
+project_name: "scenario"
+station_name: "Mentue"
+series: "c"
+time_resolution: "1d"
+version: 8
+integrator: "CRN"
+run_mode: "FORWARD"
+
+paths:
+  input_data: "data/switzerland/MAH_2369_validation.csv"
+  output_dir: "examples/04_scenario/output/baseline"
+  calibration_metadata: "examples/04_scenario/output/calibration/calibration_metadata.json"
+
+uncertainty_options:
+  noise_model: "ar1"
+  save_ensemble: true
+
+forward_options:
+  enable_prediction_intervals: true
+  mcmc_chain_path: "examples/04_scenario/output/calibration/MCMC_chain_Mentue_c_1d.csv"
+  n_samples: 1000
+  random_seed: 42

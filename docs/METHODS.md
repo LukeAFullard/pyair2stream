@@ -152,6 +152,16 @@ Fortran exactly and are mainly useful for that purpose.
 After every step, water temperature is not allowed below `Tice_cover` (default
 0 °C), as in the Fortran.
 
+With a one-day step, no scheme follows the equation exactly when water
+temperature responds within a day (large B). Compared with a fine-step
+solution of the same equation, CRN differs by 0.04–0.10 °C RMS on the Swiss
+rivers, and EUL by up to about 1 °C even where stable (validation V6). This is
+not an error in the predictions, because the parameters are calibrated with
+the scheme and absorb its behaviour. It does mean that **parameters belong to
+the scheme they were calibrated with**: the published parameters are CRN
+parameters. Calibrating with EXP instead of CRN changed validation RMSE by less
+than 0.03 °C.
+
 ## 7. Measuring the fit
 
 **Scored days.** A day is scored if it has an observed water temperature and is
@@ -288,17 +298,23 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    understates parameter uncertainty. `ar1` is recommended for daily data. (With
    weekly or monthly scoring there are no consecutive days, so `ar1` behaves like
    `iid`.)
-3. **Sampling.** The `emcee` affine-invariant ensemble sampler runs
-   `mcmc_walkers` (default 32) chains for `mcmc_steps` (default 1000) steps,
-   starting close to the DE optimum (spread 0.1% of each parameter's bound range,
-   reflected back inside the bounds). `DE-CV-MCMC` instead starts with the
-   parameter spread found by cross-validation (§11); this only affects how fast
-   the sampler settles, not what it converges to.
-4. **Burn-in and convergence.** The first max(30% of steps, 5× the
-   autocorrelation time) steps are discarded (or `burnin_fraction`). The program
-   reports the autocorrelation time (warns if the run is shorter than 50× it),
-   split-R̂ (warns above 1.01) and the acceptance fraction. **Treat results as
-   unreliable while these warnings appear**; increase `mcmc_steps`.
+3. **Sampling.** `mcmc_walkers` (default 32) chains ("walkers") are started
+   close to the DE optimum (spread 0.1% of each parameter's bound range,
+   reflected back inside the bounds) and advanced together by `emcee`'s
+   ensemble sampler with the differential-evolution move (ter Braak, 2006): each
+   proposal moves a walker along the difference between two others, which suits
+   the strongly correlated parameters of air2stream. `DE-CV-MCMC` instead starts
+   with the parameter spread found by cross-validation (§11); this only affects
+   how fast the sampler settles, not what it converges to.
+4. **Run length and convergence.** The sampler runs in blocks of 1,000 steps
+   (at least 2,000) and stops when the chain is at least 50 times its longest
+   autocorrelation time and split-R̂ is below 1.01 for every parameter, or when
+   `mcmc_steps` (default 20,000) is reached. The first max(30% of steps, 5× the
+   autocorrelation time) steps are discarded as burn-in (or `burnin_fraction`),
+   and every (autocorrelation time / 2)-th step of the rest is kept. If the
+   chain has not converged, the run stops with an error and writes its
+   diagnostics (`strict_convergence: true`, the default); with `false` it
+   continues and every output is marked as not converged.
 5. **Prediction interval.** Up to 1000 parameter sets are drawn from the chain.
    For each, the model is run and random error is added to every day: normally
    distributed with standard deviation equal to that parameter set's daily
@@ -317,6 +333,24 @@ means, days in a row above a threshold): use the raw ensemble for those
 (`save_ensemble: true`, and `pyair2stream.scenario`), never averages of the
 daily percentiles.
 
+**What the validation shows** ([validation/REPORT.md](../validation/REPORT.md)).
+On synthetic data from a known truth, 90% prediction intervals contained 89–90%
+of new observations for versions 5 and 8, and the parameter intervals of version
+5 contained the true values at close to the nominal rate (V4). The sampler was
+cross-checked against emcee's stretch move. Version 8's parameter intervals
+contained the truth only about 75% of the time: its parameters trade off against
+each other, the posterior is far from normal, and Bayesian intervals are then
+not guaranteed their nominal frequency. On three real rivers, 90% intervals
+contained 85–89% of daily values in years not used for calibration, and for
+7-day means 39–62% with `iid` against 76–88% with `ar1` (V5).
+
+Because the DE step maximises the objective (NSE, which treats errors as
+independent) while the `ar1` likelihood does not, the `ar1` chain can be
+centred on a different parameter combination from the DE best fit when
+parameters trade off. For version 8 on the Mentue, a5 is 2.6 in the best fit and
+4.7 ± 0.3 in the chain, with almost the same predictions (validation RMSE 0.78
+against 0.79 °C). The `iid` chain is centred on the DE best fit.
+
 **Outputs:** `MCMC_chain_*.csv` (post-burn-in samples), `MCMC_chain_*_meta.json`
 (σ, ρ, diagnostics, coverage, excluded draws), `MCMC_envelopes_*.csv`, and the
 parameter summary `parameter_significance_*.csv` (posterior mean, standard
@@ -324,19 +358,24 @@ deviation, 95% credible interval, and whether that interval excludes zero).
 
 ## 13. Forward runs and scenario comparisons
 
-`run_mode: FORWARD` runs the model with known parameters (`parameters_forward`,
-8 values) on any input file, without calibrating. It requires the calibration
-`Qmedia` (§4). When given `paths.calibration_metadata`, it also warns if more
-than 1% of days have θ outside the range seen in calibration (extrapolation). If the file contains water-temperature
-observations, the fit is reported as in §7.
+`run_mode: FORWARD` runs the model with known parameters on any input file,
+without calibrating. It requires the calibration `Qmedia` (§4). Given
+`paths.calibration_metadata` (the calibration's `calibration_metadata.json`), it
+takes `Qmedia` and the calibrated parameters from it (unless
+`parameters_forward` is given), refuses a different model version or integrator,
+and warns if more than 1% of days have θ outside the range seen in calibration
+(extrapolation). If the file contains water-temperature observations, the fit is
+reported as in §7.
 
 **Prediction intervals** (`forward_options.enable_prediction_intervals: true`)
 reuse a DE-MCMC chain (`mcmc_chain_path`): `n_samples` (default 1000) parameter
 sets are drawn, each is run, and error is added with standard deviation σ =
 `forward_options.residual_sigma`, or else the calibration's daily residual
 standard deviation stored in the chain's `_meta.json`. For `ar1`, ρ is taken from
-`ar1_rho`, else from this run's own residuals (if it has observations), else from
-the calibration `_meta.json`. Coverage is reported if observations exist.
+`ar1_rho`, else from the chain's `_meta.json`, else from this run's own residuals.
+The interval therefore never depends on the observations it is checked against.
+Coverage is reported if observations exist. The noise model, σ and ρ used are
+recorded in the run's `Forward_Prediction_Ensemble_*_meta.json`.
 
 **Comparing two scenarios** (for example observed versus naturalised flow): run
 FORWARD once per scenario from the same chain with `save_ensemble: true`, and
@@ -344,7 +383,12 @@ for the second run set `forward_options.reuse_sample_indices_from` to the first
 run's `Forward_Prediction_Ensemble_*_meta.json`, so both use exactly the same
 parameter sets. `scenario.paired_difference_from_files()` then checks this before
 computing the difference draw by draw, which gives an uncertainty band for the
-*difference* itself.
+*difference* itself. The random error added to a draw is generated from a seed
+fixed by the chain's content and the draw's row in it, so both runs add the same
+error to the same draw on the same day and it cancels in the difference: the
+band is the parameter uncertainty of the effect. This assumes the model's error
+on a given day would be the same under both scenarios. The validation checks
+that the paired difference equals the exact effect where it is known (V8).
 
 ## 14. Sensitivity analysis
 
@@ -385,8 +429,13 @@ change one-sided.
 - **Prediction intervals rest on assumptions**: normally distributed errors of
   constant size, independent or AR(1). Check the residual plots (histogram,
   Q-Q, autocorrelation) and the reported coverage, ideally on validation data.
-- **Converged sampling.** MCMC results are only valid once the convergence
-  warnings (§12) are gone.
+- **Converged sampling.** MCMC results are only valid once converged; by
+  default the run stops otherwise (§12).
+- **Multi-day quantities** (7-day means, runs of days above a limit) need
+  `noise_model: "ar1"` and must be computed from the saved simulations. Even
+  then their intervals were somewhat narrow on real rivers (§12).
+- **Intervals for new years are slightly optimistic**: σ is estimated on the
+  calibration years, and errors are usually somewhat larger in other years.
 - **Metric caveats.** KGE's ratio of means is unstable when mean water
   temperature is near 0 °C. AIC/BIC assume independent errors and favour more
   complex versions when errors are autocorrelated. Gap-tolerant scores are not
@@ -395,14 +444,16 @@ change one-sided.
   commit (`git rev-parse HEAD`), the Python package versions (`pip freeze`), and
   the output files `calibration_metadata.json` and any `_meta.json`.
 
-**Evidence that the implementation is correct:** the test suite compiles the
-original Fortran from source and checks that every version (3, 4, 5, 7, 8) with
-each Fortran integrator gives the same daily water temperatures to within
-6×10⁻⁶ °C (the precision of the Fortran's printed output); it also checks each
-safeguard above. Running the published parameter sets for three Swiss rivers
-reproduces the published calibration NSE to within 0.006 (see the README). On
-the bundled synthetic example, the 90% DE-MCMC interval contained 89% of
-calibration days and 92% of the held-out validation year.
+**Evidence that the implementation is correct** is in
+[validation/REPORT.md](../validation/REPORT.md), produced by
+`validation/run_all.py`: identical results to the original Fortran on real
+inputs for every version and Fortran integrator (to 5×10⁻⁶ °C, the precision of
+its printed output); all 30 published RMSE values of Piccolroaz et al. (2016)
+reproduced to within 0.001 °C; recovery of a known truth; calibrated intervals
+on synthetic data; out-of-sample performance on three real rivers; numerical
+accuracy; gaps; and exact answers from the workflow and scenario tools. The test
+suite (`pytest tests/`) also compares against the Fortran and checks each
+safeguard above.
 
 ## 17. Differences from the Fortran original
 
@@ -451,6 +502,9 @@ These are deliberate; each is covered by tests.
 - Gupta, H. V., Kling, H., Yilmaz, K. K. and Martinez, G. F. (2009).
   Decomposition of the mean squared error and NSE performance criteria.
   *Journal of Hydrology*, 377, 80–91.
+- ter Braak, C. J. F. (2006). A Markov chain Monte Carlo version of the genetic
+  algorithm Differential Evolution: easy Bayesian computing for real parameter
+  spaces. *Statistics and Computing*, 16, 239–249.
 - Goodman, J. and Weare, J. (2010). Ensemble samplers with affine invariance.
   *Communications in Applied Mathematics and Computational Science*, 5, 65–80.
 - Foreman-Mackey, D., Hogg, D. W., Lang, D. and Goodman, J. (2013). emcee: the

@@ -1,0 +1,13 @@
+river,version,noise model,converged,steps,coverage,summer coverage (Jun-Aug),7-day mean coverage,mean width (°C),calibration coverage
+Mentue,5,iid,True,4000,86.4%,97.1%,59.6%,2.19,89.4%
+Mentue,5,ar1,True,4000,85.7%,96.4%,76.3%,2.19,90.0%
+Mentue,8,iid,True,6000,88.4%,94.6%,62.2%,2.08,89.9%
+Mentue,8,ar1,True,6000,87.9%,93.8%,87.8%,2.08,90.0%
+Rhône,5,iid,True,4000,85.0%,91.3%,38.7%,2.86,90.3%
+Rhône,5,ar1,True,3000,84.9%,89.3%,84.1%,2.86,90.2%
+Rhône,8,iid,True,5000,86.1%,90.2%,56.6%,1.9,90.1%
+Rhône,8,ar1,True,5000,86.0%,89.3%,84.3%,1.9,90.3%
+Dischmabach,5,iid,True,5000,89.1%,86.2%,49.4%,2.43,90.2%
+Dischmabach,5,ar1,True,8000,88.4%,83.7%,84.6%,2.45,90.6%
+Dischmabach,8,iid,True,9000,88.2%,92.0%,53.2%,2.08,89.4%
+Dischmabach,8,ar1,True,11000,87.8%,88.8%,80.8%,2.09,89.8%

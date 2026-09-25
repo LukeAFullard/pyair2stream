@@ -42,14 +42,15 @@ pip install .
 
 ## Quick start
 
-Run the bundled example (synthetic data, about 5 seconds):
+Calibrate the model on a real Swiss river and test it on later years (under a
+minute), from the repository's top folder:
 
 ```bash
-pyair2stream --config examples/quickstart/config.yaml
+pyair2stream --config examples/01_quickstart/config.yaml
 ```
 
-Results and plots appear in `examples/quickstart/output/`. The
-[User Guide](USER_GUIDE.md#3-your-first-run-the-bundled-example) explains them.
+Results and plots appear in `examples/01_quickstart/output/`; the
+[example's README](examples/01_quickstart/README.md) explains them.
 
 To use your own data:
 
@@ -132,54 +133,54 @@ Details: [User Guide §8](USER_GUIDE.md#8-understanding-the-output-files).
 - **[docs/METHODS.md](docs/METHODS.md)** — exactly what the software does, step
   by step, its assumptions and limitations, and how it differs from the Fortran.
   Read §16 there before using results to support a decision.
+- **[validation/REPORT.md](validation/REPORT.md)** — the evidence that it works.
 - [CHANGELOG.md](CHANGELOG.md) — changes between versions.
 
 ## Is it correct?
 
-- **Same results as the original.** The test suite compiles the original Fortran
-  (a git submodule, see [`fortran/patches/NOTICE.md`](fortran/patches/NOTICE.md))
-  and checks that all five model versions give the same daily temperatures to
-  within 6×10⁻⁶ °C.
-- **Reproduces published results.** Running the published parameters for three
-  Swiss rivers (Piccolroaz et al., 2016) gives the published calibration NSE:
+The [validation suite](validation/README.md) checks this, and its results are in
+[validation/REPORT.md](validation/REPORT.md). In short:
 
-  | River (station) | Flow regime | Published NSE | pyair2stream NSE |
-  |---|---|---|---|
-  | Mentue (MAH-2369) | natural | 0.989 | 0.9886 |
-  | Rhône (SIO-2011) | regulated | 0.923 | 0.9242 |
-  | Dischmabach (DAV-2327) | snow-fed | 0.950 | 0.9558 |
+- **Same results as the original Fortran**, on real river data, for all five
+  model versions and every solution scheme the Fortran has (to 5×10⁻⁶ °C, the
+  precision of the Fortran's output).
+- **Reproduces the published results.** For three Swiss rivers (Piccolroaz et
+  al., 2016), the published parameters give the published calibration and
+  validation errors, all 30 of them to within 0.001 °C. Recalibrating with `DE`
+  fits at least as well as the published calibration.
+- **Finds a known truth.** On data made by the model from known parameters,
+  calibration predicts other years to within 0.04 °C of the truth (0.06 °C
+  with typical gaps in the data).
+- **Honest intervals, with known limits.** On such data, 90% prediction
+  intervals contain 89–90% of new observations. On the real rivers they contain
+  85–89% of daily values in years not used for calibration, so they are slightly
+  optimistic (one case falls just below the report's 85% threshold, so that
+  check is marked as failed). For multi-day quantities such as 7-day means, use
+  `noise_model: "ar1"`; the default `"iid"` makes those intervals far too narrow.
+- **Scenario tools give exact answers** where the answer is known.
 
-  Recalibrating with `DE` recovers the published parameters (for the Mentue, all
-  eight within 0.004). Details:
-  [`examples/validation/Switzerland/`](examples/validation/Switzerland/README.md).
-- **Honest uncertainty.** On the bundled example, the 90% prediction interval
-  contained 89% of calibration days and 92% of a held-out year; every run with
-  intervals reports this check for your own data.
-
-To run the tests (needs `gfortran`):
+To run the tests and the validation suite (needs `gfortran`):
 
 ```bash
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
+python validation/run_all.py --quick     # or without --quick: the full suite, about 15 minutes
 ```
 
 ## Examples
 
-Each folder has a README.
+Worked examples on a real river, each with a README
+([examples/README.md](examples/README.md)):
 
-| Folder | Shows |
+| Example | Question |
 |---|---|
-| `quickstart/` | the smallest complete run |
-| `validation/Switzerland/` | reproduction of published results; optimizer and integrator comparisons |
-| `forward_prediction_intervals/` | uncertainty bands for a future scenario (iid vs. AR(1) errors) |
-| `mcmc_comparison/` | `DE-MCMC` vs. `DE-CV-MCMC` |
-| `cross_validation/` | leave-one-year-out cross-validation |
-| `gap_experiment/` | effect of gaps on gap-tolerant calibration |
-| `optimizer_comparison/`, `optimizer_convergence/` | DE vs. PSO |
-| `Hopelands/` | a real river from raw data to results |
-
-Some examples need data that is not included in this repository.
+| [01 Quickstart](examples/01_quickstart/README.md) | Can the model reproduce this river, including years it was not calibrated on? |
+| [02 Uncertainty](examples/02_uncertainty/README.md) | What range of temperatures should we expect, and does the range hold? |
+| [03 Compliance](examples/03_compliance/README.md) | How likely is it that a temperature limit was exceeded? |
+| [04 Scenario](examples/04_scenario/README.md) | What difference would abstracting 30% of the flow make? |
+| [05 Gaps](examples/05_gaps/README.md) | What to do with missing data |
+| [06 Cross-validation](examples/06_cross_validation/README.md) | Does the model predict every year well? Which version to use? |
 
 ## Differences from the original Fortran
 

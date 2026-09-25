@@ -1,0 +1,27 @@
+# Example 03, step 2: simulate 2010-2012 many times and keep every simulation.
+# Run after step 1, from the repository's top folder:
+#   pyair2stream --config examples/03_compliance/predict.yaml
+project_name: "compliance"
+station_name: "Mentue"
+series: "c"
+time_resolution: "1d"
+version: 8
+integrator: "CRN"
+run_mode: "FORWARD"
+
+paths:
+  # Only air temperature and discharge are used to simulate. The file's water
+  # temperatures are used only to report how well the simulation matches them.
+  input_data: "data/switzerland/MAH_2369_validation.csv"        # 2010-2012
+  output_dir: "examples/03_compliance/output/prediction"
+  calibration_metadata: "examples/03_compliance/output/calibration/calibration_metadata.json"
+
+uncertainty_options:
+  noise_model: "ar1"       # needed for 7-day means and runs of days
+  save_ensemble: true      # keep all 1000 simulated series (needed for step 3)
+
+forward_options:
+  enable_prediction_intervals: true
+  mcmc_chain_path: "examples/03_compliance/output/calibration/MCMC_chain_Mentue_c_1d.csv"
+  n_samples: 1000
+  random_seed: 42

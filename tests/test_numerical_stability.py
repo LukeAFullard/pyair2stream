@@ -29,9 +29,9 @@ from pyair2stream.model import (
     check_numerical_divergence, NumericalDivergenceError, STABILITY_LIMITS,
 )
 
-QUICKSTART_CSV = os.path.join(
+MENTUE_CSV = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "examples", "quickstart", "data", "calibration_data.csv",
+    "data", "switzerland", "MAH_2369_calibration.csv",
 )
 
 # A version-8 parameter set with a negative a4 (rating-curve exponent), reproducing the
@@ -145,11 +145,11 @@ class TestNumericalStability(unittest.TestCase):
         diff = np.abs(data_crn.Twat_mod[365:] - data_exp.Twat_mod[365:])
         self.assertLess(np.max(diff), 0.1)
 
-    def test_crn_and_exp_agree_on_quickstart_dataset(self):
+    def test_crn_and_exp_agree_on_real_forcing(self):
         cal_data = CommonData()
         cal_data.runmode = 'PSO'
         cal_data.version = 8
-        cal_data._input_data_path_cal = QUICKSTART_CSV
+        cal_data._input_data_path_cal = MENTUE_CSV
         read_Tseries(cal_data, 'c')
 
         par = [1.0, 0.1, 0.1, 0.5, 1.0, 1.0, 0.5, 0.1]

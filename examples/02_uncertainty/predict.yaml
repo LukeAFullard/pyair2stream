@@ -1,0 +1,25 @@
+# Example 02, step 2: predict 2010-2012 with 90% prediction intervals.
+# Run after step 1, from the repository's top folder:
+#   pyair2stream --config examples/02_uncertainty/predict.yaml
+project_name: "uncertainty"
+station_name: "Mentue"
+series: "c"
+time_resolution: "1d"
+version: 8
+integrator: "CRN"
+run_mode: "FORWARD"
+
+paths:
+  input_data: "data/switzerland/MAH_2369_validation.csv"        # 2010-2012
+  output_dir: "examples/02_uncertainty/output/prediction"
+  # Calibrated parameters, Qmedia, version and integrator from step 1:
+  calibration_metadata: "examples/02_uncertainty/output/calibration/calibration_metadata.json"
+
+uncertainty_options:
+  noise_model: "ar1"       # the same as in step 1
+
+forward_options:
+  enable_prediction_intervals: true
+  mcmc_chain_path: "examples/02_uncertainty/output/calibration/MCMC_chain_Mentue_c_1d.csv"
+  n_samples: 1000          # parameter sets drawn from the chain
+  random_seed: 42

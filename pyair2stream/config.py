@@ -61,7 +61,7 @@ class CommonData:
     # comparable across parameters and immune to the near-zero-value problem.
     sensitivity_perturbation_mode: str = 'value'
     mcmc_walkers: int = 32
-    mcmc_steps: int = 2000
+    mcmc_steps: int = 20000
 
     # Set True by read_Tseries only once a validation period has been fully and
     # successfully loaded (file present, >= 1 year, valid gap-tolerant segments if

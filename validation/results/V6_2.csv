@@ -1,0 +1,76 @@
+river,version,scheme,RMS difference from reference (°C),max |difference| (°C),share of the model's error,package response
+Mentue,3,CRN,0.038,0.530,5%,none
+Mentue,3,EXP,0.048,0.536,6%,none
+Mentue,3,RK4,0.011,0.303,1%,none
+Mentue,3,RK2,0.109,0.580,14%,none
+Mentue,3,EUL,0.731,3.536,92%,none
+Mentue,4,CRN,0.043,0.564,6%,none
+Mentue,4,EXP,0.052,0.564,7%,none
+Mentue,4,RK4,0.012,0.325,2%,none
+Mentue,4,RK2,0.114,0.633,15%,none
+Mentue,4,EUL,0.727,3.420,93%,none
+Mentue,5,CRN,0.056,0.554,8%,none
+Mentue,5,EXP,0.075,0.585,11%,none
+Mentue,5,RK4,0.015,0.275,2%,none
+Mentue,5,RK2,0.206,1.120,31%,none
+Mentue,5,EUL,0.883,4.472,133%,none
+Mentue,7,CRN,0.077,0.847,12%,none
+Mentue,7,EXP,0.099,0.765,16%,none
+Mentue,7,RK4,diverged,diverged,,stopped (diverged)
+Mentue,7,RK2,diverged,diverged,,stopped (diverged)
+Mentue,7,EUL,diverged,diverged,,stopped (diverged)
+Mentue,8,CRN,0.090,0.880,14%,none
+Mentue,8,EXP,0.119,0.911,18%,none
+Mentue,8,RK4,diverged,diverged,,stopped (diverged)
+Mentue,8,RK2,diverged,diverged,,stopped (stability check)
+Mentue,8,EUL,diverged,diverged,,stopped (stability check)
+Rhône,3,CRN,0.050,0.277,5%,none
+Rhône,3,EXP,0.083,0.389,9%,none
+Rhône,3,RK4,0.127,0.594,14%,none
+Rhône,3,RK2,diverged,diverged,,stopped (stability check)
+Rhône,3,EUL,9.465,17.704,1044%,stopped (stability check)
+Rhône,4,CRN,0.052,0.323,6%,none
+Rhône,4,EXP,0.089,0.596,10%,none
+Rhône,4,RK4,diverged,diverged,,stopped (stability check)
+Rhône,4,RK2,diverged,diverged,,stopped (stability check)
+Rhône,4,EUL,12.024,37.019,1326%,stopped (stability check)
+Rhône,5,CRN,0.041,0.235,5%,none
+Rhône,5,EXP,0.072,0.339,8%,none
+Rhône,5,RK4,diverged,diverged,,stopped (stability check)
+Rhône,5,RK2,diverged,diverged,,stopped (stability check)
+Rhône,5,EUL,11.243,21.253,1291%,stopped (stability check)
+Rhône,7,CRN,0.042,0.341,7%,none
+Rhône,7,EXP,0.067,0.351,12%,none
+Rhône,7,RK4,diverged,diverged,,stopped (stability check)
+Rhône,7,RK2,5.846,16.879,1010%,stopped (stability check)
+Rhône,7,EUL,diverged,diverged,,stopped (stability check)
+Rhône,8,CRN,0.042,0.315,7%,none
+Rhône,8,EXP,0.069,0.312,12%,none
+Rhône,8,RK4,diverged,diverged,,stopped (stability check)
+Rhône,8,RK2,diverged,diverged,,stopped (stability check)
+Rhône,8,EUL,diverged,diverged,,stopped (stability check)
+Dischmabach,3,CRN,0.096,0.624,10%,none
+Dischmabach,3,EXP,0.153,0.629,16%,none
+Dischmabach,3,RK4,0.268,2.601,29%,none
+Dischmabach,3,RK2,diverged,diverged,,stopped (stability check)
+Dischmabach,3,EUL,6.425,15.553,686%,stopped (stability check)
+Dischmabach,4,CRN,0.101,0.583,11%,none
+Dischmabach,4,EXP,0.208,1.257,22%,none
+Dischmabach,4,RK4,diverged,diverged,,stopped (stability check)
+Dischmabach,4,RK2,diverged,diverged,,stopped (stability check)
+Dischmabach,4,EUL,diverged,diverged,,stopped (stability check)
+Dischmabach,5,CRN,0.085,0.571,11%,none
+Dischmabach,5,EXP,0.160,0.665,22%,none
+Dischmabach,5,RK4,diverged,diverged,,stopped (stability check)
+Dischmabach,5,RK2,diverged,diverged,,stopped (stability check)
+Dischmabach,5,EUL,13.606,35.224,1836%,stopped (stability check)
+Dischmabach,7,CRN,0.092,0.504,14%,none
+Dischmabach,7,EXP,0.161,0.647,25%,none
+Dischmabach,7,RK4,diverged,diverged,,stopped (stability check)
+Dischmabach,7,RK2,diverged,diverged,,stopped (stability check)
+Dischmabach,7,EUL,diverged,diverged,,stopped (stability check)
+Dischmabach,8,CRN,0.073,0.371,12%,none
+Dischmabach,8,EXP,0.141,0.692,22%,none
+Dischmabach,8,RK4,4.690,10.569,742%,stopped (stability check)
+Dischmabach,8,RK2,6.339,52.329,1003%,stopped (stability check)
+Dischmabach,8,EUL,diverged,diverged,,stopped (stability check)

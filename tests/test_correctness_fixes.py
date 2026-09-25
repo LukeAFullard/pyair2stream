@@ -15,6 +15,9 @@ error:
 - daily prediction intervals used the residual SD of weekly/monthly means;
 - saved ensembles held ~-999 values on gap days;
 - a FORWARD run overwrote the calibration's `calibration_metadata.json`.
+
+It also covers FORWARD runs taking their parameters from `calibration_metadata.json`,
+and a missing validation file stopping the run instead of skipping validation.
 """
 
 import json
@@ -179,6 +182,35 @@ def test_forward_run_does_not_overwrite_calibration_metadata(tmp_path):
     assert json.loads((out / 'calibration_metadata.json').read_text()) == sentinel
 
 
+def test_forward_takes_parameters_from_calibration_metadata(tmp_path):
+    # Without parameters_forward, a FORWARD run uses the calibrated parameters
+    # recorded in calibration_metadata.json, so nobody has to copy them by hand.
+    _csv(tmp_path / 'cal.csv')
+    meta = {'qmedia': 4.5, 'version': 8, 'integrator': 'CRN', 'par_best': PAR}
+    (tmp_path / 'meta.json').write_text(json.dumps(meta))
+    paths = {'input_data': str(tmp_path / 'cal.csv'), 'output_dir': str(tmp_path / 'out'),
+             'calibration_metadata': str(tmp_path / 'meta.json')}
+    data = _load(tmp_path, run_mode='FORWARD', paths=paths)
+    np.testing.assert_array_equal(data.par, PAR)
+    assert data.Qmedia == 4.5
+    with pytest.raises(ValueError, match='FORWARD mode needs parameters'):
+        _load(tmp_path, run_mode='FORWARD', Qmedia=4.5)
+
+
+def test_missing_validation_file_is_an_error(tmp_path):
+    # A validation_data path that does not exist (e.g. a typo) must not silently
+    # skip validation; leaving validation_data out still skips it.
+    _csv(tmp_path / 'cal.csv')
+    paths = {'input_data': str(tmp_path / 'cal.csv'), 'output_dir': str(tmp_path / 'out'),
+             'validation_data': str(tmp_path / 'typo.csv')}
+    data = _load(tmp_path, paths=paths)
+    with pytest.raises(FileNotFoundError, match='typo.csv'):
+        read_Tseries(data, 'v')
+    data = _load(tmp_path)
+    read_Tseries(data, 'v')
+    assert data.n_tot == 0
+
+
 # --- Calibration --------------------------------------------------------------
 
 def test_de_keeps_de_solution_if_polish_is_worse(tmp_path, monkeypatch):
@@ -213,6 +245,7 @@ def test_mcmc_reproducible_across_processes(tmp_path):
     for run in range(2):
         cfg = _config(tmp_path, name=f'c{run}.yaml', version=3, run_mode='DE-MCMC', random_seed=7,
                       optimization={'n_run': 3, 'n_particles': 3, 'mcmc_walkers': 8, 'mcmc_steps': 40},
+                      uncertainty_options={'strict_convergence': False},
                       paths={'input_data': str(tmp_path / 'cal.csv'), 'output_dir': str(tmp_path / f'o{run}')})
         subprocess.run([sys.executable, '-c', script, cfg], check=True, capture_output=True)
         chains.append(pd.read_csv(tmp_path / f'o{run}' / 'MCMC_chain_S_c_1d.csv').values)

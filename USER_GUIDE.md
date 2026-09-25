@@ -48,38 +48,36 @@ pyair2stream --help        # check it installed
 
 ## 3. Your first run: the bundled example
 
-The quick-start example uses four years of synthetic data for a fictional "River
-Alpha" (`examples/quickstart/data/`): three years to calibrate, one to validate.
-**Run it from the repository's top folder** (paths in the config are relative to
-where you run the command, see [§7.1](#71-run-from-the-right-directory)):
+The quick-start example calibrates the model on the Mentue, a small Swiss river
+(`data/switzerland/`): 2002–2009 to calibrate, 2010–2012 to validate. **Run it
+from the repository's top folder** (paths in the config are relative to where
+you run the command, see [§7.1](#71-run-from-the-right-directory)):
 
 ```bash
-pyair2stream --config examples/quickstart/config.yaml
+pyair2stream --config examples/01_quickstart/config.yaml
 ```
 
-You should see (after a banner):
+After a banner, you should see:
 
 ```
 mean, TSS and standard deviation (calibration)
-10.00641 28570.62781 5.10802
-Pop. Size (particles) = 5, Max Generations (runs) = 50
-DE Finished. Best internal negated objective: -0.983945
-L-BFGS-B Finished. Best internal negated objective: -0.992351
-Efficiency Index in calibration 0.9923508935960597
+9.73069 96513.81949 5.76298
+Pop. Size (particles) = 50, Max Generations (runs) = 100
+DE Finished. Best internal negated objective: -0.985672
+L-BFGS-B Finished. Best internal negated objective: -0.987927
+Efficiency Index in calibration 0.9879266378568211
 Consistency check passed.
 mean, TSS and standard deviation (validation)
-10.03896 9041.37700 4.98387
-Computation time was 3.7630 seconds.
-Starting post-processing visualizations...
-Post-processing completed.
+9.67611 37744.04425 5.87375
 ```
 
-The config sets `random_seed: 42`, so your numbers should be identical (timing
-aside). The calibration NSE is 0.992 (1.0 would be perfect), and
-`examples/quickstart/output/1_DE_NSE_River_Alpha_c_1d.out` shows the validation
-NSE, also 0.992. Open `calibration_DE_NSE_River_Alpha.png` and
-`validation_DE_NSE_River_Alpha.png` to see observed and simulated temperatures.
-[§8](#8-understanding-the-output-files) explains every file.
+The config sets `random_seed: 42`, so your numbers should be identical. The
+calibration NSE is 0.988 (1.0 would be perfect). On the validation years, NSE is
+0.982 and RMSE 0.78 °C (`goodness_of_fit_validation_DE_NSE_Mentue.csv`). Open
+`validation_DE_NSE_Mentue.png` to see observed and simulated temperatures.
+[§8](#8-understanding-the-output-files) explains every file, and
+[examples/](examples/README.md) has five more worked examples: uncertainty,
+compliance with a temperature limit, scenarios, gaps and cross-validation.
 
 ## 4. Choosing a model version and integrator
 
@@ -96,6 +94,9 @@ NSE, also 0.992. Open `calibration_DE_NSE_River_Alpha.png` and
 Start with 8 (or 5 without discharge) and compare with simpler versions on the
 **validation** period. A version that fits calibration better but validates worse
 is over-fitted; prefer the simplest version that validates well.
+Cross-validation (example [06](examples/06_cross_validation/README.md)) is the
+most thorough comparison. On the three Swiss rivers, versions 7 and 8 predicted
+unseen years best ([validation V5](validation/REPORT.md#v5)).
 
 ### Integrator (`integrator`)
 
@@ -176,7 +177,7 @@ parameter_bounds:           # required for calibration: 8 values each, for a1..a
   min: [-5, -5, -5, -1, 0,  0,  0, -1]
   max: [15, 1.5, 5,  1, 20, 10, 1,  5]
 
-# parameters_forward: [8 values]   # FORWARD only; values of unused parameters are ignored
+# parameters_forward: [8 values]   # FORWARD only; default: from paths.calibration_metadata
 
 optimization:
   n_run: 100                # DE: max generations; PSO: iterations; LATHYP: samples
@@ -186,13 +187,13 @@ optimization:
   wmax: 0.9                 # PSO only: starting inertia
   wmin: 0.4                 # PSO only: final inertia
   mcmc_walkers: 32          # DE-MCMC only (at least 2 x number of calibrated parameters)
-  mcmc_steps: 1000          # DE-MCMC only; usually needs more, check the warnings (§11)
+  mcmc_steps: 20000         # DE-MCMC only: the most steps; it stops once converged (§11)
 
 paths:
   input_data: "data/calibration.csv"          # required
   validation_data: "data/validation.csv"      # optional
   output_dir: "output"                        # default: "<project_name>/output_<version>"
-  calibration_metadata: null                  # FORWARD: a calibration's calibration_metadata.json
+  calibration_metadata: null                  # FORWARD: a calibration's calibration_metadata.json (§12)
 
 # --- Safety checks (docs/METHODS.md §15) ---
 max_plausible_twat: 60.0            # stop if a simulated temperature exceeds this (°C)
@@ -252,9 +253,9 @@ change would be exactly zero instead of the real response.
 
 So a `FORWARD` run must be given the calibration `Qmedia`, either as `Qmedia:`
 or, better, with `paths.calibration_metadata` pointing to the
-`calibration_metadata.json` written by the calibration. The latter also checks
-that `version` and `integrator` match and warns if the scenario's flows go
-outside the calibrated range.
+`calibration_metadata.json` written by the calibration. The latter also
+supplies the calibrated parameters, checks that `version` and `integrator`
+match, and warns if the scenario's flows go outside the calibrated range.
 
 ## 7. Running the model
 
@@ -338,7 +339,9 @@ scores.
 | `NumericalDivergenceError` / `exceed the ... stability limit` | Use `CRN` or `EXP` ([§9.1](#91-numerical-stability-and-the-choice-of-integrator)). |
 | `Efficiency mismatch in forward run` | Internal consistency check failed; please report it with your config. |
 | `mcmc_walkers ... must be at least 2x` | Increase `mcmc_walkers`. |
-| `chain length ... less than 50x` / `split-Rhat ... exceeds 1.01` | MCMC not converged: increase `mcmc_steps` ([§11](#11-uncertainty-de-mcmc-and-sensitivity-analysis)). |
+| `MCMC did not converge within ... steps` | Try a simpler model version, or increase `mcmc_steps` ([§11](#11-uncertainty-de-mcmc-and-sensitivity-analysis)). |
+| `FORWARD mode needs parameters` | Set `paths.calibration_metadata` (or `parameters_forward`) ([§12](#12-scenario-runs-and-prediction-intervals)). |
+| `Note: integrator RK4/RK2/EUL is kept to reproduce the original Fortran` | Use `CRN` unless you need Fortran-identical results ([§9.1](#91-numerical-stability-and-the-choice-of-integrator)). |
 | `enable_prediction_intervals is True but residual_sigma is 0.0/unavailable` | Point `mcmc_chain_path` at a chain with its `_meta.json`, or set `residual_sigma`. |
 | `draws ... were excluded as numerically divergent` | Use `CRN`/`EXP`, or check the chain and bounds ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `paired_difference_from_files: ... differs` | The two scenario runs did not use the same parameter draws ([§12](#12-scenario-runs-and-prediction-intervals)). |
@@ -358,7 +361,15 @@ The program therefore defaults to `CRN`; warns before simulating if B exceeds
 the chosen integrator's limit on some days (and stops if more than
 `stability_error_fraction` of days do); and stops if any simulated temperature
 is not a number or exceeds `max_plausible_twat`. Use `RK4`/`RK2`/`EUL` only to
-reproduce Fortran results, never for scenarios.
+reproduce Fortran results, never for scenarios: even when stable they can be
+inaccurate with a one-day step (by up to about 1 °C for `EUL` on the Mentue,
+[validation V6](validation/REPORT.md#v6)), and the program prints a note when
+one is selected. Calibrating with `EXP` instead of `CRN` changed predictions by
+less than 0.03 °C on the Swiss rivers.
+
+Parameters belong to the integrator they were calibrated with: run them with the
+same one. A `FORWARD` run given `paths.calibration_metadata` refuses a
+different integrator or model version.
 
 ### 9.2 Zero or negative discharge
 
@@ -385,8 +396,11 @@ your calibrated model. The record need not start on 1 January.
 Be aware:
 
 - **Scattered gaps discard far more data than their share suggests**: with 5% of
-  days missing at random, often only about a third of the observations can be
-  scored, because few gap-free stretches reach `min_segment_days`. Check
+  days missing at random, only about a third of the observations could be
+  scored ([validation V7](validation/REPORT.md#v7)), because few gap-free
+  stretches reach `min_segment_days`. Fill short gaps instead (from a nearby
+  station, or by interpolation over a day or two) and keep gap-tolerant mode for
+  long gaps. Example [05](examples/05_gaps/README.md) compares the two. Check
   `gaps_summary.txt` for how many observations were used.
 - **Scores are not directly comparable with complete-record scores.** Gaps often
   remove unusual periods such as floods or freezes, which can make the fit look
@@ -409,29 +423,41 @@ daily temperatures. Method: [docs/METHODS.md §12](docs/METHODS.md#12-parameter-
 run_mode: "DE-MCMC"
 optimization:
   mcmc_walkers: 32
-  mcmc_steps: 5000              # the default 1000 is often too short
+  mcmc_steps: 20000             # the most steps it may take; it stops once converged
 uncertainty_options:
-  noise_model: "ar1"            # recommended for daily data (default "iid")
+  noise_model: "ar1"            # recommended; the default is "iid" (see below)
   prediction_interval: 90       # % width of the band
   save_ensemble: false          # true: also save every simulated series (.npz)
-  strict_convergence: false     # true: stop instead of warn if not converged
+  strict_convergence: true      # default: stop with an error if not converged
   burnin_fraction: null         # override the automatic burn-in (0-1)
   on_divergent_draw: "drop"     # or "raise"
   max_divergent_fraction: 0.10
 ```
 
-Check before using the results:
+Check before using the results (example [02](examples/02_uncertainty/README.md)
+walks through this):
 
-- **Convergence.** If the console warns that the chain is shorter than 50× the
-  autocorrelation time, or that split-R̂ exceeds 1.01, the results are not yet
-  reliable: increase `mcmc_steps` and rerun.
+- **Convergence.** The sampler runs in blocks of 1,000 steps until its results
+  are stable: the chain is at least 50 times its autocorrelation time and
+  split-R̂ is below 1.01. It then prints `MCMC converged after ... steps`. If
+  that has not happened by `mcmc_steps`, the run stops with an error and no
+  interval is produced. This usually means the data cannot pin down all the
+  parameters: try a simpler model version. With `strict_convergence: false` it
+  continues instead, and marks every result as not converged; do not use such
+  results for decisions.
 - **Coverage.** The console and `MCMC_chain_*_meta.json` report
   `interval_coverage`: the share of observed days inside the band. It should be
   close to `prediction_interval`. Much lower means the band is too narrow.
-- **`noise_model`.** Day-to-day model errors are usually correlated. `"iid"`
-  ignores this and makes the *parameter* uncertainty too small; `"ar1"` accounts
-  for it. On any single day both give bands of about the same width; they differ
-  for multi-day quantities (see §12).
+- **`noise_model`.** Real model errors persist from day to day. For a single
+  day, `"iid"` and `"ar1"` give bands of about the same width. For anything
+  spanning several days they do not: on the Swiss rivers, 90% bands for 7-day
+  means contained 39–62% of observed values with `"iid"` and 76–88% with
+  `"ar1"` ([validation V5](validation/REPORT.md#v5)). Use `"ar1"`.
+- **Parameters.** For versions with many parameters (especially 8), several
+  combinations fit almost equally well. Their intervals are then too narrow
+  ([V4](validation/REPORT.md#v4)), and with `"ar1"` they can be centred away
+  from the DE best fit, which assumes independent errors. The predictions are
+  hardly affected. Rely on predictions, not on individual parameter values.
 
 Outputs: `MCMC_chain_*.csv` (parameter samples), `MCMC_chain_*_meta.json`
 (settings, diagnostics, residual σ and ρ, coverage), `MCMC_envelopes_*.csv`
@@ -461,11 +487,14 @@ naturalised flows, an abstraction scenario or climate projections.
 run_mode: "FORWARD"
 version: 8
 integrator: "CRN"
-parameters_forward: [0.56, 0.27, 0.32, -0.83, 6.07, 4.29, 0.56, 0.61]   # from 1_*.out
 paths:
   input_data: "data/scenario.csv"
   output_dir: "output/scenario"
-  calibration_metadata: "output/calibration_metadata.json"   # pins Qmedia (§6)
+  # From the calibration: its parameters, Qmedia (§6), version and integrator.
+  calibration_metadata: "output/calibration_metadata.json"
+# parameters_forward: [8 values]  # only to run other parameters than the calibrated ones
+uncertainty_options:
+  noise_model: "ar1"          # the same as in the calibration
 forward_options:
   enable_prediction_intervals: true
   mcmc_chain_path: "output/MCMC_chain_Station_A_series_1d.csv"   # from DE-MCMC
@@ -475,7 +504,8 @@ forward_options:
 ```
 
 With prediction intervals, parameter sets are drawn from the chain, each is run,
-and random error of the calibration's typical size is added
+and random error of the calibration's typical size and persistence (σ and ρ,
+from the chain's `_meta.json`) is added
 ([docs/METHODS.md §13](docs/METHODS.md#13-forward-runs-and-scenario-comparisons)).
 If the scenario file has water temperature observations, the fit and the
 interval coverage are reported. Lower bounds can fall below `Tice_cover` because
@@ -486,6 +516,8 @@ must be computed from the individual simulations, not from the daily band:
 set `uncertainty_options.save_ensemble: true` and use `pyair2stream.scenario`
 (`load_ensemble`, `aggregate`, `exceedance`). This is where `noise_model: "ar1"`
 matters: it keeps each simulated error series realistically persistent.
+Example [03](examples/03_compliance/README.md) computes the probability that a
+7-day mean limit was exceeded.
 
 **Comparing two scenarios.** To get an uncertainty band for the *difference*
 (for example abstraction minus natural flow), both runs must use the same
@@ -506,6 +538,11 @@ diff = scenario.paired_difference_from_files(
 ```
 
 This checks that the two runs really used the same draws before subtracting.
+Each draw also gets the same random error in both runs, so the error cancels
+and the spread of the difference is the parameter uncertainty of the effect.
+This assumes the model's error on a given day would be the same under both
+scenarios. Example [04](examples/04_scenario/README.md) works through a flow
+abstraction.
 
 ## 13. Cross-validation
 
@@ -545,14 +582,22 @@ decision, check:
    `1_*.out`).
 3. **Residuals**: no strong pattern over time or with temperature
    (`residual_diagnostics_*.png`).
-4. **Uncertainty**: if you report a band, MCMC converged without warnings and the
-   reported coverage is close to the nominal level, ideally on validation data.
+4. **Uncertainty**: if you report a band, the reported coverage is close to the
+   nominal level, ideally on validation data. Bands for new years are usually
+   slightly narrow (85–89% for 90% bands on the Swiss rivers,
+   [validation V5](validation/REPORT.md#v5)). For 7-day means, runs of days or
+   other multi-day quantities, use `noise_model: "ar1"` and compute them from
+   the saved simulations (§12). Report probabilities with their ranges, not as
+   a yes or no.
 5. **Scope**: the model gives **daily means**. A limit on daily maxima or on
    sub-daily values needs a separate, justified step. Scenario inputs outside
    the calibrated range of air temperature or flow are extrapolation.
 6. **Reproducibility**: keep the config (with `random_seed`), the input files,
    the pyair2stream commit (`git rev-parse HEAD`), `pip freeze` output, and the
    output folder.
+7. **The software**: [validation/REPORT.md](validation/REPORT.md) records the
+   checks that pyair2stream reproduces the original model and the published
+   results, and that its intervals are calibrated. Cite it with the commit.
 
 See [docs/METHODS.md §16](docs/METHODS.md#16-limitations-and-good-practice) for
 the full list of assumptions and limitations.

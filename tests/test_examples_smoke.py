@@ -1,15 +1,11 @@
 """
-Smoke tests for the example scripts under examples/ (docs/audit/05_cli_and_io_correctness.md,
-Defect E / required change 5.5).
+Smoke tests for the examples under examples/.
 
-`Twat_mod_p5`/`Twat_mod_p95` column-name typos in two example scripts (referencing
-columns the code has never written -- the real names are `Twat_mod_lower`/
-`Twat_mod_upper`) went undetected because nothing in CI ever ran or even parsed
-these scripts. This does not execute the examples (several need proprietary or
-generated data files not present in the repo, or take minutes to run), but it at
-least parses every one so a syntax error or an obviously undefined top-level name
-typo is caught automatically by the existing `pytest tests/` CI job -- the "at
-minimum" bar the report sets.
+Running the examples takes minutes, so CI runs them in a separate job
+(.github/workflows/tests.yml, examples). These fast checks catch the simple
+breakages: a script that no longer parses, a missing README or run.py, a
+configuration that is not valid YAML, or a reference to the envelope columns
+`Twat_mod_p5`/`Twat_mod_p95` (the real names are `Twat_mod_lower`/`Twat_mod_upper`).
 """
 
 import ast
@@ -17,49 +13,45 @@ import os
 import re
 import unittest
 
-# Match the removed column names exactly (as a quoted string/dict key), not as a
-# prefix of the still-real 'Twat_mod_p50' column.
-_REMOVED_COLUMN_RE = re.compile(r"Twat_mod_p(?:5|95)(?!\d)['\"]")
+import yaml
 
 EXAMPLES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "examples")
+_REMOVED_COLUMN_RE = re.compile(r"Twat_mod_p(?:5|95)(?!\d)['\"]")
 
 
-def _iter_example_scripts():
-    for root, _dirs, files in os.walk(EXAMPLES_DIR):
-        for name in files:
-            if name.endswith(".py"):
-                yield os.path.join(root, name)
+def _example_dirs():
+    return sorted(os.path.join(EXAMPLES_DIR, d) for d in os.listdir(EXAMPLES_DIR)
+                  if re.match(r"\d\d_", d) and os.path.isdir(os.path.join(EXAMPLES_DIR, d)))
 
 
-class TestExampleScriptsSmoke(unittest.TestCase):
-    def test_every_example_script_parses(self):
-        scripts = list(_iter_example_scripts())
-        self.assertGreater(len(scripts), 0, "Expected at least one example script under examples/")
+def _files(ext):
+    for d in _example_dirs():
+        for name in sorted(os.listdir(d)):
+            if name.endswith(ext):
+                yield os.path.join(d, name)
 
-        failures = []
-        for path in scripts:
-            with open(path, 'r') as f:
+
+class TestExamples(unittest.TestCase):
+    def test_every_example_has_readme_and_run_script(self):
+        dirs = _example_dirs()
+        self.assertGreater(len(dirs), 0)
+        for d in dirs:
+            for name in ("README.md", "run.py"):
+                self.assertTrue(os.path.exists(os.path.join(d, name)), f"{d} has no {name}")
+
+    def test_every_script_parses(self):
+        for path in _files(".py"):
+            with open(path) as f:
                 source = f.read()
-            try:
-                ast.parse(source, filename=path)
-            except SyntaxError as e:
-                failures.append(f"{path}: {e}")
+            ast.parse(source, filename=path)
+            self.assertIsNone(_REMOVED_COLUMN_RE.search(source), f"{path} uses Twat_mod_p5/p95")
 
-        self.assertEqual(failures, [], "Example script(s) failed to parse:\n" + "\n".join(failures))
-
-    def test_no_example_references_removed_envelope_columns(self):
-        # Twat_mod_p5/Twat_mod_p95 were never the real column names (the code has
-        # always written Twat_mod_lower/Twat_mod_p50/Twat_mod_upper) and the
-        # dual-name fallback that used to paper over this in post_processing.py
-        # has been removed (report 05, Defect E). Guard against the typo coming back.
-        offenders = []
-        for path in _iter_example_scripts():
-            with open(path, 'r') as f:
-                source = f.read()
-            if _REMOVED_COLUMN_RE.search(source):
-                offenders.append(path)
-
-        self.assertEqual(offenders, [], f"Example script(s) reference removed columns Twat_mod_p5/p95: {offenders}")
+    def test_every_config_is_valid_yaml(self):
+        for path in _files(".yaml"):
+            with open(path) as f:
+                cfg = yaml.safe_load(f)
+            self.assertIn("run_mode", cfg, path)
+            self.assertIn("paths", cfg, path)
 
 
 if __name__ == '__main__':

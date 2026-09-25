@@ -173,7 +173,8 @@ def test_save_ensemble_matches_envelope_percentiles():
         data.n_run = 1
         data.mcmc_walkers = 16
         data.mcmc_steps = 10
-        data.uncertainty_options = {"noise_model": "iid", "ar1_rho": None, "save_ensemble": True}
+        data.uncertainty_options = {"noise_model": "iid", "ar1_rho": None, "save_ensemble": True,
+                                    "strict_convergence": False}  # tiny chain: tests other behaviour, not convergence
 
         DE_MCMC_mode(data, seed=7)
 

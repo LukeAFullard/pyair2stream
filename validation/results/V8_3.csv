@@ -1,0 +1,5 @@
+tool,cases,disagreements
+aggregate (7-day means),31400,0
+"exceedance, runs of at least 1 day(s)",200,0
+"exceedance, runs of at least 3 day(s)",200,0
+"exceedance, runs of at least 7 day(s)",200,0

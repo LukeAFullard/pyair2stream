@@ -39,6 +39,15 @@ your runs.
   (silently treated as monthly) are now rejected with a clear message. The
   optimizers refuse to run when no parameter is free (e.g. bounds missing).
 - Messages no longer point to documents that do not exist.
+- ⚠ **Paired scenario differences carried two independent sets of random
+  error**, one from each run, so the band of a difference was much too wide
+  (for two identical scenarios on the Mentue, which should differ by exactly
+  zero, the difference had a standard deviation of about 0.7 °C). Each parameter draw now gets the same error in both runs, and it
+  cancels.
+- In AR(1) FORWARD runs, ρ was re-estimated from the observations being
+  predicted when there were any. It now comes from the calibration, like σ.
+- A `validation_data` path that does not exist (for example a typo) silently
+  skipped validation; it now stops with an error.
 
 ### Added
 - Prediction-interval **coverage check**: the share of observed days inside the
@@ -47,10 +56,33 @@ your runs.
   model to forget each segment's approximate start value.
 - `goodness_of_fit_*.csv` now also reports `N` and `NSE`.
 - A `DE-MCMC` run with `cross_validation.enabled` now warns that the block is ignored.
+- **Validation suite** (`validation/run_all.py`, results in
+  `validation/REPORT.md`): Fortran equivalence on real inputs, the published
+  results of Piccolroaz et al. (2016), known-truth recovery, interval
+  calibration, real-river prediction, numerical accuracy, gaps, and exact
+  workflow and scenario answers.
+- FORWARD runs without `parameters_forward` use the calibrated parameters in
+  `paths.calibration_metadata`, so they need not be copied by hand.
+- The FORWARD ensemble's `_meta.json` records the noise model, σ and ρ used.
+- A note is printed when `RK4`, `RK2` or `EUL` is selected: with a one-day step
+  they can be inaccurate even when stable.
+- The Fortran comparison tests now include discharge that varies from day to day.
 
 ### Changed
-- The quick-start example uses the recommended seeded `DE` + `CRN` (it used
-  unseeded PSO + RK4, whose NSE varied from 0.43 to 0.98 between runs).
+- ⚠ **DE-MCMC sampling.** The sampler uses the differential-evolution move
+  instead of emcee's default stretch move (3–4 times faster on air2stream's
+  correlated parameters). It runs until converged (at least 50 autocorrelation
+  times and split-R̂ below 1.01) or until `mcmc_steps`, which is now a maximum
+  with default 20,000 (was a fixed 1,000, usually far too short). If it has not
+  converged it stops with an error (`strict_convergence: true`, new default)
+  instead of warning. The saved chain is thinned. Intervals from earlier
+  versions' default runs were often based on unconverged chains.
+- **Examples replaced** by six worked examples on the Mentue (quickstart,
+  uncertainty, compliance, scenario, gaps, cross-validation). The old examples
+  were removed: several no longer matched the code, and the Hopelands data had
+  no recorded source or licence.
+- The Swiss river data moved to `data/switzerland/`, with their source, licence
+  and checksums.
 - Documentation rewritten for clarity: README, USER_GUIDE, and a single
   step-by-step methods description, `docs/METHODS.md`, which replaces the five
   separate topic documents in `docs/`.

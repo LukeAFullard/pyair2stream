@@ -179,18 +179,19 @@ class TestPairedDifferenceFromFiles(unittest.TestCase):
         if os.path.exists(self.chain_path):
             os.remove(self.chain_path)
 
-    def _run(self, folder, q_scale, n_samples=6, reuse_from=None, seed=42, chain_path=None):
+    def _run(self, folder, q_scale, n_samples=6, reuse_from=None, seed=42, chain_path=None,
+             sigma=1.0, uncertainty=None):
         data = _build_forward_data(folder, q_scale=q_scale)
         data.forward_options = {
             'enable_prediction_intervals': True,
             'mcmc_chain_path': chain_path or self.chain_path,
-            'residual_sigma': 1.0,
+            'residual_sigma': sigma,
             'n_samples': n_samples,
             'random_seed': seed,
         }
         if reuse_from is not None:
             data.forward_options['reuse_sample_indices_from'] = reuse_from
-        data.uncertainty_options = {'noise_model': 'iid', 'save_ensemble': True}
+        data.uncertainty_options = {'noise_model': 'iid', 'save_ensemble': True, **(uncertainty or {})}
         forward_mode(data)
         return os.path.join(
             folder, f"Forward_Prediction_Ensemble_{data.station}_{data.series}_{data.time_res}.npz"
@@ -209,6 +210,51 @@ class TestPairedDifferenceFromFiles(unittest.TestCase):
         # Scenario B has systematically higher flow -> a real, non-trivial temperature
         # difference is expected (sanity: not all-zero).
         self.assertGreater(np.max(np.abs(diff)), 1e-6)
+
+    def _pair(self, q_b, **kw):
+        ensemble_a = self._run(self.folder_a, q_scale=1.0, n_samples=6, seed=7, **kw)
+        ensemble_b = self._run(self.folder_b, q_scale=q_b, reuse_from=ensemble_a.replace('.npz', '_meta.json'), **kw)
+        return scenario.paired_difference_from_files(ensemble_a, ensemble_b)
+
+    def test_identical_scenarios_give_exactly_zero_difference(self):
+        # Each draw's residual noise is fixed by its chain row, so the same draw gets the
+        # same noise in both runs and it cancels in the paired difference.
+        for unc in ({'noise_model': 'iid'}, {'noise_model': 'ar1', 'ar1_rho': 0.7}):
+            with self.subTest(**unc):
+                diff = self._pair(q_b=1.0, uncertainty=unc)
+                finite = diff[np.isfinite(diff)]
+                self.assertGreater(finite.size, 0)
+                np.testing.assert_array_equal(finite, 0.0)
+
+    def test_paired_difference_does_not_depend_on_residual_noise(self):
+        # For different scenarios the difference is parameter uncertainty only: the same
+        # with a large or a small residual sigma.
+        for unc in ({'noise_model': 'iid'}, {'noise_model': 'ar1', 'ar1_rho': 0.7}):
+            with self.subTest(**unc):
+                big = self._pair(q_b=1.4, sigma=2.0, uncertainty=unc)
+                small = self._pair(q_b=1.4, sigma=0.1, uncertainty=unc)
+                self.assertGreater(np.nanmax(np.abs(big)), 1e-6)
+                np.testing.assert_allclose(big, small, atol=1e-9)
+
+    def test_ar1_rho_comes_from_the_calibration_record(self):
+        # Even when the forward data have observations, rho is taken from the chain's
+        # calibration record (like sigma), not re-estimated from the data being predicted.
+        with open(self.chain_path.replace('.csv', '_meta.json'), 'w') as f:
+            json.dump({'sigma': 0.8, 'rho': 0.3}, f)
+        data = _build_forward_data(self.folder_a)
+        data.Twat_obs[:] = data.Tair * 0.5
+        data.forward_options = {'enable_prediction_intervals': True, 'mcmc_chain_path': self.chain_path,
+                                'n_samples': 4, 'random_seed': 1}
+        data.uncertainty_options = {'noise_model': 'ar1'}
+        try:
+            forward_mode(data)
+            with open(os.path.join(self.folder_a, f"Forward_Prediction_Ensemble_{data.station}_"
+                                                  f"{data.series}_{data.time_res}_meta.json")) as f:
+                meta = json.load(f)
+        finally:
+            os.remove(self.chain_path.replace('.csv', '_meta.json'))
+        self.assertEqual(meta['rho'], 0.3)
+        self.assertEqual(meta['residual_sigma'], 0.8)
 
     def test_mismatched_dates_raises(self):
         ensemble_a = self._run(self.folder_a, q_scale=1.0, n_samples=6, seed=7)

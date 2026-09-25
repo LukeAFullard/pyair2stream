@@ -127,6 +127,11 @@ def paired_difference(ens_a: np.ndarray, ens_b: np.ndarray) -> np.ndarray:
     abstraction and climate projection studies actually need: a credible interval on
     a *difference*, not just on each scenario separately.
 
+    The residual noise added to each draw is fixed by the draw's chain row, so the
+    same draw carries the same noise in both runs and it cancels here: the spread of
+    the difference is the parameter uncertainty of the effect. This assumes the
+    model's error on a given day would be the same under both scenarios.
+
     This only checks `.shape` -- it has no way to detect two ensembles that happen
     to have the same shape but were drawn from different (or differently-ordered,
     or differently-seeded) posterior samples, which silently produces a
