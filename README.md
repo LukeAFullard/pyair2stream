@@ -156,8 +156,10 @@ The [validation suite](validation/README.md) checks this, and its results are in
   cannot be reproduced exactly by anyone: the original program itself, run with
   its distributed settings, returns different parameters on every run there,
   because its optimiser stops at a different point each time. The published
-  parameters belong to the Crank–Nicolson scheme the paper used: with RK4 most
-  of them are unstable.
+  parameters belong to the Crank–Nicolson scheme the paper used: with RK4, 8 of
+  the 15 sets are unstable and the rest give different errors. Calibrating with
+  RK4 comes close to the published parameters (within 1% of their ranges) only
+  where the water temperature responds slowly: the Mentue, versions 3–5.
 - **Finds a known truth.** On data made by the model from known parameters,
   calibration predicts other years to within 0.04 °C of the truth (0.06 °C
   with typical gaps in the data).
@@ -175,7 +177,7 @@ To run the tests and the validation suite (needs `gfortran`):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # or without --quick: the full suite, about 50 minutes
+python validation/run_all.py --quick     # or without --quick: the full suite, about 70 minutes
 ```
 
 ## Examples

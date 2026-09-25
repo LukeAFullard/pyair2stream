@@ -366,6 +366,12 @@ inaccurate with a one-day step (by up to about 1 °C for `EUL` on the Mentue,
 one is selected. Calibrating with `EXP` instead of `CRN` changed predictions by
 less than 0.03 °C on the Swiss rivers.
 
+Parameters belong to the scheme they were calibrated with. The published Swiss
+parameters (calibrated with Crank–Nicolson) are unstable with `RK4` in 8 of 15
+cases and give different errors in the rest
+([validation V2](validation/REPORT.md#v2), part E). Run parameters taken from a
+paper with the scheme the paper used.
+
 Parameters belong to the integrator they were calibrated with: run them with the
 same one. A `FORWARD` run given `paths.calibration_metadata` refuses a
 different integrator or model version.
