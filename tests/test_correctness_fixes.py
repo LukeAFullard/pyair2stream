@@ -299,3 +299,31 @@ def test_goodness_of_fit_reports_nse_and_r2_separately(tmp_path):
     assert gof['R2'] == pytest.approx(1.0)
     assert gof['NSE'] == pytest.approx(1 - np.sum((mod - obs) ** 2) / np.sum((obs - obs.mean()) ** 2))
     assert gof['NSE'] < 0.9
+
+
+# --- Added checks -------------------------------------------------------------
+
+def test_interval_coverage_reports_share_of_observations_inside(tmp_path):
+    _csv(tmp_path / 'cal.csv')
+    data = _load(tmp_path)
+    obs = data.Twat_obs
+    inside = np.zeros(data.n_tot, dtype=bool)
+    inside[365::2] = True  # every other real day inside the band
+    env = pd.DataFrame({'Twat_mod_lower': np.where(inside, obs - 1, obs + 1),
+                        'Twat_mod_upper': np.where(inside, obs + 1, obs + 2)})
+    result = optimization._interval_coverage(data, env, 90.0)
+    n = data.n_tot - 365
+    assert result['interval_coverage_n_days'] == n
+    assert result['interval_coverage'] == pytest.approx(np.sum(inside[365:]) / n)
+
+
+def test_segment_warmup_warning_when_relaxation_is_slow(tmp_path, capsys):
+    from pyair2stream.model import check_segment_warmup
+    _csv(tmp_path / 'cal.csv')
+    data = _load(tmp_path, version=3, gap_tolerant=True, warmup_drop_days=15)
+    data.par[:] = [0.5, 0.05, 0.05, 0, 0, 0, 0, 0]  # B = a3 = 0.05/day -> 60 days needed
+    check_segment_warmup(data)
+    assert 'warmup_drop_days: 60' in capsys.readouterr().out
+    data.par[2] = 1.0  # B = 1/day -> 3 days needed: no warning
+    check_segment_warmup(data)
+    assert 'warmup_drop_days' not in capsys.readouterr().out

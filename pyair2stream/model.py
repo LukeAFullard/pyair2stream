@@ -165,6 +165,35 @@ def warn_on_stability(data: CommonData, error_fraction: float = STABILITY_ERROR_
     return report
 
 
+def check_segment_warmup(data: CommonData) -> None:
+    """
+    Gap-tolerant mode only: warn if `warmup_drop_days` is too short for the
+    approximate restart temperature of each segment to be forgotten.
+
+    A difference between the restart value and the "true" state decays roughly
+    as exp(-B*t), where B (1/day) is the ODE's decay rate for the current
+    parameters. After 3/B days about 95% of it has gone, so the unscored start
+    of each segment should be at least that long.
+    """
+    if not data.gap_tolerant or not data.segments:
+        return
+    in_seg = np.zeros(data.n_tot, dtype=bool)
+    for start, end in data.segments:
+        in_seg[start:end + 1] = True
+    B = compute_B_series(data)
+    ok = in_seg & np.isfinite(B) & (B > 0)
+    if not np.any(ok):
+        return
+    needed = int(np.ceil(3.0 / np.median(B[ok])))
+    if data.warmup_drop_days < needed:
+        print(
+            f"Warning: warmup_drop_days={data.warmup_drop_days} is shorter than about three "
+            f"relaxation times of the calibrated model ({needed} days). The start of each "
+            f"segment may still reflect its approximate restart temperature; consider "
+            f"warmup_drop_days: {needed}. See USER_GUIDE.md §10."
+        )
+
+
 def _divergence_bad_mask(Twat_mod: np.ndarray, max_plausible_twat: float) -> np.ndarray:
     """Shared "bad" definition for `check_numerical_divergence`/`is_numerically_divergent`:
     a present (not the -999.0 missing sentinel) value that is non-finite or exceeds the

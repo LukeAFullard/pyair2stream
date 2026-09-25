@@ -12,7 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
-from .config import CommonData
+from .config import CommonData, ACTIVE_PARAMS
 
 
 def select_dotty_data(df_0: pd.DataFrame) -> tuple:
@@ -342,9 +342,12 @@ def post_process(data: CommonData, toll: float = None):
         # df has columns: 'Year', 'Month', 'Day', 'Tair', 'Twat_obs', 'Twat_mod', 'Twat_obs_agg', 'Twat_mod_agg', 'Q'
         valid_mask = df['Twat_obs_agg'].notna() & df['Twat_mod_agg'].notna()
 
-        # Calculate number of active parameters (k)
+        # Number of fitted parameters (k): the free ones for a calibration; for a
+        # FORWARD run (parameters fitted elsewhere) all parameters the version uses.
         k = 0
-        if data.flag_par is not None and data.parmin is not None and data.parmax is not None:
+        if data.runmode == 'FORWARD' and data.version in ACTIVE_PARAMS:
+            k = len(ACTIVE_PARAMS[data.version])
+        elif data.flag_par is not None and data.parmin is not None and data.parmax is not None:
             for j in range(len(data.flag_par)):
                 if data.flag_par[j] and data.parmin[j] != data.parmax[j]:
                     k += 1

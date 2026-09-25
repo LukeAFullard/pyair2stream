@@ -228,8 +228,11 @@ def _save_ensemble_npz(data: CommonData, ensemble_simulations: np.ndarray, filen
 
 def _export_ensemble_outputs(data: CommonData, ensemble_simulations: np.ndarray, prediction_interval: float,
                               env_filename: str, ensemble_filename: Optional[str] = None,
-                              save_ensemble: bool = False) -> None:
-    """Write the percentile envelope CSV and, if requested, the raw ensemble npz (both post-warm-up)."""
+                              save_ensemble: bool = False) -> dict:
+    """
+    Write the percentile envelope CSV and, if requested, the raw ensemble npz (both
+    post-warm-up). Returns the interval's empirical coverage (see `_interval_coverage`).
+    """
     env_df = _percentile_envelope(data, ensemble_simulations, prediction_interval)
     env_df.iloc[365:].to_csv(env_filename, index=False)  # drop the warm-up block
     print(f"Saved predictive uncertainty envelopes to {env_filename}")
@@ -238,6 +241,28 @@ def _export_ensemble_outputs(data: CommonData, ensemble_simulations: np.ndarray,
         if ensemble_filename is None:
             raise ValueError("save_ensemble is True but no ensemble_filename was provided.")
         _save_ensemble_npz(data, ensemble_simulations, ensemble_filename)
+
+    return _interval_coverage(data, env_df, prediction_interval)
+
+
+def _interval_coverage(data: CommonData, env_df: pd.DataFrame, prediction_interval: float) -> dict:
+    """
+    Share of observed, scored days whose observation lies inside the prediction
+    interval. For a well-calibrated X% interval this should be close to X%; a much
+    lower value means the interval is too narrow. None when there are no observations.
+    """
+    eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=bool)
+    lo = env_df['Twat_mod_lower'].to_numpy()
+    hi = env_df['Twat_mod_upper'].to_numpy()
+    m = eval_mask & (data.Twat_obs != -999.0) & np.isfinite(lo) & np.isfinite(hi)
+    n = int(np.sum(m))
+    if n == 0:
+        return {"interval_coverage": None, "interval_coverage_n_days": 0}
+    obs = data.Twat_obs[m]
+    coverage = float(np.mean((obs >= lo[m]) & (obs <= hi[m])))
+    print(f"Interval check: {coverage:.1%} of {n} observed days lie inside the "
+          f"{prediction_interval:g}% prediction interval.")
+    return {"interval_coverage": coverage, "interval_coverage_n_days": n}
 
 
 def _hash_file(path: str) -> str:
@@ -393,7 +418,8 @@ def forward_mode(data: CommonData) -> None:
 
     data.par_best = data.par.copy()
     data.finalfit = ei
-    print(f'Efficiency Index in calibration {data.finalfit}')
+    if has_obs:
+        print(f'Efficiency index of this run against its own T_water observations: {data.finalfit}')
 
     # Optional Probabilistic Forward Envelope
     if data.forward_options and data.forward_options.get('enable_prediction_intervals', False):
@@ -575,7 +601,7 @@ def forward_mode(data: CommonData) -> None:
         env_filename = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
         ensemble_filename = os.path.join(data.folder, f"Forward_Prediction_Ensemble_{data.station}_{data.series}_{data.time_res}.npz")
         save_ensemble = bool(uncertainty_options.get('save_ensemble', False))
-        _export_ensemble_outputs(data, ensemble_simulations, prediction_interval, env_filename, ensemble_filename, save_ensemble)
+        coverage = _export_ensemble_outputs(data, ensemble_simulations, prediction_interval, env_filename, ensemble_filename, save_ensemble)
 
         # Sidecar metadata for the forward prediction-interval ensemble (the
         # FORWARD-mode equivalent of MCMC_chain_*_meta.json), named to pair with the
@@ -587,6 +613,7 @@ def forward_mode(data: CommonData) -> None:
         meta_filename = ensemble_filename.replace('.npz', '_meta.json')
         meta_data = {
             **divergence_summary,
+            **coverage,
             "on_divergent_draw": on_divergent_draw,
             "max_divergent_fraction": max_divergent_fraction,
             "chain_path": chain_path,
@@ -1110,7 +1137,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     env_filename = os.path.join(data.folder, f"MCMC_envelopes_{data.station}_{data.series}_{data.time_res}.csv")
     ensemble_filename = os.path.join(data.folder, f"MCMC_ensemble_{data.station}_{data.series}_{data.time_res}.npz")
     save_ensemble = bool(uncertainty_options.get('save_ensemble', False))
-    _export_ensemble_outputs(data, ensemble_simulations, prediction_interval, env_filename, ensemble_filename, save_ensemble)
+    coverage = _export_ensemble_outputs(data, ensemble_simulations, prediction_interval, env_filename, ensemble_filename, save_ensemble)
 
     print("Writing metadata sidecar...")
     sidecar_data = {
@@ -1138,6 +1165,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         "envelope_sample_seed": seed,
         "sample_indices": [int(x) for x in sample_indices],
         "valid_draw_indices": divergence_summary["valid_draw_indices"],
+        **coverage,
     }
 
     sidecar_filename = os.path.join(data.folder, f"MCMC_chain_{data.station}_{data.series}_{data.time_res}_meta.json")

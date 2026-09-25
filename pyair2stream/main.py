@@ -21,7 +21,8 @@ from .post_processing import post_process
 from .sensitivity import sensitivity_analysis
 from . import __version__
 
-from .model import call_model, aggregation, statis, funcobj, detect_segments, warn_on_stability, check_numerical_divergence
+from .model import (call_model, aggregation, statis, funcobj, detect_segments, warn_on_stability,
+                    check_numerical_divergence, check_segment_warmup)
 
 def run_optimizer(data: CommonData) -> None:
     """
@@ -82,6 +83,7 @@ def forward(data: CommonData) -> None:
         detect_segments(data)
 
     warn_on_stability(data, error_fraction=data.stability_error_fraction)
+    check_segment_warmup(data)
     call_model(data)
     check_numerical_divergence(data, max_plausible_twat=data.max_plausible_twat)
 
@@ -289,8 +291,8 @@ def main():
             t2 = time.time()
             print(f"Computation time was {t2 - t1:.4f} seconds.")
             return  # skip the normal single calibration + forward() + post_process()
-        elif data.runmode not in ('DE-MCMC', 'DE-CV-MCMC'):
-            print(f"Warning: cross_validation is enabled in config, but run mode '{data.runmode}' does not support it (or handles it internally). Ignoring cross_validation block.")
+        elif data.runmode != 'DE-CV-MCMC':  # DE-CV-MCMC uses the block internally
+            print(f"Warning: cross_validation is enabled in config, but run mode '{data.runmode}' does not support it. Ignoring cross_validation block.")
 
     run_optimizer(data)
 
