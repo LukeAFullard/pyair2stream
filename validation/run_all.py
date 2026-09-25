@@ -1,7 +1,7 @@
 """
 Run the validation suite and write validation/REPORT.md.
 
-    python validation/run_all.py            # full suite (about 30 minutes on 4 cores)
+    python validation/run_all.py            # full suite (about 15 minutes on 4 cores)
     python validation/run_all.py --quick    # reduced version of every check (about 2 minutes)
     python validation/run_all.py --only V2 V6
 
@@ -138,7 +138,7 @@ def figures(r: Result) -> None:
                           "Lower is better. Grey bars: the two simple alternatives."))
         if b is not None and len(b) and "7-day mean coverage" in b:
             b = b[b.converged]
-            fig, axes = plt.subplots(1, 2, figsize=(9, 3.6), sharey=True)
+            fig, axes = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
             for ax, col, title in zip(axes, ("coverage", "7-day mean coverage"),
                                       ("Daily temperatures", "7-day mean temperatures")):
                 for k, (noise, colour) in enumerate((("iid", "0.6"), ("ar1", "tab:blue"))):
@@ -147,10 +147,13 @@ def figures(r: Result) -> None:
                     ax.bar(x, g[col] * 100, 0.38, color=colour, label=f"noise_model: {noise}")
                 ax.axhline(90, color="black", ls="--", lw=1)
                 g = b[b["noise model"] == "iid"]
-                ax.set_xticks(np.arange(len(g)), [f"{rv}\nv{v}" for rv, v in zip(g.river, g.version)], fontsize=8)
+                ax.set_xticks(np.arange(len(g)), [f"{rv} v{v}" for rv, v in zip(g.river, g.version)], fontsize=8,
+                              rotation=30, ha="right")
                 ax.set(title=title, ylim=(0, 100))
             axes[0].set_ylabel("Validation observations inside\nthe 90% interval (%)")
-            axes[1].legend(frameon=False, fontsize=8, loc="lower right")
+            handles, names = axes[0].get_legend_handles_labels()
+            fig.legend(handles, names, frameon=False, fontsize=8, ncol=2, loc="lower center",
+                       bbox_to_anchor=(0.5, -0.17))
             r.figures.append((_save(fig, "V5_interval_coverage.png"),
                               "Dashed: the nominal 90%. For 7-day means only AR(1) noise comes close."))
 
