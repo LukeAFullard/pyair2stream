@@ -1,0 +1,3 @@
+case,raw spread of the leave-one-year-out fits,jackknife,MCMC,"median width, jackknife / MCMC","median width, raw spread / MCMC"
+B,55%,87%,85%,1.4,0.5
+D,56%,83%,75%,1.8,0.6
