@@ -25,7 +25,7 @@ before its result.
 From the repository root, with the package installed (`pip install -e .`):
 
 ```bash
-python validation/run_all.py            # full suite, about 25 minutes on 4 cores
+python validation/run_all.py            # full suite, about 50 minutes on 4 cores
 python validation/run_all.py --quick    # reduced version of every check, about 2 minutes
 python validation/run_all.py --only V2 V6
 ```
@@ -34,7 +34,10 @@ V1 needs `gfortran` and the Fortran source (`git submodule update --init`);
 without them it is reported as not run. The run rewrites `REPORT.md`,
 `results/` (every table as CSV) and `figures/`. Scratch files go to `work/`,
 which is not kept. All random steps are seeded, so a rerun on the same software
-versions gives the same numbers; the report records the versions used.
+versions gives the same numbers; the report records the versions used. The one
+exception is V2 part D, which runs the original Fortran program's own
+calibration: it seeds its random numbers from the clock, so its runs differ each
+time (which is what part D shows).
 
 ## Data
 
