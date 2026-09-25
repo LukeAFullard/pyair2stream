@@ -36,6 +36,8 @@ The model was calibrated using a hybrid Differential Evolution (DE) and L-BFGS-B
 | RMSE   | 0.914  |
 | MAE    | 0.705  |
 
+*Produced by an earlier version, whose "R²" was the NSE of the plotted series under another name. Current versions report NSE and R² (squared correlation) separately in `goodness_of_fit_*.csv`.*
+
 ![Calibration Results](output/calibration_DE-MCMC_NSE_Hopelands.png)
 *Figure 3: Observed vs. Modeled water temperature for the calibration period, including 90% prediction intervals.*
 

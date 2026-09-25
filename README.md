@@ -3,445 +3,206 @@
 [![License: CC BY-SA 3.0](https://img.shields.io/badge/License-CC_BY--SA_3.0-lightgrey.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
 
-A modern Python port of **air2stream**, a hybrid physics-based/empirical model for simulating daily river water temperature from air temperature and (optionally) discharge.
+`pyair2stream` predicts the **daily mean water temperature of a river** from daily
+air temperature and (optionally) river discharge. It is a Python version of
+**air2stream** (Toffolon and Piccolroaz, 2015), a widely used model that fits a
+small physically based equation to your site's own measurements.
 
-Original model: Toffolon, M. and Piccolroaz, S. (2015). *A hybrid model for river water temperature as a function of air temperature and discharge*, Environmental Research Letters, 10(11), 114011. [doi:10.1088/1748-9326/10/11/114011](https://doi.org/10.1088/1748-9326/10/11/114011)
+Typical uses: filling gaps in a water temperature record, checking what a river's
+temperature would have been under different flows (for example with and without
+water abstraction), projecting temperatures under future climate, and asking
+whether a site is likely to meet a temperature limit, with an uncertainty band.
 
-`pyair2stream` reimplements the original Fortran model in Python/[Numba](https://numba.pydata.org/) and adds:
+> This is a community port, not the official release by the model's authors. It
+> reproduces the original Fortran results (see [Is it correct?](#is-it-correct))
+> and adds features listed below.
 
-- **YAML-based configuration** instead of fixed-width text files
-- **CSV in, CSV out** — no custom binary formats
-- **Gap-tolerant mode** for calibrating on time series with missing air temperature or discharge data
-- **Modern calibration algorithms**: Differential Evolution + L-BFGS-B (default), PSO, Latin Hypercube, and DE + MCMC (via [`emcee`](https://emcee.readthedocs.io/)) for uncertainty quantification
-- **Automatic post-processing**: calibration/validation plots and parameter dotty-plots
-- **One-at-a-time sensitivity analysis** and forward prediction intervals
-- **Autoregressive AR(1) Prediction Intervals**: An opt-in noise model for MCMC prediction intervals to account for residual serial correlation, yielding more realistic uncertainty bounds.
-- A test suite that validates the Python/Numba integration against the original compiled Fortran source (see [Testing](#testing))
+## What it does
 
-> **Status**: this is a community Python port, not the official model release. See [Relationship to the original Fortran code](#relationship-to-the-original-fortran-code) below.
+- **Calibrates** the model's 3–8 parameters to your observed water temperature
+  (Differential Evolution by default; also Particle Swarm and Latin Hypercube).
+- **Validates** it on a separate period you supply.
+- **Quantifies uncertainty** in the parameters and gives prediction intervals
+  (`DE-MCMC`), including for new scenarios.
+- **Runs scenarios** with fixed parameters (`FORWARD`), and compares two
+  scenarios with an uncertainty band on the difference.
+- Handles **gaps** in air temperature or discharge (gap-tolerant mode),
+  **cross-validation** by year, and **sensitivity analysis**.
+- Uses a **YAML config file and CSV files**, and writes CSV results and plots.
 
-## Contents
+## Install
 
-- [Model versions](#model-versions)
-- [Installation](#installation)
-- [Quick start](#quick-start)
-- [Configuration](#configuration)
-- [Input data format](#input-data-format)
-- [Gap-tolerant mode](#gap-tolerant-mode)
-- [Outputs](#outputs)
-- [Using pyair2stream from Python](#using-pyair2stream-from-python)
-- [Testing](#testing)
-- [Examples](#examples)
-- [Relationship to the original Fortran code](#relationship-to-the-original-fortran-code)
-- [Validation against published literature](#validation-against-published-literature)
-- [Citing](#citing)
-- [License](#license)
-
-## Model versions
-
-`air2stream` supports five model formulations, selected via `version` in the config file. Each trades off complexity/data requirements against the physical processes it represents:
-
-| Version | Parameters | Uses discharge? | Seasonal signal? | Notes |
-|:-------:|:----------:|:----------------:|:-----------------:|-------|
-| 3 | 3  | No  | No  | Simplest linear air–water relationship |
-| 4 | 4  | Yes | No  | Adds discharge-dependent thermal inertia |
-| 5 | 5  | No  | Yes | Adds an explicit seasonal (cosine) term |
-| 7 | 7  | Yes | Yes | Full model without the discharge-attenuation exponent |
-| 8 | 8  | Yes | Yes | Full model (recommended starting point for most rivers) |
-
-Four numerical integrators are available (`integrator` in the config): `EUL` (explicit Euler), `RK2`, `RK4` (default, recommended), and `CRN` (semi-implicit Crank–Nicolson).
-
-## Installation
-
-Requires Python 3.9+.
+Requires Python 3.9 or newer.
 
 ```bash
 git clone https://github.com/LukeAFullard/pyair2stream.git
 cd pyair2stream
 pip install .
 ```
-
-This installs `pyair2stream` and its dependencies (`numpy`, `pandas`, `matplotlib`, `scipy`, `pyyaml`, `numba`, `emcee`, `openpyxl`), plus the `pyair2stream` command-line entry point.
-
-For development (running tests, editing the source):
-
-```bash
-pip install -e .
-pip install pytest
-```
-
-> The original Fortran source is pulled in as a git submodule under `fortran/upstream/` purely as a reference implementation used by the test suite (see [Testing](#testing)); it is not required to run `pyair2stream`. Clone with `git clone --recurse-submodules`, or run `git submodule update --init --recursive` after a plain clone.
 
 ## Quick start
 
-The fastest way to see `pyair2stream` work end-to-end is the bundled quick-start example, which uses a small synthetic dataset so it runs in a few seconds:
+Run the bundled example (synthetic data, about 5 seconds):
 
 ```bash
-git clone https://github.com/LukeAFullard/pyair2stream.git
-cd pyair2stream
-pip install .
 pyair2stream --config examples/quickstart/config.yaml
 ```
 
-This calibrates the model, validates it against a held-out year, writes results to `examples/quickstart/output/`, and generates diagnostic plots automatically. See the [User Guide's walkthrough](USER_GUIDE.md#3-your-first-run-the-bundled-example) for what the output should look like and how to interpret it.
+Results and plots appear in `examples/quickstart/output/`. The
+[User Guide](USER_GUIDE.md#3-your-first-run-the-bundled-example) explains them.
 
-Once that runs cleanly, point `pyair2stream` at your own data:
+To use your own data:
 
-1. Prepare a CSV of daily data with `Date`, `T_air`, `T_water`, and (optionally) `Discharge` columns — see [Input data format](#input-data-format).
-2. Create a `config.yaml` (a minimal example is below; see [Configuration](#configuration) for the full reference).
-3. Run:
-
-```bash
-pyair2stream --config config.yaml
-```
-
-### Minimal `config.yaml`
+1. Make a CSV with one row per day: `Date`, `T_air`, `T_water`, `Discharge`
+   (see [Input data](#input-data)).
+2. Write a `config.yaml` like the one below.
+3. Run `pyair2stream --config config.yaml`.
 
 ```yaml
-project_name: "my_river_project"
+project_name: "my_river"
 station_name: "Station_A"
-series: "c"                # c = continuous daily series
-time_resolution: "1d"      # 1d, nw (n weeks), or nm (n months)
-version: 8                 # 3, 4, 5, 7, or 8
-objective_function: "NSE"  # NSE, KGE, or RMS
-integrator: "RK4"          # RK4, EUL, RK2, or CRN
-run_mode: "DE"             # DE (recommended), PSO, LATHYP, FORWARD, or DE-MCMC
+version: 8                 # model version: 3, 4, 5, 7 or 8 (see below)
+run_mode: "DE"             # calibrate with Differential Evolution
+random_seed: 42            # makes results exactly repeatable
 
 paths:
-  input_data: "data/calibration_data.csv"
-  validation_data: "data/validation_data.csv"   # optional
+  input_data: "data/calibration.csv"
+  validation_data: "data/validation.csv"   # optional
+  output_dir: "output"
 
 optimization:
-  n_run: 100
-  n_particles: 50
+  n_run: 100               # maximum generations
+  n_particles: 10          # population = 10 x 8 parameters
 
-parameter_bounds:
-  min: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  max: [10.0, 1.0, 1.0, 1.0, 1.0, 10.0, 1.0, 1.0]
+parameter_bounds:          # search ranges for a1..a8 (original authors' ranges)
+  min: [-5, -5, -5, -1, 0,  0,  0, -1]
+  max: [15, 1.5, 5,  1, 20, 10, 1,  5]
 ```
 
-## Configuration
+Everything not set uses a sensible default (for example the stable `CRN`
+integrator and the NSE objective). The [User Guide](USER_GUIDE.md#6-configuration-reference)
+lists every option.
 
-The config file is YAML and supports options for calibration mode, optimizer settings, gap-tolerant mode, sensitivity analysis, and forward prediction intervals. The **full annotated reference** — including every option, its default, and when it applies — is in **[USER_GUIDE.md](USER_GUIDE.md)**.
+## Input data
 
-## Input data format
-
-Input/validation CSVs need a `Date` column parseable by pandas (e.g. `YYYY-MM-DD`) plus:
-
-| Column | Required | Description |
+| Column | Required | Notes |
 |---|---|---|
-| `T_air` | Yes | Air temperature (°C) |
-| `T_water` | Yes | Observed water temperature (°C). Missing values allowed. |
-| `Discharge` | Only for versions 4, 7, 8 | River discharge |
+| `Date` | yes | one row for every calendar day, e.g. `2020-01-31` |
+| `T_air` | yes | daily mean air temperature (°C); no gaps unless `gap_tolerant: true` |
+| `T_water` | yes | daily mean water temperature (°C); gaps allowed |
+| `Discharge` | versions 4, 7, 8 | daily mean flow (any unit); no gaps, > 0 |
 
-Missing values can be left blank (read as `NaN`) or given the legacy `-999.0` sentinel.
+Leave missing values blank or write `-999`. Calibration and validation files must
+start on 1 January and cover at least a year.
 
-```csv
-Date,T_air,T_water,Discharge
-2020-01-01,5.2,4.1,12.5
-2020-01-02,4.8,4.0,11.8
-2020-01-03,6.1,,10.2
-```
+## Model versions
 
-## Gap-tolerant mode
+| Version | Parameters | Uses discharge | Seasonal term |
+|:-:|:-:|:-:|:-:|
+| 3 | 3 | no | no |
+| 4 | 4 | yes | no |
+| 5 | 5 | no | yes |
+| 7 | 7 | yes | yes |
+| 8 | 8 | yes | yes |
 
-By default the model requires `T_air` (and `Discharge`, if used) to be gap-free over the whole record. Setting `gap_tolerant: true` allows the model to split the series into contiguous valid segments and integrate each independently.
-
-**Before relying on gap-tolerant mode, be aware:**
-
-- Gaps often coincide with floods or freeze events. Calibrating on the remaining data excludes these extremes, which can **artificially inflate** NSE/KGE relative to a continuous record — the two are not directly comparable.
-- If large high-flow periods are missing, the automatically computed `Qmedia` (mean discharge, used for normalization) will be biased low. Supply a known historical `Qmedia` in the config if this is a concern.
-- `T_water` observations that fall inside a forcing gap are excluded from both calibration and evaluation.
-- Each segment discards a short warm-up buffer (`warmup_drop_days`, default 15) after restarting, since the restart condition relies on a day-of-year climatology.
-
-See [USER_GUIDE.md](USER_GUIDE.md#10-gap-tolerant-mode) for full details.
+Start with version 8 if you have good discharge data (or 5 if not), and compare
+with simpler versions: prefer the simplest one that performs well on the
+validation period. The equation is given in [docs/METHODS.md](docs/METHODS.md#5-the-equation-and-model-versions).
 
 ## Outputs
 
-Running `pyair2stream` writes to the configured output directory:
-
-| File pattern | Contents |
+| File | Contents |
 |---|---|
-| `parameters.txt` | Parameter bounds actually used, after fixing version-inactive parameters to 0 |
-| `0_*.csv` | Optimization history (every parameter set tried and its objective score) |
-| `1_*.out` | Best-fit parameters and final efficiency score (calibration, then validation if run) |
-| `2_*.csv` | Simulated vs. observed time series (calibration period) |
-| `3_*.csv` | Simulated vs. observed time series (validation period, if validation data was supplied) |
-| `calibration_*.png` / `.pdf` | Time-series plot restricted to the calibration period's observations |
-| `validation_*.png` / `.pdf` | Same, for the validation period |
-| `full_simulation_*.png` / `.pdf` | Same, over the whole simulated record, including where there's no observation |
-| `convergence_*.png` / `.pdf` | Objective-function value vs. optimizer iteration |
-| `dottyplots_*.png` / `.pdf` | Parameter/objective-function dotty plots |
-| `predicted_vs_measured_*.png` / `.pdf` | Simulated vs. observed scatter, one per period (calibration/validation/full_simulation) |
-| `residual_diagnostics_*.png` / `.pdf` | Residual histogram, Q-Q plot, and autocorrelation, one per period |
-| `goodness_of_fit_*.csv` | R², RMSE, MAE, AIC, BIC, one file per period |
-| `sensitivity_*.csv` / `.png` / `.pdf` | One-at-a-time sensitivity analysis (only if `sensitivity_analysis: true`) |
-| `MCMC_chain_*.csv`, `MCMC_envelopes_*.csv` | MCMC parameter samples and prediction intervals (`DE-MCMC` mode only) |
-| `Forward_Prediction_Envelopes_*.csv` | Prediction envelopes for a `FORWARD` run using a prior MCMC chain (see [forward prediction intervals](USER_GUIDE.md#12-forward-prediction-intervals)) |
-| `cv_results.csv` | One row per cross-validation fold with metrics and calibrated parameters (only if `cross_validation.enabled: true`) |
-| `gaps_summary.txt` | Gap/segment diagnostics (gap-tolerant mode only) |
+| `1_*.out` | best parameters (line 1), calibration score (line 2), validation score (line 3) |
+| `2_*.csv`, `3_*.csv` | daily observed and simulated water temperature, calibration and validation periods |
+| `goodness_of_fit_*.csv` | N, NSE, R², RMSE, MAE, AIC, BIC for each period |
+| `calibration_*.png`, `validation_*.png`, `full_simulation_*.png` | time-series plots with residuals |
+| `predicted_vs_measured_*.png`, `residual_diagnostics_*.png` | scatter plot; residual histogram, Q-Q and autocorrelation |
+| `convergence_*.png`, `dottyplots_*.png`, `0_*.csv` | every parameter set tried during calibration |
+| `calibration_metadata.json`, `parameters.txt` | `Qmedia`, bounds and settings used, needed for later scenario runs |
+| `MCMC_*`, `Forward_Prediction_*`, `parameter_significance_*` | uncertainty results (`DE-MCMC` and `FORWARD` with intervals) |
+| `sensitivity_*`, `cv_results.csv`, `gaps_summary.txt` | optional analyses |
 
-See [§8 of the User Guide](USER_GUIDE.md#8-understanding-the-output-files) for a worked explanation of these files, including an important note about warm-up rows in `2_*.csv`/`3_*.csv`.
+Details: [User Guide §8](USER_GUIDE.md#8-understanding-the-output-files).
 
-### Note on Cross-Validation
-In `cross_validation` mode, the first eligible calendar year is strictly enforced to never be a candidate fold. This is because the model requires a prior year of continuous data for initialization and spin-up. If `skip_first_year: false` is configured without skipping years via `min_train_years`, execution will halt with a configuration error.
+## Documentation
 
-## Using pyair2stream from Python
+- **[USER_GUIDE.md](USER_GUIDE.md)** — how to prepare data, configure, run, read
+  the results, and fix common errors.
+- **[docs/METHODS.md](docs/METHODS.md)** — exactly what the software does, step
+  by step, its assumptions and limitations, and how it differs from the Fortran.
+  Read §16 there before using results to support a decision.
+- [CHANGELOG.md](CHANGELOG.md) — changes between versions.
 
-```python
-from pyair2stream.io import read_calibration, read_Tseries
-from pyair2stream.model import aggregation, statis
-from pyair2stream.optimization import DE_mode
+## Is it correct?
 
-data = read_calibration(config_file="config.yaml")
-read_Tseries(data, "c")
-aggregation(data)
-statis(data)
+- **Same results as the original.** The test suite compiles the original Fortran
+  (a git submodule, see [`fortran/patches/NOTICE.md`](fortran/patches/NOTICE.md))
+  and checks that all five model versions give the same daily temperatures to
+  within 6×10⁻⁶ °C.
+- **Reproduces published results.** Running the published parameters for three
+  Swiss rivers (Piccolroaz et al., 2016) gives the published calibration NSE:
 
-DE_mode(data)  # populates data.par_best and data.finalfit
-print(data.par_best, data.finalfit)
-```
+  | River (station) | Flow regime | Published NSE | pyair2stream NSE |
+  |---|---|---|---|
+  | Mentue (MAH-2369) | natural | 0.989 | 0.9886 |
+  | Rhône (SIO-2011) | regulated | 0.923 | 0.9242 |
+  | Dischmabach (DAV-2327) | snow-fed | 0.950 | 0.9558 |
 
-## Testing
+  Recalibrating with `DE` recovers the published parameters (for the Mentue, all
+  eight within 0.004). Details:
+  [`examples/validation/Switzerland/`](examples/validation/Switzerland/README.md).
+- **Honest uncertainty.** On the bundled example, the 90% prediction interval
+  contained 89% of calibration days and 92% of a held-out year; every run with
+  intervals reports this check for your own data.
 
-The test suite includes regression tests that compile the original Fortran source with `gfortran` and numerically compare its output against the Python/Numba implementation, in addition to unit tests for I/O, optimization, sensitivity analysis, and post-processing.
-
-The Fortran source itself is not vendored in this repo — it's a git submodule pinned to a specific commit of the upstream [air2stream](https://github.com/spiccolroaz/air2stream) reference implementation, with a small, documented patch applied at build time to make it compile under `gfortran` (the original targets Intel Fortran on Windows). See [`fortran/patches/NOTICE.md`](fortran/patches/NOTICE.md) for exactly what's patched, why, and licensing attribution.
+To run the tests (needs `gfortran`):
 
 ```bash
-git submodule update --init --recursive   # fetch the pinned upstream Fortran source
-gfortran --version   # gfortran is required for the golden Fortran-comparison tests
+git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
 ```
 
-If the submodule isn't initialized, the golden tests fail immediately with a clear message telling you to run the `git submodule update` command above, rather than a cryptic file-not-found error.
-
 ## Examples
 
-The `examples/` directory contains runnable end-to-end examples, each with its own README explaining the setup and results in detail:
+Each folder has a README.
 
-| Directory | Demonstrates |
+| Folder | Shows |
 |---|---|
-| `quickstart/` | Minimal synthetic dataset and config — the fastest way to see a full run (see [Quick start](#quick-start)) |
-| `gap_tolerance/` | `gap_tolerant` calibration under 1/2/3 simulated data gaps, and the performance trade-offs involved |
-| `gap_experiment/` | How parameter stability and goodness-of-fit degrade as gaps are introduced into `T_air` |
-| `forward_prediction_intervals/` | Generating probabilistic prediction envelopes from a prior `DE-MCMC` calibration, including the AR(1) noise model |
-| `cross_validation/` | Leave-one-year-out cross-validation on a real river dataset |
-| `optimizer_comparison/` | Calibrating the same dataset with `PSO`, `DE`, and `DE-MCMC` and comparing results |
-| `optimizer_convergence/` | How `PSO` and `DE` convergence behaviour changes with iteration count |
-| `Hopelands/` | Full real river-station case studies, including raw-data preprocessing, gap-tolerant calibration, and sensitivity analysis |
-| `validation/Switzerland/` | Re-derivation of the Python PSO bugfix (see [Known deviations](#known-deviations-from-the-fortran-reference)) and the literature validation study below |
+| `quickstart/` | the smallest complete run |
+| `validation/Switzerland/` | reproduction of published results; optimizer and integrator comparisons |
+| `forward_prediction_intervals/` | uncertainty bands for a future scenario (iid vs. AR(1) errors) |
+| `mcmc_comparison/` | `DE-MCMC` vs. `DE-CV-MCMC` |
+| `cross_validation/` | leave-one-year-out cross-validation |
+| `gap_experiment/` | effect of gaps on gap-tolerant calibration |
+| `optimizer_comparison/`, `optimizer_convergence/` | DE vs. PSO |
+| `Hopelands/` | a real river from raw data to results |
 
-## Relationship to the original Fortran code
+Some examples need data that is not included in this repository.
 
-`pyair2stream` reproduces the governing equations, numerical integrators, and objective functions of the original Fortran `air2stream` model. It is not officially maintained by the original authors — if you need the reference implementation, see the original air2stream repository.
+## Differences from the original Fortran
 
-### Known deviations from the Fortran reference
-
-These are the known, intentional behavioral differences from the original
-Fortran, found during porting and fixed with test coverage:
-
-- **PSO initialization/NaN handling (fixed in `optimization.py`)**: the initial
-  Python port initialized `fitbest` to zero and did not guard against NaN
-  objective values from solver overflow, causing PSO to silently return
-  all-zero parameters on some datasets. Fixed by initializing to `-1e30` and
-  using NaN-safe comparisons/argmax. See PR #21 and
-  `examples/validation/Switzerland/README.md`.
-- **`mineff_index` config location (fixed in `io.py`)**: corrected to read
-  from the config root rather than nested under `optimization:`, matching
-  `USER_GUIDE.md`.
-- **Dotty-plot tolerance defaults (fixed in `post_processing.py`)**: the
-  default acceptability threshold for highlighting "good" parameter sets in
-  diagnostic plots is now objective-function-aware (0.5 for NSE/KGE, 2.0 for
-  RMS) instead of a single hardcoded value, which previously produced an
-  empty acceptable-parameter region for NSE/KGE calibrations.
-- **Qmedia is no longer silently recomputed for validation or FORWARD runs
-  (fixed in `io.py`/`main.py`)**: the Fortran (and the initial Python port)
-  recompute `Qmedia` from whichever discharge series is currently loaded,
-  including the validation period and any `FORWARD`-mode scenario discharge.
-  Since `theta = Discharge / Qmedia` is the model's only view of discharge,
-  this silently rescales `theta` back and can fully cancel a scenario's
-  discharge signal (see `docs/audit/01_qmedia_scenario_invariance.md`).
-  `pyair2stream` now freezes `Qmedia` across the calibration/validation split
-  within a run, persists it to `calibration_metadata.json` on every run, and
-  requires `FORWARD` mode to supply an explicit `Qmedia:` or
-  `paths.calibration_metadata` rather than recomputing it. This changes
-  validation-period objective values for existing non-gap-tolerant
-  configurations that relied on the old (unfitted) recomputed `Qmedia`.
-- **Default integrator changed from `RK4` to `CRN` (fixed in `io.py`)**: the ODE is
-  linear in `Tw` with a discharge-dependent decay rate `B`; explicit schemes
-  (`RK4`/`RK2`/`EUL`) are only conditionally stable in `B` and can diverge silently
-  — no NaN, no error — at discharge different from the calibration record, even
-  when stable at calibration (see `docs/audit/02_numerical_integration.md`). `CRN`
-  is unconditionally stable and matches the new `EXP` integrator to well under
-  0.1 °C on every case tested. `pyair2stream` also now raises
-  `NumericalDivergenceError` in `main.forward()`, `forward_mode()`, and
-  `sensitivity_analysis()` if a simulated water temperature is non-finite or
-  exceeds `max_plausible_twat` (default 60 °C), and warns (erroring above
-  `stability_error_fraction`) when a pre-flight check finds `B` exceeding the
-  chosen integrator's stability limit. This changes results for any run that
-  relied on the previous `RK4` default; set `integrator: "RK4"` explicitly to
-  keep the old behaviour. `RK4`/`RK2`/`EUL` remain available and are unchanged
-  — they still match the golden Fortran tests exactly.
-- **`eval_mask` is now always set, and `statis()`/`aggregation()` are aligned with
-  `funcobj()` (fixed in `model.py`/`io.py`)**: `eval_mask` (the mask excluding the
-  warm-up block and, in gap-tolerant mode, each segment's `warmup_drop_days`) was
-  previously only ever built when `gap_tolerant: true`; in the default workflow it
-  stayed `None` for the whole run. This meant the DE-MCMC likelihood's own daily
-  mask double-counted the warm-up block (a verbatim copy of year one) as real
-  observations, inflating its effective sample size by up to 33% and sharpening
-  the posterior incorrectly. Separately, in gap-tolerant mode, `aggregation()`
-  emitted every window with a valid observation while `funcobj()` additionally
-  skipped windows failing `eval_mask` — so `statis()` computed `mean_obs`/`TSS_obs`
-  from a different, larger sample than the one actually scored, inflating NSE,
-  and (non-monotonically) shifting KGE/R²/AIC/BIC. `pyair2stream` now builds
-  `eval_mask` unconditionally on every data load, has `aggregation()` refuse to
-  emit a window with no `eval_mask`-eligible day, and scores the MCMC likelihood
-  on the same aggregated series `funcobj()` uses (see
-  `docs/audit/03_objective_function_and_masks.md`). This changes every reported
-  NSE/KGE/R²/AIC/BIC in gap-tolerant mode, and the MCMC posterior in every mode.
-- **CLI/I-O correctness fixes (`main.py`/`io.py`/`optimization.py`/`post_processing.py`,
-  audit report 05)**: `pyair2stream --config ...` in `FORWARD` mode called
-  `aggregation()`/`statis()` unconditionally before dispatching to any run mode,
-  so a pure projection with no `T_water` at all — the package's headline
-  climate-projection use case — crashed with `n_dat is 0` before ever reaching
-  `forward_mode()`'s own correct handling of that case; this is now gated on
-  `run_mode != 'FORWARD'`. A validation period shorter than one year returned
-  from `read_Tseries` before `data.n_tot` was overwritten, so it silently kept
-  the calibration value and passed `main.forward()`'s length guard, re-running
-  "validation" on the calibration arrays and appending a bogus efficiency line
-  to `1_*.out`; gated instead on an explicit `data.validation_available` flag.
-  Every output CSV (`2_*.csv`, `3_*.csv`, `MCMC_envelopes_*.csv`,
-  `Forward_Prediction_Envelopes_*.csv`) is no longer written with the 365-day
-  warm-up block (`Year=-999`) prepended — anyone reading these files directly
-  previously got 365 junk rows and a `pd.to_datetime` crash. Added an explicit
-  `calendar: "standard" | "noleap" | "360_day"` config key so GCM output on a
-  non-standard calendar computes the seasonal term's phase from row position
-  against the declared calendar instead of from (potentially padded, silently
-  misaligning) Gregorian dates; the 1-January start requirement is also relaxed
-  for `FORWARD` mode. Removed the `Twat_mod_p5`/`Twat_mod_p95` dual-name
-  fallback in `post_processing.py` — a compatibility shim for a column name the
-  code has never actually written — and fixed the two example scripts that
-  still referenced it.
-- **PSO convergence criterion (`optimization.py`)**: the Fortran's stopping
-  condition is `IF (norm .lt. 0.0)`, which is never true for a non-negative
-  `norm` and so never fires — Fortran `PSO_mode` always runs to completion.
-  `pyair2stream` uses `norm < 1e-4`, a meaningful tolerance, so `PSO` can now
-  terminate early once particles converge on the global best. A legitimate fix
-  (see "PSO initialization/NaN handling" above), but an undocumented
-  behavioural change from the reference.
-- **Qmedia definition (`io.py`)**: the Fortran excludes only `Q == -999`
-  (missing) from the `Qmedia` average. `pyair2stream` also excludes `Q <= 0`,
-  since a non-positive discharge is physically invalid and would otherwise
-  pull the average toward zero.
-- **`tt` (seasonal-phase) construction (`io.py`)**: the Fortran walks
-  sequential day counts from `year_ini`, so `tt` implicitly assumes the record
-  starts 1 January and is gap-free. `pyair2stream` computes day-of-year from
-  the real calendar date of each row instead. The two are equivalent when the
-  Fortran's assumption holds, and more robust when it does not (e.g. a
-  `FORWARD`-mode scenario file not starting 1 January).
-- **No seeded reproducibility (fixed in `main.py`/`optimization.py`/`io.py`,
-  audit report 07, Defect A)**: no config key seeded calibration, so
-  `differential_evolution(..., seed=None)` drew from global numpy random
-  state and `PSO_mode`/`LH_mode` called `np.random.seed()` (also global) —
-  two runs of an identical config could converge to substantially different
-  parameter sets (equifinality, not just PRNG noise in the last decimal) with
-  no way to reproduce a published result. A new top-level `random_seed:`
-  config key is now threaded through to whichever optimizer is dispatched and
-  recorded in `calibration_metadata.json`; `PSO_mode`/`LH_mode` now draw from a
-  local `np.random.Generator` instead of mutating global state.
-- **`Q == 0` now raises a clear error by default, with an opt-in floor, instead of
-  crashing or silently mis-simulating (fixed in `model.py`/`model_numba.py`/
-  `io.py`/`config.py`)**: for versions 4, 7, and 8, discharge only enters the ODE
-  through `theta = Q/Qmedia`, with `theta ** a4` as a divisor. At `Q == 0` this
-  either raised a bare, uncaught `ZeroDivisionError` (`a4 > 0`) or silently
-  evaluated to `inf`, collapsing that day's (and every subsequent day's in the
-  same segment) simulated temperature towards zero with no error, NaN, or
-  warning (`a4 < 0`, the sign optimizers empirically tend to select) — invisible
-  to `check_numerical_divergence`, since the resulting value stays inside the
-  plausible temperature range. This could crash calibration on a naturally-
-  occurring zero-flow day the first time DE sampled a positive `a4`, and applied
-  identically to `FORWARD`-mode scenario discharge (naturalised flow, climate
-  projection). `read_Tseries` now raises a `ValueError` naming the offending
-  index/date and count before any parameter vector or integrator is involved,
-  regardless of `a4`'s sign; an opt-in `min_theta_floor` config key clamps
-  `theta` away from zero by a small, documented epsilon instead, applied
-  consistently across every integrator. Versions 3/5 (which never evaluate
-  `theta`) and gap-tolerant mode's existing handling of `Q <= 0` are unchanged.
-- **Posterior/prediction-interval ensemble loops now carry their own divergence
-  guard (fixed in `optimization.py`/`model.py`)**: `check_numerical_divergence`
-  previously ran only on the single deterministic best-fit simulation, not inside
-  `forward_mode()`'s prediction-interval loop or `_run_mcmc_uncertainty()`'s
-  envelope loop (`DE-MCMC`/`DE-CV-MCMC`), each of which calls `call_model()` once
-  per posterior draw. A single bad draw either crashed the whole batch or — if it
-  stayed finite — was silently written into the percentile envelope and raw
-  ensemble `scenario.paired_difference` consumes. A new per-draw check now
-  excludes (default) or raises on (`uncertainty_options.on_divergent_draw:
-  "raise"`) a divergent draw, reporting the exclusion on the console and in the
-  run's sidecar metadata, and raises rather than silently proceeding if the
-  excluded fraction exceeds `uncertainty_options.max_divergent_fraction` (default
-  10%) or every draw diverges.
-- **Paired scenario ensembles now enforce matched posterior draws instead of only
-  documenting the requirement (fixed in `optimization.py`/`scenario.py`)**:
-  `scenario.paired_difference` only ever checked `.shape`, so two ensembles built
-  from unrelated posterior draws (e.g. a mismatched or omitted
-  `forward_options.random_seed` across two config files) passed silently and
-  produced a statistically meaningless "paired" difference. `forward_mode()` now
-  persists each run's source-chain identity, requested sample indices, and the
-  indices that actually survived per-draw divergence filtering into a sidecar
-  JSON; a new `forward_options.reuse_sample_indices_from` config key lets a second
-  run reuse a prior run's exact indices instead of drawing new ones; and a new
-  `scenario.paired_difference_from_files()` cross-checks this provenance before
-  differencing, raising `ValueError` on any mismatch. The existing shape-only
-  `paired_difference()` remains available unchanged.
-
-Only the integrator-default change, the eval_mask/aggregation fix, and the
-`min_theta_floor`/ensemble-divergence changes above touch the core
-forward-simulation physics, the calibration objective's sample selection, or the
-integrators themselves — and even those only change behaviour for previously
-unhandled edge cases (non-positive discharge, a divergent ensemble draw); every
-integrator's own numerics for `Q > 0` are unchanged and still validated by the
-golden Fortran tests. The rest affect calibration robustness, output file layout,
-and diagnostic plotting.
-
-## Validation against published literature
-
-Beyond the Fortran golden tests, `pyair2stream` has been validated against the
-three Swiss river datasets and literature parameter sets published in the
-supplementary material of Piccolroaz et al. (2016), using the `FORWARD` run
-mode with literature-derived parameters, and independently re-calibrated with
-Differential Evolution:
-
-| River (station) | Flow regime | Literature NSE | pyair2stream NSE (DE) |
-|---|---|---|---|
-| Mentue (MAH-2369) | Natural | 0.989 | 0.9886 |
-| Rhône (SIO-2011) | Regulated | 0.923 | 0.9242 |
-| Dischmabach (DAV-2327) | Snow-fed | 0.950 | 0.9558 |
-
-Full methodology, parameter tables, and plots: [`examples/validation/Switzerland/README.md`](examples/validation/Switzerland/README.md).
-
-> **Note on optimizer choice**: this study found that PSO can converge to
-> different parameter sets than DE due to equifinality (multiple parameter
-> combinations giving similarly good NSE), particularly for versions with 8
-> free parameters. DE and DE-MCMC matched literature parameters far more
-> closely than PSO in these tests. **For scientific/publication use, prefer
-> `DE` or `DE-MCMC` over `PSO`** unless you've independently confirmed PSO
-> convergence for your dataset.
+Results match the Fortran for the same settings. The main differences are safer
+defaults (the stable `CRN` integrator and the DE optimizer), checks that stop
+with a clear error instead of producing silently wrong numbers, `Qmedia` kept
+fixed at its calibration value for validation and scenario runs, and the added
+features above. Full list: [docs/METHODS.md §17](docs/METHODS.md#17-differences-from-the-fortran-original).
 
 ## Citing
 
-If you use this software in published work, please cite the original model paper:
+Please cite the original model:
 
-> Toffolon, M. and Piccolroaz, S. (2015). A hybrid model for river water temperature as a function of air temperature and discharge. *Environmental Research Letters*, 10(11), 114011. https://doi.org/10.1088/1748-9326/10/11/114011
+> Toffolon, M. and Piccolroaz, S. (2015). A hybrid model for river water
+> temperature as a function of air temperature and discharge. *Environmental
+> Research Letters*, 10(11), 114011. https://doi.org/10.1088/1748-9326/10/11/114011
 
-Because `pyair2stream` is not yet distributed via PyPI and does not currently
-tag releases, please also record the exact git commit hash used for your
-study (`git rev-parse HEAD`) so your results are reproducible, e.g.:
+and record the pyair2stream version you used. `pyair2stream` has no tagged
+releases yet, so give the git commit (`git rev-parse HEAD`), e.g.:
 
-> Water temperature simulations were produced using pyair2stream
+> Water temperatures were simulated with pyair2stream
 > (https://github.com/LukeAFullard/pyair2stream, commit `<sha>`).
 
 ## License
 
-[CC BY-SA 3.0](LICENSE)
+[CC BY-SA 3.0](LICENSE), the license of the original air2stream code.

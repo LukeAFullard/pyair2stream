@@ -16,7 +16,7 @@ Additionally, the configuration parser (`pyair2stream/io.py`) incorrectly nested
 2. **Handle NaNs Safely**:
    - Updates to `fitbest` now have a strict check: `if not np.isnan(fit[k]) and fit[k] > fitbest[k]`.
    - Identification of the best global particle uses `np.nanargmax(fitbest)` to avoid collapsing.
-3. **Fix YAML Parsers**: `data.mineff_index = np.float64(config.get('mineff_index', 0.0))` securely extracts the configuration in `io.py`.
+3. **Fix YAML Parsers**: `data.mineff_index = np.float64(config.get('mineff_index', 0.0))` securely extracts the configuration in `io.py`. (Current versions accept `mineff_index` but do not use it: `0_*.csv` records every evaluation.)
 
 ## Verification & Results
 Identical validation environments were set up using the `DAV_2327` dataset for both the legacy Fortran codebase and the `pyair2stream` package to compare parameter selection.
@@ -115,6 +115,8 @@ Following the initial evaluation, a high-intensity Differential Evolution pass (
 ## Extended Analysis: Optimizer, Integrator, and Bound Constraints
 
 A fully extended evaluation was run on all three Swiss stations utilizing high-intensity search settings (500 particles, 3000 runs). For each station, 8 evaluations were conducted: comparing PSO vs DE, CRN vs RK4 integrators, and testing both standard parameter bounds (`a4` in `[-1.0, 1.0]`) and restricted parameter bounds (`a4` in `[0.0, 1.0]`).
+
+The `R2` column below comes from an earlier version, in which it was the NSE of the plotted series (hence equal to NSE). Current versions report R² (squared correlation) separately.
 
 ### MAH Results
 
