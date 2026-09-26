@@ -39,7 +39,7 @@ RANGE = np.array(AUTHORS_BOUNDS["max"], float) - np.array(AUTHORS_BOUNDS["min"],
 # 500 iterations, c1 = c2 = 2, inertia 0.9 -> 0.4, RMSE, Crank-Nicolson, the bounds used here.
 PSO_SETTINGS = {"n_particles": 500, "n_run": 500, "c1": 2.0, "c2": 2.0, "wmax": 0.9, "wmin": 0.4}
 PSO_RUNS = 3            # the original program seeds its random numbers from the clock: every run differs
-PACKAGE_PSO_STATIONS = ("MAH_2369",)   # pyair2stream's PSO is much slower than the Fortran; one river
+PACKAGE_PSO_STATIONS = ("MAH_2369",)   # one river, to keep the run time down
 UPSTREAM = os.path.join(REPO, "fortran", "upstream")
 
 
@@ -224,8 +224,8 @@ def _sim_rmse(csv, v, par, qmedia) -> float:
     return float(np.sqrt(np.mean((sim[m] - obs[m]) ** 2)))
 
 
-# Part E: the same with the RK4 scheme instead of Crank-Nicolson. pyair2stream's PSO is slow, so
-# it is run only for the Mentue's versions 7 and 8, where the parameters trade off.
+# Part E: the same with the RK4 scheme instead of Crank-Nicolson. To keep the run time down,
+# pyair2stream's PSO is run only for the Mentue's versions 7 and 8, where the parameters trade off.
 RK4_PACKAGE_CASES = (("MAH_2369", 7), ("MAH_2369", 8))
 
 
@@ -316,7 +316,7 @@ def run(ctx) -> Result:
                f"Crank-Nicolson, the same parameter ranges; the paper itself does not state the swarm size or "
                f"iterations), {PSO_RUNS} times per river and version, since it seeds its random numbers from "
                f"the clock. pyair2stream's PSO is run {PSO_RUNS} times with the same settings on the Mentue "
-               f"(it is much slower than the Fortran). (E) The same with the RK4 scheme instead of "
+               f"only, to keep the run time down. (E) The same with the RK4 scheme instead of "
                f"Crank-Nicolson (the original program's readme lists RK4 in its example): the published "
                f"parameters are simulated with both schemes, each version is recalibrated by DE with RK4, the "
                f"original program's PSO is run {PSO_RUNS} times per case with RK4, and pyair2stream's PSO with "

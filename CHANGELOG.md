@@ -28,6 +28,9 @@ your runs.
   daily residual spread (no change at `1d`).
 - **DE-MCMC was not reproducible** with `random_seed` set (the sampler's random
   generator was not seeded).
+- DE calibration no longer prints `RuntimeWarning: overflow encountered in
+  square`. It came from SciPy's convergence test when some trial parameters make
+  the simulation run away; the search itself is unchanged.
 - Saved ensembles (`save_ensemble`) held values near −999 on gap days; now NaN.
 - A FORWARD run overwrote `calibration_metadata.json` when it shared the
   calibration's output folder; FORWARD runs no longer write this file.
@@ -85,6 +88,12 @@ your runs.
   note that the spread of its parameters is not a confidence interval.
 
 ### Changed
+- **PSO calibration is about 4 times faster.** The data were sent to a worker
+  process with every particle evaluation, which cost more than the model run
+  itself; each worker now receives them once. Results are unchanged. A
+  500-particle, 500-iteration calibration of the Mentue takes about 30 s on 4
+  cores (the original Fortran: about 40–70 s on one core, depending on how it
+  is compiled).
 - ⚠ **The default `noise_model` is now `"ar1"`** (was `"iid"`). Real model
   errors persist from day to day; with `"iid"`, 90% intervals for 7-day means
   contained only 39–62% of observed values on the Swiss rivers, against 76–88%

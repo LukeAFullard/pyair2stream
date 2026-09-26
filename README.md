@@ -179,7 +179,7 @@ To run the tests and the validation suite (needs `gfortran`):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # or without --quick: the full suite, about 70 minutes
+python validation/run_all.py --quick     # or without --quick: the full suite, about 50 minutes
 ```
 
 ## Examples
@@ -194,7 +194,7 @@ Worked examples on a real river, each with a README
 | [03 Compliance](examples/03_compliance/README.md) | How likely is it that a temperature limit was exceeded? |
 | [04 Scenario](examples/04_scenario/README.md) | What difference would abstracting 30% of the flow make? |
 | [05 Gaps](examples/05_gaps/README.md) | What to do with missing data |
-| [06 Cross-validation](examples/06_cross_validation/README.md) | Does the model predict every year well? Which version to use? |
+| [06 Cross-validation](examples/06_cross_validation/README.md) | Does the model predict every year well? How firmly do the data fix the parameters? Which version to use? |
 
 ## Differences from the original Fortran
 
