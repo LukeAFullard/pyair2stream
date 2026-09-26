@@ -10,6 +10,7 @@ integrator: "CRN"
 objective_function: "NSE"
 run_mode: "DE"
 random_seed: 42
+Qmedia: 1.4915             # mean discharge of 2002-2009: every fold uses the same discharge scaling
 
 paths:
   input_data: "data/switzerland/MAH_2369_calibration.csv"       # 2002-2009

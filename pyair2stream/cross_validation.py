@@ -411,7 +411,48 @@ def run_leave_one_year_out_cv(
     return results
 
 
-def summarize(results: list[FoldResult]) -> pd.DataFrame:
+JACKKNIFE_LEVEL = 0.90
+
+
+def count_blocks(data: CommonData, cv_config: CVConfig) -> int:
+    """Number of blocks (years, or groups of `n_years_per_fold` years) in the whole record,
+    including the leading years that are never held out."""
+    wy = assign_year_groups(data, cv_config.water_year_start_month)
+    n_years = len([y for y in np.unique(wy) if y != -999])
+    size = cv_config.n_years_per_fold if cv_config.unit == "n_years" else 1
+    return n_years // size
+
+
+def jackknife_rows(par: np.ndarray, n_blocks: int, level: float = JACKKNIFE_LEVEL) -> list[dict]:
+    """
+    Delete-one-block jackknife intervals for the parameters, from the m folds' fitted
+    parameters (rows of `par`). The standard jackknife deletes each of the n blocks once:
+    SE^2 = (n-1)/n * sum over n of (theta_i - mean)^2. Cross-validation never holds out the
+    first years, so only m < n deletions are available; the sum over n is estimated as n/m
+    times the sum over the m folds, giving SE^2 = (n-1)/m * sum over m. The interval is the
+    mean of the folds +- t(level, m-1) x SE.
+    """
+    from scipy import stats
+    par = np.asarray(par, dtype=np.float64)
+    m = par.shape[0]
+    centre = par.mean(axis=0)
+    se = np.sqrt((n_blocks - 1) / m * np.sum((par - centre) ** 2, axis=0))
+    half = stats.t.ppf(0.5 + level / 2, m - 1) * se
+    pct = f"{level * 100:g}"
+    return [{"fold": "jackknife_se", **{f"p{i + 1}": v for i, v in enumerate(se)}},
+            {"fold": f"jackknife_{pct}_lower", **{f"p{i + 1}": v for i, v in enumerate(centre - half)}},
+            {"fold": f"jackknife_{pct}_upper", **{f"p{i + 1}": v for i, v in enumerate(centre + half)}}]
+
+
+def cross_validate(data: CommonData, run_mode: str) -> pd.DataFrame:
+    """Run the cross-validation configured in `data.cross_validation` and return the
+    `cv_results.csv` table, including jackknife parameter intervals (see `summarize`)."""
+    cv_config = data.cross_validation
+    results = run_leave_one_year_out_cv(data, cv_config, run_mode)
+    return summarize(results, n_blocks=count_blocks(data, cv_config))
+
+
+def summarize(results: list[FoldResult], n_blocks: Optional[int] = None) -> pd.DataFrame:
     """
     One row per fold: metrics + calibrated parameter columns (p1..pN), for
     easy mean/std reporting and for checking whether par_best is stable
@@ -420,7 +461,11 @@ def summarize(results: list[FoldResult]) -> pd.DataFrame:
 
     The final rows include 'mean', 'std', and 'pooled' (which computes
     NSE/KGE/RMSE on the concatenated held-out predictions from all folds,
-    weighting all out-of-sample days equally).
+    weighting all out-of-sample days equally). Given `n_blocks` (the number of
+    blocks in the whole record) and at least two folds, three more rows give
+    jackknife standard errors and 90% intervals for the parameters
+    (`jackknife_rows`). The 'std' row is only the spread between folds: the folds
+    share most of their data, so it understates the parameters' uncertainty.
     """
     rows = []
     for r in results:
@@ -482,7 +527,10 @@ def summarize(results: list[FoldResult]) -> pd.DataFrame:
                 pooled_row[col] = float('nan') # not applicable for pooled metric row
 
         # Append summary rows
-        summary_df = pd.DataFrame([mean_row, std_row, pooled_row])
+        extra = []
+        if n_blocks is not None and len(results) >= 2:
+            extra = jackknife_rows(np.array([r.par_best for r in results]), n_blocks)
+        summary_df = pd.DataFrame([mean_row, std_row, pooled_row, *extra])
         df = pd.concat([df, summary_df], ignore_index=True)
 
     return df

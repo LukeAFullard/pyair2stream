@@ -167,7 +167,7 @@ min_theta_floor: null       # e.g. 1.0e-6 to allow zero-flow days (§9.2)
 Qmedia: null                # mean discharge used to scale flow; required for FORWARD (below)
 
 # --- Calibration ---
-run_mode: "DE"              # DE, PSO, LATHYP, DE-MCMC, DE-CV-MCMC or FORWARD (below)
+run_mode: "DE"              # DE, PSO, LATHYP, DE-MCMC or FORWARD (below)
 objective_function: "NSE"   # NSE, KGE or RMS (docs/METHODS.md §7)
 time_resolution: "1d"       # "1d" daily, "Nw" N-week means (e.g. "2w"), "1m" monthly means
 prc: 1.0                    # weekly/monthly: minimum fraction of days with an observation
@@ -239,7 +239,6 @@ start; if a calibrated value ends up exactly on a bound, widen that bound.
 | `PSO` | Particle Swarm Optimisation, as in the original Fortran. Less reliable: check it converged. |
 | `LATHYP` | Latin Hypercube sampling of the bounds (exploration, not optimisation). |
 | `DE-MCMC` | `DE`, then parameter and prediction uncertainty (§11). |
-| `DE-CV-MCMC` | As `DE-MCMC`, starting the sampler from the spread found by cross-validation. |
 | `FORWARD` | No calibration: runs given parameters, e.g. on a scenario (§12). |
 
 ### Qmedia: keep it fixed when discharge changes
@@ -367,6 +366,12 @@ inaccurate with a one-day step (by up to about 1 °C for `EUL` on the Mentue,
 one is selected. Calibrating with `EXP` instead of `CRN` changed predictions by
 less than 0.03 °C on the Swiss rivers.
 
+Parameters belong to the scheme they were calibrated with. The published Swiss
+parameters (calibrated with Crank–Nicolson) are unstable with `RK4` in 8 of 15
+cases and give different errors in the rest
+([validation V2](validation/REPORT.md#v2), part E). Run parameters taken from a
+paper with the scheme the paper used.
+
 Parameters belong to the integrator they were calibrated with: run them with the
 same one. A `FORWARD` run given `paths.calibration_metadata` refuses a
 different integrator or model version.
@@ -425,7 +430,7 @@ optimization:
   mcmc_walkers: 32
   mcmc_steps: 20000             # the most steps it may take; it stops once converged
 uncertainty_options:
-  noise_model: "ar1"            # recommended; the default is "iid" (see below)
+  noise_model: "ar1"            # the default; "iid" is also available (see below)
   prediction_interval: 90       # % width of the band
   save_ensemble: false          # true: also save every simulated series (.npz)
   strict_convergence: true      # default: stop with an error if not converged
@@ -452,12 +457,14 @@ walks through this):
   day, `"iid"` and `"ar1"` give bands of about the same width. For anything
   spanning several days they do not: on the Swiss rivers, 90% bands for 7-day
   means contained 39–62% of observed values with `"iid"` and 76–88% with
-  `"ar1"` ([validation V5](validation/REPORT.md#v5)). Use `"ar1"`.
+  `"ar1"` ([validation V5](validation/REPORT.md#v5)). Keep the default `"ar1"`.
 - **Parameters.** For versions with many parameters (especially 8), several
   combinations fit almost equally well. Their intervals are then too narrow
   ([V4](validation/REPORT.md#v4)), and with `"ar1"` they can be centred away
   from the DE best fit, which assumes independent errors. The predictions are
-  hardly affected. Rely on predictions, not on individual parameter values.
+  hardly affected. Rely on predictions, not on individual parameter values; if
+  you need parameter confidence intervals, the cross-validation jackknife
+  (§13) was closer to its stated 90% for version 8.
 
 Outputs: `MCMC_chain_*.csv` (parameter samples), `MCMC_chain_*_meta.json`
 (settings, diagnostics, residual σ and ρ, coverage), `MCMC_envelopes_*.csv`
@@ -465,9 +472,6 @@ Outputs: `MCMC_chain_*.csv` (parameter samples), `MCMC_chain_*_meta.json`
 `parameter_significance_*.csv` (mean, SD and 95% interval of each parameter)
 and `parameter_correlation_*.png`.
 
-`DE-CV-MCMC` does the same but starts the sampler with the parameter spread from
-cross-validation (§13). This can shorten the time to converge; it does not
-change the answer.
 
 ### Sensitivity analysis
 
@@ -515,7 +519,8 @@ the error is added after the simulation.
 must be computed from the individual simulations, not from the daily band:
 set `uncertainty_options.save_ensemble: true` and use `pyair2stream.scenario`
 (`load_ensemble`, `aggregate`, `exceedance`). This is where `noise_model: "ar1"`
-matters: it keeps each simulated error series realistically persistent.
+(the default) matters: it keeps each simulated error series realistically
+persistent.
 Example [03](examples/03_compliance/README.md) computes the probability that a
 7-day mean limit was exceeded.
 
@@ -568,8 +573,20 @@ With the defaults, the first two years are always used for training only. The ru
 writes `cv_results.csv` (one row per held-out year with NSE, KGE, RMSE on daily
 values and the fitted parameters, plus `mean`, `std` and `pooled` rows) instead
 of the usual outputs. Large differences in parameters between years mean the
-data do not pin them down well. Cross-validation is ignored (with a warning) in
-other run modes, except that `DE-CV-MCMC` uses these settings internally.
+data do not pin them down well.
+
+**Parameter confidence intervals.** The rows `jackknife_90_lower` and
+`jackknife_90_upper` give approximate 90% intervals for each parameter, worked
+out from how much the parameters move between folds (the delete-one-year
+jackknife, [docs/METHODS.md §11](docs/METHODS.md#11-cross-validation)). In a
+test with known parameters they contained the true values 83–94% of the time,
+for every model version ([validation V4](validation/REPORT.md#v4)). Do not use
+the `std` row for this: each fold shares most of its data with the others, so
+that spread is far smaller than the real uncertainty (it contained the true
+values only 35–56% of the time). For versions 4, 7 and 8, set `Qmedia:` in the
+config so that every fold uses the same discharge scaling; otherwise the
+parameters also move with it. Cross-validation is ignored (with a warning) in
+other run modes.
 
 ## 14. Checklist for results that support a decision
 
@@ -586,7 +603,7 @@ decision, check:
    nominal level, ideally on validation data. Bands for new years are usually
    slightly narrow (85–89% for 90% bands on the Swiss rivers,
    [validation V5](validation/REPORT.md#v5)). For 7-day means, runs of days or
-   other multi-day quantities, use `noise_model: "ar1"` and compute them from
+   other multi-day quantities, keep `noise_model: "ar1"` (the default) and compute them from
    the saved simulations (§12). Report probabilities with their ranges, not as
    a yes or no.
 5. **Scope**: the model gives **daily means**. A limit on daily maxima or on

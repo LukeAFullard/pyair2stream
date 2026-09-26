@@ -20,5 +20,5 @@ parameter_bounds:
   max: [15, 1.5, 5,  1, 20, 10, 1,  5]
 
 uncertainty_options:
-  noise_model: "ar1"       # model errors persist from day to day (see README)
+  noise_model: "ar1"       # the default: model errors persist from day to day (see README)
   prediction_interval: 90  # per cent

@@ -1,0 +1,16 @@
+river,version,largest difference (% of range),match,"calibration RMSE, published","calibration RMSE, recalibrated",local search from published,seed 2 vs seed 1 (% of range),"validation RMSE, published","validation RMSE, recalibrated"
+Mentue,3,0.0,True,0.79267,0.79267,,,,
+Mentue,4,0.02,True,0.78499,0.78499,,,,
+Mentue,5,0.01,True,0.66642,0.66642,,,,
+Mentue,7,5.36,False,0.63715,0.6336,0.6336,0.0,0.7784,0.7793
+Mentue,8,11.73,False,0.645,0.63312,0.63312,0.01,0.7809,0.7791
+Rhône,3,2.87,False,0.90723,0.90726,0.90723,2.88,1.0476,1.048
+Rhône,4,0.04,True,0.90654,0.90654,,,,
+Rhône,5,0.0,True,0.87069,0.87069,,,,
+Rhône,7,13.32,False,0.57868,0.578,0.578,0.01,0.7391,0.7396
+Rhône,8,38.34,False,0.57922,0.57745,0.57783,0.0,0.7392,0.7395
+Dischmabach,3,0.34,True,0.9369,0.9369,,,,
+Dischmabach,4,0.0,True,0.93281,0.93281,,,,
+Dischmabach,5,0.03,True,0.7407,0.7407,,,,
+Dischmabach,7,0.0,True,0.63493,0.63493,,,,
+Dischmabach,8,0.0,True,0.63159,0.63159,,,,

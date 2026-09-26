@@ -24,9 +24,14 @@ cross_validation:
   skip_first_year: true    # 2002 and 2003 are always used for calibration
 ```
 
+They also set `Qmedia` (the mean discharge of 2002–2009), so every fold scales
+discharge the same way; otherwise version 8's parameters would also move with
+each fold's own mean discharge.
+
 Each run writes `cv_results.csv`: one row per held-out year with its NSE, KGE,
 RMSE and the parameters fitted without it, then the mean, standard deviation,
-and scores over all held-out days together (`pooled`).
+scores over all held-out days together (`pooled`), and 90% confidence intervals
+for the parameters (`jackknife_90_lower`, `jackknife_90_upper`).
 
 ## Results
 
@@ -50,12 +55,36 @@ and scores over all held-out days together (`pooled`).
   data, 2007 had the warmest April–May of the record and a summer discharge
   about three times the usual (mean 2.5 against 0.4–0.9 in other years).
 - **The parameters are stable.** When a different year is held out, each
-  parameter changes by about 1–7% of its value. The exception is version 8's
+  parameter changes by about 1–9% of its value. The exception is version 8's
   `a4`, which is close to zero, so small absolute changes are large relative
   ones. Large changes would mean the data cannot pin the parameters down.
 - **Version 8 is slightly better** (0.66 against 0.69 °C over all held-out
   days), and better in four of six years. The gain is small. Version 5 does not
   use discharge, so it cannot be used for flow scenarios such as example 04.
+
+## Parameter confidence intervals
+
+The `jackknife_90` rows turn the year-to-year movement of the parameters into
+approximate 90% confidence intervals. The spread between folds (`std` row)
+cannot be used directly: each fold shares most of its data with the others, so
+it is far too small. For version 8:
+
+| | a1 | a2 | a3 | a4 | a5 | a6 | a7 | a8 |
+|---|---|---|---|---|---|---|---|---|
+| mean of the folds | 0.877 | 0.655 | 0.771 | 0.048 | 2.613 | 1.738 | 0.600 | 0.271 |
+| 90% interval, lower | 0.736 | 0.562 | 0.672 | −0.159 | 1.767 | 1.013 | 0.588 | 0.190 |
+| 90% interval, upper | 1.018 | 0.748 | 0.870 | 0.255 | 3.460 | 2.463 | 0.613 | 0.352 |
+
+In a test with known parameters, these intervals contained the true values
+83–94% of the time, for every model version
+([validation V4](../../validation/REPORT.md#v4)), so treat them as approximate.
+For version 8 they did better than the MCMC parameter intervals of example 02.
+
+The version 8 parameters published for the Mentue by Piccolroaz et al. (2016)
+lie outside several of these intervals (for example `a5` = 4.39). They are not
+at the best fit of these data ([validation V2](../../validation/REPORT.md#v2)):
+version 8's parameters trade off along a ridge of almost equally good fits, and
+can move a long way along it with little change in the predictions.
 
 ## When to use it
 

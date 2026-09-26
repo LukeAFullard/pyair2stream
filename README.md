@@ -27,7 +27,8 @@ whether a site is likely to meet a temperature limit, with an uncertainty band.
 - **Runs scenarios** with fixed parameters (`FORWARD`), and compares two
   scenarios with an uncertainty band on the difference.
 - Handles **gaps** in air temperature or discharge (gap-tolerant mode),
-  **cross-validation** by year, and **sensitivity analysis**.
+  **cross-validation** by year (with confidence intervals for the parameters), and
+  **sensitivity analysis**.
 - Uses a **YAML config file and CSV files**, and writes CSV results and plots.
 
 ## Install
@@ -147,7 +148,20 @@ The [validation suite](validation/README.md) checks this, and its results are in
 - **Reproduces the published results.** For three Swiss rivers (Piccolroaz et
   al., 2016), the published parameters give the published calibration and
   validation errors, all 30 of them to within 0.001 °C. Recalibrating with `DE`
-  fits at least as well as the published calibration.
+  returns the published parameters for versions 3, 4 and 5 (to within 1% of
+  their ranges, apart from one flat trade-off on the Rhône) and for versions 7
+  and 8 on the Dischmabach. For versions 7 and 8 on the other two rivers it
+  finds a slightly better fit than the published one, with different
+  parameters but the same predictions (to 0.002 °C). The original program,
+  given both sets, computes the same errors as pyair2stream and agrees that
+  the new ones fit better, so the difference is not a bug. Those published
+  values cannot be reproduced exactly by anyone: the original program itself,
+  run with its distributed settings, returns different parameters on every run
+  there, because its optimiser stops at a different point each time. The published
+  parameters belong to the Crank–Nicolson scheme the paper used: with RK4, 8 of
+  the 15 sets are unstable and the rest give different errors. Calibrating with
+  RK4 comes close to the published parameters (within 1% of their ranges) only
+  where the water temperature responds slowly: the Mentue, versions 3–5.
 - **Finds a known truth.** On data made by the model from known parameters,
   calibration predicts other years to within 0.04 °C of the truth (0.06 °C
   with typical gaps in the data).
@@ -156,7 +170,7 @@ The [validation suite](validation/README.md) checks this, and its results are in
   85–89% of daily values in years not used for calibration, so they are slightly
   optimistic (one case falls just below the report's 85% threshold, so that
   check is marked as failed). For multi-day quantities such as 7-day means, use
-  `noise_model: "ar1"`; the default `"iid"` makes those intervals far too narrow.
+  `noise_model: "ar1"` (the default); `"iid"` makes those intervals far too narrow.
 - **Scenario tools give exact answers** where the answer is known.
 
 To run the tests and the validation suite (needs `gfortran`):
@@ -165,7 +179,7 @@ To run the tests and the validation suite (needs `gfortran`):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # or without --quick: the full suite, about 15 minutes
+python validation/run_all.py --quick     # or without --quick: the full suite, about 70 minutes
 ```
 
 ## Examples

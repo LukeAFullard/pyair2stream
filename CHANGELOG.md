@@ -58,9 +58,17 @@ your runs.
 - A `DE-MCMC` run with `cross_validation.enabled` now warns that the block is ignored.
 - **Validation suite** (`validation/run_all.py`, results in
   `validation/REPORT.md`): Fortran equivalence on real inputs, the published
-  results of Piccolroaz et al. (2016), known-truth recovery, interval
+  results and parameters of Piccolroaz et al. (2016) (including runs of the
+  original program's own calibration, with Crank–Nicolson and with RK4),
+  known-truth recovery, interval
   calibration, real-river prediction, numerical accuracy, gaps, and exact
   workflow and scenario answers.
+- **Parameter confidence intervals from cross-validation**: `cv_results.csv`
+  now includes delete-one-year jackknife rows (`jackknife_se`,
+  `jackknife_90_lower`, `jackknife_90_upper`). In validation (V4) they contained
+  the true parameters 83–94% of the time for every model version; the plain
+  spread between folds (`std`), by contrast, is far too small to use as an
+  uncertainty (35–56%).
 - FORWARD runs without `parameters_forward` use the calibrated parameters in
   `paths.calibration_metadata`, so they need not be copied by hand.
 - The FORWARD ensemble's `_meta.json` records the noise model, σ and ρ used.
@@ -68,7 +76,20 @@ your runs.
   they can be inaccurate even when stable.
 - The Fortran comparison tests now include discharge that varies from day to day.
 
+### Removed
+- **`run_mode: "DE-CV-MCMC"`.** It ran a cross-validation only to choose where
+  the MCMC sampler starts, and gave the same parameter and prediction intervals
+  as `DE-MCMC` (to within 1.5% of their width on the Mentue; validation report
+  at commit b48b6dc) while taking longer. A config that asks for it now stops
+  with a message pointing to `DE-MCMC`. Cross-validation itself is unchanged;
+  note that the spread of its parameters is not a confidence interval.
+
 ### Changed
+- ⚠ **The default `noise_model` is now `"ar1"`** (was `"iid"`). Real model
+  errors persist from day to day; with `"iid"`, 90% intervals for 7-day means
+  contained only 39–62% of observed values on the Swiss rivers, against 76–88%
+  with `"ar1"` (validation V5). Daily intervals are about the same width
+  either way. Set `noise_model: "iid"` to get the previous behaviour.
 - ⚠ **DE-MCMC sampling.** The sampler uses the differential-evolution move
   instead of emcee's default stretch move (3–4 times faster on air2stream's
   correlated parameters). It runs until converged (at least 50 autocorrelation

@@ -14,7 +14,7 @@ import pandas as pd
 from typing import Tuple
 
 from .config import (
-    CommonData, ACTIVE_PARAMS, VALID_VERSIONS, VALID_RUN_MODES, VALID_INTEGRATORS,
+    CommonData, DEFAULT_NOISE_MODEL, ACTIVE_PARAMS, VALID_VERSIONS, VALID_RUN_MODES, VALID_INTEGRATORS,
     VALID_OBJECTIVES,
 )
 from .model import prepare_evaluation, check_nonpositive_discharge
@@ -76,6 +76,13 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
               "one-day step it can be inaccurate even when stable (by up to about 1 degC for EUL); "
               "use CRN (the default) unless you need Fortran-identical results (USER_GUIDE §9.1).")
     data.runmode = config.get('run_mode', 'DE')
+    if data.runmode == 'DE-CV-MCMC':
+        raise ValueError(
+            "run_mode 'DE-CV-MCMC' has been removed: it gave the same intervals as 'DE-MCMC' "
+            "(the cross-validation only set the sampler's starting points). Use run_mode: "
+            "'DE-MCMC', and cross-validation with run_mode 'DE' to see how stable the "
+            "parameters are from year to year (USER_GUIDE §13)."
+        )
     _check_choice('run_mode', data.runmode, VALID_RUN_MODES)
     data.prc = np.float64(config.get('prc', 1.0))
     # Top-level calibration seed: threaded through to whichever optimizer `run_optimizer` dispatches to.
@@ -172,7 +179,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
 
     # Parse uncertainty_options
     uncertainty_options = config.get('uncertainty_options', {})
-    noise_model = uncertainty_options.get('noise_model', 'iid')
+    noise_model = uncertainty_options.get('noise_model', DEFAULT_NOISE_MODEL)
     ar1_rho = uncertainty_options.get('ar1_rho', None)
 
     if noise_model not in ["iid", "ar1"]:
@@ -190,7 +197,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     save_ensemble = bool(uncertainty_options.get('save_ensemble', False))
     strict_convergence = bool(uncertainty_options.get('strict_convergence', True))
 
-    # Burn-in override for DE-MCMC/DE-CV-MCMC. Left unset (None), burn-in defaults to
+    # Burn-in override for DE-MCMC. Left unset (None), burn-in defaults to
     # max(0.3*mcmc_steps, 5*max(tau)), where tau is the autocorrelation time.
     burnin_fraction = uncertainty_options.get('burnin_fraction', None)
     if burnin_fraction is not None:
@@ -285,7 +292,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     elif data.runmode == 'DE':
         data.n_particles = int(opt_config.get('n_particles', 50)) # Using n_particles as population size
         # c1, c2, wmax, wmin not used for DE
-    elif data.runmode in ['DE-MCMC', 'DE-CV-MCMC']:
+    elif data.runmode == 'DE-MCMC':
         data.n_particles = int(opt_config.get('n_particles', 50)) # Using n_particles as population size for initial DE
         data.mcmc_walkers = int(opt_config.get('mcmc_walkers', 32))
         data.mcmc_steps = int(opt_config.get('mcmc_steps', 20000))  # maximum; stops earlier once converged

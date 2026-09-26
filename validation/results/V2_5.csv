@@ -1,0 +1,16 @@
+river,version,parameters match,original program: published parameters,original program: recalibrated parameters,pyair2stream: recalibrated parameters,"largest difference, pyair2stream vs original program","better fit, by the original program"
+Mentue,3,True,0.79267,0.79267,0.79267,0.000001,tie
+Mentue,4,True,0.78499,0.78499,0.78499,0.000004,tie
+Mentue,5,True,0.66642,0.66642,0.66642,0.000003,tie
+Mentue,7,False,0.63715,0.63360,0.63360,0.000003,recalibrated
+Mentue,8,False,0.64500,0.63312,0.63312,0.000004,recalibrated
+Rhône,3,False,0.90723,0.90726,0.90726,0.000001,tie
+Rhône,4,True,0.90654,0.90654,0.90654,0.000001,tie
+Rhône,5,True,0.87069,0.87069,0.87069,0.000005,tie
+Rhône,7,False,0.57868,0.57800,0.57800,0.000001,recalibrated
+Rhône,8,False,0.57922,0.57745,0.57745,0.000004,recalibrated
+Dischmabach,3,True,0.93690,0.93690,0.93690,0.000004,tie
+Dischmabach,4,True,0.93281,0.93281,0.93281,0.000004,tie
+Dischmabach,5,True,0.74070,0.74070,0.74070,0.000002,tie
+Dischmabach,7,True,0.63493,0.63493,0.63493,0.000002,tie
+Dischmabach,8,True,0.63159,0.63159,0.63159,0.000004,tie

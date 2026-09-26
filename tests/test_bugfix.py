@@ -6,7 +6,7 @@ import shutil
 import tempfile
 from unittest.mock import MagicMock, patch
 
-from pyair2stream.optimization import DE_MCMC_mode, DE_CV_MCMC_mode
+from pyair2stream.optimization import DE_MCMC_mode
 
 def test_mcmc_autocorr_invalid_json():
     # Setup mock data for DE_MCMC_mode
@@ -87,8 +87,4 @@ def test_mcmc_ndim_zero_de_runs():
 
     with patch('pyair2stream.optimization.DE_mode') as mock_de:
         DE_MCMC_mode(data)
-        mock_de.assert_called_once()
-
-        mock_de.reset_mock()
-        DE_CV_MCMC_mode(data)
         mock_de.assert_called_once()

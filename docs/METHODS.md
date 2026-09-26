@@ -263,9 +263,9 @@ LATHYP:
    because the model needs earlier data to start from. Later years become folds
    (one year each, or blocks of `n_years_per_fold`). Folds with fewer than
    `min_valid_obs` observations are skipped.
-3. For each fold: its water-temperature observations are hidden; `Qmedia` (and,
-   in gap-tolerant mode, the day-of-year climatology) is recomputed without the
-   fold; the model is calibrated on the rest; the full record is simulated; and
+3. For each fold: its water-temperature observations are hidden; `Qmedia`
+   (unless set with `Qmedia:`) and, in gap-tolerant mode, the day-of-year
+   climatology are recomputed without the fold; the model is calibrated on the rest; the full record is simulated; and
    NSE, KGE and RMSE are computed on the hidden days only (daily values).
    In gap-tolerant mode the fold's air temperature and discharge are also hidden
    during calibration, so the fold becomes a gap.
@@ -273,8 +273,25 @@ LATHYP:
    standard deviation across folds and "pooled" scores over all held-out days.
 
 Large variation of the parameters between folds means they are poorly determined
-by the data (equifinality). A cross-validation run does not also produce a
-single final calibration.
+by the data (equifinality). The spread between folds (`std`) is not a confidence
+interval: the folds share most of their data, so it understates the uncertainty
+(in validation V4 it contained the true values only 35–56% of the time).
+
+`cv_results.csv` therefore also gives **jackknife intervals** for the parameters.
+With θᵢ the parameters fitted without block i (m folds), θ̄ their mean, and n the
+number of blocks in the whole record (years, or groups of `n_years_per_fold`):
+
+  SE² = (n − 1)/m · Σᵢ (θᵢ − θ̄)²,  interval = θ̄ ± t₀.₉₅,ₘ₋₁ · SE.
+
+When every block is held out (m = n) this is the standard delete-one-block
+jackknife; the first years are never held out, so the sum over n blocks is
+estimated as n/m times the sum over the m folds. In validation V4 these 90%
+intervals contained the true parameters 83–94% of the time for every version,
+closer to 90% than the MCMC parameter intervals for version 8 (85% against
+75%), at about 1.8 times their width. For versions 4, 7 and 8 set `Qmedia`
+explicitly, so that every fold uses the same discharge scaling.
+
+A cross-validation run does not also produce a single final calibration.
 
 ## 12. Parameter and prediction uncertainty (DE-MCMC)
 
@@ -287,15 +304,16 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
 2. **Likelihood** (how well a parameter set explains the data), computed on the
    same scored values as the objective (§7), assuming normally distributed errors
    of constant size (the size is estimated, not supplied):
-   - `noise_model: "iid"` (default) treats every day's error as independent:
+   - `noise_model: "iid"` treats every day's error as independent:
      log L = −(n/2)·ln(SSE/n).
-   - `noise_model: "ar1"` allows each day's error to carry over part of the
+   - `noise_model: "ar1"` (default) allows each day's error to carry over part of the
      previous day's (lag-1 autocorrelation ρ, estimated once from the DE fit's
      daily residuals, limited to 0–0.99). Errors are converted to independent
      "innovations" (e₀·√(1−ρ²); eₜ − ρ·eₜ₋₁) within each unbroken run of
      scored days, and log L = −(n/2)·ln(SSE_innovations/n) + (runs/2)·ln(1−ρ²).
    River temperature errors are usually strongly autocorrelated; `iid` then
-   understates parameter uncertainty. `ar1` is recommended for daily data. (With
+   understates parameter uncertainty, and makes intervals for multi-day
+   quantities far too narrow, which is why `ar1` is the default. (With
    weekly or monthly scoring there are no consecutive days, so `ar1` behaves like
    `iid`.)
 3. **Sampling.** `mcmc_walkers` (default 32) chains ("walkers") are started
@@ -303,9 +321,7 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    reflected back inside the bounds) and advanced together by `emcee`'s
    ensemble sampler with the differential-evolution move (ter Braak, 2006): each
    proposal moves a walker along the difference between two others, which suits
-   the strongly correlated parameters of air2stream. `DE-CV-MCMC` instead starts
-   with the parameter spread found by cross-validation (§11); this only affects
-   how fast the sampler settles, not what it converges to.
+   the strongly correlated parameters of air2stream.
 4. **Run length and convergence.** The sampler runs in blocks of 1,000 steps
    (at least 2,000) and stops when the chain is at least 50 times its longest
    autocorrelation time and split-R̂ is below 1.01 for every parameter, or when
@@ -449,7 +465,11 @@ change one-sided.
 `validation/run_all.py`: identical results to the original Fortran on real
 inputs for every version and Fortran integrator (to 5×10⁻⁶ °C, the precision of
 its printed output); all 30 published RMSE values of Piccolroaz et al. (2016)
-reproduced to within 0.001 °C; recovery of a known truth; calibrated intervals
+reproduced to within 0.001 °C, and their parameters recovered by recalibration
+except where the parameters trade off (versions 7 and 8 on two rivers, where
+recalibration fits slightly better with different parameters and the same
+predictions, and where the original program itself returns different
+parameters on every run); recovery of a known truth; calibrated intervals
 on synthetic data; out-of-sample performance on three real rivers; numerical
 accuracy; gaps; and exact answers from the workflow and scenario tools. The test
 suite (`pytest tests/`) also compares against the Fortran and checks each

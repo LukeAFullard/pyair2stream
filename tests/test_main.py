@@ -173,10 +173,9 @@ class TestMain(unittest.TestCase):
     @patch('pyair2stream.main.read_Tseries')
     @patch('pyair2stream.main.aggregation')
     @patch('pyair2stream.main.statis')
-    @patch('pyair2stream.cross_validation.run_leave_one_year_out_cv')
-    @patch('pyair2stream.cross_validation.summarize')
+    @patch('pyair2stream.cross_validation.cross_validate')
     @patch('sys.argv', ['main.py', '--config', 'dummy.yaml'])
-    def test_main_cross_validation(self, mock_summarize, mock_run_cv, mock_statis, mock_agg, mock_read_ts, mock_read_cal):
+    def test_main_cross_validation(self, mock_cross_validate, mock_statis, mock_agg, mock_read_ts, mock_read_cal):
         data = CommonData()
         data.runmode = "DE"
         data.cross_validation = "loyo"
@@ -187,7 +186,7 @@ class TestMain(unittest.TestCase):
 
         mock_read_cal.return_value = data
         mock_df = pd.DataFrame({'fold': [1], 'NSE': [0.9]})
-        mock_summarize.return_value = mock_df
+        mock_cross_validate.return_value = mock_df
 
         main()
 
@@ -195,8 +194,7 @@ class TestMain(unittest.TestCase):
         # from main() before dispatching (report 05, Defect A only concerns FORWARD).
         mock_agg.assert_called_once_with(data)
         mock_statis.assert_called_once_with(data)
-        mock_run_cv.assert_called_once_with(data, "loyo", data.runmode)
-        mock_summarize.assert_called_once()
+        mock_cross_validate.assert_called_once_with(data, data.runmode)
         self.assertTrue(os.path.exists(os.path.join(data.folder, "cv_results.csv")))
 
 if __name__ == '__main__':

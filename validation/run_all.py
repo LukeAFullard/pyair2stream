@@ -1,7 +1,7 @@
 """
 Run the validation suite and write validation/REPORT.md.
 
-    python validation/run_all.py            # full suite (about 15 minutes on 4 cores)
+    python validation/run_all.py            # full suite (about 70 minutes on 4 cores)
     python validation/run_all.py --quick    # reduced version of every check (about 2 minutes)
     python validation/run_all.py --only V2 V6
 
@@ -40,7 +40,10 @@ def git_state() -> str:
             return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True).stdout.strip()
         except OSError:
             return ""
-    dirty = " (with uncommitted changes)" if git("status", "--porcelain", "--untracked-files=no") else ""
+    # The run's own outputs (REPORT.md, results/, figures/) are not part of what is validated.
+    dirty = " (with uncommitted changes)" if git(
+        "status", "--porcelain", "--untracked-files=no", "--", ".", ":!validation/REPORT.md",
+        ":!validation/results", ":!validation/figures") else ""
     return f"commit {git('rev-parse', '--short', 'HEAD')}{dirty}"
 
 
@@ -193,6 +196,7 @@ def main():
     ap.add_argument("--workers", type=int, default=min(4, os.cpu_count() or 1), help="parallel processes")
     args = ap.parse_args()
     ctx = types.SimpleNamespace(quick=args.quick, workers=args.workers)
+    state = git_state()
     selected = [(c, m) for c, m in CHECKS if not args.only or c in {o.upper() for o in args.only}]
     os.makedirs(RESULTS, exist_ok=True)
     os.makedirs(FIGURES, exist_ok=True)
@@ -201,7 +205,6 @@ def main():
             if not args.only or f.split("_")[0] in {c for c, _ in selected}:
                 os.remove(os.path.join(folder, f))
     results = []
-    state = git_state()
     t0 = datetime.datetime.now()
     for code, module in selected:
         print(f"{code} ...", flush=True)

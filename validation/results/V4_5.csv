@@ -1,0 +1,6 @@
+version,raw spread (fold mean +- 1.645 x std),jackknife,MCMC (same replicates),"median width, jackknife / MCMC"
+3,47%,92%,,
+4,35%,83%,,
+5,53%,87%,85%,1.2
+7,42%,94%,,
+8,56%,85%,75%,1.8
