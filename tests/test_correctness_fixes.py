@@ -124,6 +124,25 @@ def test_optimizer_refuses_to_run_without_free_parameters(tmp_path):
         DE_mode(data, seed=1)
 
 
+def test_de_does_not_warn_about_runaway_simulations(tmp_path, monkeypatch):
+    """Runaway simulations give astronomically bad scores; SciPy's convergence test then
+    overflows. That is expected and must not reach the user as a RuntimeWarning."""
+    _csv(tmp_path / 'cal.csv')
+    data = read_calibration(_config(tmp_path, optimization={'n_run': 5, 'n_particles': 5}))
+    read_Tseries(data, 'c')
+    aggregation(data)
+    statis(data)
+
+    def score(d):   # a3 below 0.3 stands in for a runaway simulation
+        d.current_nse = d.current_r2 = d.current_mae = 0.0
+        return -1e200 if d.par[2] < 0.3 else 0.5
+    monkeypatch.setattr(optimization, 'sub_1', score)
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', RuntimeWarning)
+        DE_mode(data, seed=1)
+
+
 # --- Model versions: unused parameters ---------------------------------------
 
 @pytest.mark.parametrize('version, par', [

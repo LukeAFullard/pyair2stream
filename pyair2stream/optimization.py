@@ -993,15 +993,20 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
 
     # Phase 1: Differential Evolution (Global Search)
     # workers=1 to avoid unpicklable local function 'objective_wrapper'
-    result_de = differential_evolution(
-        objective_wrapper,
-        bounds,
-        maxiter=data.n_run,
-        popsize=data.n_particles,
-        workers=1,
-        polish=False,
-        seed=seed
-    )
+    # Parameter sets whose simulation runs away (e.g. a3 < 0) score astronomically badly.
+    # SciPy's convergence test takes the standard deviation of all scores, which then
+    # overflows to inf and correctly reads as "not converged yet"; only the warning is
+    # silenced, the search is unchanged.
+    with np.errstate(over='ignore'):
+        result_de = differential_evolution(
+            objective_wrapper,
+            bounds,
+            maxiter=data.n_run,
+            popsize=data.n_particles,
+            workers=1,
+            polish=False,
+            seed=seed
+        )
 
     print(f"DE Finished. Best internal negated objective: {result_de.fun:.6f}")
 

@@ -585,8 +585,11 @@ the `std` row for this: each fold shares most of its data with the others, so
 that spread is far smaller than the real uncertainty (it contained the true
 values only 35–56% of the time). For versions 4, 7 and 8, set `Qmedia:` in the
 config so that every fold uses the same discharge scaling; otherwise the
-parameters also move with it. Cross-validation is ignored (with a warning) in
-other run modes.
+parameters also move with it. Each interval is for one parameter on its own:
+parameters that trade off move together from fold to fold, so combining the
+ends of several intervals gives parameter sets that do not fit the data
+(example [06](examples/06_cross_validation/README.md) shows this).
+Cross-validation is ignored (with a warning) in other run modes.
 
 ## 14. Checklist for results that support a decision
 

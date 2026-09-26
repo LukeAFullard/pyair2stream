@@ -28,6 +28,9 @@ your runs.
   daily residual spread (no change at `1d`).
 - **DE-MCMC was not reproducible** with `random_seed` set (the sampler's random
   generator was not seeded).
+- DE calibration no longer prints `RuntimeWarning: overflow encountered in
+  square`. It came from SciPy's convergence test when some trial parameters make
+  the simulation run away; the search itself is unchanged.
 - Saved ensembles (`save_ensemble`) held values near −999 on gap days; now NaN.
 - A FORWARD run overwrote `calibration_metadata.json` when it shared the
   calibration's output folder; FORWARD runs no longer write this file.
