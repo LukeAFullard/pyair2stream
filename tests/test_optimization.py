@@ -181,6 +181,21 @@ class TestOptimization(unittest.TestCase):
         self.assertTrue(len(df) > 0)
         self.assertTrue("eff_index" in df.columns)
 
+    def test_PSO_mode_is_reproducible(self):
+        """Particles are evaluated in worker processes; with the same seed the result
+        and the full history must be the same, whatever order the workers finish in."""
+        self.data.n_particles = 40
+        self.data.n_run = 5
+        self.data.runmode = 'PSO'
+        csv = os.path.join(self.data.folder, "0_PSO_RMS_test_station_test_series_1d.csv")
+        runs = []
+        for _ in range(2):
+            PSO_mode(self.data, seed=7)
+            runs.append((self.data.par_best.copy(), self.data.finalfit, pd.read_csv(csv)))
+        np.testing.assert_array_equal(runs[0][0], runs[1][0])
+        self.assertEqual(runs[0][1], runs[1][1])
+        pd.testing.assert_frame_equal(runs[0][2], runs[1][2])
+
     def test_LH_mode(self):
         self.data.n_run = 5
         self.data.runmode = 'LATHYP'

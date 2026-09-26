@@ -431,10 +431,20 @@ def sub_1(data: CommonData) -> np.float64:
     call_model(data)
     return np.float64(funcobj(data))
 
-def eval_particle_worker(args):
+# PSO evaluates its particles in parallel worker processes. Each worker receives the
+# data once, when it starts; each task then carries only one particle's parameters.
+# (Sending the whole data object with every task cost more than the model run itself.)
+_worker_data: Optional[CommonData] = None
+
+
+def _init_particle_worker(data: CommonData) -> None:
+    global _worker_data
+    _worker_data = data
+
+
+def eval_particle_worker(p_vals: np.ndarray):
     """
-    Top-level helper for multiprocessing.
-    Args should be a tuple of (CommonData, parameter_array, n_par).
+    Evaluate one particle in a worker process started with `_init_particle_worker`.
 
     Returns `(eff_index, nse, r2, mae)`. `sub_1` sets `data.current_nse`/
     `current_r2`/`current_mae` as a side effect inside this (child) process; only
@@ -442,11 +452,11 @@ def eval_particle_worker(args):
     those metrics must be returned here rather than read from `data` afterward --
     the parent's own `data.current_*` are untouched defaults otherwise.
     """
-    data, p_vals, n_par = args
-    # When passed to a new process via executor.map, 'data' is already a local deserialized copy.
-    data.par[:n_par] = p_vals
+    data = _worker_data
+    data.par[:len(p_vals)] = p_vals
     eff_index = sub_1(data)
     return eff_index, data.current_nse, data.current_r2, data.current_mae
+
 
 def forward_mode(data: CommonData) -> None:
     """
@@ -766,8 +776,12 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
         v[j, :] = v_rand[j, :] * dvmax
         pbest[j, :] = x[j, :]
 
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        results = list(executor.map(eval_particle_worker, [(data, x[:, k], n_par) for k in range(n_particles)]))
+    n_workers = os.cpu_count() or 1
+    chunk = max(1, n_particles // (4 * n_workers))   # a few batches per worker and iteration
+    with concurrent.futures.ProcessPoolExecutor(max_workers=n_workers, initializer=_init_particle_worker,
+                                                initargs=(data,)) as executor:
+        results = list(executor.map(eval_particle_worker, [x[:, k].copy() for k in range(n_particles)],
+                                    chunksize=chunk))
 
         for k in range(n_particles):
             eff_index, nse_k, r2_k, mae_k = results[k]
@@ -806,12 +820,12 @@ def PSO_mode(data: CommonData, seed: Optional[int] = None) -> None:
                         status = 1
 
                 if status == 0:
-                    particles_to_eval.append((data, x[:, k], n_par))
+                    particles_to_eval.append(x[:, k].copy())
                     eval_indices.append(k)
                 else:
                     fit[k] = -1e30
 
-            eval_results = list(executor.map(eval_particle_worker, particles_to_eval))
+            eval_results = list(executor.map(eval_particle_worker, particles_to_eval, chunksize=chunk))
 
             idx = 0
             for k in eval_indices:
