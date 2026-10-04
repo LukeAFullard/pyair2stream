@@ -257,13 +257,19 @@ def _fig_exact(a):
         g = a[a.test == test].set_index("scheme")
         ax.scatter(range(len(schemes)), [g.loc[sc, "max |error| (°C)"] for sc in schemes], s=34, marker=marker,
                    color=colour, label=test, zorder=3)
-    reference_line(ax, TOL_ANALYTIC, f"limit for CRN, EXP, RK4, RK2 ({TOL_ANALYTIC} °C)")
+    for tol, label, dy, va in ((TOL_ANALYTIC, f"limit for CRN, EXP, RK4, RK2 ({TOL_ANALYTIC} °C)", -3, "top"),
+                               (TOL_ANALYTIC_EUL, f"limit for EUL, a first-order scheme ({TOL_ANALYTIC_EUL} °C)", 3,
+                                "bottom")):
+        ax.axhline(tol, color=INK2, lw=0.9, ls=(0, (4, 3)), zorder=1)
+        ax.annotate(label, (0.33, tol), xycoords=("axes fraction", "data"), xytext=(0, dy),
+                    textcoords="offset points", fontsize=7.5, color=INK2, va=va)
     ax.set_yscale("log")
+    ax.set_ylim(1e-14, 3)
     ax.set_xticks(range(len(schemes)), [sc.replace(" (", "\n(") for sc in schemes], fontsize=7.5)
     ax.grid(axis="x", visible=False)
     ax.set_ylabel("Largest error against the\nexact solution (°C)")
     ax.set_title("Every scheme solves the equation correctly")
-    ax.legend(loc="lower left", fontsize=7.5)
+    ax.legend(loc="lower left", bbox_to_anchor=(0.6, 0.3), fontsize=7.5)
     return (save_figure(fig, "V6_exact_solution.png"),
             "Largest error of each scheme against the exact solution (log scale). All are within their limits; the "
             "reference solver used in part B is exact to rounding.")

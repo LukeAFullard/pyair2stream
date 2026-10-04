@@ -362,7 +362,7 @@ def _fig_prediction_coverage(df):
     plot_style()
     df = df[df.converged]
     cases = list(dict.fromkeys(df.case))
-    fig, ax = plt.subplots(figsize=(7.5, 3.6))
+    fig, ax = plt.subplots(figsize=(8.5, 3.8))
     rng = np.random.default_rng(0)
     for i, c in enumerate(cases):
         y = df[df.case == c]["held-out coverage"].to_numpy() * 100
@@ -370,7 +370,9 @@ def _fig_prediction_coverage(df):
         ax.scatter(i + rng.uniform(-0.13, 0.13, len(y)), y, s=16, color=colour, alpha=0.8, zorder=3)
         ax.hlines(y.mean(), i - 0.28, i + 0.28, color=INK, lw=1.6, zorder=4)
     reference_line(ax, 90, "nominal 90%")
-    ax.set_xticks(range(len(cases)), [c.replace(": ", ":\n", 1).replace(", ", ",\n", 1) for c in cases], fontsize=7.5)
+    short = {"A": "A\nversion 5\niid noise", "B": "B\nversion 5\nexact AR(1)", "C": "C\nversion 5\nwrong model",
+             "D": "D\nversion 8\nexact AR(1)", "E": "E\nversion 5\nleast squares", "F": "F\nversion 8\nleast squares"}
+    ax.set_xticks(range(len(cases)), [short.get(c[0], c) for c in cases], fontsize=7.5)
     ax.grid(axis="x", visible=False)
     ax.set_ylabel("Held-out observations inside\nthe 90% interval (%)")
     ax.set_title("Prediction-interval coverage, one point per replicate (black: mean)")

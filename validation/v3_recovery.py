@@ -111,7 +111,7 @@ def _figures(df, example):
     import matplotlib.pyplot as plt
     plot_style()
     figs = []
-    fig, ax = plt.subplots(figsize=(7, 3.2))
+    fig, ax = plt.subplots(figsize=(7, 1.2 + 0.36 * len(df)))
     labels = [f"version {f} fitted to version-{tv} data, {k} noise" for tv, f, k in
               zip(df["true version"], df["fitted version"], df["noise"])]
     err = df["prediction RMSE vs truth, 2010-2012"].to_numpy()
@@ -127,7 +127,11 @@ def _figures(df, example):
     ax.grid(axis="y", visible=False)
     ax.set_xlabel("Prediction error against the noise-free truth, 2010-2012 (RMSE, °C)")
     ax.set_title(f"Calibration on noisy data recovers the truth (noise {SIGMA} °C)")
-    ax.legend(loc="lower right", fontsize=7.5)
+    from matplotlib.patches import Patch
+    handles = [Patch(color=BLUE, label="correct model version")]
+    if (~spec).any():
+        handles.append(Patch(color=LIGHT_GREY, label="wrong model version (for contrast)"))
+    ax.legend(handles=handles, loc="lower right", fontsize=7.5)
     figs.append((save_figure(fig, "V3_recovery.png"),
                  f"With the correct model version, predictions for years not used in calibration are within a few "
                  f"hundredths of a degree of the truth, although the data had {SIGMA} °C of noise. The wrong "

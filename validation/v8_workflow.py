@@ -211,7 +211,8 @@ def _figure(pairs):
            ylabel="Paired difference, mean over days (°C)", title="Each parameter draw: paired difference vs exact")
     ax.legend(loc="upper left", fontsize=7.5)
     for (noise, (effect, mean_diff, worst)), colour in zip(pairs.items(), (BLUE, ORANGE)):
-        bx.hist(np.log10(np.maximum(worst, 1e-17)), bins=20, color=colour, alpha=0.6, label=f"noise model {noise}")
+        bx.hist(np.log10(np.maximum(worst, 1e-17)), bins=20, color=colour, histtype="step", lw=1.6,
+                label=f"noise model {noise}")
     bx.set(xlabel="log10 of the largest |paired difference - exact effect| over all days (°C)",
            ylabel="Parameter draws", title="Agreement to rounding error")
     bx.legend(loc="upper left", fontsize=7.5)
