@@ -435,6 +435,7 @@ optimization:
   mcmc_steps: 20000             # the most steps it may take; it stops once converged
 uncertainty_options:
   noise_model: "ar1"            # the default; "iid" is also available (see below)
+  likelihood: "least_squares"   # the default; "exact" is also available (see below)
   prediction_interval: 90       # % width of the band
   save_ensemble: false          # true: also save every simulated series (.npz)
   strict_convergence: true      # default: stop with an error if not converged
@@ -460,15 +461,23 @@ walks through this):
 - **`noise_model`.** Real model errors persist from day to day. For a single
   day, `"iid"` and `"ar1"` give bands of about the same width. For anything
   spanning several days they do not: on the Swiss rivers, 90% bands for 7-day
-  means contained 39–62% of observed values with `"iid"` and 76–88% with
+  means contained 39–62% of observed values with `"iid"` and 83–88% with
   `"ar1"` ([validation V5](validation/REPORT.md#v5)). Keep the default `"ar1"`.
+- **`likelihood`.** How the sampler judges a parameter set. The default,
+  `"least_squares"`, keeps the band centred on the best fit (the least-squares
+  fit, as the original authors calibrated) and widens the uncertainty because
+  daily errors are not independent. The alternative, `"exact"` (the exact
+  AR(1) likelihood), pays more attention to day-to-day changes than to the
+  overall level: on the Swiss rivers it moved the band slightly cooler (by up
+  to 0.05 °C) and made predictions slightly worse ([V5](validation/REPORT.md#v5)).
+  Keep the default.
 - **Parameters.** For versions with many parameters (especially 8), several
-  combinations fit almost equally well. Their intervals are then too narrow
-  ([V4](validation/REPORT.md#v4)), and with `"ar1"` they can be centred away
-  from the DE best fit, which assumes independent errors. The predictions are
-  hardly affected. Rely on predictions, not on individual parameter values; if
-  you need parameter confidence intervals, the cross-validation jackknife
-  (§13) was closer to its stated 90% for version 8.
+  combinations fit almost equally well, so individual values are uncertain.
+  With the default likelihood, 90% parameter intervals contained the true
+  values about 90% of the time or more in a test with known parameters
+  ([V4](validation/REPORT.md#v4)). Rely on predictions rather than individual
+  parameter values; parameters that trade off move together, so do not combine
+  the ends of several intervals.
 
 Outputs: `MCMC_chain_*.csv` (parameter samples), `MCMC_chain_*_meta.json`
 (settings, diagnostics, residual σ and ρ, coverage), `MCMC_envelopes_*.csv`

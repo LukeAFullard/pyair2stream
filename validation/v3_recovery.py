@@ -12,7 +12,8 @@ import os
 import numpy as np
 import pandas as pd
 
-from common import (WORK, Result, Timer, calibrate, mean_discharge, published_params, river_csv, simulate)
+from common import (WORK, Result, Section, Timer, calibrate, mean_discharge, published_params, river_csv, simulate,
+                    plot_style, save_figure, reference_line, BLUE, ORANGE, INK2, LIGHT_GREY, AXIS)
 
 SIGMA = 0.5        # °C, noise standard deviation (similar to real residuals)
 RHO = 0.7          # lag-1 autocorrelation of the AR(1) noise (as in real residuals)
@@ -56,7 +57,7 @@ def run(ctx) -> Result:
     cases = [(5, 5, "iid")] if ctx.quick else [
         (3, 3, "iid"), (3, 3, "ar1"), (5, 5, "iid"), (5, 5, "ar1"), (8, 8, "iid"), (8, 8, "ar1"), (8, 3, "iid")]
     q_cal = mean_discharge(river_csv("MAH_2369", "calibration"))
-    rows = []
+    rows, example = [], None
     with Timer() as t:
         for i, (v_true, v_fit, kind) in enumerate(cases):
             par_true = published_params(v_true, "MAH_2369")
@@ -71,6 +72,9 @@ def run(ctx) -> Result:
             val_csv = os.path.join(WORK, "v3_forcing_validation.csv")
             pred = simulate(val_csv, v_fit, d.par_best, "CRN", q_cal, name="v3pred").Twat_mod[365:]
             pred_rmse = float(np.sqrt(np.mean((pred - truth_val) ** 2)))
+            if (v_true, v_fit, kind) == (8, 8, "ar1") or (ctx.quick and example is None):
+                dates = pd.to_datetime(pd.read_csv(river_csv("MAH_2369", "validation")).Date)
+                example = (v_true, kind, dates, truth_val.copy(), pred.copy())
             active = [j for j in range(8) if par_true[j] != 0 or d.par_best[j] != 0]
             rel = [abs(d.par_best[j] - par_true[j]) / max(abs(par_true[j]), 1e-3) for j in active]
             specified = v_true == v_fit
@@ -94,5 +98,53 @@ def run(ctx) -> Result:
     res.notes.append("Parameter errors can be large for version 8 even when predictions are accurate: several "
                      "parameter combinations produce almost the same temperatures (equifinality). Predictions, "
                      "not individual parameter values, are what the model can be relied on for.")
-    res.tables.append(("Known-truth recovery, Mentue forcing", df))
+    res.sections.append(Section(
+        "Predicting other years from a calibration on noisy data",
+        f"Each case calibrates on 2002-2009 data made by the model plus noise of {SIGMA} °C, then predicts "
+        "2010-2012. The prediction is compared with the noise-free truth, so a perfect calibration would show "
+        "zero error.",
+        figures=_figures(df, example), tables=[("Known-truth recovery, Mentue forcing", df)]))
     return res
+
+
+def _figures(df, example):
+    import matplotlib.pyplot as plt
+    plot_style()
+    figs = []
+    fig, ax = plt.subplots(figsize=(7, 3.2))
+    labels = [f"version {f} fitted to version-{tv} data, {k} noise" for tv, f, k in
+              zip(df["true version"], df["fitted version"], df["noise"])]
+    err = df["prediction RMSE vs truth, 2010-2012"].to_numpy()
+    spec = (df["true version"] == df["fitted version"]).to_numpy()
+    y = np.arange(len(df))[::-1]
+    ax.barh(y[spec], err[spec], height=0.55, color=BLUE, label="correct model version")
+    ax.barh(y[~spec], err[~spec], height=0.55, color=LIGHT_GREY, label="wrong model version (for contrast)")
+    for yi, e in zip(y, err):
+        ax.annotate(f"{e:.3f}", (e, yi), xytext=(3, 0), textcoords="offset points", va="center", fontsize=7.5,
+                    color=INK2)
+    reference_line(ax, TOL, f"pass limit {TOL} °C", axis="x")
+    ax.set_yticks(y, labels, fontsize=7.5)
+    ax.grid(axis="y", visible=False)
+    ax.set_xlabel("Prediction error against the noise-free truth, 2010-2012 (RMSE, °C)")
+    ax.set_title(f"Calibration on noisy data recovers the truth (noise {SIGMA} °C)")
+    ax.legend(loc="lower right", fontsize=7.5)
+    figs.append((save_figure(fig, "V3_recovery.png"),
+                 f"With the correct model version, predictions for years not used in calibration are within a few "
+                 f"hundredths of a degree of the truth, although the data had {SIGMA} °C of noise. The wrong "
+                 f"version (grey) is shown for contrast."))
+    if example is not None:
+        v, kind, dates, truth, pred = example
+        dates = pd.DatetimeIndex(dates)
+        m = dates.year == 2010
+        fig, (a1, a2) = plt.subplots(2, 1, figsize=(8, 4), sharex=True, gridspec_kw={"height_ratios": [3, 1.3]})
+        a1.plot(dates[m], truth[m], color=BLUE, lw=3, alpha=0.5, label="truth (no noise)")
+        a1.plot(dates[m], pred[m], color=ORANGE, lw=1.0, label="prediction from the calibrated model")
+        a1.set_ylabel("Water temperature (°C)")
+        a1.set_title(f"Version {v}, {kind} noise: 2010, a year not used in calibration")
+        a1.legend(loc="upper left")
+        a2.plot(dates[m], pred[m] - truth[m], color=INK2, lw=0.8)
+        a2.axhline(0, color=AXIS, lw=0.8)
+        a2.set_ylabel("Prediction minus\ntruth (°C)")
+        figs.append((save_figure(fig, "V3_timeseries.png"),
+                     "The calibrated model's prediction follows the true temperature closely on every day."))
+    return figs

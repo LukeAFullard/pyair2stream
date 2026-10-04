@@ -5,7 +5,8 @@ Run the validation suite and write validation/REPORT.md.
     python validation/run_all.py --quick    # reduced version of every check (about 2 minutes)
     python validation/run_all.py --only V2 V6
 
-The report, its tables (validation/results/*.csv) and figures
+The summary (validation/REPORT.md), one full report per check
+(validation/reports/V*.md), their tables (validation/results/*.csv) and figures
 (validation/figures/*.png) are written from scratch on every run. Scratch files
 go to validation/work/ (not committed).
 """
@@ -81,110 +82,78 @@ def status(r: Result) -> str:
     return "not run" if r.passed is None else ("PASS" if r.passed else "FAIL")
 
 
-# --- figures ------------------------------------------------------------------
+# --- reports ------------------------------------------------------------------
 
-def _save(fig, name):
-    import matplotlib.pyplot as plt
-    os.makedirs(FIGURES, exist_ok=True)
-    fig.savefig(os.path.join(FIGURES, name), dpi=130, bbox_inches="tight")
-    plt.close(fig)
-    return name
+REPORTS = os.path.join(HERE, "reports")
 
 
-def figures(r: Result) -> None:
-    import matplotlib.pyplot as plt
-    data = getattr(r, "figure_data", None)
-    if data is None:
-        return
-    if r.code == "V2":
-        fig, ax = plt.subplots(figsize=(5, 5))
-        for col, label, m in (("pyair2stream cal", "calibration period", "o"),
-                              ("pyair2stream val", "validation period", "s")):
-            pub = data["published cal" if "cal" in col else "published val"]
-            ax.scatter(pub, data[col], marker=m, label=label, s=28)
-        lim = [0, float(max(data["published cal"].max(), data["published val"].max())) * 1.1]
-        ax.plot(lim, lim, color="grey", lw=1)
-        ax.set(xlim=lim, ylim=lim, xlabel="Published RMSE (°C)", ylabel="pyair2stream RMSE (°C)",
-               title="Published parameters: RMSE reproduced")
-        ax.legend()
-        r.figures.append((_save(fig, "V2_published_rmse.png"),
-                          "Each point is one river, model version and period; all lie on the 1:1 line."))
-    elif r.code == "V4":
-        df = data[data.converged]
-        cases = list(dict.fromkeys(df.case))
-        fig, ax = plt.subplots(figsize=(7, 3.6))
-        for i, c in enumerate(cases):
-            y = df[df.case == c]["held-out coverage"] * 100
-            ax.scatter(np.full(len(y), i) + np.random.default_rng(0).uniform(-0.12, 0.12, len(y)), y, s=16)
-            ax.hlines(y.mean(), i - 0.25, i + 0.25, color="black")
-        ax.axhline(90, color="grey", ls="--", lw=1)
-        ax.set_xticks(range(len(cases)), [c.split(":")[0] for c in cases])
-        ax.set(ylabel="Held-out observations inside\nthe 90% interval (%)",
-               title="Prediction-interval coverage, one point per replicate")
-        r.figures.append((_save(fig, "V4_interval_coverage.png"),
-                          "Cases as in the table. Black line: mean over replicates. Dashed: the nominal 90%."))
-    elif r.code == "V5":
-        a, b = data
-        fig, ax = plt.subplots(figsize=(8, 3.6))
-        rivers = list(dict.fromkeys(a.river))
-        labels = list(dict.fromkeys(a.version.astype(str)))
-        w = 0.8 / len(labels)
-        for k, lab in enumerate(labels):
-            vals = [a[(a.river == rv) & (a.version.astype(str) == lab)].RMSE.mean() for rv in rivers]
-            name = f"version {lab}" if lab.isdigit() else lab
-            ax.bar(np.arange(len(rivers)) + k * w, vals, w, label=name,
-                   color=None if lab.isdigit() else ("0.55" if "day" in lab else "0.8"))
-        ax.set_xticks(np.arange(len(rivers)) + 0.4 - w / 2, rivers)
-        ax.set(ylabel="RMSE on validation years (°C)", title="Predicting years not used for calibration")
-        ax.legend(ncol=2, fontsize=8, frameon=False)
-        r.figures.append((_save(fig, "V5_validation_rmse.png"),
-                          "Lower is better. Grey bars: the two simple alternatives."))
-        if b is not None and len(b) and "7-day mean coverage" in b:
-            b = b[b.converged]
-            fig, axes = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
-            for ax, col, title in zip(axes, ("coverage", "7-day mean coverage"),
-                                      ("Daily temperatures", "7-day mean temperatures")):
-                for k, (noise, colour) in enumerate((("iid", "0.6"), ("ar1", "tab:blue"))):
-                    g = b[b["noise model"] == noise]
-                    x = np.arange(len(g)) + (k - 0.5) * 0.38
-                    ax.bar(x, g[col] * 100, 0.38, color=colour, label=f"noise_model: {noise}")
-                ax.axhline(90, color="black", ls="--", lw=1)
-                g = b[b["noise model"] == "iid"]
-                ax.set_xticks(np.arange(len(g)), [f"{rv} v{v}" for rv, v in zip(g.river, g.version)], fontsize=8,
-                              rotation=30, ha="right")
-                ax.set(title=title, ylim=(0, 100))
-            axes[0].set_ylabel("Validation observations inside\nthe 90% interval (%)")
-            handles, names = axes[0].get_legend_handles_labels()
-            fig.legend(handles, names, frameon=False, fontsize=8, ncol=2, loc="lower center",
-                       bbox_to_anchor=(0.5, -0.17))
-            r.figures.append((_save(fig, "V5_interval_coverage.png"),
-                              "Dashed: the nominal 90%. For 7-day means only AR(1) noise comes close."))
+def _table_lines(r: Result, title: str, df: pd.DataFrame, counter: list, prefix: str) -> list:
+    counter[0] += 1
+    name = f"{r.code}_{counter[0]}.csv"
+    df.to_csv(os.path.join(RESULTS, name), index=False)
+    return [f"**{title}** ([csv]({prefix}results/{name}))", "", md_table(df), ""]
 
 
-# --- report -------------------------------------------------------------------
+def as_parts(text: str) -> list:
+    """Text with labelled parts '(A) ... (B) ...' as an introduction plus one bullet per part."""
+    import re
+    pieces = [p for p in re.split(r"\s*(?=\([A-H]\)\s)", text.strip()) if p]
+    if len(pieces) < 3:
+        return [text, ""]
+    intro, parts = (pieces[0], pieces[1:]) if not pieces[0].startswith("(") else ("", pieces)
+    return ([intro, ""] if intro else []) + [f"- {p}" for p in parts] + [""]
+
+
+def write_check_report(r: Result, env_line: str) -> None:
+    """reports/<code>.md: the full report of one check."""
+    lines = [f"# {r.code}. {r.title}", "",
+             f"[Validation summary](../REPORT.md) · {env_line} · run time {r.seconds / 60:.1f} minutes", "",
+             f"**Result: {status(r)}.**", "", *as_parts(r.summary)]
+    for heading, text in (("Question", r.question), ("Method", r.method), ("Pass criterion", r.criterion)):
+        if text:
+            lines += [f"## {heading}", "", *as_parts(text)]
+    counter = [0]
+    if r.sections:
+        lines += ["## Results", ""]
+    for s in r.sections:
+        lines += [f"### {s.title}", ""]
+        if s.text:
+            lines += [s.text, ""]
+        for fname, caption in s.figures:
+            lines += [f"![{caption}](../figures/{fname})", "", f"*{caption}*", ""]
+        for title, df in s.tables:
+            lines += _table_lines(r, title, df, counter, "../")
+    if r.notes:
+        lines += ["## What this means", ""]
+        for n in r.notes:
+            lines += [n, ""]
+    with open(os.path.join(REPORTS, f"{r.code}.md"), "w") as f:
+        f.write("\n".join(lines))
+
 
 def write_report(results, env, quick):
+    """REPORT.md: the summary, with each check's headline figure and a link to its full report."""
     lines = ["# pyair2stream validation report", "",
-             "Generated by `validation/run_all.py`. Each check states its question, method and pass "
-             "criterion before its result. See `validation/README.md` for what each check covers and why.", ""]
+             "Generated by `validation/run_all.py`. This page summarises each check; its full report "
+             "(question, method, pass criterion, figures, tables and what the result means) is linked "
+             "below it. See `validation/README.md` for why each check matters.", ""]
     if quick:
         lines += ["> **Quick mode:** every check ran in a reduced form. Use the full run for evidence.", ""]
-    lines += ["## Summary", "", "| Check | Question | Result |", "|---|---|---|"]
+    lines += ["## Summary", "", "| Check | Question | Result | Full report |", "|---|---|---|---|"]
     for r in results:
-        lines.append(f"| [{r.code}](#{r.code.lower()}) | {r.title} | **{status(r)}** |")
+        lines.append(f"| [{r.code}](#{r.code.lower()}) | {r.title} | **{status(r)}** | "
+                     f"[reports/{r.code}.md](reports/{r.code}.md) |")
     lines += ["", "## Environment", "", "| | |", "|---|---|", *[f"| {k} | {v} |" for k, v in env], ""]
+    env_line = next(v for k, v in env if k == "pyair2stream").split(" at the start")[0]
+    env_line = f"pyair2stream {env_line}, {dict(env)['Date']}"
     for r in results:
+        write_check_report(r, env_line)
         lines += [f"## {r.code}", "", f"### {r.title}", "", f"**Question.** {r.question}", "",
-                  f"**Method.** {r.method}", "", f"**Pass criterion.** {r.criterion}", "",
-                  f"**Result: {status(r)}.** {r.summary}", f"(Run time {r.seconds / 60:.1f} minutes.)", ""]
-        for i, (title, df) in enumerate(r.tables, 1):
-            name = f"{r.code}_{i}.csv"
-            df.to_csv(os.path.join(RESULTS, name), index=False)
-            lines += [f"**{title}** ([csv](results/{name}))", "", md_table(df), ""]
-        for fname, caption in r.figures:
-            lines += [f"![{caption}](figures/{fname})", "", f"*{caption}*", ""]
-        for n in r.notes:
-            lines += [f"> {n}", ""]
+                  f"**Result: {status(r)}.**", "", *as_parts(r.summary)]
+        headline = next((f for s in r.sections for f in s.figures), None)
+        if headline:
+            lines += [f"![{headline[1]}](figures/{headline[0]})", "", f"*{headline[1]}*", ""]
+        lines += [f"**Full report: [reports/{r.code}.md](reports/{r.code}.md)**", ""]
     with open(os.path.join(HERE, "REPORT.md"), "w") as f:
         f.write("\n".join(lines))
 
@@ -198,11 +167,10 @@ def main():
     ctx = types.SimpleNamespace(quick=args.quick, workers=args.workers)
     state = git_state()
     selected = [(c, m) for c, m in CHECKS if not args.only or c in {o.upper() for o in args.only}]
-    os.makedirs(RESULTS, exist_ok=True)
-    os.makedirs(FIGURES, exist_ok=True)
-    for folder in (RESULTS, FIGURES):
+    for folder in (RESULTS, FIGURES, REPORTS):
+        os.makedirs(folder, exist_ok=True)
         for f in os.listdir(folder):
-            if not args.only or f.split("_")[0] in {c for c, _ in selected}:
+            if not args.only or f.split("_")[0].split(".")[0] in {c for c, _ in selected}:
                 os.remove(os.path.join(folder, f))
     results = []
     t0 = datetime.datetime.now()
@@ -213,10 +181,6 @@ def main():
         except Exception:
             r = Result(code=code, title=module, question="", method="", criterion="", passed=False,
                        summary="The check stopped with an error:\n\n```\n" + traceback.format_exc() + "```")
-        try:
-            figures(r)
-        except Exception:
-            r.notes.append("Figure failed: " + traceback.format_exc(limit=1))
         print(f"{code} {status(r)} ({r.seconds / 60:.1f} min): {r.summary}", flush=True)
         results.append(r)
     env = environment(args.quick, (datetime.datetime.now() - t0).total_seconds(), state)

@@ -41,8 +41,18 @@ DE_SETTINGS = {"n_run": 300, "n_particles": 15}
 
 
 @dataclass
+class Section:
+    """One part of a check's report: a heading, explanatory text, figures and tables."""
+    title: str
+    text: str = ""
+    figures: List[Tuple[str, str]] = field(default_factory=list)   # (file name in figures/, caption)
+    tables: List[Tuple[str, pd.DataFrame]] = field(default_factory=list)
+
+
+@dataclass
 class Result:
-    """Outcome of one validation check, rendered into REPORT.md by run_all.py."""
+    """Outcome of one validation check, rendered by run_all.py into reports/<code>.md and a
+    summary in REPORT.md."""
     code: str
     title: str
     question: str
@@ -50,11 +60,60 @@ class Result:
     criterion: str
     passed: Optional[bool] = None          # None = descriptive, no pass/fail
     summary: str = ""
-    tables: List[Tuple[str, pd.DataFrame]] = field(default_factory=list)
-    figures: List[Tuple[str, str]] = field(default_factory=list)   # (file name, caption)
+    sections: List[Section] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
     seconds: float = 0.0
-    figure_data: object = None             # raw data for run_all.py's figures
+
+
+# --- Figures ------------------------------------------------------------------
+# One visual system for every figure: a light surface, recessive solid hairline grids and
+# axes, thin marks, and categorical colours in a fixed order (validated for colour-vision
+# deficiency; at most three in scatter plots and small multiples).
+
+BLUE, ORANGE, AQUA, YELLOW, MAGENTA = "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"
+SERIES = (BLUE, ORANGE, AQUA, YELLOW, MAGENTA)
+INK, INK2, MUTED, GRID, AXIS, SURFACE = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7", "#fcfcfb"
+LIGHT_GREY = "#c3c2b7"
+
+
+def plot_style():
+    """Apply the shared figure style (call before drawing)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    from cycler import cycler
+    matplotlib.rcParams.update({
+        "figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
+        "font.family": "sans-serif", "font.sans-serif": ["DejaVu Sans", "Arial", "Helvetica"],
+        "font.size": 9, "axes.titlesize": 10, "axes.labelsize": 9, "figure.titlesize": 11,
+        "text.color": INK, "axes.labelcolor": INK2, "axes.titlecolor": INK,
+        "xtick.color": AXIS, "ytick.color": AXIS, "xtick.labelcolor": INK2, "ytick.labelcolor": INK2,
+        "axes.edgecolor": AXIS, "axes.linewidth": 0.8, "axes.spines.top": False, "axes.spines.right": False,
+        "axes.grid": True, "grid.color": GRID, "grid.linewidth": 0.6, "grid.linestyle": "-",
+        "axes.axisbelow": True, "lines.linewidth": 1.5, "lines.markersize": 5,
+        "legend.frameon": False, "legend.fontsize": 8, "axes.prop_cycle": cycler(color=SERIES),
+    })
+
+
+def save_figure(fig, name: str) -> str:
+    """Save `fig` as figures/<name> and return the name."""
+    import matplotlib.pyplot as plt
+    os.makedirs(FIGURES, exist_ok=True)
+    fig.savefig(os.path.join(FIGURES, name), dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return name
+
+
+def reference_line(ax, value, label=None, axis="y"):
+    """A dashed reference line (a threshold, the nominal level or 1:1), labelled at its end."""
+    line = ax.axhline if axis == "y" else ax.axvline
+    line(value, color=INK2, lw=0.9, ls=(0, (4, 3)), zorder=1)
+    if label:
+        if axis == "y":
+            ax.annotate(label, (1, value), xycoords=("axes fraction", "data"), xytext=(-2, 3),
+                        textcoords="offset points", ha="right", va="bottom", fontsize=7.5, color=INK2)
+        else:
+            ax.annotate(label, (value, 1), xycoords=("data", "axes fraction"), xytext=(3, -2),
+                        textcoords="offset points", ha="left", va="top", fontsize=7.5, color=INK2)
 
 
 def river_csv(station: str, period: str) -> str:

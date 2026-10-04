@@ -16,7 +16,7 @@ from scipy.optimize import differential_evolution, minimize
 import emcee
 
 import json
-from .config import CommonData, DEFAULT_NOISE_MODEL
+from .config import CommonData, DEFAULT_NOISE_MODEL, DEFAULT_LIKELIHOOD
 from .model import (
     call_model, funcobj, aggregation, statis, warn_on_stability, check_numerical_divergence,
     is_numerically_divergent, NumericalDivergenceError,
@@ -84,6 +84,25 @@ def _ar1_log_likelihood(residuals: np.ndarray, rho: float, runs: list) -> float:
     if sse_u == 0:
         return MCMC_MAX_LOG_LIKELIHOOD
     return -0.5 * N * np.log(sse_u / N) + 0.5 * n_runs * np.log(1.0 - rho ** 2)
+
+
+def _least_squares_log_likelihood(residuals: np.ndarray, rho: float, runs: list) -> float:
+    """
+    Concentrated least-squares (iid Gaussian) log-likelihood with the effective number of
+    independent observations n_eff = n (1 - rho) / (1 + rho) in place of n. Its maximum is the
+    least-squares fit; its spread is widened for lag-1 autocorrelation rho of the residuals
+    (the variance of a mean of AR(1) errors is larger by n / n_eff). Equal to
+    `_iid_log_likelihood` when rho = 0.
+    """
+    if not runs:
+        return -np.inf
+    e = residuals[np.concatenate(runs)]
+    n = len(e)
+    sse = float(np.sum(e ** 2))
+    if sse == 0:
+        return MCMC_MAX_LOG_LIKELIHOOD
+    n_eff = n * (1.0 - rho) / (1.0 + rho)
+    return -0.5 * n_eff * np.log(sse / n)
 
 
 def _reflected_walker_init(initial: np.ndarray, scale: np.ndarray, lo: np.ndarray, hi: np.ndarray,
@@ -1069,6 +1088,8 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
 
     uncertainty_options = data.uncertainty_options or {}
     noise_model = uncertainty_options.get('noise_model', DEFAULT_NOISE_MODEL)
+    likelihood = uncertainty_options.get('likelihood', DEFAULT_LIKELIHOOD)
+    ar1_log_likelihood = _least_squares_log_likelihood if likelihood == 'least_squares' else _ar1_log_likelihood
 
     eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
     segments = _segments_for(data)
@@ -1109,7 +1130,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         # -- daily and aggregated coincide at 1d resolution.
         if noise_model == 'ar1':
             residuals = data.Twat_mod_agg - data.Twat_obs_agg
-            return _ar1_log_likelihood(residuals, best_rho, ar1_runs)
+            return ar1_log_likelihood(residuals, best_rho, ar1_runs)
         else:
             mod = data.Twat_mod_agg[valid_mask_agg]
             obs = data.Twat_obs_agg[valid_mask_agg]
@@ -1254,6 +1275,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         "sigma": best_sigma,
         "n_valid_pairs": N,  # N valid points used for variance, proxy for pairs
         "noise_model_used_for_this_run": noise_model,
+        "likelihood": likelihood if noise_model == 'ar1' else 'least_squares',
         "mcmc_walkers": nwalkers,
         "mcmc_seed": seed,
         **convergence,

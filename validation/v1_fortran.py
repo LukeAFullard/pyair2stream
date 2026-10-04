@@ -13,8 +13,8 @@ import sys
 import numpy as np
 import pandas as pd
 
-from common import (REPO, WORK, VERSIONS, Result, published_params, river_csv, mean_discharge,
-                    simulate, Timer)
+from common import (REPO, WORK, VERSIONS, Result, Section, published_params, river_csv, mean_discharge,
+                    simulate, Timer, plot_style, save_figure, reference_line, BLUE, ORANGE, INK2, MUTED)
 
 INTEGRATORS = ("EUL", "RK2", "RK4", "CRN")     # the ones the Fortran implements
 TOL = 1e-5                                     # °C; the Fortran prints 6 decimals
@@ -57,7 +57,7 @@ def run(ctx) -> Result:
         pd.DataFrame({"Date": dates.strftime("%Y-%m-%d"), "T_air": src.T_air, "T_water": tw,
                       "Discharge": src.Discharge}).to_csv(csv, index=False)
         qmedia = mean_discharge(csv)
-        rows = []
+        rows, example = [], None
         for v in VERSIONS:
             par = published_params(v, "MAH_2369")
             for integ in INTEGRATORS:
@@ -67,6 +67,8 @@ def run(ctx) -> Result:
                 ft_ok = np.isfinite(ft) & (np.abs(ft) < PLAUSIBLE)
                 both = py_ok & ft_ok
                 max_diff = float(np.max(np.abs(py[both] - ft[both]))) if both.any() else np.nan
+                if (v, integ) == (8, "CRN"):
+                    example = (dates, py.copy(), np.asarray(ft, float).copy())
                 rows.append({"version": v, "integrator": integ, "days compared": int(both.sum()),
                              "days diverged (Python)": int((~py_ok).sum()),
                              "days diverged (Fortran)": int((~ft_ok).sum()),
@@ -82,5 +84,54 @@ def run(ctx) -> Result:
     if n_div:
         res.summary += (f"; in {n_div} cases (explicit integrators) both programs diverge on the same days "
                         "with these parameters, which were calibrated with CRN (see V6).")
-    res.tables.append(("Python vs Fortran, Mentue 2002-2009, published parameters", df))
+    res.sections.append(Section(
+        "Python and Fortran, day by day",
+        "Both programs simulated the same eight years of real Mentue forcing with the published parameters. "
+        "The figures show the largest daily difference in each case and, for the full model with the "
+        "default scheme, the two simulations themselves.",
+        figures=_figures(df, example),
+        tables=[("Python vs Fortran, Mentue 2002-2009, published parameters", df)]))
     return res
+
+
+def _figures(df, example):
+    import matplotlib.pyplot as plt
+    plot_style()
+    figs = []
+    fig, ax = plt.subplots(figsize=(8, 3.2))
+    labels = [f"v{v} {i}" for v, i in zip(df.version, df.integrator)]
+    x = np.arange(len(df))
+    y = df["max |difference| (°C)"].to_numpy()
+    ax.scatter(x, y, s=28, color=BLUE, zorder=3, label="largest difference on any day")
+    div = df["days diverged (Python)"] > 0
+    ax.scatter(x[div], y[div], s=80, facecolors="none", edgecolors=ORANGE, lw=1.4, zorder=4,
+               label="both programs diverge on the same days (excluded from the comparison)")
+    reference_line(ax, TOL, f"pass limit {TOL:g} °C")
+    reference_line(ax, 5e-6, "rounding of the Fortran's printed output (5e-6 °C)")
+    ax.set_yscale("log")
+    ax.set_ylim(1e-7, 1e-4)
+    ax.set_xticks(x, labels, rotation=60, ha="right", fontsize=7.5)
+    ax.set_ylabel("|Python - Fortran| (°C)")
+    ax.set_title("Largest daily difference between pyair2stream and the original Fortran")
+    ax.legend(loc="lower left", fontsize=7.5)
+    figs.append((save_figure(fig, "V1_max_difference.png"),
+                 "Every model version and scheme agrees with the Fortran to the last digit the Fortran prints."))
+    if example is not None:
+        _, py, ft = example
+        n = 365
+        day = np.arange(1, n + 1)
+        fig, (a1, a2) = plt.subplots(2, 1, figsize=(8, 4), sharex=True, gridspec_kw={"height_ratios": [3, 1.3]})
+        a1.plot(day, ft[:n], color=BLUE, lw=3, alpha=0.5, label="original Fortran")
+        a1.plot(day, py[:n], color=ORANGE, lw=1.0, label="pyair2stream")
+        a1.set_ylabel("Water temperature (°C)")
+        a1.set_title("Version 8, Crank-Nicolson, first year of the Mentue record")
+        a1.legend(loc="upper left")
+        a2.plot(day, py[:n] - ft[:n], color=INK2, lw=0.8)
+        a2.set_xlabel("Day of the record (Mentue forcing, 2002)")
+        a2.set_ylabel("Difference (°C)")
+        a2.set_ylim(-1e-5, 1e-5)
+        a2.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+        figs.append((save_figure(fig, "V1_timeseries.png"),
+                     "The two simulations lie on top of each other; their difference (lower panel) is "
+                     "below 0.00001 °C every day."))
+    return figs

@@ -13,7 +13,8 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 import pandas as pd
 
-from common import WORK, Result, Timer, calibrate, mean_discharge, published_params, river_csv, simulate
+from common import (WORK, Result, Section, Timer, calibrate, mean_discharge, published_params, river_csv, simulate,
+                    plot_style, save_figure, reference_line, BLUE, ORANGE, INK2)
 from v3_recovery import SIGMA, noise, truth_series
 
 VERSION = 5
@@ -119,6 +120,36 @@ def run(ctx) -> Result:
                          "scored days make the calibration less certain. Filling short air-temperature gaps by "
                          "interpolation (or from a nearby station) keeps every day, at the cost of small errors "
                          "in the filled values; use gap-tolerant mode for long gaps.")
+    fig = _figure(df, err)
     df[err] = df[err].round(3)
-    res.tables.append(("Effect of gaps on the calibrated model", df))
+    res.sections.append(Section(
+        "Gap patterns and their effect",
+        "Each gap pattern was applied to the same synthetic 2002-2009 record before calibration; each calibrated "
+        "model then predicted 2010-2012 from complete forcing.",
+        figures=[fig], tables=[("Effect of gaps on the calibrated model", df)]))
     return res
+
+
+def _figure(df, err):
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
+    plot_style()
+    n = len(df)
+    fig, ax = plt.subplots(figsize=(8, 1.3 + 0.36 * n))
+    y = np.arange(n)[::-1]
+    colours = [ORANGE if m == "gap-tolerant" else BLUE for m in df["mode"]]
+    ax.barh(y, df[err], height=0.55, color=colours)
+    for yi, e, scored in zip(y, df[err], df["days scored in calibration"]):
+        ax.annotate(f"{e:.3f} °C  ({scored} days scored)", (e, yi), xytext=(4, 0), textcoords="offset points",
+                    va="center", fontsize=7.5, color=INK2)
+    reference_line(ax, TOL, f"pass limit {TOL} °C", axis="x")
+    ax.set_xlim(0, TOL * 1.6)
+    ax.set_yticks(y, df["gap pattern (calibration years 2002-2009)"], fontsize=7.5)
+    ax.grid(axis="y", visible=False)
+    ax.set_xlabel("Prediction error against the noise-free truth, 2010-2012 (RMSE, °C)")
+    ax.set_title("Gaps in the record do not bias the calibrated model")
+    ax.legend(handles=[Patch(color=BLUE, label="standard mode"), Patch(color=ORANGE, label="gap-tolerant mode")],
+              loc="lower right", fontsize=7.5)
+    return (save_figure(fig, "V7_gaps.png"),
+            "Prediction error for each gap pattern, with the number of days left to score in calibration. All are "
+            "well within the limit; scattered air-temperature gaps in gap-tolerant mode leave far fewer days to score.")

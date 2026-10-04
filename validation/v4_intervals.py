@@ -17,20 +17,27 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 import pandas as pd
 
-from common import (DE_SETTINGS, WORK, Result, Timer, load, mean_discharge, published_params, quiet,
-                    river_csv, AUTHORS_BOUNDS)
+from common import (DE_SETTINGS, WORK, Result, Section, Timer, load, mean_discharge, published_params, quiet,
+                    river_csv, AUTHORS_BOUNDS, plot_style, save_figure, reference_line, BLUE, ORANGE, AQUA, INK,
+                    INK2, LIGHT_GREY)
 from v3_recovery import SIGMA, RHO, noise, truth_series
 
-# (label, true version, noise in the data, noise model used by the likelihood, replicates full / quick)
+# (label, true version, noise in the data, error model of the likelihood, replicates full / quick).
+# Error model: "iid", "ar1" (exact AR(1) likelihood) or "ar1-ls" (least-squares likelihood with the
+# effective sample size, AR(1) noise in the predictions). Cases E and F use the same synthetic data as
+# B and D (DATA_SEED), so the two AR(1) likelihoods are compared on identical data.
 CASES = [
     ("A: version 5, iid noise, iid model", 5, "iid", "iid", 30, 0),
-    ("B: version 5, AR(1) noise, ar1 model", 5, "ar1", "ar1", 30, 3),
+    ("B: version 5, AR(1) noise, exact ar1 likelihood", 5, "ar1", "ar1", 30, 0),
     ("C: version 5, AR(1) noise, iid model (mis-specified)", 5, "ar1", "iid", 30, 0),
-    ("D: version 8, AR(1) noise, ar1 model", 8, "ar1", "ar1", 12, 0),
+    ("D: version 8, AR(1) noise, exact ar1 likelihood", 8, "ar1", "ar1", 12, 0),
+    ("E: version 5, AR(1) noise, least-squares likelihood", 5, "ar1", "ar1-ls", 30, 3),
+    ("F: version 8, AR(1) noise, least-squares likelihood", 8, "ar1", "ar1-ls", 12, 0),
 ]
+DATA_SEED = {"E": "B", "F": "D"}
 PI_RANGE = (0.87, 0.93)     # accepted mean coverage of the 90% prediction interval
 PAR_MIN = 0.78              # accepted pooled coverage of the 90% parameter intervals (not clearly below 0.9)
-PAR_REQUIRED = ("A", "B")   # cases whose parameter intervals must meet PAR_MIN (version 5; see notes)
+PAR_REQUIRED = ("A", "B", "E", "F")   # cases whose parameter intervals must meet PAR_MIN (see notes)
 N_JACKKNIFE = 12            # replicates per version for the cross-validation parameter intervals
 JACKKNIFE_VERSIONS = (3, 4, 5, 7, 8)
 JACKKNIFE_OK = 0.80         # a version's jackknife intervals count as dependable at this coverage or more
@@ -46,7 +53,7 @@ def replicate(args):
     par_true = published_params(version, "MAH_2369")
     src_c, truth_c = truth_series(version, par_true, "calibration", q_cal, tag=tag)
     src_v, truth_v = truth_series(version, par_true, "validation", q_cal, tag=tag)
-    rng = np.random.default_rng(1000 * (ord(label[0]) - 64) + r)
+    rng = np.random.default_rng(1000 * (ord(DATA_SEED.get(label[0], label[0])) - 64) + r)
     cal_csv, val_csv = os.path.join(folder, "cal.csv"), os.path.join(folder, "val.csv")
     src_c.assign(T_water=np.round(truth_c + noise(len(truth_c), noise_kind, rng), 3)).to_csv(cal_csv, index=False)
     src_v.assign(T_water=np.round(truth_v + noise(len(truth_v), noise_kind, rng), 3)).to_csv(val_csv, index=False)
@@ -55,7 +62,8 @@ def replicate(args):
     cfg = {"version": version, "integrator": "CRN", "run_mode": "DE-MCMC", "objective_function": "NSE",
            "random_seed": r + 1, "Qmedia": q_cal, "parameter_bounds": AUTHORS_BOUNDS,
            "optimization": {"n_run": 300, "n_particles": 15, "mcmc_walkers": 32, "mcmc_steps": 20000},
-           "uncertainty_options": {"noise_model": model_noise},
+           "uncertainty_options": {"noise_model": "iid" if model_noise == "iid" else "ar1",
+                                   "likelihood": "least_squares" if model_noise == "ar1-ls" else "exact"},
            "paths": {"input_data": cal_csv, "output_dir": out}}
     data = load(cfg, tag)
     try:
@@ -75,7 +83,7 @@ def replicate(args):
 
     fcfg = {"version": version, "integrator": "CRN", "run_mode": "FORWARD", "Qmedia": q_cal,
             "parameters_forward": [float(x) for x in data.par_best],
-            "uncertainty_options": {"noise_model": model_noise},
+            "uncertainty_options": {"noise_model": "iid" if model_noise == "iid" else "ar1"},
             "forward_options": {"enable_prediction_intervals": True,
                                 "mcmc_chain_path": os.path.join(out, "MCMC_chain_S_c_1d.csv"),
                                 "n_samples": 1000, "random_seed": r + 1},
@@ -159,6 +167,9 @@ def leave_one_year_out(args):
         table = cross_validate(data, "DE").set_index("fold")
     chain_file = os.path.join(folder, "out", "MCMC_chain_S_c_1d.csv")
     chain = pd.read_csv(chain_file) if case and os.path.exists(chain_file) else None
+    ls_case = {5: "E", 8: "F"}.get(version)
+    ls_file = os.path.join(WORK, f"v4_{ls_case}_{r}", "out", "MCMC_chain_S_c_1d.csv") if ls_case else ""
+    ls_chain = pd.read_csv(ls_file) if ls_case and os.path.exists(ls_file) else None
     rows = []
     for j in ACTIVE_PARAMS[version]:
         col = f"p{j + 1}"
@@ -170,6 +181,9 @@ def leave_one_year_out(args):
         if chain is not None:
             m_lo, m_hi = np.percentile(chain[f"par_{j + 1}"], [5, 95])
             row.update({"MCMC covers": m_lo <= truth[j] <= m_hi, "MCMC width": m_hi - m_lo})
+        if ls_chain is not None:
+            m_lo, m_hi = np.percentile(ls_chain[f"par_{j + 1}"], [5, 95])
+            row.update({"MCMC least squares covers": m_lo <= truth[j] <= m_hi})
         rows.append(row)
     return rows
 
@@ -184,11 +198,14 @@ def run(ctx) -> Result:
                f"calibrated with DE-MCMC (CRN, 32 walkers, run until converged, at most 20,000 steps) on "
                f"2002-2009. A FORWARD run then produces 90% prediction intervals for 2010-2012 from the "
                f"chain, and the share of 2010-2012 observations inside them is recorded. The share of "
-               f"parameters whose 90% credible interval contains the true value is also recorded. Case C "
-               f"deliberately uses the wrong (iid) noise model on autocorrelated data.",
-        criterion=f"For the correctly specified cases (A, B, D): every run converges, and the mean held-out "
+               f"parameters whose 90% credible interval contains the true value is also recorded. With AR(1) "
+               f"noise, the chain is run with each of the two likelihoods the package offers: the exact AR(1) "
+               f"likelihood (cases B, D) and the least-squares likelihood with the effective sample size "
+               f"(cases E, F, on the same data as B and D). Case C deliberately uses the wrong (iid) noise "
+               f"model on autocorrelated data.",
+        criterion=f"For the correctly specified cases (A, B, D, E, F): every run converges, and the mean held-out "
                   f"coverage of the 90% prediction interval is between {PI_RANGE[0]:.0%} and {PI_RANGE[1]:.0%}. "
-                  f"For version 5 (A, B): pooled parameter-interval coverage at least {PAR_MIN:.0%}. "
+                  f"For cases A, B, E and F: pooled parameter-interval coverage at least {PAR_MIN:.0%}. "
                   f"Parameter coverage is reported, not required, for case C (wrong noise model, expected "
                   f"to be too narrow) and case D (see notes).")
     jobs = []
@@ -244,13 +261,23 @@ def run(ctx) -> Result:
     shown = summ.copy()
     for col in fmt:
         shown[col] = shown[col].map(lambda x: f"{x:.1%}" if pd.notna(x) else "")
-    res.tables += [("Coverage of 90% intervals (means over replicates)", shown)]
+    sec_pred = Section(
+        "Prediction intervals",
+        "Each replicate is a new synthetic data set from the known truth. A 90% prediction interval for "
+        "2010-2012 is made from the calibration on 2002-2009, and the share of the 2010-2012 observations "
+        "inside it is recorded.",
+        figures=[_fig_prediction_coverage(df)], tables=[("Coverage of 90% intervals (means over replicates)", shown)])
+    sec_par = Section(
+        "Parameter intervals from MCMC",
+        "For each replicate, whether each parameter's 90% credible interval contains the true value.")
+    res.sections += [sec_pred, sec_par]
     if len(pp):
         spread = pp.pivot(index="parameter", columns="case", values="replicate spread / posterior SD")
         cover = pp.pivot(index="parameter", columns="case", values="coverage")
-        res.tables += [("Parameter-interval coverage, by parameter", cover.map(lambda x: f"{x:.0%}" if pd.notna(x) else "").reset_index()),
-                       ("Spread of estimates between replicates / posterior standard deviation (1 = calibrated)",
-                        spread.round(2).reset_index())]
+        sec_par.figures.append(_fig_parameter_coverage(pp))
+        sec_par.tables += [("Parameter-interval coverage, by parameter", cover.map(lambda x: f"{x:.0%}" if pd.notna(x) else "").reset_index()),
+                           ("Spread of estimates between replicates / posterior standard deviation (1 = calibrated)",
+                            spread.round(2).reset_index())]
         d = pp[(pp.case == "D") & (pp.coverage < PAR_MIN)]
         if len(d):
             res.notes.append(
@@ -265,17 +292,26 @@ def run(ctx) -> Result:
                 f"other (several combinations fit almost equally well), which makes the posterior strongly "
                 f"non-Gaussian; Bayesian parameter intervals are then not guaranteed to have their nominal "
                 f"frequency coverage. Version 8's prediction intervals are unaffected. Do not quote version 8 "
-                f"parameter intervals as confidence statements; rely on predictions. (An earlier version of "
-                f"this check also required {PAR_MIN:.0%} parameter coverage for case D; it was not met, "
-                f"and the requirement was removed after this investigation.)")
+                f"parameter intervals from the exact AR(1) likelihood as confidence statements. (An earlier "
+                f"version of this check also required {PAR_MIN:.0%} parameter coverage for case D; it was not "
+                f"met, and the requirement was removed after this investigation.)")
+    if len(summ) and summ.case.str.startswith("F").any() and summ.case.str.startswith("D").any():
+        cov = lambda c: summ.loc[summ.case.str.startswith(c), "parameter coverage"].iloc[0]
+        res.notes.append(
+            f"The least-squares likelihood (cases E and F) centres the chain on the least-squares fit and widens it "
+            f"by the effective sample size n(1 - rho)/(1 + rho). On the same data its version 8 parameter "
+            f"intervals contained the true value {cov('F'):.0%} of the time, against {cov('D'):.0%} with the exact "
+            f"AR(1) likelihood, and {cov('E'):.0%} against {cov('B'):.0%} for version 5; prediction intervals were "
+            f"equally well calibrated with either. On real rivers, where the model is never exactly right, the "
+            f"exact AR(1) likelihood can also move the parameters away from the best fit (V5).")
     if checks:
         ck = pd.DataFrame(checks)
-        res.tables.append(("Sampler cross-check, case D: package sampler (DE move) vs stretch move", ck.round(3)))
+        sec_par.tables.append(("Sampler cross-check, case D: package sampler (DE move) vs stretch move", ck.round(3)))
         if (ck.iloc[:, -1] > 0.10).any():
             res.passed = False
             res.notes.append("The two samplers disagree by more than 10% of an interval's width.")
     if len(jk):
-        for col in ("raw spread covers", "jackknife covers", "MCMC covers"):
+        for col in ("raw spread covers", "jackknife covers", "MCMC covers", "MCMC least squares covers"):
             if col in jk:
                 jk[col] = jk[col].astype(float)          # True/False, NaN where there is no MCMC
         g = jk.groupby("version")
@@ -284,13 +320,22 @@ def run(ctx) -> Result:
             "jackknife": g["jackknife covers"].mean()})
         if "MCMC covers" in jk:
             by_version["MCMC (same replicates)"] = g["MCMC covers"].mean()
+        if "MCMC least squares covers" in jk:
+            by_version["MCMC least squares (same replicates)"] = g["MCMC least squares covers"].mean()
             ratio = (jk["jackknife width"] / jk["MCMC width"]).groupby(jk.version).median()
         shown = by_version.map(lambda x: f"{x:.0%}" if pd.notna(x) else "")
         if "MCMC covers" in jk:
             shown["median width, jackknife / MCMC"] = ratio.round(1).map(lambda x: "" if pd.isna(x) else x)
-        res.tables.append((f"Parameter intervals from cross-validation (cross_validation.cross_validate, leave one "
-                           f"year out), {N_JACKKNIFE} replicates per version with AR(1) noise: share of 90% "
-                           f"intervals containing the true value", shown.reset_index()))
+        res.sections.append(Section(
+            "Parameter intervals from cross-validation",
+            f"For {N_JACKKNIFE} replicates per model version, leave-one-year-out cross-validation through the "
+            "package, and whether three kinds of 90% interval contain the true parameters: the raw spread between "
+            "folds, the jackknife interval reported in cv_results.csv, and (versions 5 and 8) the MCMC interval "
+            "from the same data.",
+            figures=[_fig_jackknife(by_version)],
+            tables=[(f"Parameter intervals from cross-validation (cross_validation.cross_validate, leave one "
+                     f"year out), {N_JACKKNIFE} replicates per version with AR(1) noise: share of 90% "
+                     f"intervals containing the true value", shown.reset_index())]))
         cover = by_version["jackknife"]
         raw = by_version["raw spread (fold mean +- 1.645 x std)"]
         low = [v for v in JACKKNIFE_VERSIONS if cover[v] < JACKKNIFE_OK]
@@ -309,5 +354,88 @@ def run(ctx) -> Result:
         note += (f" With {N_JACKKNIFE} replicates per version, each share is uncertain by several percentage "
                  f"points.")
         res.notes.append(note)
-    res.figure_data = df.drop(columns=["per_param"], errors="ignore")
     return res
+
+
+def _fig_prediction_coverage(df):
+    import matplotlib.pyplot as plt
+    plot_style()
+    df = df[df.converged]
+    cases = list(dict.fromkeys(df.case))
+    fig, ax = plt.subplots(figsize=(7.5, 3.6))
+    rng = np.random.default_rng(0)
+    for i, c in enumerate(cases):
+        y = df[df.case == c]["held-out coverage"].to_numpy() * 100
+        colour = LIGHT_GREY if "mis-specified" in c else BLUE
+        ax.scatter(i + rng.uniform(-0.13, 0.13, len(y)), y, s=16, color=colour, alpha=0.8, zorder=3)
+        ax.hlines(y.mean(), i - 0.28, i + 0.28, color=INK, lw=1.6, zorder=4)
+    reference_line(ax, 90, "nominal 90%")
+    ax.set_xticks(range(len(cases)), [c.replace(": ", ":\n", 1).replace(", ", ",\n", 1) for c in cases], fontsize=7.5)
+    ax.grid(axis="x", visible=False)
+    ax.set_ylabel("Held-out observations inside\nthe 90% interval (%)")
+    ax.set_title("Prediction-interval coverage, one point per replicate (black: mean)")
+    return (save_figure(fig, "V4_interval_coverage.png"),
+            "Each point is one synthetic data set. Mean coverage is at the nominal 90% in every case, including the "
+            "deliberately wrong noise model (grey): for single days the noise model hardly matters.")
+
+
+def _fig_parameter_coverage(pp):
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+    plot_style()
+    params = sorted(pp.parameter.unique(), key=lambda x: int(x[1:]))
+    x = {p: i for i, p in enumerate(params)}
+    fig, ax = plt.subplots(figsize=(7.5, 3.4))
+    styles = {"B": (BLUE, "o", "B: version 5, exact ar1"), "D": (BLUE, "D", "D: version 8, exact ar1"),
+              "E": (ORANGE, "o", "E: version 5, least squares"), "F": (ORANGE, "D", "F: version 8, least squares"),
+              "A": (AQUA, "s", "A: version 5, iid noise and model"), "C": (LIGHT_GREY, "s", "C: wrong noise model")}
+    handles = []
+    for case, (colour, marker, label) in styles.items():
+        g = pp[pp.case == case]
+        if g.empty:
+            continue
+        off = {"A": -0.25, "B": -0.15, "E": -0.05, "D": 0.05, "F": 0.15, "C": 0.25}[case]
+        ax.scatter([x[p] + off for p in g.parameter], g.coverage * 100, s=30, marker=marker, color=colour, zorder=3)
+        handles.append(Line2D([0], [0], marker=marker, lw=0, color=colour, label=label))
+    reference_line(ax, 90, "nominal 90%")
+    ax.set_xticks(range(len(params)), params)
+    ax.set_ylim(30, 105)
+    ax.grid(axis="x", visible=False)
+    ax.set_ylabel("Replicates whose 90% interval\ncontains the true value (%)")
+    ax.set_title("MCMC parameter intervals by case and parameter")
+    ax.legend(handles=handles, loc="lower left", fontsize=7.5, ncol=2)
+    return (save_figure(fig, "V4_parameter_coverage.png"),
+            "Share of replicates whose 90% MCMC interval contains the true parameter. Blue: exact AR(1) likelihood "
+            "(circles version 5, diamonds version 8); orange: least-squares likelihood on the same data; grey: the "
+            "wrong noise model, too narrow.")
+
+
+def _fig_jackknife(by_version):
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+    plot_style()
+    versions = list(by_version.index)
+    fig, ax = plt.subplots(figsize=(7, 3.4))
+    cols = [("raw spread (fold mean +- 1.645 x std)", LIGHT_GREY, "o", "spread between folds (not an interval)"),
+            ("jackknife", ORANGE, "s", "cross-validation jackknife"),
+            ("MCMC (same replicates)", BLUE, "D", "MCMC, exact ar1 likelihood, same data"),
+            ("MCMC least squares (same replicates)", AQUA, "^", "MCMC, least-squares likelihood, same data")]
+    handles = []
+    for k, (col, colour, marker, label) in enumerate(cols):
+        if col not in by_version:
+            continue
+        vals = by_version[col].to_numpy(dtype=float) * 100
+        xs = np.arange(len(versions)) + (k - 1.5) * 0.14
+        ok = np.isfinite(vals)
+        ax.scatter(xs[ok], vals[ok], s=34, marker=marker, color=colour, zorder=3)
+        handles.append(Line2D([0], [0], marker=marker, lw=0, color=colour, label=label))
+    reference_line(ax, 90, "nominal 90%")
+    ax.set_xticks(range(len(versions)), [f"version {v}" for v in versions])
+    ax.set_ylim(0, 105)
+    ax.grid(axis="x", visible=False)
+    ax.set_ylabel("Intervals containing\nthe true value (%)")
+    ax.set_title("Parameter intervals from leave-one-year-out cross-validation")
+    ax.legend(handles=handles, loc="lower right", fontsize=7.5)
+    return (save_figure(fig, "V4_jackknife.png"),
+            "The jackknife intervals (orange) are close to 90% for every version; the raw spread between folds "
+            "(grey) is far too narrow to use as an interval.")

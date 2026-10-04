@@ -314,22 +314,31 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    on the bounds.
 2. **Likelihood** (how well a parameter set explains the data), computed on the
    same scored values as the objective (§7), assuming normally distributed errors
-   of constant size (the size is estimated, not supplied):
+   of constant size (the size is estimated, not supplied). A model's daily errors
+   usually persist from one day to the next (lag-1 autocorrelation ρ, estimated
+   once from the DE fit's daily residuals, limited to 0–0.99), so n days of
+   errors carry the information of fewer independent ones.
+   - `noise_model: "ar1"` with `likelihood: "least_squares"` (the default):
+     log L = −(n_eff/2)·ln(SSE/n), with n_eff = n·(1−ρ)/(1+ρ), the usual
+     effective number of independent observations for AR(1) errors. Its best
+     value is the least-squares fit, the criterion the original authors
+     calibrated with, and its spread is widened to allow for the autocorrelation.
+   - `noise_model: "ar1"` with `likelihood: "exact"`: the exact AR(1) likelihood.
+     Errors are converted to independent "innovations" (e₀·√(1−ρ²); eₜ − ρ·eₜ₋₁)
+     within each unbroken run of scored days, and
+     log L = −(n/2)·ln(SSE_innovations/n) + (runs/2)·ln(1−ρ²). This weighs
+     day-to-day changes in the error far more than its overall level. On real
+     rivers, where the model is never exactly right, it moved the parameters away
+     from the best fit, to slightly worse and cooler predictions (see below), so
+     it is not the default.
    - `noise_model: "iid"` treats every day's error as independent:
-     log L = −(n/2)·ln(SSE/n).
-   - `noise_model: "ar1"` (default) allows each day's error to carry over part of the
-     previous day's (lag-1 autocorrelation ρ, estimated once from the DE fit's
-     daily residuals, limited to 0–0.99). Errors are converted to independent
-     "innovations" (e₀·√(1−ρ²); eₜ − ρ·eₜ₋₁) within each unbroken run of
-     scored days, and log L = −(n/2)·ln(SSE_innovations/n) + (runs/2)·ln(1−ρ²).
-   River temperature errors are usually strongly autocorrelated; `iid` then
-   understates parameter uncertainty, and makes intervals for multi-day
-   quantities far too narrow, which is why `ar1` is the default. (With
-   weekly or monthly scoring there are no consecutive days, so `ar1` behaves like
-   `iid`.) Both are the exact normal (Gaussian) likelihood with the error size
-   replaced by its best estimate. This gives the same result as treating the
-   error size as unknown with the standard non-informative prior (∝ 1/σ) and
-   averaging over it.
+     log L = −(n/2)·ln(SSE/n). With autocorrelated errors this understates
+     parameter uncertainty, and makes intervals for multi-day quantities far too
+     narrow.
+   With weekly or monthly scoring there are no consecutive scored days, so ρ
+   plays no part in the likelihood. Each likelihood replaces the error size by
+   its best estimate; this gives the same result as treating the error size as
+   unknown with the standard non-informative prior (∝ 1/σ) and averaging over it.
 3. **Sampling.** `mcmc_walkers` (default 32) chains ("walkers") are started
    close to the DE optimum (spread 0.1% of each parameter's bound range,
    reflected back inside the bounds) and advanced together by `emcee`'s
@@ -368,22 +377,24 @@ means, days in a row above a threshold): use the raw ensemble for those
 daily percentiles.
 
 **What the validation shows** ([validation/REPORT.md](../validation/REPORT.md)).
-On synthetic data from a known truth, 90% prediction intervals contained 89–90%
-of new observations for versions 5 and 8, and the parameter intervals of version
-5 contained the true values at close to the nominal rate (V4). The sampler was
-cross-checked against emcee's stretch move. Version 8's parameter intervals
-contained the truth only about 75% of the time: its parameters trade off against
-each other, the posterior is far from normal, and Bayesian intervals are then
-not guaranteed their nominal frequency. On three real rivers, 90% intervals
-contained 85–89% of daily values in years not used for calibration, and for
-7-day means 39–62% with `iid` against 76–88% with `ar1` (V5).
+On synthetic data from a known truth, 90% prediction intervals contained about
+90% of new observations for versions 5 and 8 with every likelihood, and with the
+default least-squares likelihood the 90% parameter intervals contained the true
+values at least 90% of the time for both versions (V4). The exact AR(1)
+likelihood's intervals for version 8 contained the truth only about 75% of the
+time: its parameters trade off against each other and that posterior is far from
+normal. The sampler was cross-checked against emcee's stretch move. On three real
+rivers, 90% intervals contained 85–89% of daily values in years not used for
+calibration, and for 7-day means 39–62% with `iid` against 83–88% with the
+default (V5).
 
-Because the DE step maximises the objective (NSE, which treats errors as
-independent) while the `ar1` likelihood does not, the `ar1` chain can be
-centred on a different parameter combination from the DE best fit when
-parameters trade off. For version 8 on the Mentue, a5 is 2.6 in the best fit and
-4.7 ± 0.3 in the chain, with almost the same predictions (validation RMSE 0.78
-against 0.79 °C). The `iid` chain is centred on the DE best fit.
+**Where the chain is centred.** With the default least-squares likelihood the
+chain is centred on the DE best fit. With `likelihood: "exact"` it can be centred
+elsewhere, also for versions whose parameters do not trade off: on the Mentue,
+the median parameters of the exact AR(1) chain predicted the validation years
+with an RMSE of 1.01 instead of 0.93 °C for version 3 (0.83 instead of 0.80 for
+version 5, 0.79 instead of 0.78 for version 8) and 0.03–0.05 °C cooler. For a
+limit on warm water, a cooler band would understate the chance of exceedance.
 
 **Outputs:** `MCMC_chain_*.csv` (post-burn-in samples), `MCMC_chain_*_meta.json`
 (σ, ρ, diagnostics, coverage, excluded draws), `MCMC_envelopes_*.csv`, and the
