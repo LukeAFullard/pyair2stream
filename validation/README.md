@@ -35,9 +35,10 @@ without them it is reported as not run. The run rewrites `REPORT.md`,
 `results/` (every table as CSV) and `figures/`. Scratch files go to `work/`,
 which is not kept. All random steps are seeded, so a rerun on the same software
 versions gives the same numbers; the report records the versions used. The one
-exception is V2 part D, which runs the original Fortran program's own
-calibration: it seeds its random numbers from the clock, so its runs differ each
-time (which is what part D shows).
+exception is the original Fortran program's own calibration runs in V2 parts D
+and E: it seeds its random numbers from the clock, so those runs differ each
+time (which is what part D shows). A rerun of the full suite reproduced every
+other table byte for byte.
 
 ## Data
 
