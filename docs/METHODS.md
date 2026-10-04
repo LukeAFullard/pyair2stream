@@ -40,13 +40,17 @@ by the physics of a river's heat budget, whose 3 to 8 coefficients (parameters
 `a1`–`a8`) are not measured but *fitted* to observed water temperature at your
 site.
 
-A run has two stages:
+A run has two stages, and optionally a third:
 
 1. **Calibrate**: search for the parameter values that make simulated water
    temperature match your observations best (§8).
 2. **Simulate**: run the model with those parameters, on the calibration period
    and, if supplied, on a separate validation period (§9), or on new inputs such
    as a scenario (§13).
+3. **Quantify uncertainty** (optional): find every parameter set consistent
+   with the data and the typical size and persistence of the model's errors
+   (§12), and use them to give ranges, probabilities that a limit was exceeded,
+   and differences between scenarios (§13).
 
 ## 2. Input data
 
@@ -68,6 +72,10 @@ Each input file is a CSV with one row per calendar day and the columns `Date`,
   FORWARD runs (§13) may start on any day.
 - Dates must be real (Gregorian) dates, unless you declare `calendar: "noleap"`
   (365-day years) or `"360_day"` (twelve 30-day months) for climate-model output.
+- **Implausible values are reported**, not changed: a warning lists `T_air`
+  outside −60 to 60 °C and `T_water` outside −2 to 50 °C. Such values usually
+  mean a missing-value code other than blank or `-999` (for example `-99`), which
+  would otherwise be used as a real temperature.
 
 ## 3. The warm-up year
 
@@ -172,9 +180,11 @@ a segment, §10).
 directly. With `"Nw"` (N weeks) the record is cut into consecutive blocks of N×7
 days starting on the first day; with `"1m"` into calendar months. A block is used
 only if the fraction of its days with a scored observation is at least `prc`
-(default 1.0, i.e. every day). The block's observed value is the mean of those
-observations, and the simulated value is the mean of the simulation **on the same
-days**.
+(above 0 and at most 1; default 1.0, i.e. every day). As in the Fortran, a last,
+incomplete month counts only its days in the record, while a last, incomplete
+block of weeks is compared with the full N×7 days. The block's observed value is
+the mean of those observations, and the simulated value is the mean of the
+simulation **on the same days**.
 
 **Objective function** (`objective_function`), computed over the n scored values:
 
@@ -266,7 +276,8 @@ LATHYP:
 3. For each fold: its water-temperature observations are hidden; `Qmedia`
    (unless set with `Qmedia:`) and, in gap-tolerant mode, the day-of-year
    climatology are recomputed without the fold; the model is calibrated on the rest; the full record is simulated; and
-   NSE, KGE and RMSE are computed on the hidden days only (daily values).
+   NSE, KGE and RMSE are computed on the hidden days only (daily values; in
+   gap-tolerant mode not on the unscored start of a segment, §10).
    In gap-tolerant mode the fold's air temperature and discharge are also hidden
    during calibration, so the fold becomes a gap.
 4. `cv_results.csv` lists each fold's scores and parameters, plus the mean and
@@ -315,7 +326,10 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    understates parameter uncertainty, and makes intervals for multi-day
    quantities far too narrow, which is why `ar1` is the default. (With
    weekly or monthly scoring there are no consecutive days, so `ar1` behaves like
-   `iid`.)
+   `iid`.) Both are the exact normal (Gaussian) likelihood with the error size
+   replaced by its best estimate. This gives the same result as treating the
+   error size as unknown with the standard non-informative prior (∝ 1/σ) and
+   averaging over it.
 3. **Sampling.** `mcmc_walkers` (default 32) chains ("walkers") are started
    close to the DE optimum (spread 0.1% of each parameter's bound range,
    reflected back inside the bounds) and advanced together by `emcee`'s
@@ -323,11 +337,13 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    proposal moves a walker along the difference between two others, which suits
    the strongly correlated parameters of air2stream.
 4. **Run length and convergence.** The sampler runs in blocks of 1,000 steps
-   (at least 2,000) and stops when the chain is at least 50 times its longest
-   autocorrelation time and split-R̂ is below 1.01 for every parameter, or when
-   `mcmc_steps` (default 20,000) is reached. The first max(30% of steps, 5× the
-   autocorrelation time) steps are discarded as burn-in (or `burnin_fraction`),
-   and every (autocorrelation time / 2)-th step of the rest is kept. If the
+   (at least 2,000). The first max(30% of steps, 5× the longest autocorrelation
+   time) steps are discarded as burn-in (or `burnin_fraction` of them). It
+   stops when the number of steps is at least 50 times the longest
+   autocorrelation time (estimated after burn-in) and split-R̂ is below 1.01 for
+   every parameter, or when `mcmc_steps` (default 20,000) is reached. After
+   burn-in, every k-th step is kept, with k half the shortest autocorrelation
+   time. If the
    chain has not converged, the run stops with an error and writes its
    diagnostics (`strict_convergence: true`, the default); with `false` it
    continues and every output is marked as not converged.
@@ -338,7 +354,9 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    deviation and ρ (`ar1`). The `prediction_interval` (default 90%) is the band
    between the matching lower and upper percentiles of these simulations on each
    day. The program then reports the **coverage**: the share of observed days
-   inside the band (it should be close to the nominal percentage).
+   inside the band (it should be close to the nominal percentage). This band and
+   its coverage are for the calibration period; for any other period, including
+   validation, use a FORWARD run from the chain (§13).
 6. Any drawn parameter set whose simulation diverges (§15) is excluded and
    reported; if more than `max_divergent_fraction` (default 10%) diverge, the run
    stops.
@@ -371,6 +389,9 @@ against 0.79 °C). The `iid` chain is centred on the DE best fit.
 (σ, ρ, diagnostics, coverage, excluded draws), `MCMC_envelopes_*.csv`, and the
 parameter summary `parameter_significance_*.csv` (posterior mean, standard
 deviation, 95% credible interval, and whether that interval excludes zero).
+Excluding zero only means something for parameters where zero means "no
+effect" (`a2`, `a4`, `a5`, `a6`, `a8`). It says nothing about `a1`, `a3` or the
+seasonal timing `a7`.
 
 ## 13. Forward runs and scenario comparisons
 
@@ -389,9 +410,30 @@ sets are drawn, each is run, and error is added with standard deviation σ =
 `forward_options.residual_sigma`, or else the calibration's daily residual
 standard deviation stored in the chain's `_meta.json`. For `ar1`, ρ is taken from
 `ar1_rho`, else from the chain's `_meta.json`, else from this run's own residuals.
-The interval therefore never depends on the observations it is checked against.
-Coverage is reported if observations exist. The noise model, σ and ρ used are
+With the `_meta.json` that DE-MCMC writes next to the chain, the interval
+therefore does not depend on the observations it is checked against. Coverage
+is reported if observations exist. The noise model, σ and ρ used are
 recorded in the run's `Forward_Prediction_Ensemble_*_meta.json`.
+
+**Probability that a limit was exceeded.** With `save_ensemble: true` every
+simulated series is kept (`.npz`): one per parameter draw, each with its own
+error series. A probability is computed in three steps:
+
+1. In each series, compute the quantity the limit is defined on, for example
+   the highest 7-day moving mean in the year. In `pyair2stream.scenario`,
+   `aggregate` gives means (or sums, maxima) over consecutive fixed periods and
+   `exceedance` counts days above a threshold, optionally only in runs of at
+   least k consecutive days (days not simulated count as not above); moving
+   means are computed with pandas `rolling` (example 03).
+2. The probability of exceedance is the share of series in which that quantity
+   exceeds the limit.
+3. A range for the quantity (for example 90%) is given by the matching
+   percentiles across the series.
+
+Never compute such a quantity from the daily band: the upper edge of the daily
+band is not the upper edge of a weekly mean or a yearly peak. The probability
+is only as good as the model and its error model: check the coverage on
+validation years first (§16; example 03).
 
 **Comparing two scenarios** (for example observed versus naturalised flow): run
 FORWARD once per scenario from the same chain with `save_ensemble: true`, and
@@ -423,7 +465,8 @@ change one-sided.
 | Check | When | Effect |
 |---|---|---|
 | Missing dates, incomplete `T_air`/`Discharge`, non-positive discharge, short record | loading data | error |
-| Invalid version, run mode, integrator, objective, time resolution, bounds | loading config | error |
+| `T_air` or `T_water` outside a plausible range (§2) | loading data | warning |
+| Invalid version, run mode, integrator, objective, time resolution, `prc`, bounds | loading config | error |
 | Stability of the chosen integrator (B vs. limit, §6) | before each user-facing simulation | warning; error if >10% of days exceed it |
 | Simulated temperature not finite or above `max_plausible_twat` (60 °C) | after each user-facing simulation | error |
 | Recomputed objective matches the calibration result | after calibration | error |
@@ -436,15 +479,20 @@ change one-sided.
 - **Daily means only.** Inputs and outputs are daily means. The model cannot
   predict daily maxima, minima or sub-daily peaks; a criterion defined on those
   needs a separate, justified relationship.
-- **Fitted, site-specific model.** Parameters describe one site and period.
-  Predictions for conditions outside the calibration range (air temperature,
-  discharge) are extrapolations; check the θ-range warning.
+- **Fitted, site-specific model.** Parameters describe one site and period, and
+  assume the river behaves the same way in the period predicted (no new dam,
+  effluent, abstraction pattern or loss of shading in between). Predictions for
+  conditions outside the calibration range (air temperature, discharge) are
+  extrapolations; check the θ-range warning.
 - **Different parameter sets can fit equally well** (equifinality), especially
   for versions 7 and 8. Inspect the dotty plots; a parameter at a bound suggests
   the bounds are too narrow. Prefer the simplest version that validates well.
 - **Prediction intervals rest on assumptions**: normally distributed errors of
   constant size, independent or AR(1). Check the residual plots (histogram,
   Q-Q, autocorrelation) and the reported coverage, ideally on validation data.
+  Errors are often larger in some seasons than others, so also check coverage
+  in the season a limit applies to (on the Swiss rivers, summer coverage of 90%
+  intervals was 84–97%, validation V5).
 - **Converged sampling.** MCMC results are only valid once converged; by
   default the run stops otherwise (§12).
 - **Multi-day quantities** (7-day means, runs of days above a limit) need
@@ -452,6 +500,9 @@ change one-sided.
   then their intervals were somewhat narrow on real rivers (§12).
 - **Intervals for new years are slightly optimistic**: σ is estimated on the
   calibration years, and errors are usually somewhat larger in other years.
+- **Scenario differences** assume the model's error on a given day would be the
+  same under both scenarios, so their band shows parameter uncertainty only
+  (§13).
 - **Metric caveats.** KGE's ratio of means is unstable when mean water
   temperature is near 0 °C. AIC/BIC assume independent errors and favour more
   complex versions when errors are autocorrelated. Gap-tolerant scores are not
@@ -482,19 +533,23 @@ These are deliberate; each is covered by tests.
 - **Default integrator is `CRN`** (the choice suggested in the Fortran's example input);
   RK4/RK2/EUL are unchanged and match the Fortran exactly.
 - **Default optimiser is DE + L-BFGS-B**; PSO and LATHYP are kept.
-- **PSO**: the best-so-far starts at −10³⁰ rather than 0 and ignores failed (NaN)
-  evaluations, and the early-stop test uses a tolerance of 1e-4 (the Fortran's
-  test can never be met, so it always runs to the end).
+- **PSO**: the first global best is the best initial particle (the Fortran
+  looks it up in a score array that is still all zero, so it always takes the
+  first particle); failed (NaN) evaluations are ignored; and the early-stop
+  test uses a tolerance of 1e-4 (the Fortran's test can never be met, so it
+  always runs to the end).
 - **`Qmedia`** also excludes discharge ≤ 0, and is fixed at the calibration value
   for validation and FORWARD runs instead of being recomputed.
 - **Seasonal phase** is computed from each row's real date (equivalent for
   records starting on 1 January); FORWARD runs may start on any date, with the
   warm-up year taking the phase of the rows it copies.
-- **Checks added**: missing values, non-positive discharge, unused parameters,
-  integrator stability and divergence (§15); the Fortran would run on silently.
+- **Checks added**: missing values, implausible values, non-positive discharge,
+  unused parameters, integrator stability and divergence (§15); the Fortran
+  would run on silently.
 - **Time resolution**: an out-of-range index in the Fortran's weekly aggregation
   of the last, partial block is avoided; monthly aggregation accepts only `1m`
-  (the Fortran ignores the number of months).
+  (the Fortran ignores the number of months); a week or month without
+  observations is never scored (with `prc` 0 the Fortran divides by zero).
 - **`0_*.csv`** records every evaluated parameter set (the Fortran's
   `mineff_index` filter is not applied).
 - **Added features** not in the Fortran: gap-tolerant mode, cross-validation,

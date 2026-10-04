@@ -13,10 +13,11 @@ reproducible regardless of what happens on the upstream `main` branch.
 The upstream source targets Intel Fortran on Windows in a few places
 (`ifport`/`makedirqq`, and `form='binary'`, both Intel-specific extensions
 gfortran does not implement). Rather than silently maintaining a modified
-fork, we keep the upstream source untouched in the submodule and apply a
-small, auditable patch (fortran/patches/gfortran-portability.patch) at build
-time. See fortran/patches/NOTICE.md for exactly what the patch changes and
-why, and for licensing attribution (upstream is CC BY-SA 3.0).
+fork, we keep the upstream source untouched in the submodule and, at build
+time, apply a few search-and-replace edits to a scratch copy (the
+`replacements` table in `_build_fortran_binary`). See fortran/patches/NOTICE.md
+for exactly what they change and why, and for licensing attribution (upstream
+is CC BY-SA 3.0).
 """
 
 import subprocess
@@ -32,7 +33,6 @@ from datetime import timedelta
 # directory, so tests work regardless of where pytest is invoked from.
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _UPSTREAM_SRC = os.path.join(_REPO_ROOT, "fortran", "upstream", "src")
-_PATCH_FILE = os.path.join(_REPO_ROOT, "fortran", "patches", "gfortran-portability.patch")
 
 _SOURCE_FILES = [
     "AIR2STREAM_MODULES.f90",

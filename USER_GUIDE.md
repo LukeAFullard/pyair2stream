@@ -120,7 +120,9 @@ One CSV per period (calibration, and optionally validation) with these columns:
 Rules the program enforces:
 
 - **One row for every calendar day.** Show a missing value as an empty cell or
-  `-999` in an existing row; never skip the date.
+  `-999` in an existing row; never skip the date. Other codes (such as `-99` or
+  `9999`) are read as real values: the program warns if a temperature looks
+  implausible, but convert such codes to empty cells first.
 - **`T_air` and `Discharge` must have no gaps** unless you use
   [gap-tolerant mode](#10-gap-tolerant-mode).
 - **Discharge must be above zero** for versions 4, 7 and 8 ([§9.2](#92-zero-or-negative-discharge)).
@@ -145,7 +147,10 @@ phase.
 **Checking and preparing data:**
 `pyair2stream.analyze_timeseries(df)` reports missing data and usable segments
 before you calibrate, and `pyair2stream.merge_timeseries(...)` builds a daily
-file (daily means of all readings on each day) from separate raw files.
+file (daily means of all readings on each day) from separate raw files. It
+averages whatever readings a day has, however few, and drops rows whose date it
+cannot read: check that each day has enough readings spread over the whole day
+(a day with only daytime readings gives too high a daily mean).
 
 ## 6. Configuration reference
 
@@ -170,7 +175,7 @@ Qmedia: null                # mean discharge used to scale flow; required for FO
 run_mode: "DE"              # DE, PSO, LATHYP, DE-MCMC or FORWARD (below)
 objective_function: "NSE"   # NSE, KGE or RMS (docs/METHODS.md §7)
 time_resolution: "1d"       # "1d" daily, "Nw" N-week means (e.g. "2w"), "1m" monthly means
-prc: 1.0                    # weekly/monthly: minimum fraction of days with an observation
+prc: 1.0                    # weekly/monthly: minimum fraction of days with an observation (above 0, at most 1)
 random_seed: null           # set an integer to make results exactly repeatable
 
 parameter_bounds:           # required for calibration: 8 values each, for a1..a8
@@ -333,6 +338,8 @@ scores.
 | `Non-positive discharge (Q <= 0)` | See [§9.2](#92-zero-or-negative-discharge). |
 | `FORWARD mode requires an explicit Qmedia` | Set `Qmedia:` or `paths.calibration_metadata` ([§6](#qmedia-keep-it-fixed-when-discharge-changes)). |
 | `n_dat is 0 after aggregation` | No usable `T_water` values: check the column, or lower `prc`. |
+| `prc must be a fraction above 0 and at most 1` | Set `prc` to e.g. `0.6` (60% of days in each week or month). |
+| `Warning: ... value(s) of T_air` (or `T_water`) `... are outside` | Usually a missing-value code other than `-999`: replace it with an empty cell. Otherwise check the units (°C). |
 | `No valid segments found` | Gap-tolerant: no gap-free stretch is at least `min_segment_days` long. |
 | `Qmedia is zero or negative` | Gap-tolerant: too little valid discharge; set `Qmedia:`. |
 | `NumericalDivergenceError` / `exceed the ... stability limit` | Use `CRN` or `EXP` ([§9.1](#91-numerical-stability-and-the-choice-of-integrator)). |
@@ -366,15 +373,12 @@ inaccurate with a one-day step (by up to about 1 °C for `EUL` on the Mentue,
 one is selected. Calibrating with `EXP` instead of `CRN` changed predictions by
 less than 0.03 °C on the Swiss rivers.
 
-Parameters belong to the scheme they were calibrated with. The published Swiss
-parameters (calibrated with Crank–Nicolson) are unstable with `RK4` in 8 of 15
-cases and give different errors in the rest
-([validation V2](validation/REPORT.md#v2), part E). Run parameters taken from a
-paper with the scheme the paper used.
-
 Parameters belong to the integrator they were calibrated with: run them with the
-same one. A `FORWARD` run given `paths.calibration_metadata` refuses a
-different integrator or model version.
+same one. The published Swiss parameters (calibrated with Crank–Nicolson) are
+unstable with `RK4` in 8 of 15 cases and give different errors in the rest
+([validation V2](validation/REPORT.md#v2), part E), so run parameters taken from
+a paper with the scheme the paper used. A `FORWARD` run given
+`paths.calibration_metadata` refuses a different integrator or model version.
 
 ### 9.2 Zero or negative discharge
 
@@ -443,8 +447,8 @@ Check before using the results (example [02](examples/02_uncertainty/README.md)
 walks through this):
 
 - **Convergence.** The sampler runs in blocks of 1,000 steps until its results
-  are stable: the chain is at least 50 times its autocorrelation time and
-  split-R̂ is below 1.01. It then prints `MCMC converged after ... steps`. If
+  are stable: it has run for at least 50 times its longest autocorrelation time
+  and split-R̂ is below 1.01. It then prints `MCMC converged after ... steps`. If
   that has not happened by `mcmc_steps`, the run stops with an error and no
   interval is produced. This usually means the data cannot pin down all the
   parameters: try a simpler model version. With `strict_convergence: false` it
@@ -603,7 +607,8 @@ decision, check:
 3. **Residuals**: no strong pattern over time or with temperature
    (`residual_diagnostics_*.png`).
 4. **Uncertainty**: if you report a band, the reported coverage is close to the
-   nominal level, ideally on validation data. Bands for new years are usually
+   nominal level, ideally on validation data and in the season your limit
+   applies to (errors can be larger in some seasons). Bands for new years are usually
    slightly narrow (85–89% for 90% bands on the Swiss rivers,
    [validation V5](validation/REPORT.md#v5)). For 7-day means, runs of days or
    other multi-day quantities, keep `noise_model: "ar1"` (the default) and compute them from

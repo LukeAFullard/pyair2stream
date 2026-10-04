@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.1] - 2026-10-04
+
+### Fixed
+- Weekly or monthly scoring (`time_resolution` `Nw` or `1m`) with `prc: 0` stopped
+  with `ZeroDivisionError` when a week or month had no observation. `prc` must
+  now be above 0 and at most 1, and a block without observations is never scored.
+- Gap-tolerant cross-validation scored the first `warmup_drop_days` of a segment
+  that starts inside a held-out year (after a real gap in the forcing), which
+  calibration and validation do not score. These days are now excluded, and
+  `n_obs_held_out` counts the days actually scored. Runs without gaps are
+  unchanged.
+
+### Added
+- A warning when `T_air` is outside −60 to 60 °C or `T_water` outside −2 to
+  50 °C, which usually means a missing-value code other than `-999` (such as
+  `-99` or `-9999`) or a unit error. The values are still used as given.
+- A clearer message when a gap-tolerant run's file has no water temperatures.
+
 ## [0.4.0] - 2026-09-25
 
 A correctness review found several defects that gave wrong results **without

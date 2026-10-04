@@ -85,6 +85,24 @@ Everything not set uses a sensible default (for example the stable `CRN`
 integrator and the NSE objective). The [User Guide](USER_GUIDE.md#6-configuration-reference)
 lists every option.
 
+## Did a site meet a temperature limit?
+
+The usual route, each step a worked example:
+
+1. **Check the model fits your river**: calibrate on years with measured water
+   temperature and check it predicts other years well ([example 01](examples/01_quickstart/README.md)).
+2. **Measure its uncertainty** with `run_mode: "DE-MCMC"`, and check that its
+   ranges hold on years it was not calibrated on ([example 02](examples/02_uncertainty/README.md)).
+3. **Simulate the period in question** 1,000 times with `FORWARD` and
+   `save_ensemble: true`. Work out the quantity your limit is defined on (for
+   example the highest 7-day mean) in each simulation; the share above the limit
+   is the probability that it was exceeded ([example 03](examples/03_compliance/README.md)).
+4. **Report a probability with its range**, not a yes or no, together with the
+   checks in [User Guide §14](USER_GUIDE.md#14-checklist-for-results-that-support-a-decision).
+
+The model gives daily **means**: a limit on daily maxima needs a separate,
+justified step.
+
 ## Input data
 
 | Column | Required | Notes |

@@ -236,3 +236,25 @@ class TestCliAndIoCorrectness(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_implausible_input_values_are_reported(tmp_path, capsys):
+    """A missing-value code other than -999 (here -99 and 9999) is not recognised as
+    missing; it must at least be reported rather than modelled silently."""
+    import yaml
+    from pyair2stream.io import read_calibration, read_Tseries
+    dates = pd.date_range("2001-01-01", periods=400, freq="D")
+    df = pd.DataFrame({"Date": dates, "T_air": 10.0, "T_water": 8.0})
+    df.loc[40, "T_air"] = -99.0
+    df.loc[50, "T_water"] = 9999.0
+    df.loc[60, "T_water"] = -999.0           # the recognised code: missing, no warning
+    df.to_csv(tmp_path / "in.csv", index=False)
+    with open(tmp_path / "c.yaml", "w") as f:
+        yaml.safe_dump({"version": 3, "paths": {"input_data": str(tmp_path / "in.csv"),
+                        "output_dir": str(tmp_path / "out")}}, f)
+    data = read_calibration(str(tmp_path / "c.yaml"))
+    read_Tseries(data, "c")
+    out = capsys.readouterr().out
+    assert "1 value(s) of T_air" in out and "-99 on 2001-02-10" in out
+    assert "1 value(s) of T_water" in out and "9999 on 2001-02-20" in out
+    assert data.Twat_obs[365 + 60] == -999.0
