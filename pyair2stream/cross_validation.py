@@ -374,8 +374,13 @@ def run_leave_one_year_out_cv(
 
                 call_model(data)
 
+                # Score the held-out days the calibration would score: in
+                # gap-tolerant mode not the unscored start of a segment (§10),
+                # which begins from an approximate temperature.
+                scored = data.eval_mask[idx] if data.eval_mask is not None else True
+                obs_scored = np.where(scored, orig_twat, MISSING_DATA_SENTINEL)
                 sim = data.Twat_mod
-                nse, kge, rmse = _compute_fold_metrics(orig_twat, sim[idx], MISSING_DATA_SENTINEL)
+                nse, kge, rmse = _compute_fold_metrics(obs_scored, sim[idx], MISSING_DATA_SENTINEL)
 
                 start_date = pd.Timestamp(*data.date[idx[0]])
                 end_date = pd.Timestamp(*data.date[idx[-1]])
@@ -385,12 +390,12 @@ def run_leave_one_year_out_cv(
                     label=label,
                     held_out_start=start_date,
                     held_out_end=end_date,
-                    n_obs_held_out=int(np.sum(orig_twat != MISSING_DATA_SENTINEL)),
+                    n_obs_held_out=int(np.sum(obs_scored != MISSING_DATA_SENTINEL)),
                     par_best=data.par_best.copy(),
                     nse=nse,
                     kge=kge,
                     rmse=rmse,
-                    obs_held_out=orig_twat.copy(),
+                    obs_held_out=obs_scored,
                     sim_held_out=sim[idx].copy(),
                 ))
             finally:

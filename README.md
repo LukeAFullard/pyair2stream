@@ -85,6 +85,24 @@ Everything not set uses a sensible default (for example the stable `CRN`
 integrator and the NSE objective). The [User Guide](USER_GUIDE.md#6-configuration-reference)
 lists every option.
 
+## Did a site meet a temperature limit?
+
+The usual route, each step a worked example:
+
+1. **Check the model fits your river**: calibrate on years with measured water
+   temperature and check it predicts other years well ([example 01](examples/01_quickstart/README.md)).
+2. **Measure its uncertainty** with `run_mode: "DE-MCMC"`, and check that its
+   ranges hold on years it was not calibrated on ([example 02](examples/02_uncertainty/README.md)).
+3. **Simulate the period in question** 1,000 times with `FORWARD` and
+   `save_ensemble: true`. Work out the quantity your limit is defined on (for
+   example the highest 7-day mean) in each simulation; the share above the limit
+   is the probability that it was exceeded ([example 03](examples/03_compliance/README.md)).
+4. **Report a probability with its range**, not a yes or no, together with the
+   checks in [User Guide §14](USER_GUIDE.md#14-checklist-for-results-that-support-a-decision).
+
+The model gives daily **means**: a limit on daily maxima needs a separate,
+justified step.
+
 ## Input data
 
 | Column | Required | Notes |
@@ -166,11 +184,20 @@ The [validation suite](validation/README.md) checks this, and its results are in
   calibration predicts other years to within 0.04 °C of the truth (0.06 °C
   with typical gaps in the data).
 - **Honest intervals, with known limits.** On such data, 90% prediction
-  intervals contain 89–90% of new observations. On the real rivers they contain
-  85–89% of daily values in years not used for calibration, so they are slightly
-  optimistic (one case falls just below the report's 85% threshold, so that
-  check is marked as failed). For multi-day quantities such as 7-day means, use
-  `noise_model: "ar1"` (the default); `"iid"` makes those intervals far too narrow.
+  intervals contain 89–90% of new observations, and 90% parameter intervals
+  contain the true values 91–97% of the time. On the real rivers, prediction
+  intervals contain 84.5–89% of daily values in years not used for calibration,
+  so they are slightly optimistic. One case, the Rhône with version 5, falls
+  just below the report's 85% threshold, so that check is marked as failed. For
+  multi-day quantities such as 7-day means, use `noise_model: "ar1"` (the
+  default); `"iid"` makes those intervals far too narrow.
+- **The published parameters and the intervals.** The published parameters lie
+  inside pyair2stream's 90% parameter intervals for versions 3–5 on all three
+  rivers, for version 7 on the Rhône and for every version on the Dischmabach.
+  For versions 7 and 8 on the Mentue and version 8 on the Rhône several lie
+  outside. These are the cases above where recalibration finds a slightly
+  better fit with different parameters: many combinations fit almost equally
+  well, and the published set is one of them.
 - **Scenario tools give exact answers** where the answer is known.
 
 To run the tests and the validation suite (needs `gfortran`):
@@ -179,7 +206,7 @@ To run the tests and the validation suite (needs `gfortran`):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # or without --quick: the full suite, about 50 minutes
+python validation/run_all.py --quick     # or without --quick: the full suite, about an hour
 ```
 
 ## Examples

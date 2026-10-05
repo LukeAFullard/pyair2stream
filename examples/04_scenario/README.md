@@ -55,18 +55,18 @@ diff = scenario.paired_difference_from_files(
 
 | | Median | 90% range |
 |---|---|---|
-| Average summer (Jun–Aug) change | +0.03 °C | +0.02 to +0.05 °C |
-| Average winter (Dec–Feb) change | −0.07 °C | −0.09 to −0.05 °C |
-| Largest warming on a single day | +0.36 °C | +0.34 to +0.38 °C |
-| Extra days per year above 18 °C | 0.7 | 0.0 to 1.7 |
-| *Summer change if the runs were not paired* | *+0.03 °C* | *−0.21 to +0.26 °C* |
+| Average summer (Jun–Aug) change | +0.05 °C | +0.03 to +0.07 °C |
+| Average winter (Dec–Feb) change | −0.07 °C | −0.10 to −0.04 °C |
+| Largest warming on a single day | +0.31 °C | +0.27 to +0.35 °C |
+| Extra days per year above 18 °C | 1.0 | 0.0 to 2.0 |
+| *Summer change if the runs were not paired* | *+0.05 °C* | *−0.19 to +0.28 °C* |
 
 ![Daily effect of the abstraction and the summer average](figures/abstraction_effect.png)
 
 **Reading it.** According to the calibrated model, this abstraction changes the
 Mentue's temperature only slightly on average. Summers are marginally warmer and
 winters marginally colder: with less water, the river follows the air more
-closely. On individual low-flow days the warming reaches about 0.4 °C. Without
+closely. On individual low-flow days the warming reaches about 0.3 °C. Without
 pairing (last row, grey in the figure), the same simulations cannot even tell
 whether the river gets warmer or colder.
 

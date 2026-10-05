@@ -16,8 +16,8 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from common import (AUTHORS_BOUNDS, DE_SETTINGS, REPO, WORK, Result, Timer, load, mean_discharge, quiet,
-                    river_csv)
+from common import (AUTHORS_BOUNDS, DE_SETTINGS, REPO, WORK, Result, Section, Timer, load, mean_discharge, quiet,
+                    river_csv, plot_style, save_figure, BLUE, ORANGE, INK2)
 
 TOL_EXACT = 1e-6       # °C, identical results
 TOL_EFFECT = 1e-4      # °C, paired difference against the exact effect
@@ -96,7 +96,7 @@ def _part_b():
     warm = pd.read_csv(val)
     warm_csv = os.path.join(WORK, "v8b_plus1.csv")
     warm.assign(T_air=warm.T_air + 1.0).to_csv(warm_csv, index=False)
-    rows, ensembles = [], {}
+    rows, ensembles, pairs = [], {}, {}
     for noise in ("iid", "ar1"):
         base = _forward(val, data.par_best, q, chain, f"v8b_base_{noise}", noise)
         meta = base.replace(".npz", "_meta.json")
@@ -110,7 +110,8 @@ def _part_b():
                          f"{np.percentile(effect, 5):.3f}-{np.percentile(effect, 95):.3f}",
                      "max |paired difference - a2/a3| (°C)": float(np.nanmax(np.abs(diff - effect)))})
         ensembles[noise] = base
-    return pd.DataFrame(rows), ensembles
+        pairs[noise] = (effect.ravel(), np.nanmean(diff, axis=1), np.nanmax(np.abs(diff - effect), axis=1))
+    return pd.DataFrame(rows), ensembles, pairs
 
 
 def _part_c(ensemble_path):
@@ -160,7 +161,7 @@ def run(ctx) -> Result:
                   f"for both noise models (the residual noise cancels). (C) No disagreements.")
     with Timer() as t:
         a = _part_a()
-        b, ensembles = _part_b()
+        b, ensembles, pairs = _part_b()
         c = _part_c(ensembles["ar1"])
     ok_a = bool((a.iloc[:, -1] <= TOL_EXACT).all())
     ok_b = bool((b.iloc[:, -1] <= TOL_EFFECT).all())
@@ -177,7 +178,45 @@ def run(ctx) -> Result:
     for df in (a, b):
         col = df.columns[-1]
         df[col] = df[col].map(lambda x: f"{x:.1e}")
-    res.tables += [("A. Command-line workflow: FORWARD vs calibration output", a),
-                   ("B. Paired +1 °C air-temperature scenario vs the exact effect", b),
-                   ("C. Threshold tools vs an independent calculation", c)]
+    res.sections += [
+        Section("A. The command-line workflow reproduces the calibration",
+                "A calibration from the command line, then FORWARD runs from its calibration_metadata.json, as "
+                "USER_GUIDE §12 describes.",
+                tables=[("A. Command-line workflow: FORWARD vs calibration output", a)]),
+        Section("B. A paired scenario comparison recovers an exactly known effect",
+                "Raising air temperature by 1 °C changes version 5's water temperature by exactly a2/a3 °C on every "
+                "day. Two FORWARD runs (real and +1 °C air temperature) use the same parameter draws, and their "
+                "paired difference is compared with each draw's a2/a3.",
+                figures=[_figure(pairs)],
+                tables=[("B. Paired +1 °C air-temperature scenario vs the exact effect", b)]),
+        Section("C. The threshold tools count correctly",
+                "scenario.aggregate and scenario.exceedance against an independent calculation written with pandas.",
+                tables=[("C. Threshold tools vs an independent calculation", c)])]
     return res
+
+
+def _figure(pairs):
+    import matplotlib.pyplot as plt
+    plot_style()
+    fig, (ax, bx) = plt.subplots(1, 2, figsize=(10, 3.8), gridspec_kw={"width_ratios": [1.2, 1]},
+                                 layout="constrained")
+    lo = min(p[0].min() for p in pairs.values())
+    hi = max(p[0].max() for p in pairs.values())
+    pad = 0.05 * (hi - lo)
+    ax.plot([lo - pad, hi + pad], [lo - pad, hi + pad], color=INK2, lw=0.9, ls=(0, (4, 3)), zorder=1)
+    for (noise, (effect, mean_diff, worst)), colour, marker in zip(pairs.items(), (BLUE, ORANGE), ("o", "s")):
+        ax.scatter(effect, mean_diff, s=14, marker=marker, facecolor="none", edgecolor=colour, lw=1,
+                   label=f"noise model {noise}", zorder=3)
+    ax.set(xlabel="Exact effect of +1 °C air temperature, a2/a3 (°C)",
+           ylabel="Paired difference, mean over days (°C)", title="Each parameter draw: paired difference vs exact")
+    ax.legend(loc="upper left", fontsize=7.5)
+    for (noise, (effect, mean_diff, worst)), colour in zip(pairs.items(), (BLUE, ORANGE)):
+        bx.hist(np.log10(np.maximum(worst, 1e-17)), bins=20, color=colour, histtype="step", lw=1.6,
+                label=f"noise model {noise}")
+    bx.set(xlabel="log10 of the largest |paired difference - exact effect| over all days (°C)",
+           ylabel="Parameter draws", title="Agreement to rounding error")
+    bx.legend(loc="upper left", fontsize=7.5)
+    return (save_figure(fig, "V8_paired_difference.png"),
+            "Left: every draw's paired difference lies on the 1:1 line with its exact effect. Right: the largest "
+            "disagreement on any day is at the level of computer rounding (about 1e-14 °C); the random error added "
+            "to each draw cancels exactly.")

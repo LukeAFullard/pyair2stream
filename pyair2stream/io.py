@@ -14,7 +14,7 @@ import pandas as pd
 from typing import Tuple
 
 from .config import (
-    CommonData, DEFAULT_NOISE_MODEL, ACTIVE_PARAMS, VALID_VERSIONS, VALID_RUN_MODES, VALID_INTEGRATORS,
+    CommonData, DEFAULT_NOISE_MODEL, DEFAULT_LIKELIHOOD, VALID_LIKELIHOODS, ACTIVE_PARAMS, VALID_VERSIONS, VALID_RUN_MODES, VALID_INTEGRATORS,
     VALID_OBJECTIVES,
 )
 from .model import prepare_evaluation, check_nonpositive_discharge
@@ -23,6 +23,25 @@ from .model import prepare_evaluation, check_nonpositive_discharge
 def _check_choice(name: str, value, allowed) -> None:
     if value not in allowed:
         raise ValueError(f"Invalid {name} {value!r}. Must be one of: {', '.join(map(str, allowed))}.")
+
+
+# Daily means outside these ranges (degC) are almost certainly not real, e.g. a
+# missing-value code other than -999 (such as -99 or -9999) or a unit error.
+PLAUSIBLE_RANGES = {'T_air': (-60.0, 60.0), 'T_water': (-2.0, 50.0)}
+
+
+def _warn_implausible_values(df: pd.DataFrame, date_col: pd.Series, filename: str) -> None:
+    """Print a warning for input values outside PLAUSIBLE_RANGES. They are still used."""
+    for col, (lo, hi) in PLAUSIBLE_RANGES.items():
+        if col not in df.columns or not pd.api.types.is_numeric_dtype(df[col]):
+            continue        # non-numeric text is reported when the column is converted
+        bad = (df[col] < lo) | (df[col] > hi)
+        if bad.any():
+            first = int(np.argmax(bad.to_numpy()))
+            print(f"Warning: {int(bad.sum())} value(s) of {col} in {filename} are outside "
+                  f"{lo:g} to {hi:g} degC (first: {df[col].iloc[first]:g} on "
+                  f"{date_col.iloc[first].date()}). Check for missing-value codes other than "
+                  "-999 or a blank cell, and for unit errors; these values are used as given.")
 
 
 def _read_8_values(values, name: str) -> np.ndarray:
@@ -85,6 +104,11 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         )
     _check_choice('run_mode', data.runmode, VALID_RUN_MODES)
     data.prc = np.float64(config.get('prc', 1.0))
+    if not (0.0 < data.prc <= 1.0):
+        raise ValueError(
+            f"prc must be a fraction above 0 and at most 1 (the share of days in a week or "
+            f"month that must have an observation), got {data.prc}."
+        )
     # Top-level calibration seed: threaded through to whichever optimizer `run_optimizer` dispatches to.
     # Without it, two runs of the same config produce different `par_best` (DE's
     # own global-state RNG, PSO/LATHYP's global `np.random`) with no way to
@@ -184,6 +208,8 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
 
     if noise_model not in ["iid", "ar1"]:
         raise ValueError(f"Invalid noise_model: '{noise_model}'. Must be 'iid' or 'ar1'.")
+    likelihood = uncertainty_options.get('likelihood', DEFAULT_LIKELIHOOD)
+    _check_choice('uncertainty_options.likelihood', likelihood, VALID_LIKELIHOODS)
 
     if ar1_rho is not None:
         if not (-1.0 < float(ar1_rho) < 1.0):
@@ -227,6 +253,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
 
     data.uncertainty_options = {
         "noise_model": noise_model,
+        "likelihood": likelihood,
         "ar1_rho": ar1_rho,
         "prediction_interval": prediction_interval,
         "save_ensemble": save_ensemble,
@@ -391,7 +418,11 @@ def compute_doy_climatology(data: CommonData) -> None:
             doy_counts[doy] += 1
 
     if np.sum(doy_counts) == 0:
-        raise ValueError("Zero T_water observations found during calibration. Calibration is impossible.")
+        raise ValueError(
+            "No T_water observations in this file. Gap-tolerant mode starts each segment from "
+            "the observed water temperature, or from its day-of-year average in this file, so "
+            "it needs some observations (docs/METHODS.md §10)."
+        )
 
     for i in range(366):
         if doy_counts[i] > 0:
@@ -501,6 +532,7 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
     for col in ('T_air', 'T_water', 'Discharge'):
         if col in df.columns:
             df[col] = df[col].replace(-999.0, np.nan)
+    _warn_implausible_values(df, date_col, filename)
 
     if not data.gap_tolerant:
         if df['T_air'].isnull().any():

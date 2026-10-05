@@ -9,8 +9,9 @@ from pyair2stream.cross_validation import (
 )
 
 @pytest.fixture
-def dummy_data():
+def dummy_data(tmp_path):
     data = CommonData()
+    data.folder = str(tmp_path)  # calibration runs write their history here, not the working directory
     n_tot = 365 * 4
     data.n_tot = n_tot
     data.date = np.zeros((n_tot, 3), dtype=np.int32)
@@ -343,3 +344,43 @@ def test_summarize_adds_jackknife_rows_and_count_blocks(dummy_data):
     df = summarize(results, n_blocks=4).set_index("fold")
     assert {"jackknife_se", "jackknife_90_lower", "jackknife_90_upper"} <= set(df.index)
     assert "jackknife_se" not in summarize(results).set_index("fold").index
+
+
+def test_gap_tolerant_cv_does_not_score_the_unscored_start_of_a_segment(dummy_data):
+    """A real forcing gap inside a held-out year starts a new segment. Its first
+    warmup_drop_days begin from an approximate temperature and are not scored in
+    calibration (docs/METHODS.md §10), so cross-validation must not score them either."""
+    dummy_data.random_seed = 42
+    dummy_data.gap_tolerant = True
+    dummy_data.version = 5
+    n_tot = dummy_data.n_tot
+    dummy_data.Tair = np.sin(np.linspace(0, 4 * np.pi, n_tot)) + 10
+    dummy_data.Twat_obs = np.sin(np.linspace(0, 4 * np.pi, n_tot)) * 0.8 + 10
+    gap = np.where((dummy_data.date[:, 0] == 2012) & (dummy_data.date[:, 1] == 6)
+                   & (dummy_data.date[:, 2] <= 5))[0]          # 1-5 June 2012
+    dummy_data.Tair[gap] = -999.0
+    dummy_data.Q = np.ones(n_tot) * 10
+    dummy_data.tt = np.linspace(0, 4, n_tot)
+    dummy_data.parmin = np.zeros(8)
+    dummy_data.parmax = np.ones(8) * 10
+    dummy_data.par = np.ones(8)
+    dummy_data.par_best = np.ones(8)
+    dummy_data.flag_par = np.ones(8, dtype=bool)
+    dummy_data.Twat_mod = np.zeros(n_tot)
+    dummy_data._n_tot_raw = n_tot - 365
+    dummy_data.runmode = 'PSO'
+    dummy_data.time_res = "1d"
+    dummy_data.n_run = 2
+    dummy_data.n_particles = 2
+    dummy_data.mod_num = "CRN"
+    dummy_data.fun_obj = "NSE"
+
+    config = CVConfig(unit="year", min_train_years=1, skip_first_year=True, min_valid_obs=1)
+    results = {r.label: r for r in run_leave_one_year_out_cv(dummy_data, config, 'PSO')}
+
+    # 2012 has 366 days: 5 in the gap and the first 15 after it are not scored.
+    assert results["2012"].n_obs_held_out == 366 - 5 - dummy_data.warmup_drop_days
+    assert results["2013"].n_obs_held_out == np.sum(dummy_data.date[:, 0] == 2013)   # all scored
+    after_gap = gap[-1] + 1 - np.where(dummy_data.date[:, 0] == 2012)[0][0]
+    assert np.all(results["2012"].obs_held_out[after_gap:after_gap + 15] == -999.0)
+    assert (dummy_data.Tair[gap] == -999.0).all()       # the real gap is still there

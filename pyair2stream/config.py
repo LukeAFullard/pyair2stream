@@ -36,6 +36,13 @@ VALID_OBJECTIVES = ('NSE', 'KGE', 'RMS')
 # intervals for multi-day quantities (e.g. 7-day means) are far too narrow
 # (validation/REPORT.md, V5).
 DEFAULT_NOISE_MODEL = 'ar1'
+# How DE-MCMC scores a parameter set when the noise model is ar1 (docs/METHODS.md §12).
+# 'least_squares' (default): the least-squares (iid) likelihood with the effective number of
+# independent observations n(1 - rho)/(1 + rho), so the chain is centred on the least-squares
+# fit. 'exact': the exact AR(1) likelihood, which on real rivers can move the parameters away
+# from the best fit, towards slightly worse and cooler predictions (validation/REPORT.md, V5).
+VALID_LIKELIHOODS = ('least_squares', 'exact')
+DEFAULT_LIKELIHOOD = 'least_squares'
 
 
 @dataclass

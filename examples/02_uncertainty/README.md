@@ -26,10 +26,10 @@ After the DE calibration, the sampler runs in blocks of 1,000 steps until its
 results are stable, and reports:
 
 ```
-  5000 steps: max autocorrelation time 29.1, max split-Rhat 1.0091
+  5000 steps: max autocorrelation time 28.2, max split-Rhat 1.0089
 MCMC converged after 5000 steps (at least 50 x the autocorrelation time, split-Rhat below 1.01).
 ...
-Interval check: 90.2% of 2907 observed days lie inside the 90% prediction interval.
+Interval check: 90.4% of 2907 observed days lie inside the 90% prediction interval.
 ```
 
 **Check both lines before using the results.**
@@ -59,11 +59,11 @@ writes the interval for every day to
 measurements, it also reports how many fall inside:
 
 ```
-Interval check: 87.6% of 1095 observed days lie inside the 90% prediction interval.
+Interval check: 89.1% of 1095 observed days lie inside the 90% prediction interval.
 ```
 
-That is a little below 90%. The validation suite found the same on all three
-Swiss rivers (85–89%, [V5](../../validation/REPORT.md#v5)): the model's errors
+That is close to 90%, slightly below. The validation suite found 84.5–89% on the
+three Swiss rivers ([V5](../../validation/REPORT.md#v5)): the model's errors
 are somewhat larger in years it has not seen, so the intervals are slightly
 optimistic for new years.
 
@@ -80,24 +80,28 @@ points fall outside it.*
   (independent errors), but for anything spanning several days (7-day means,
   consecutive days above a limit) `"iid"` gives intervals that are far too
   narrow. On the Swiss rivers, 90% intervals for 7-day means contained only
-  39–62% of observed values with `"iid"`, and 76–88% with `"ar1"`
+  39–62% of observed values with `"iid"`, and 83–88% with `"ar1"`
   ([V5](../../validation/REPORT.md#v5)).
+- **`likelihood`** is left at its default, `"least_squares"`: the parameter
+  sets are judged by their least-squares fit, with the uncertainty widened
+  because daily errors are not independent. The band therefore stays centred on
+  the best fit. The alternative, `"exact"`, centred this example's band about
+  0.05 °C cooler and gave lower probabilities of exceeding a limit (example
+  03) ([V5](../../validation/REPORT.md#v5)).
 - **`random_seed`** makes the whole run repeatable.
 
 ## About the parameters
 
 `output/calibration/parameter_significance_DE-MCMC_Mentue.csv` lists each
-parameter's mean and 95% range. Two cautions for version 8, whose parameters
-trade off against each other (several combinations fit almost equally well):
+parameter's mean and 95% range. They are centred on the best fit in
+`calibration_metadata.json` (for example `a5`: 2.55 in the best fit, 2.72 ±
+0.38 in the chain). In a test with known parameters, such 90% ranges contained
+the true value at least 90% of the time ([V4](../../validation/REPORT.md#v4)).
 
-- The ranges are narrower than they should be
-  ([V4](../../validation/REPORT.md#v4)).
-- With `noise_model: "ar1"` they can be centred on a different combination from
-  the best fit in `calibration_metadata.json`, which maximises NSE and so treats
-  errors as independent. Here `a5` is 2.6 in the best fit but 4.7 ± 0.3 in the
-  chain. The predictions barely differ (validation RMSE 0.78 against 0.79 °C).
-
-Rely on the predictions, not on individual parameter values.
+Version 8's parameters trade off against each other: several combinations fit
+almost equally well, so each range is wide, and parameters move together.
+Rely on the predictions rather than on individual parameter values, and do not
+combine the ends of several ranges.
 
 ## Next
 

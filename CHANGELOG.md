@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.4.1] - 2026-10-04
+
+### Fixed
+- Weekly or monthly scoring (`time_resolution` `Nw` or `1m`) with `prc: 0` stopped
+  with `ZeroDivisionError` when a week or month had no observation. `prc` must
+  now be above 0 and at most 1, and a block without observations is never scored.
+- Gap-tolerant cross-validation scored the first `warmup_drop_days` of a segment
+  that starts inside a held-out year (after a real gap in the forcing), which
+  calibration and validation do not score. These days are now excluded, and
+  `n_obs_held_out` counts the days actually scored. Runs without gaps are
+  unchanged.
+
+### Changed
+- ⚠ **DE-MCMC now uses the least-squares likelihood by default**
+  (`uncertainty_options.likelihood: "least_squares"`), widened for the
+  autocorrelation of the errors by the effective sample size n(1 − ρ)/(1 + ρ).
+  The previous exact AR(1) likelihood is still available as `likelihood:
+  "exact"`. On real rivers the exact AR(1) likelihood moved the parameters away
+  from the best fit, so its prediction bands were centred on slightly worse
+  predictions (validation V5: band centres up to 0.11 °C from the best fit's,
+  against 0.01 °C with the new default). The new default stays on the best
+  fit, its parameter intervals contained the truth at least 90% of the time for
+  versions 5 and 8 in the known-truth test (version 8: about 75% before), and
+  its 7-day mean bands held better on real rivers (83–88% against 76–88%).
+  Prediction intervals and probabilities from DE-MCMC and FORWARD runs change;
+  rerun them.
+
+### Added
+- A warning when `T_air` is outside −60 to 60 °C or `T_water` outside −2 to
+  50 °C, which usually means a missing-value code other than `-999` (such as
+  `-99` or `-9999`) or a unit error. The values are still used as given.
+- A clearer message when a gap-tolerant run's file has no water temperatures.
+- Validation: one full report per check (`validation/reports/`), with figures;
+  V2 compares the published parameters with 90% intervals around the same
+  least-squares estimator (part F); V4 and V5 test both likelihoods.
+
 ## [0.4.0] - 2026-09-25
 
 A correctness review found several defects that gave wrong results **without

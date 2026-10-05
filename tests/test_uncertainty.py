@@ -161,3 +161,43 @@ def test_generate_ar1_noise():
     assert np.all(noise2[:10] == 0.0)
     assert np.all(noise2[21:] == 0.0)
     assert not np.all(noise2[10:21] == 0.0)
+
+
+def test_least_squares_likelihood_matches_iid_at_rho_zero_and_widens_with_rho():
+    """The least-squares likelihood with an effective sample size has its maximum at the
+    least-squares fit (it depends on the residuals only through their sum of squares), equals
+    the iid likelihood when rho = 0, and is flatter by n_eff / n = (1 - rho) / (1 + rho)."""
+    from pyair2stream.optimization import _least_squares_log_likelihood, _iid_log_likelihood
+    from pyair2stream.uncertainty import build_ar1_runs
+    rng = np.random.default_rng(0)
+    e = rng.normal(size=200)
+    runs = build_ar1_runs(np.ones(200, bool), [(0, 199)])
+    assert np.isclose(_least_squares_log_likelihood(e, 0.0, runs), _iid_log_likelihood(e, np.zeros(200)))
+    rho = 0.7
+    scale = (1 - rho) / (1 + rho)
+    d_ls = _least_squares_log_likelihood(1.1 * e, rho, runs) - _least_squares_log_likelihood(e, rho, runs)
+    d_iid = _iid_log_likelihood(1.1 * e, np.zeros(200)) - _iid_log_likelihood(e, np.zeros(200))
+    assert np.isclose(d_ls, scale * d_iid)
+    # A constant offset is penalised as in least squares (unlike the exact AR(1) likelihood).
+    from pyair2stream.optimization import _ar1_log_likelihood
+    off = e + 0.5
+    assert (_least_squares_log_likelihood(e, rho, runs) - _least_squares_log_likelihood(off, rho, runs)) > \
+        scale * 0.9 * (_iid_log_likelihood(e, np.zeros(200)) - _iid_log_likelihood(off, np.zeros(200)))
+    assert (_ar1_log_likelihood(e, rho, runs) - _ar1_log_likelihood(off, rho, runs)) < \
+        (_least_squares_log_likelihood(e, rho, runs) - _least_squares_log_likelihood(off, rho, runs))
+
+
+def test_likelihood_option_is_validated(tmp_path):
+    import yaml
+    import pytest
+    from pyair2stream.io import read_calibration
+    for value, ok in (("least_squares", True), ("exact", True), ("ar2", False)):
+        cfg = {"version": 3, "uncertainty_options": {"likelihood": value},
+               "paths": {"input_data": "x.csv", "output_dir": str(tmp_path / "out")}}
+        path = tmp_path / "c.yaml"
+        path.write_text(yaml.safe_dump(cfg))
+        if ok:
+            assert read_calibration(str(path)).uncertainty_options["likelihood"] == value
+        else:
+            with pytest.raises(ValueError, match="likelihood"):
+                read_calibration(str(path))

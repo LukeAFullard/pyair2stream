@@ -144,6 +144,33 @@ def test_trailing_partial_month_accepted_as_full_period():
     np.testing.assert_allclose(actual, np.mean(march_values), rtol=1e-12)
 
 
+@pytest.mark.parametrize('time_res', ['1w', '1m'])
+def test_block_without_observations_is_skipped_not_divided_by_zero(time_res):
+    """A week or month with no observation is skipped even when prc would let it
+    through (prc <= 0 is rejected by read_calibration; this guards direct use)."""
+    data, dates, values = _build_aggregation_data(31 + 28 + 31, time_res, prc=0.0)
+    data.Twat_obs[365 + 31:365 + 31 + 28] = -999.0     # all of February missing
+    aggregation(data)
+    scored = data.Twat_obs_agg[data.I_inf[:, 2]]
+    assert np.all(np.isfinite(scored))
+    # 1m: February is dropped. 1w: 13 weeks from 1 Jan; weeks 6-8 (days 35-55) lie
+    # wholly in February and are dropped.
+    assert data.n_dat == (3 - 1 if time_res == '1m' else 13 - 3)
+
+
+@pytest.mark.parametrize('prc', [0.0, -0.5, 1.5])
+def test_prc_outside_zero_to_one_rejected(tmp_path, prc):
+    input_csv = tmp_path / 'input.csv'
+    dates = pd.date_range('2001-01-01', periods=366, freq='D')
+    pd.DataFrame({'Date': dates, 'T_air': 15.0, 'T_water': 12.0}).to_csv(input_csv, index=False)
+    config_path = tmp_path / 'config.yaml'
+    with open(config_path, 'w') as f:
+        yaml.safe_dump({'version': 3, 'prc': prc, 'paths': {'input_data': str(input_csv),
+                        'output_dir': str(tmp_path / 'out')}}, f)
+    with pytest.raises(ValueError, match='prc'):
+        read_calibration(config_file=str(config_path))
+
+
 class TestTimeResolutionValidation:
     """8.3: `time_resolution` is validated in `read_calibration`, not deep inside `aggregation()`."""
 

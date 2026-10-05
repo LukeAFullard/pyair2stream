@@ -572,7 +572,9 @@ def aggregation(data: CommonData) -> None:
                     n_pos += 1
                     count += 1
 
-            if count >= n_days * data.prc:
+            # `count > 0` also guards prc <= 0 (rejected by read_calibration), where
+            # the Fortran would divide by zero for a block with no observations.
+            if count > 0 and count >= n_days * data.prc:
                 data.I_inf[n_inf - 1, 1] = n_pos - 2 # n_pos-1 in Fortran (which is last idx added), in Python it's n_pos-2 because we do n_pos += 1
                 data.I_inf[n_inf - 1, 2] = pos_tmp
                 data.Twat_obs_agg[pos_tmp] = tmp / count
@@ -592,7 +594,7 @@ def aggregation(data: CommonData) -> None:
         for i in range(365, data.n_tot):
             month = data.date[i, 1]
             if month != month_curr:
-                if count >= n_days * data.prc and i != 365:
+                if count > 0 and count >= n_days * data.prc and i != 365:
                     data.I_inf[n_inf - 1, 1] = n_pos - 2
                     data.I_inf[n_inf - 1, 2] = i - int(np.floor(0.5 * n_days)) - 1
                     data.Twat_obs_agg[data.I_inf[n_inf - 1, 2]] = tmp / count
@@ -615,7 +617,7 @@ def aggregation(data: CommonData) -> None:
                 count += 1
 
         # Last month
-        if count >= n_days * data.prc:
+        if count > 0 and count >= n_days * data.prc:
             data.I_inf[n_inf - 1, 1] = n_pos - 2
             data.I_inf[n_inf - 1, 2] = data.n_tot - 1 - int(np.floor(0.5 * n_days)) # using data.n_tot - 1 as the last i
             data.Twat_obs_agg[data.I_inf[n_inf - 1, 2]] = tmp / count

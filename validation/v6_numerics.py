@@ -17,8 +17,9 @@ import numpy as np
 import pandas as pd
 from numba import njit
 
-from common import (RIVERS, VERSIONS, WORK, Result, Timer, calibrate, daily, load, mean_discharge, metrics,
-                    published_params, published_rmse, river_csv, simulate)
+from common import (RIVERS, VERSIONS, WORK, Result, Section, Timer, calibrate, daily, load, mean_discharge, metrics,
+                    published_params, published_rmse, river_csv, simulate, plot_style, save_figure, reference_line,
+                    BLUE, ORANGE, AQUA, INK2, MUTED, LIGHT_GREY)
 
 INTEGRATORS = ("CRN", "EXP", "RK4", "RK2", "EUL")
 SUBSTEPS = 96                 # reference solution: 96 RK4 sub-steps per day (15 minutes)
@@ -224,14 +225,103 @@ def run(ctx) -> Result:
                      "which the published Rhône and Dischmabach parameters do (a3 > 2), and they can be "
                      "inaccurate even when stable (EUL by up to about 1 °C on the Mentue). The package prints "
                      "a notice when one of them is selected.")
+    figs = [_fig_exact(a), _fig_real(b), _fig_schemes(c)]
     for col in ("RMS difference from reference (°C)", "max |difference| (°C)"):
         b[col] = b[col].map(lambda x: "diverged" if not np.isfinite(x) else f"{x:.3f}")
     b["share of the model's error"] = b["share of the model's error"].map(
         lambda x: "" if not np.isfinite(x) else f"{x:.0%}")
     a["max |error| (°C)"] = a["max |error| (°C)"].map(lambda x: f"{x:.1e}")
-    res.tables += [("A. Error against the exact solution", a),
-                   ("B. Real forcing, published parameters: difference from the reference solution",
-                    b.drop(columns=["diverged"])),
-                   ("C. Calibrated with CRN or EXP: validation RMSE (°C)", c.round(3))]
-    res.figure_data = rows_b
+    res.sections += [
+        Section("A. Against the exact solution",
+                "With constant air temperature and discharge the equation has an exact solution, so the error of "
+                "each scheme can be measured directly.",
+                figures=[figs[0]], tables=[("A. Error against the exact solution", a)]),
+        Section("B. Real forcing: each scheme against a fine-step reference",
+                f"The same equation solved with {SUBSTEPS} small steps per day serves as the reference. The "
+                "package's response (warning or stop) is recorded for every run.",
+                figures=[figs[1]],
+                tables=[("B. Real forcing, published parameters: difference from the reference solution",
+                         b.drop(columns=["diverged"]))]),
+        Section("C. Does the choice of stable scheme change a calibrated model's predictions?",
+                "Each case is calibrated and validated twice, once with each always-stable scheme.",
+                figures=[figs[2]], tables=[("C. Calibrated with CRN or EXP: validation RMSE (°C)", c.round(3))])]
     return res
+
+
+def _fig_exact(a):
+    import matplotlib.pyplot as plt
+    plot_style()
+    fig, ax = plt.subplots(figsize=(7.5, 3.2))
+    schemes = list(dict.fromkeys(a.scheme))
+    for k, (test, colour, marker) in enumerate((("version 5", BLUE, "o"), ("version 8", ORANGE, "s"))):
+        g = a[a.test == test].set_index("scheme")
+        ax.scatter(range(len(schemes)), [g.loc[sc, "max |error| (°C)"] for sc in schemes], s=34, marker=marker,
+                   color=colour, label=test, zorder=3)
+    for tol, label, dy, va in ((TOL_ANALYTIC, f"limit for CRN, EXP, RK4, RK2 ({TOL_ANALYTIC} °C)", -3, "top"),
+                               (TOL_ANALYTIC_EUL, f"limit for EUL, a first-order scheme ({TOL_ANALYTIC_EUL} °C)", 3,
+                                "bottom")):
+        ax.axhline(tol, color=INK2, lw=0.9, ls=(0, (4, 3)), zorder=1)
+        ax.annotate(label, (0.33, tol), xycoords=("axes fraction", "data"), xytext=(0, dy),
+                    textcoords="offset points", fontsize=7.5, color=INK2, va=va)
+    ax.set_yscale("log")
+    ax.set_ylim(1e-14, 3)
+    ax.set_xticks(range(len(schemes)), [sc.replace(" (", "\n(") for sc in schemes], fontsize=7.5)
+    ax.grid(axis="x", visible=False)
+    ax.set_ylabel("Largest error against the\nexact solution (°C)")
+    ax.set_title("Every scheme solves the equation correctly")
+    ax.legend(loc="lower left", bbox_to_anchor=(0.6, 0.3), fontsize=7.5)
+    return (save_figure(fig, "V6_exact_solution.png"),
+            "Largest error of each scheme against the exact solution (log scale). All are within their limits; the "
+            "reference solver used in part B is exact to rounding.")
+
+
+def _fig_real(b):
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+    plot_style()
+    cases = list(dict.fromkeys(zip(b.river, b.version)))
+    cap = 3.0
+    fig, ax = plt.subplots(figsize=(7.5, 1.2 + 0.27 * len(cases)))
+    for i, (rv, v) in enumerate(cases):
+        y = len(cases) - 1 - i
+        for k, (sc, colour, marker) in enumerate((("CRN", BLUE, "o"), ("EXP", ORANGE, "s"), ("RK4", AQUA, "D"))):
+            row = b[(b.river == rv) & (b.version == v) & (b.scheme == sc)].iloc[0]
+            val = row["RMS difference from reference (°C)"]
+            dy = (k - 1) * 0.18
+            if not np.isfinite(val) or val > cap:
+                ax.scatter(cap, y + dy, marker="x", s=30, color=colour, zorder=3)
+            else:
+                ax.scatter(val, y + dy, marker=marker, s=26, color=colour, zorder=3)
+    ax.axvline(cap, color=LIGHT_GREY, lw=0.8)
+    ax.annotate("diverged or above 3 °C,\nstopped by the package", (cap, 1), xycoords=("data", "axes fraction"),
+                xytext=(4, -2), textcoords="offset points", fontsize=7, color=INK2, va="top")
+    ax.set_xscale("log")
+    ax.set_xlim(0.005, cap * 1.6)
+    ax.set_yticks(range(len(cases))[::-1], [f"{rv} v{v}" for rv, v in cases], fontsize=7.5)
+    ax.grid(axis="y", visible=False)
+    ax.set_xlabel("RMS difference from the fine-step reference (°C, log scale)")
+    ax.set_title("On real forcing, CRN (the default) stays within 0.1 °C of the reference")
+    ax.legend(handles=[Line2D([0], [0], marker=m, lw=0, color=c, label=n) for n, c, m in
+                       (("CRN (default)", BLUE, "o"), ("EXP", ORANGE, "s"), ("RK4", AQUA, "D"))],
+              loc="lower left", fontsize=7.5)
+    return (save_figure(fig, "V6_schemes_real.png"),
+            "Difference of each scheme from the fine-step reference on real forcing with the published parameters. "
+            "RK4 diverges where the water responds quickly; every such run was stopped (RK2 and EUL: see table).")
+
+
+def _fig_schemes(c):
+    import matplotlib.pyplot as plt
+    plot_style()
+    fig, ax = plt.subplots(figsize=(7, 1.2 + 0.3 * len(c)))
+    y = np.arange(len(c))[::-1]
+    ax.hlines(y, c["CRN"], c["EXP"], color=LIGHT_GREY, lw=2, zorder=2)
+    ax.scatter(c["CRN"], y, s=34, color=BLUE, label="calibrated and run with CRN", zorder=3)
+    ax.scatter(c["EXP"], y, s=34, marker="s", color=ORANGE, label="calibrated and run with EXP", zorder=3)
+    ax.set_yticks(y, [f"{rv} v{v}" for rv, v in zip(c.river, c.version)], fontsize=7.5)
+    ax.grid(axis="y", visible=False)
+    ax.set_xlabel("Validation RMSE (°C)")
+    ax.set_title("The two always-stable schemes give the same predictive skill")
+    ax.legend(loc="lower right", fontsize=7.5)
+    return (save_figure(fig, "V6_crn_vs_exp.png"),
+            "Validation error when the model is calibrated and run with CRN or with EXP. The difference is at most "
+            "a few hundredths of a degree: the parameters absorb the scheme's behaviour.")
