@@ -188,14 +188,14 @@ The [validation suite](validation/README.md) checks this, and its results are in
   with typical gaps in the data).
 - **Honest intervals, with known limits.** On such data, 90% prediction
   intervals contain 89–90% of new observations, and 90% parameter intervals
-  contain the true values 91–97% of the time. On the real rivers, prediction
-  intervals contain 84.5–89% of daily values in years not used for calibration,
-  so they are slightly optimistic. One case, the Rhône with version 5, falls
-  just below the report's 85% threshold, so that check is marked as failed. For
-  multi-day quantities such as 7-day means, keep `noise_model: "ar1"` and
-  `rho_timescale: "weekly"` (the defaults): `"iid"` makes those intervals far
-  too narrow and `"daily"` somewhat too narrow, because model errors also have
-  a part that lasts for weeks
+  contain the true values 91–97% of the time. On the real rivers, with the
+  default settings, prediction intervals contain 85–89.6% of daily values in
+  years not used for calibration, so they are slightly optimistic. With three
+  of the other settings tested, the Rhône with version 5 falls just below the
+  report's 85% threshold (84.5–85.0%), so that check is marked as failed. For
+  7-day means the default intervals contain 89–94% of observed values, against
+  83–88% with `rho_timescale: "daily"` and 39–62% with `noise_model: "iid"`:
+  model errors also have a part that lasts for weeks
   ([docs/METHODS.md §12](docs/METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc)).
 - **The published parameters and the intervals.** The published parameters lie
   inside pyair2stream's 90% parameter intervals for versions 3–5 on all three
@@ -210,14 +210,14 @@ The [validation suite](validation/README.md) checks this, and its results are in
   probabilities for yearly statistics (highest daily mean, highest 7-day mean,
   days above a threshold) were closer to what happened than going by how often
   the limit was exceeded in past years, but their 90% ranges contained the
-  measured value in only 67–87% of river-years, so treat them as approximate.
+  measured value in only 73–93% of river-years, so treat them as approximate.
   Version 5, which has no discharge term, did no better than past years for the
   yearly peaks: on the Rhône it could not follow the year-to-year changes.
 - **Warmer and lower-flow years.** Calibrated only on the coolest (or
   highest-flow) third of the years, the model predicted the warmest (or
   lowest-flow) third almost as well as when calibrated on the middle third (at
   most 0.07 °C worse) and better than the simple alternatives, with 90%
-  intervals containing 83–91% of the measurements. The exception is version 5
+  intervals containing 84–92% of the measurements. The exception is version 5
   on the Rhône, which does no better than the simple alternatives whichever
   years it is calibrated on. On rivers like the Rhône, use a version with
   discharge (7 or 8).

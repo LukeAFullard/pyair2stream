@@ -16,7 +16,7 @@ before its result.
 | V1 | Does it compute the same temperatures as the original Fortran program, on real, variable inputs? Does it compute the same calibration score, from the same weekly and monthly averages, also when the record has gaps? | Shows the model equations, solution schemes and scoring were translated correctly. |
 | V2 | Given the published parameters, does it reproduce the published model errors for every model version on three Swiss rivers? Does its own calibration, done the way the paper did it, fit at least as well (judged by the original program too) and find the published parameters? Do the published parameters lie inside its uncertainty intervals? | Ties the package to the peer-reviewed results of Piccolroaz et al. (2016). |
 | V3 | When data are made by the model itself from known parameters, does calibration recover them well enough to predict other years? | Only with a known truth can we tell whether calibration finds the right answer. |
-| V4 | Do the 90% uncertainty intervals contain the truth about 90% of the time, with each likelihood the package offers, and with ρ (error persistence) measured over days or over weeks? | An interval is only useful if its stated confidence is honest. |
+| V4 | Do the 90% uncertainty intervals contain the truth about 90% of the time, with each likelihood the package offers, with ρ (error persistence) measured over days or over weeks, and when calibrating on weekly means? | An interval is only useful if its stated confidence is honest. |
 | V5 | On real rivers, how well does a calibrated model predict years it has not seen, compared with simple alternatives? Do its intervals contain about 90% of real measurements, for single days and for 7-day means, and are they centred on the best fit? | Tests the whole approach on real data, not only the code. |
 | V6 | How accurate are the numerical schemes, does the package stop runs that go wrong, and does the choice of stable scheme matter? | Rules out numerical error as a source of wrong answers. |
 | V7 | Do gaps in the water or air temperature record bias the result? | Real records have gaps. |
@@ -59,7 +59,8 @@ probabilities have the coverage they state when the model is right. It also
 shows how well the model does on three real rivers, including where the
 approach falls short there: intervals for new years are slightly narrow (V5),
 ranges for yearly peaks are too narrow (V9), and a version without discharge
-does not suit a river like the Rhône (V5, V9, V10).
+does not suit a river like the Rhône (V5, V9, V10). Calibrating on weekly or
+monthly means needs bounds that keep `a2` and `a3` at least 0 (V4).
 
 It does not show that the model suits your river. Check that with your own data:
 calibrate on some years and test on others, as V5 does and as the examples show.

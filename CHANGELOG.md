@@ -28,8 +28,11 @@
   (weeks to a season); matched to consecutive days, ρ ignores the slow part, so
   bands for weekly to seasonal quantities (a 7-day mean, a yearly peak, the
   probability a limit was exceeded) were too narrow and the interval for the
-  seasonal timing parameter `a7` was 1.6 times too narrow in the known-truth
-  test. The weekly estimate is the larger of the consecutive-day ρ and the ρ
+  seasonal timing parameter `a7` was about 1.5 times too narrow in the
+  known-truth test. On the Swiss rivers, in years not used for calibration,
+  90% bands for 7-day means now held 89–94% of observed values (83–88% before),
+  and version 8's 90% ranges for yearly statistics 73–93% of river-years
+  (67–87% before). The weekly estimate is the larger of the consecutive-day ρ and the ρ
   that reproduces the correlation of 7-day mean errors one week apart. It falls
   back to the consecutive-day ρ when fewer than 20 weeks of scored errors are
   available. The reasons, in theory and in the validation, are in
@@ -72,7 +75,7 @@
   gaps in the record and for two values of `prc`.
 - Validation V9: probabilities that a yearly statistic exceeded a limit. They
   come true as often as stated on synthetic data; on the Swiss rivers version 8's
-  beat going by past years, but their 90% ranges held in only 67–87% of years,
+  beat going by past years, but their 90% ranges held in only 73–93% of years,
   and version 5's did no better than past years for the yearly peaks.
 - Validation V10: calibrating on the coolest (or highest-flow) years and
   predicting the warmest (or lowest-flow) ones cost at most 0.07 °C of RMSE;

@@ -62,7 +62,7 @@ measurements, it also reports how many fall inside:
 Interval check: 89.3% of 1095 observed days lie inside the 90% prediction interval.
 ```
 
-That is close to 90%, slightly below. The validation suite found 84.5–89% on the
+That is close to 90%, slightly below. The validation suite found 85–89.6% on the
 three Swiss rivers ([V5](../../validation/REPORT.md#v5)): the model's errors
 are somewhat larger in years it has not seen, so the intervals are slightly
 optimistic for new years.
@@ -80,7 +80,7 @@ points fall outside it.*
   (independent errors), but for anything spanning several days (7-day means,
   consecutive days above a limit) `"iid"` gives intervals that are far too
   narrow. On the Swiss rivers, 90% intervals for 7-day means contained only
-  39–62% of observed values with `"iid"`, and 83–88% with `"ar1"`
+  39–62% of observed values with `"iid"`, and 89–94% with `"ar1"`
   ([V5](../../validation/REPORT.md#v5)).
 - **`likelihood`** is left at its default, `"least_squares"`: the parameter
   sets are judged by their least-squares fit, with the uncertainty widened

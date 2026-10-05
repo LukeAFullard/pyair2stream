@@ -478,7 +478,7 @@ walks through this):
 - **`noise_model`.** Real model errors persist from day to day. For a single
   day, `"iid"` and `"ar1"` give bands of about the same width. For anything
   spanning several days they do not: on the Swiss rivers, 90% bands for 7-day
-  means contained 39–62% of observed values with `"iid"` and 83–88% with
+  means contained 39–62% of observed values with `"iid"` and 89–94% with
   `"ar1"` ([validation V5](validation/REPORT.md#v5)). Keep the default `"ar1"`.
 - **`rho_timescale`.** How the persistence of the errors (ρ) is measured. Model
   errors have a fast part, which changes from day to day, and a slow part,
@@ -489,7 +489,7 @@ walks through this):
   consecutive days, which ignores the slow part. Daily bands are about the
   same either way. Bands for weekly means, yearly peaks and probabilities that
   a limit was exceeded are wider with `"weekly"`, and held better on real
-  rivers: 90% bands for 7-day means contained 88.5–93.6% of observed values
+  rivers: 90% bands for 7-day means contained 89.1–93.6% of observed values
   with `"weekly"` against 82.7–87.8% with `"daily"` ([V5](validation/REPORT.md#v5)).
   Keep the default; use `"daily"` to reproduce results made with version 0.4.1
   or earlier. Why the weekly scale is right in theory, not only in these
@@ -575,7 +575,7 @@ Example [03](examples/03_compliance/README.md) computes the probability that a
 7-day mean limit was exceeded. Such probabilities are computed correctly (on
 synthetic data they come true as often as they say), but on real rivers the
 ranges for yearly peaks were too narrow: version 8's 90% ranges contained the
-measured value in 67–87% of years not used for calibration
+measured value in 73–93% of years not used for calibration
 ([validation V9](validation/REPORT.md#v9)). Treat them as approximate, and
 check them on your own validation years.
 
@@ -665,7 +665,7 @@ decision, check:
 4. **Uncertainty**: if you report a band, the reported coverage is close to the
    nominal level, ideally on validation data and in the season your limit
    applies to (errors can be larger in some seasons). Bands for new years are usually
-   slightly narrow (84.5–89% for 90% bands on the Swiss rivers,
+   slightly narrow (85–89.6% for 90% bands on the Swiss rivers,
    [validation V5](validation/REPORT.md#v5)). For 7-day means, runs of days or
    other multi-day quantities, keep `noise_model: "ar1"` and `rho_timescale:
    "weekly"` (the defaults) and compute them from the saved simulations (§12). Report probabilities with their ranges, not as

@@ -477,7 +477,8 @@ process has only one. The choice is which of them it should reproduce.
    parameters, the factor must be large enough for the slowest parameter.
    Validation V4 computes this formula and compares it with the measured spread
    of the estimates; they agree closely. With fast + slow errors, the daily ρ
-   made a7's interval 1.6 times too narrow, and the weekly ρ gave it the right
+   made a7's interval about 1.5 times too narrow (measured 1.54; the formula
+   predicts 1.59), and the weekly ρ gave it the right
    width. The cost is that intervals of the fast-varying parameters are wider
    than necessary, by a factor of about two to three in V4. That happens with
    either ρ: it is a property of a single effective sample size. The two errors
@@ -503,9 +504,10 @@ values at least 90% of the time for both versions (V4). The exact AR(1)
 likelihood's intervals for version 8 contained the truth only about 75% of the
 time: its parameters trade off against each other and that posterior is far from
 normal. The sampler was cross-checked against emcee's stretch move. On three real
-rivers, 90% intervals contained 84.5–89% of daily values in years not used for
-calibration, and for 7-day means 39–62% with `iid` against 83–88% with the
-default (V5). On the same rivers, the parameters published by Piccolroaz et al.
+rivers, with the default settings, 90% intervals contained 85–89.6% of daily
+values in years not used for calibration (84.5–89.6% across all settings
+tested), and for 7-day means 89–94%, against 83–88% with `rho_timescale:
+"daily"` and 39–62% with `iid` (V5). On the same rivers, the parameters published by Piccolroaz et al.
 (2016) lay inside these intervals for every converged run of versions 3–5. For
 versions 7 and 8 on the Mentue and version 8 on the Rhône several lay outside:
 there many parameter combinations fit almost equally well, and the published
@@ -571,15 +573,16 @@ validation years first (§16; example 03).
 **What the validation shows** (V9). On synthetic data, where the model and its
 error model are exactly right, the stated probabilities for yearly statistics
 (highest daily mean, highest 7-day mean, days above a threshold) came true as
-often as stated, and the 50% and 90% ranges contained the measured value 42–58%
+often as stated, and the 50% and 90% ranges contained the measured value 44–58%
 and 86–94% of the time. On the three Swiss rivers, for years not used for
 calibration, version 8's probabilities were closer to what happened than the
 share of past years in which the limit was exceeded (Brier skill score
-0.13–0.41), but its 90% ranges contained the measured value in only 67–87% of
-river-years: the model can be off by a few tenths of a degree for a whole
-summer, which the error model (day-to-day AR(1) errors of constant size) does
-not represent. Version 5 did no better than past years for the yearly peaks
-(−0.11 and −0.12): on the Rhône it predicted almost the same peak every year.
+0.08–0.42), but its 90% ranges contained the measured value in only 73–93% of
+river-years (67–87% with `rho_timescale: "daily"`): the model can be off by a
+few tenths of a degree for a whole summer, which the error model (AR(1) errors
+of constant size) represents only in part. Version 5 did no better than past
+years for the yearly peaks (−0.03 and −0.04; −0.11 and −0.12 with the daily
+ρ): on the Rhône it predicted almost the same peak every year.
 
 **Comparing two scenarios** (for example observed versus naturalised flow): run
 FORWARD once per scenario from the same chain with `save_ensemble: true`, and
@@ -645,7 +648,7 @@ change one-sided.
   versions on validation years or by cross-validation (§11).
 - **Probabilities for yearly statistics are approximate on real rivers.** Their
   computation is right (V9, synthetic data), but on the Swiss rivers version
-  8's 90% ranges for yearly peaks contained the measured value in 67–87% of
+  8's 90% ranges for yearly peaks contained the measured value in 73–93% of
   years not used for calibration (V9). Report them with that caveat.
 - **Different parameter sets can fit equally well** (equifinality), especially
   for versions 7 and 8. Inspect the dotty plots; a parameter at a bound suggests
