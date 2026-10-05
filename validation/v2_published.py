@@ -396,6 +396,26 @@ def _jackknife_interval(args):
     return "jackknife", st, v, {"intervals": iv, "folds": len(folds)}
 
 
+def _at_bound(x, j):
+    """Whether x lies on a bound of the authors' range for parameter j (index 0-7)."""
+    lo, hi = AUTHORS_BOUNDS["min"][j], AUTHORS_BOUNDS["max"][j]
+    return min(abs(x - lo), abs(x - hi)) <= 1e-3 * RANGE[j]
+
+
+def _inside(x, lo, hi, j):
+    """Whether x lies inside the interval [lo, hi] of parameter j. A value on a bound of the authors'
+    range also counts as inside when the interval reaches to within 1% of the range of that bound:
+    the range cuts the distribution off there, so a 5-95% interval stops just short of the bound
+    even when the best fit lies on it."""
+    tol = 1e-9 * RANGE[j]
+    if lo - tol <= x <= hi + tol:
+        return True
+    if _at_bound(x, j):
+        bound_lo = abs(x - AUTHORS_BOUNDS["min"][j]) <= 1e-3 * RANGE[j]
+        return (lo - x if bound_lo else x - hi) <= MATCH * RANGE[j]
+    return False
+
+
 def _part_f(ctx, de_par):
     """Intervals for every recalibrated case; returns (detail table, summary table, per-river plot data)."""
     from pyair2stream.config import ACTIVE_PARAMS
@@ -416,17 +436,20 @@ def _part_f(ctx, de_par):
         for j in ACTIVE_PARAMS[v]:
             m_lo, m_hi = mc["intervals"][j]
             j_lo, j_hi = jk["intervals"][j]
-            a, b = m_lo <= pub[j] <= m_hi, j_lo <= pub[j] <= j_hi
-            in_mc += a
-            in_jk += b
+            a = _inside(pub[j], m_lo, m_hi, j) if mc["converged"] else None
+            b = _inside(pub[j], j_lo, j_hi, j)
+            in_mc += bool(a)
+            in_jk += bool(b)
             detail.append({"river": RIVERS[st], "version": v, "parameter": f"a{j + 1}",
                            "published": f"{pub[j]:.3f}", "pyair2stream best fit": f"{best[j]:.3f}",
-                           "MCMC 90% interval": f"{m_lo:.3f} to {m_hi:.3f}", "published inside (MCMC)": a,
+                           "on a bound": "yes" if _at_bound(pub[j], j) else "",
+                           "MCMC 90% interval": f"{m_lo:.3f} to {m_hi:.3f}",
+                           "published inside (MCMC)": "not converged" if a is None else a,
                            "jackknife 90% interval": f"{j_lo:.3f} to {j_hi:.3f}", "published inside (jackknife)": b})
         n = len(ACTIVE_PARAMS[v])
         summary.append({"river": RIVERS[st], "version": v, "parameters": n,
                         "MCMC converged (steps)": f"{'yes' if mc['converged'] else 'NO'} ({mc['steps']})",
-                        "published inside MCMC interval": f"{in_mc} of {n}",
+                        "published inside MCMC interval": f"{in_mc} of {n}" if mc["converged"] else "not converged",
                         "cross-validation folds": jk["folds"],
                         "published inside jackknife interval": f"{in_jk} of {n}"})
         plot.setdefault(st, {})[v] = {"pub": pub, "best": best, "mcmc": mc["intervals"], "mcmc_ok": mc["converged"],
@@ -493,6 +516,15 @@ def _fig_valley(differ_rows):
     if not n:
         return None
     fig, axes = plt.subplots(1, n, figsize=(2.3 * n + 0.8, 3.1), sharey=True, squeeze=False)
+    # Scale the y-axis to the stretch between the two parameter sets: beyond them the
+    # RMSE can rise steeply for some cases, which would flatten every other curve.
+    span = 0.0
+    for r in rows:
+        t, cal, val = r["_valley"]
+        i0 = int(np.argmin(np.abs(t)))
+        inside = (t >= -0.05) & (t <= 1.05)
+        span = max(span, np.nanmax(np.abs(cal[inside] - cal[i0])), np.nanmax(np.abs(val[inside] - val[i0])))
+    lim = max(1.4 * span, 0.01)
     for ax, r in zip(axes[0], rows):
         t, cal, val = r["_valley"]
         i0 = int(np.argmin(np.abs(t)))
@@ -503,12 +535,14 @@ def _fig_valley(differ_rows):
         ax.axhline(0, color=AXIS, lw=0.8)
         ax.set_xticks([0, 1], ["published", "recali-\nbrated"], fontsize=7.5)
         ax.set_title(f"{r['river']} v{r['version']}", fontsize=9)
+        ax.set_ylim(-lim, lim)
     axes[0][0].set_ylabel("RMSE change from the published\nparameters (°C)")
     axes[0][0].legend(loc="lower left", fontsize=7)
     fig.suptitle("Along the line between the two parameter sets the fit barely changes", y=1.03)
     return (save_figure(fig, "V2_rmse_valley.png"),
             "RMSE along the straight line from the published parameters (left mark) to the recalibrated ones "
-            "(right mark), relative to the published parameters. The curves are almost flat: many parameter "
+            "(right mark), relative to the published parameters; the y-axis covers the stretch between the two. "
+            "The curves are almost flat: many parameter "
             "combinations fit nearly equally well (a 'flat valley'), which is why the two sets differ.")
 
 
@@ -655,7 +689,7 @@ def _fig_rk4(scores, de_rk4):
     ax.legend(handles=[Line2D([0], [0], marker="o", lw=0, color=BLUE, label="published parameters, Crank-Nicolson"),
                        Line2D([0], [0], marker="o", lw=0, color=ORANGE, label="published parameters, RK4"),
                        Line2D([0], [0], marker="D", lw=0, color=AQUA, label="recalibrated with RK4")],
-              loc="lower right", fontsize=7.5)
+              loc="upper center", bbox_to_anchor=(0.5, -0.13), ncol=3, fontsize=7.5, frameon=False)
     return (save_figure(fig, "V2_rk4.png"),
             "The published parameters reproduce the paper's errors only with Crank-Nicolson (blue). With RK4 "
             "(orange) they diverge or fit worse; RK4 needs its own calibration (aqua).")
@@ -889,13 +923,16 @@ def run(ctx) -> Result:
             "calibrated with (V6).")
     if len(f_detail):
         n = len(f_detail)
-        in_mc = int(f_detail["published inside (MCMC)"].sum())
-        in_jk = int(f_detail["published inside (jackknife)"].sum())
-        either = int((f_detail["published inside (MCMC)"] | f_detail["published inside (jackknife)"]).sum())
+        mc_ok = f_detail["published inside (MCMC)"] != "not converged"
+        mc_in = f_detail["published inside (MCMC)"].map(lambda x: x is True)
+        jk_in = f_detail["published inside (jackknife)"].astype(bool)
+        in_mc, n_mc = int(mc_in.sum()), int(mc_ok.sum())
+        in_jk = int(jk_in.sum())
+        either = int((mc_in | jk_in).sum())
         res.summary += (f" (F) The published values lie inside pyair2stream's 90% intervals for {in_jk} of {n} "
-                        f"parameter values (cross-validation jackknife) and {in_mc} of {n} (MCMC); {either} of {n} "
-                        f"lie inside at least one.")
-        outside = f_detail[~(f_detail["published inside (MCMC)"] | f_detail["published inside (jackknife)"])]
+                        f"parameter values (cross-validation jackknife) and {in_mc} of {n_mc} (MCMC, converged runs); "
+                        f"{either} of {n} lie inside at least one.")
+        outside = f_detail[~(mc_in | jk_in)]
         where = sorted({f"{r.river} version {r.version}" for r in outside.itertuples()})
         res.sections.append(Section(
             "F. Do the published values lie inside pyair2stream's uncertainty intervals?",
@@ -907,12 +944,17 @@ def run(ctx) -> Result:
             "model's daily errors are correlated from day to day (fewer independent observations than days). "
             "V4 tests both kinds of interval against a known truth. A published value outside both intervals "
             "is not where a least-squares calibration on these data lands; part C shows why that can happen "
-            "without the published parameters predicting any worse.",
+            "without the published parameters predicting any worse. Two counting rules: a published value on a "
+            "bound of the authors' parameter range (column 'on a bound') counts as inside an interval that "
+            "reaches to within 1% of the range of that bound, because the range cuts the distribution off there "
+            "and a 5-95% interval then stops just short of the bound; and an MCMC run that did not converge "
+            "gives no usable interval and is not counted (faded bar in the figure).",
             figures=[_fig_parameter_intervals(st, f_plot[st]) for st in RIVERS if st in f_plot],
             tables=[("F. Published parameters and 90% intervals: summary by river and version", f_summary),
                     ("F. Published parameters and 90% intervals, by parameter", f_detail)]))
         note = (f"Part F: the published parameters lie inside the cross-validation jackknife intervals for {in_jk} "
-                f"of {n} parameter values and inside the MCMC intervals for {in_mc} of {n}.")
+                f"of {n} parameter values and inside the MCMC intervals for {in_mc} of {n_mc} (runs that "
+                f"converged).")
         if where:
             note += (f" The values outside both are in {', '.join(where)}. These are the cases of part C where the "
                      "parameters trade off along a flat valley: the published set lies further along the valley "
