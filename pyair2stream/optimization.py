@@ -19,7 +19,7 @@ import json
 from .config import CommonData, DEFAULT_NOISE_MODEL, DEFAULT_LIKELIHOOD, DEFAULT_RHO_TIMESCALE
 from .model import (
     call_model, funcobj, aggregation, statis, warn_on_stability, check_numerical_divergence,
-    is_numerically_divergent, NumericalDivergenceError,
+    is_numerically_divergent, NumericalDivergenceError, check_daily_plausibility,
 )
 from .uncertainty import (estimate_rho, estimate_ar1_rho, generate_ar1_noise, build_ar1_runs, ar1_whitened_stats,
                           mean_error_variance_factor, scoring_block_days)
@@ -1117,6 +1117,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     data.par[:n_par] = best_params.copy()
     call_model(data)
     funcobj(data)
+    check_daily_plausibility(data)
 
     rho_timescale = uncertainty_options.get('rho_timescale', DEFAULT_RHO_TIMESCALE)
     best_rho = estimate_rho(data.Twat_mod, data.Twat_obs, eval_mask, segments, rho_timescale)

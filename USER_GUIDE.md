@@ -239,6 +239,12 @@ always records every parameter set tried.
 Parameters your version does not use are fixed at zero automatically, but you
 still give 8 bounds. The ranges above are the original authors' and are a good
 start; if a calibrated value ends up exactly on a bound, widen that bound.
+**With weekly or monthly scoring** (`time_resolution` other than `"1d"`), set
+the minimum of `a2` and `a3` to 0. Otherwise the calibration can end on
+parameters whose daily simulation zigzags between 0 °C and high values: the
+zigzag averages out in weekly or monthly means, so it scores well. In a test
+with known parameters this happened in 9 of 30 weekly-scored calibrations
+([V4](validation/REPORT.md#v4)); pyair2stream warns when it does.
 
 ### Run modes (`run_mode`)
 
@@ -348,6 +354,7 @@ scores.
 | `No valid segments found` | Gap-tolerant: no gap-free stretch is at least `min_segment_days` long. |
 | `Qmedia is zero or negative` | Gap-tolerant: too little valid discharge; set `Qmedia:`. |
 | `NumericalDivergenceError` / `exceed the ... stability limit` | Use `CRN` or `EXP` ([§9.1](#91-numerical-stability-and-the-choice-of-integrator)). |
+| `Warning: the relaxation rate B is negative` / `zigzags from one day to the next` | The calibrated parameters are physically impossible, usually after weekly or monthly scoring with bounds that allow a negative `a2` or `a3`. Set their minimum to 0 and calibrate again ([§6](#parameters-a1a8)). Do not use the results. |
 | `Efficiency mismatch in forward run` | Internal consistency check failed; please report it with your config. |
 | `mcmc_walkers ... must be at least 2x` | Increase `mcmc_walkers`. |
 | `MCMC did not converge within ... steps` | Try a simpler model version, or increase `mcmc_steps` ([§11](#11-uncertainty-de-mcmc-and-sensitivity-analysis)). |
@@ -364,7 +371,10 @@ scores.
 The model relaxes water temperature towards a balance at a rate `B` per day; for
 version 8, `B = (a3 + a8·θ) / θ^a4` with `θ = Discharge/Qmedia`. With a one-day
 step, the explicit integrators are only stable while B stays below a limit:
-`EUL` and `RK2` 2.0, `RK4` 2.785. `CRN` and `EXP` are always stable. Because B
+`EUL` and `RK2` 2.0, `RK4` 2.785. `CRN` and `EXP` are stable for any positive
+B. A negative B is physically impossible (water temperature would move away
+from the balance) and pyair2stream warns about it after a calibration or
+forward run. Because B
 depends on discharge, parameters that are stable for the calibration flows can
 be unstable for other flows. An unstable run can produce plausible-looking but
 wrong numbers without any error.

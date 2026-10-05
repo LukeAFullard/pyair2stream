@@ -46,6 +46,16 @@
   (`rho`, `rho_likelihood`) and `rho_timescale`.
 
 ### Added
+- ⚠ A warning when a simulation is physically implausible in a way its score
+  may not show: the relaxation rate B is negative on some day, or the daily
+  simulation zigzags from one day to the next (checked after calibration,
+  before DE-MCMC sampling and in FORWARD runs). Weekly or monthly means cannot
+  see a zigzag: with the authors' bounds, which allow a negative `a2` and `a3`,
+  9 of 30 weekly-scored calibrations of version 5 on synthetic data ended on
+  such a parameter set, with daily errors of about 11 °C and weekly means that
+  fit (validation V4, case J). **If you calibrated on weekly or monthly means,
+  check your parameters**, and set the minimum of `a2` and `a3` to 0
+  (docs/METHODS.md §7).
 - A warning when ρ reaches its limit of 0.99, which usually means a systematic
   error such as a seasonal bias; and a note when a FORWARD run reuses a chain
   whose ρ was estimated at another time scale than the run's `rho_timescale`

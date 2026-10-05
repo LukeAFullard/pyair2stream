@@ -63,6 +63,7 @@ def test_mcmc_autocorr_invalid_json():
              patch('pyair2stream.optimization.DE_mode'), \
              patch('pyair2stream.optimization.call_model'), \
              patch('pyair2stream.optimization.funcobj', return_value=1.0), \
+             patch('pyair2stream.optimization.check_daily_plausibility'), \
              patch('pyair2stream.uncertainty.generate_ar1_noise', return_value=np.zeros(3)):
 
             DE_MCMC_mode(data)

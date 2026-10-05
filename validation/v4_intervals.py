@@ -37,13 +37,19 @@ CASES = [
     ("H: version 5, fast + slow noise, least squares (mis-specified noise)", 5, "two-part", "ar1-ls", 30, 0),
     ("I: version 5, fast + slow noise, least squares, rho from consecutive days (mis-specified noise)", 5,
      "two-part", "ar1-ls-daily", 30, 0),
-    ("J: version 5, AR(1) noise, least squares, weekly scoring (time_resolution 1w)", 5, "ar1", "ar1-ls-1w", 30, 0),
+    ("J: version 5, AR(1) noise, least squares, weekly scoring (time_resolution 1w), authors' bounds", 5, "ar1",
+     "ar1-ls-1w", 30, 0),
+    ("K: as J, with a2 and a3 at least 0", 5, "ar1", "ar1-ls-1w-pos", 30, 0),
 ]
-# Cases on identical synthetic data: E, G, J as B; F as D; I as H.
-DATA_SEED = {"E": "B", "F": "D", "G": "B", "I": "H", "J": "B"}
+# Cases on identical synthetic data: E, G, J, K as B; F as D; I as H.
+DATA_SEED = {"E": "B", "F": "D", "G": "B", "I": "H", "J": "B", "K": "B"}
+REPORT_ONLY = ("J",)        # correctly specified but reported, not judged (see notes)
+# Weekly scoring cannot see a daily simulation that zigzags; bounds that keep a2 and a3 at least 0
+# (water warms with the air and relaxes towards equilibrium) rule such parameter sets out.
+POSITIVE_BOUNDS = {"min": [-5, 0, 0, -1, 0, 0, 0, -1], "max": AUTHORS_BOUNDS["max"]}
 PI_RANGE = (0.87, 0.93)     # accepted mean coverage of the 90% prediction interval
 PAR_MIN = 0.78              # accepted pooled coverage of the 90% parameter intervals (not clearly below 0.9)
-PAR_REQUIRED = ("A", "B", "E", "F", "G", "J")   # cases whose parameter intervals must meet PAR_MIN (see notes)
+PAR_REQUIRED = ("A", "B", "E", "F", "G", "K")   # cases whose parameter intervals must meet PAR_MIN (see notes)
 N_JACKKNIFE = 12            # replicates per version for the cross-validation parameter intervals
 JACKKNIFE_VERSIONS = (3, 4, 5, 7, 8)
 JACKKNIFE_OK = 0.80         # a version's jackknife intervals count as dependable at this coverage or more
@@ -65,22 +71,23 @@ def replicate(args):
     src_v.assign(T_water=np.round(truth_v + noise(len(truth_v), noise_kind, rng), 3)).to_csv(val_csv, index=False)
 
     out = os.path.join(folder, "out")
+    bounds = POSITIVE_BOUNDS if model_noise.endswith("-pos") else AUTHORS_BOUNDS
     cfg = {"version": version, "integrator": "CRN", "run_mode": "DE-MCMC", "objective_function": "NSE",
-           "random_seed": r + 1, "Qmedia": q_cal, "parameter_bounds": AUTHORS_BOUNDS,
+           "random_seed": r + 1, "Qmedia": q_cal, "parameter_bounds": bounds,
            "optimization": {"n_run": 300, "n_particles": 15, "mcmc_walkers": 32, "mcmc_steps": 20000},
            "uncertainty_options": {"noise_model": "iid" if model_noise == "iid" else "ar1",
                                    "likelihood": "least_squares" if model_noise.startswith("ar1-ls") else "exact"},
            "paths": {"input_data": cal_csv, "output_dir": out}}
     if model_noise.endswith("-daily"):
         cfg["uncertainty_options"]["rho_timescale"] = "daily"
-    time_res = "1w" if model_noise.endswith("-1w") else "1d"
+    time_res = "1w" if "-1w" in model_noise else "1d"
     cfg["time_resolution"] = time_res
     data = load(cfg, tag)
     try:
         with quiet():
             DE_MCMC_mode(data, seed=r + 1)
     except RuntimeError:            # not converged within the maximum
-        return {"case": label, "replicate": r, "converged": False}
+        return {"case": label, "replicate": r, "converged": False, "implausible": implausible(data)}
     meta = json.load(open(os.path.join(out, f"MCMC_chain_S_c_{time_res}_meta.json")))
     chain = pd.read_csv(os.path.join(out, f"MCMC_chain_S_c_{time_res}.csv"))
     per_param = {}
@@ -103,11 +110,22 @@ def replicate(args):
         forward_mode(fdata)
     fmeta = json.load(open(os.path.join(folder, "fwd", "Forward_Prediction_Ensemble_S_c_1d_meta.json")))
     return {"case": label, "replicate": r, "converged": True, "steps": meta["steps_run"], "rho": meta["rho"],
-            "variance factor": meta.get("likelihood_variance_factor"),
+            "variance factor": meta.get("likelihood_variance_factor"), "implausible": implausible(data),
             "calibration coverage": meta["interval_coverage"],
             "held-out coverage": fmeta["interval_coverage"],
             "parameters inside 90% interval": float(np.mean(inside)), "n parameters": len(inside),
             "per_param": per_param}
+
+
+def implausible(data):
+    """Whether pyair2stream's plausibility check (negative relaxation rate, or a daily simulation
+    that zigzags) warns about the calibration's best fit."""
+    from pyair2stream.model import call_model, check_daily_plausibility, OSCILLATION_CHANGE_CORR
+    data.par[:] = data.par_best
+    call_model(data)
+    with quiet():
+        c = check_daily_plausibility(data)
+    return bool(c["n_negative_B"] > 0 or (c["change_corr"] is not None and c["change_corr"] < OSCILLATION_CHANGE_CORR))
 
 
 def sampler_crosscheck(r):
@@ -266,14 +284,16 @@ def run(ctx) -> Result:
                f"week-to-week persistence of the errors (rho_timescale weekly); case G repeats case E with rho "
                f"from consecutive days (the 'daily' option). Cases H and I use noise made of a fast (2-day) and "
                f"a slow (3-4 week) part, as measured on the real rivers, which an AR(1) model can only "
-               f"approximate: H with the weekly default, I with the daily option, on the same data. Case J "
-               f"repeats case E with weekly scoring (time_resolution 1w): the likelihood then compares weekly "
-               f"means, whose errors are much less correlated from week to week than days are.",
-        criterion=f"For the correctly specified cases (A, B, D, E, F, G, J): every run converges, and the mean "
+               f"approximate: H with the weekly default, I with the daily option, on the same data. Cases J "
+               f"and K repeat case E with weekly scoring (time_resolution 1w): the likelihood then compares "
+               f"weekly means, whose errors are much less correlated from week to week than days are. J uses "
+               f"the authors' bounds, which allow a negative a2 and a3; K requires both to be at least 0.",
+        criterion=f"For the correctly specified cases (A, B, D, E, F, G, K): every run converges, and the mean "
                   f"held-out coverage of the 90% prediction interval is between {PI_RANGE[0]:.0%} and "
-                  f"{PI_RANGE[1]:.0%}. For cases A, B, E, F, G and J: pooled parameter-interval coverage at least "
+                  f"{PI_RANGE[1]:.0%}. For cases A, B, E, F, G and K: pooled parameter-interval coverage at least "
                   f"{PAR_MIN:.0%}. Results are reported, not judged, for case C (wrong noise model, expected to "
-                  f"be too narrow), case D (see notes) and cases H and I (noise that AR(1) can only approximate).")
+                  f"be too narrow), case D (see notes), cases H and I (noise that AR(1) can only approximate) and "
+                  f"case J (see notes).")
     jobs = []
     for label, v, nk, nm, n_full, n_quick in CASES:
         for r in range(n_quick if ctx.quick else n_full):
@@ -301,7 +321,7 @@ def run(ctx) -> Result:
                                                           weights=conv["n parameters"])), 3) if len(conv) else None,
              "mean steps": int(conv["steps"].mean()) if len(conv) else None,
              "mean rho": round(float(conv["rho"].mean()), 3) if len(conv) else None}
-        if "mis-specified" not in label:
+        if "mis-specified" not in label and label[0] not in REPORT_ONLY:
             s["pass"] = bool(s["converged"] == s["replicates"] and s["mean held-out coverage"] is not None
                              and PI_RANGE[0] <= s["mean held-out coverage"] <= PI_RANGE[1]
                              and (label[0] not in PAR_REQUIRED or s["parameter coverage"] >= PAR_MIN))
@@ -433,16 +453,37 @@ def run(ctx) -> Result:
                 f"coverage of single days was {min(r['prediction coverage'] for r in rho_rows):.0%}-"
                 f"{max(r['prediction coverage'] for r in rho_rows):.0%} in all four cases, since on a single day "
                 f"rho does not change the width of the band (V9 tests quantities that span weeks).")
-    if len(summ) and summ.case.str.startswith("J").any() and summ.case.str.startswith("E").any():
+    if len(summ) and summ.case.str.startswith("K").any() and summ.case.str.startswith("E").any():
         cov = lambda c: summ.loc[summ.case.str.startswith(c + ":"), "parameter coverage"].iloc[0]
-        jf = df[df.case.str.startswith("J:") & df.converged]["variance factor"].astype(float)
-        jr = df[df.case.str.startswith("J:") & df.converged]["rho"].astype(float)
+        k = df[df.case.str.startswith("K:") & df.converged]
+        kf, kr = k["variance factor"].astype(float), k["rho"].astype(float)
         res.notes.append(
-            f"Weekly scoring (case J, the data of case E). The likelihood counts weekly means, and allows for "
+            f"Weekly scoring (case K, the data of case E). The likelihood counts weekly means, and allows for "
             f"their correlation from week to week: n/n_eff = 1 + 2 r_b/(1 - rho^7), on average "
-            f"{jf.mean():.2f}, against (1 + rho)/(1 - rho) = {((1 + jr) / (1 - jr)).mean():.2f} for daily values "
-            f"with the same rho. Parameter intervals contained the true value {cov('J'):.0%} of the time "
+            f"{kf.mean():.2f}, against (1 + rho)/(1 - rho) = {((1 + kr) / (1 - kr)).mean():.2f} for daily values "
+            f"with the same rho. Parameter intervals contained the true value {cov('K'):.0%} of the time "
             f"({cov('E'):.0%} with daily scoring).")
+    if len(summ) and summ.case.str.startswith("J").any():
+        j = df[df.case.str.startswith("J:")]
+        bad = j[j["implausible"].astype(bool)]
+        good = j[~j["implausible"].astype(bool) & j.converged]
+        cov_good = (float(np.average(good["parameters inside 90% interval"], weights=good["n parameters"]))
+                    if len(good) else float("nan"))
+        others = df[~df.case.str.startswith("J:")]
+        res.notes.append(
+            f"Weekly scoring with the authors' bounds (case J). {len(bad)} of {len(j)} calibrations ended on a "
+            f"parameter set with a negative relaxation rate (a3 below 0) whose daily simulation zigzags between "
+            f"0 °C and high values: weekly means average the zigzag out, so it can score as well as the true "
+            f"parameters. pyair2stream's plausibility check (negative relaxation rate, or successive daily "
+            f"changes correlated below -0.5) warned for each of these {len(bad)} and for "
+            f"{int(others['implausible'].astype(bool).sum())} of the {len(others)} calibrations in the other "
+            f"cases; {int((~bad.converged.astype(bool)).sum())} of the {len(bad)} did not converge. Over "
+            f"the {len(j)} calibrations, parameter intervals contained the true value "
+            f"{summ.loc[summ.case.str.startswith('J:'), 'parameter coverage'].iloc[0]:.0%} of the time, and "
+            f"{cov_good:.0%} over the {len(good)} that converged without a warning. With weekly or monthly "
+            f"scoring, bounds that keep a2 and a3 at least 0 rule such sets out (case K). An earlier run of "
+            f"this check judged case J against the parameter criterion and failed for this reason (76%); "
+            f"case K was added after it.")
     if checks:
         ck = pd.DataFrame(checks)
         sec_par.tables.append(("Sampler cross-check, case D: package sampler (DE move) vs stretch move", ck.round(3)))
@@ -517,7 +558,7 @@ def _fig_prediction_coverage(df):
     short = {"A": "A\nversion 5\niid noise", "B": "B\nversion 5\nexact AR(1)", "C": "C\nversion 5\nwrong model",
              "D": "D\nversion 8\nexact AR(1)", "E": "E\nversion 5\nleast squares", "F": "F\nversion 8\nleast squares",
              "G": "G\nas E,\ndaily rho", "H": "H\nfast + slow\nnoise", "I": "I\nas H,\ndaily rho",
-             "J": "J\nas E, weekly\nscoring"}
+             "J": "J\nweekly scoring,\nauthors' bounds", "K": "K\nweekly scoring,\na2, a3 >= 0"}
     ax.set_xticks(range(len(cases)), [short.get(c[0], c) for c in cases], fontsize=7.5)
     ax.grid(axis="x", visible=False)
     ax.set_ylabel("Held-out observations inside\nthe 90% interval (%)")

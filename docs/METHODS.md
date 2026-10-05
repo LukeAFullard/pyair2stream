@@ -144,14 +144,16 @@ daily inputs. Five methods (`integrator`) are available:
 
 | Integrator | Method | Stability |
 |---|---|---|
-| `CRN` (default) | Crank–Nicolson (semi-implicit, 2nd order) | always stable |
-| `EXP` | exponential / integrating factor | always stable |
+| `CRN` (default) | Crank–Nicolson (semi-implicit, 2nd order) | stable for any B ≥ 0 |
+| `EXP` | exponential / integrating factor | stable for any B ≥ 0 |
 | `RK4` | Runge–Kutta 4th order | only while B < 2.785 |
 | `RK2` | Heun (Runge–Kutta 2nd order) | only while B < 2.0 |
 | `EUL` | explicit Euler, Fortran variant (inputs of the next day) | only while B < 2.0 |
 
 `B` is how fast water temperature relaxes (per day); for version 8,
-`B = (a3 + a8·θ) / θ^a4`. Because B depends on discharge, the explicit methods
+`B = (a3 + a8·θ) / θ^a4`. A negative B is physically impossible (water
+temperature would move away from equilibrium); see §7 for how it can arise and
+the warning about it. Because B depends on discharge, the explicit methods
 (RK4, RK2, EUL) can become unstable on flows different from calibration and then
 give wrong numbers without any error. `CRN` is therefore the default and is the
 method recommended by the original authors. `RK4`, `RK2` and `EUL` reproduce the
@@ -185,6 +187,19 @@ incomplete month counts only its days in the record, while a last, incomplete
 block of weeks is compared with the full N×7 days. The block's observed value is
 the mean of those observations, and the simulated value is the mean of the
 simulation **on the same days**.
+
+Weekly or monthly means cannot see what happens from one day to the next. A
+parameter set whose daily simulation zigzags (in air2stream, a negative
+relaxation rate a3 makes the simulation swing between the 0 °C floor and high
+values) can then score as well as the true one. With the authors' bounds,
+which allow a negative a2 and a3, 9 of 30 weekly-scored calibrations of version
+5 on synthetic data ended on such a set: daily errors of about 11 °C, weekly
+means that fit (validation V4, case J). Physically, water warms with the air
+and relaxes towards equilibrium, so a2 and a3 should be at least 0; with those
+bounds no calibration ended there (case K). After every calibration and
+forward run pyair2stream warns if the relaxation rate B (§6) is negative on
+any day, or if successive daily changes of the simulation are correlated below
+−0.5 (sensible fits give about +0.5).
 
 **Objective function** (`objective_function`), computed over the n scored values:
 
@@ -600,6 +615,8 @@ change one-sided.
 | Invalid version, run mode, integrator, objective, time resolution, `prc`, bounds | loading config | error |
 | Stability of the chosen integrator (B vs. limit, §6) | before each user-facing simulation | warning; error if >10% of days exceed it |
 | Simulated temperature not finite or above `max_plausible_twat` (60 °C) | after each user-facing simulation | error |
+| Negative relaxation rate B, or a daily simulation that zigzags (§7) | after calibration, before DE-MCMC sampling, FORWARD runs | warning |
+| ρ at its limit of 0.99; exact likelihood with weekly or monthly scoring (§12) | DE-MCMC | warning |
 | Recomputed objective matches the calibration result | after calibration | error |
 | Discharge outside the calibrated range | FORWARD runs | warning |
 | Segment warm-up too short | gap-tolerant runs | warning |

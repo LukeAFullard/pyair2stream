@@ -22,7 +22,7 @@ from .sensitivity import sensitivity_analysis
 from . import __version__
 
 from .model import (call_model, aggregation, statis, funcobj, detect_segments, warn_on_stability,
-                    check_numerical_divergence, check_segment_warmup)
+                    check_numerical_divergence, check_segment_warmup, check_daily_plausibility)
 
 JACKKNIFE_NOTE = (
     "The rows jackknife_90_lower/upper are approximate 90% intervals for the parameters (in "
@@ -92,6 +92,7 @@ def forward(data: CommonData) -> None:
     check_segment_warmup(data)
     call_model(data)
     check_numerical_divergence(data, max_plausible_twat=data.max_plausible_twat)
+    check_daily_plausibility(data)
 
     # Calculate objective function again to ensure consistency
     ei_check = funcobj(data)
