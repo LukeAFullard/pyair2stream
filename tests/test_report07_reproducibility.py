@@ -204,7 +204,7 @@ class TestRandomSeedConfigThreading(unittest.TestCase):
 
 
 class TestVersionConsistency(unittest.TestCase):
-    """7.5: pyproject.toml, CHANGELOG.md, and pyair2stream.__version__ must agree."""
+    """7.5: pyproject.toml, CHANGELOG.md, CITATION.cff and pyair2stream.__version__ must agree."""
 
     def test_version_matches_pyproject_and_changelog(self):
         import pyair2stream
@@ -221,6 +221,11 @@ class TestVersionConsistency(unittest.TestCase):
 
         self.assertEqual(pyair2stream.__version__, pyproject_version)
         self.assertEqual(pyair2stream.__version__, changelog_version)
+
+        citation_text = (REPO_ROOT / 'CITATION.cff').read_text()
+        m = re.search(r'^version: "([^"]+)"', citation_text, re.MULTILINE)
+        self.assertIsNotNone(m, "Could not find version in CITATION.cff")
+        self.assertEqual(pyair2stream.__version__, m.group(1))
 
 
 class TestVersion8ZeroingClaimRemoved(unittest.TestCase):

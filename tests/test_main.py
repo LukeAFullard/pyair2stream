@@ -186,7 +186,15 @@ class TestMain(unittest.TestCase):
 
         mock_read_cal.return_value = data
         mock_df = pd.DataFrame({'fold': [1], 'NSE': [0.9]})
-        mock_cross_validate.return_value = mock_df
+        # One held-out year with a known error: +0.5 °C in July, -0.2 °C otherwise.
+        from pyair2stream.cross_validation import FoldResult
+        days = pd.date_range("2011-01-01", "2011-12-31")
+        obs = np.full(len(days), 10.0)
+        sim = obs + np.where(days.month == 7, 0.5, -0.2)
+        fold = FoldResult(fold_id=0, label="2011", held_out_start=days[0], held_out_end=days[-1],
+                          n_obs_held_out=len(days), par_best=np.zeros(8), nse=0.9, kge=0.9, rmse=0.3,
+                          obs_held_out=obs, sim_held_out=sim, dates_held_out=days)
+        mock_cross_validate.return_value = (mock_df, [fold])
 
         main()
 
@@ -194,8 +202,12 @@ class TestMain(unittest.TestCase):
         # from main() before dispatching (report 05, Defect A only concerns FORWARD).
         mock_agg.assert_called_once_with(data)
         mock_statis.assert_called_once_with(data)
-        mock_cross_validate.assert_called_once_with(data, data.runmode)
+        mock_cross_validate.assert_called_once_with(data, data.runmode, return_folds=True)
         self.assertTrue(os.path.exists(os.path.join(data.folder, "cv_results.csv")))
+        bias = pd.read_csv(os.path.join(data.folder, "cv_bias_by_month.csv")).set_index("period")
+        self.assertAlmostEqual(bias.loc["Jul", "bias"], 0.5)
+        self.assertAlmostEqual(bias.loc["Jan", "bias"], -0.2)
+        self.assertTrue(os.path.exists(os.path.join(data.folder, "cv_bias_by_month.png")))
 
 if __name__ == '__main__':
     unittest.main()

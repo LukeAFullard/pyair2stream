@@ -144,14 +144,16 @@ daily inputs. Five methods (`integrator`) are available:
 
 | Integrator | Method | Stability |
 |---|---|---|
-| `CRN` (default) | Crank–Nicolson (semi-implicit, 2nd order) | always stable |
-| `EXP` | exponential / integrating factor | always stable |
+| `CRN` (default) | Crank–Nicolson (semi-implicit, 2nd order) | stable for any B ≥ 0 |
+| `EXP` | exponential / integrating factor | stable for any B ≥ 0 |
 | `RK4` | Runge–Kutta 4th order | only while B < 2.785 |
 | `RK2` | Heun (Runge–Kutta 2nd order) | only while B < 2.0 |
 | `EUL` | explicit Euler, Fortran variant (inputs of the next day) | only while B < 2.0 |
 
 `B` is how fast water temperature relaxes (per day); for version 8,
-`B = (a3 + a8·θ) / θ^a4`. Because B depends on discharge, the explicit methods
+`B = (a3 + a8·θ) / θ^a4`. A negative B is physically impossible (water
+temperature would move away from equilibrium); see §7 for how it can arise and
+the warning about it. Because B depends on discharge, the explicit methods
 (RK4, RK2, EUL) can become unstable on flows different from calibration and then
 give wrong numbers without any error. `CRN` is therefore the default and is the
 method recommended by the original authors. `RK4`, `RK2` and `EUL` reproduce the
@@ -186,6 +188,19 @@ block of weeks is compared with the full N×7 days. The block's observed value i
 the mean of those observations, and the simulated value is the mean of the
 simulation **on the same days**.
 
+Weekly or monthly means cannot see what happens from one day to the next. A
+parameter set whose daily simulation zigzags (in air2stream, a negative
+relaxation rate a3 makes the simulation swing between the 0 °C floor and high
+values) can then score as well as the true one. With the authors' bounds,
+which allow a negative a2 and a3, 9 of 30 weekly-scored calibrations of version
+5 on synthetic data ended on such a set: daily errors of about 11 °C, weekly
+means that fit (validation V4, case J). Physically, water warms with the air
+and relaxes towards equilibrium, so a2 and a3 should be at least 0; with those
+bounds no calibration ended there (case K). After every calibration and
+forward run pyair2stream warns if the relaxation rate B (§6) is negative on
+any day, or if successive daily changes of the simulation are correlated below
+−0.5 (sensible fits give about +0.5).
+
 **Objective function** (`objective_function`), computed over the n scored values:
 
 - **NSE** (Nash–Sutcliffe efficiency) = 1 − Σ(sim − obs)² / Σ(obs − mean obs)².
@@ -201,6 +216,20 @@ NSE, R² (squared correlation between simulated and observed), RMSE, MAE, and
 AIC = n·ln(SSE/n) + 2(k+1) and BIC = n·ln(SSE/n) + (k+1)·ln(n), where SSE is the
 sum of squared errors and k the number of fitted parameters (the +1 is the error
 variance). AIC and BIC assume independent errors (§16).
+
+**Mean error by month and season** (`bias_by_month_*.csv` and `.png`, for the
+calibration and validation periods; `cv_bias_by_month.*` for the held-out years
+of a cross-validation). A model can score well over the year and still be too
+warm in summer and too cool in spring. For each calendar month, each season
+(December counted with January and February of the same year) and the whole
+year, the daily errors (simulated − measured) are first averaged within each
+year; a month counts in a year if it has at least 10 days with both values (a
+season 30, a year 120). The bias is the mean of these yearly values, with the
+95% interval mean ± t₀.₉₇₅,ₙ₋₁ · sd/√n over the n years (none with fewer than
+two). Days are not used as independent values because errors persist from day
+to day and can last a whole season, so an interval from daily values would be
+far too narrow. An interval that excludes zero means the model is consistently
+biased in that month or season.
 
 ## 8. Calibration
 
@@ -281,7 +310,9 @@ LATHYP:
    In gap-tolerant mode the fold's air temperature and discharge are also hidden
    during calibration, so the fold becomes a gap.
 4. `cv_results.csv` lists each fold's scores and parameters, plus the mean and
-   standard deviation across folds and "pooled" scores over all held-out days.
+   standard deviation across folds and "pooled" scores over all held-out days;
+   `cv_bias_by_month.*` gives the mean error by month and season over the
+   held-out days (§7).
 
 Large variation of the parameters between folds means they are poorly determined
 by the data (equifinality). The spread between folds (`std`) is not a confidence
@@ -316,8 +347,8 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
 2. **Likelihood** (how well a parameter set explains the data), computed on the
    same scored values as the objective (§7), assuming normally distributed errors
    of constant size (the size is estimated, not supplied). A model's daily errors
-   usually persist from one day to the next (lag-1 autocorrelation ρ, estimated
-   once from the DE fit's daily residuals, limited to 0–0.99), so n days of
+   persist (AR(1) correlation ρ, estimated once from the DE fit's daily
+   residuals, limited to 0–0.99; see "How ρ is estimated" below), so n days of
    errors carry the information of fewer independent ones.
    - `noise_model: "ar1"` with `likelihood: "least_squares"` (the default):
      log L = −(n_eff/2)·ln(SSE/n), with n_eff = n·(1−ρ)/(1+ρ), the usual
@@ -336,8 +367,18 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
      log L = −(n/2)·ln(SSE/n). With autocorrelated errors this understates
      parameter uncertainty, and makes intervals for multi-day quantities far too
      narrow.
-   With weekly or monthly scoring there are no consecutive scored days, so ρ
-   plays no part in the likelihood. Each likelihood replaces the error size by
+   With weekly or monthly scoring (§7) each scored value is the mean of a block
+   of m days (m = 7N for `"Nw"`, 30 for `"1m"`), and block means are much less
+   correlated from one block to the next than days are. The least-squares
+   likelihood then uses n_eff = n / [1 + 2·r_b/(1 − ρ^m)], with r_b the
+   correlation between the means of adjacent blocks of AR(1) errors (the
+   formula under "How ρ is estimated", with m days in place of 7); for m = 1
+   this is n·(1−ρ)/(1+ρ). The
+   daily n_eff applied to block means would make parameter intervals 1.6–4.4
+   times too wide for ρ = 0.5–0.95. The exact AR(1) likelihood needs consecutive
+   scored days; with weekly or monthly scoring it treats the block errors as
+   independent and warns, since its intervals are then too narrow if errors
+   persist from block to block. Each likelihood replaces the error size by
    its best estimate; this gives the same result as treating the error size as
    unknown with the standard non-informative prior (∝ 1/σ) and averaging over it.
 3. **Sampling.** `mcmc_walkers` (default 32) chains ("walkers") are started
@@ -377,6 +418,84 @@ means, days in a row above a threshold): use the raw ensemble for those
 (`save_ensemble: true`, and `pyair2stream.scenario`), never averages of the
 daily percentiles.
 
+**How ρ is estimated** (`uncertainty_options.rho_timescale`).
+
+- `"weekly"` (the default). Every 7-day window of scored, observed days is paired
+  with the complete 7-day window that starts 7 days later, and the correlation r
+  of their mean errors is measured. ρ is the AR(1) value whose 7-day means have
+  that correlation: r = Σ_{d=1..13} (7 − |d − 7|)·ρ^d / (7 + 2·Σ_{k=1..6} (7 − k)·ρ^k).
+  The larger of this and the lag-1 correlation of consecutive days is used. It
+  needs at least 140 pairs (about 21 complete weeks); otherwise the lag-1 value
+  is used, with a warning.
+- `"daily"`: the lag-1 correlation of consecutive scored days.
+
+Both need daily observations. A window counts only if all 7 days are scored,
+so with many missing days (for example a measurement every other day) the
+lag-1 value is used. With fewer than 30 pairs of consecutive scored days, ρ is
+0, with a warning, and bands for multi-day quantities are then too narrow.
+
+ρ sets the noise added to predictions and n_eff in the least-squares likelihood.
+The exact likelihood always uses the lag-1 correlation, because removing the
+correlation of consecutive days (eₜ − ρ·eₜ₋₁) is a day-scale operation. The
+chain's `_meta.json` records `rho`, `rho_timescale`, `rho_likelihood`,
+`scoring_block_days` and `likelihood_variance_factor` (n/n_eff). FORWARD runs
+use the chain's ρ, and say so when it was estimated at another time scale than
+their own `rho_timescale` (chains from version 0.4.1 or earlier used
+consecutive days). If ρ reaches its limit of 0.99, a warning says so: errors
+that persist for months usually mean a systematic error, such as a bias in one
+season (§7, mean error by month and season).
+
+**Why the weekly scale (theory).** Real model errors have two memories at once:
+on the Swiss rivers a fast part that fades in about two days (57–76% of the
+error variance) and a slow part lasting three to five weeks (24–43%). An AR(1)
+process has only one. The choice is which of them it should reproduce.
+
+1. *Predictions.* Compliance quantities are built from many days (7-day means,
+   runs of warm days, summer peaks). The uncertainty of an m-day mean depends on
+   every error correlation up to lag m: Var = σ²/m · [1 + 2·Σ_{k<m} (1 − k/m)·r_k]
+   (Bayley and Hammersley, 1946). Matched to consecutive days, an AR(1) ignores
+   the slow part. On the Swiss rivers it understated the variance of 30–90-day
+   mean errors by a factor of two to three. Matched to week-to-week persistence,
+   the variance it implies was 1.2–1.4 times the measured one for 7–14-day means
+   and about right (0.83–1.3) at 60–90 days. A noise model that understates
+   low-frequency variability gives intervals that are too narrow (Poppick et al.,
+   2017). In hydrology, ignoring error persistence underestimates the
+   uncertainty of aggregated quantities (Evin et al., 2014), and reliable
+   intervals at several time scales need errors at several time scales
+   (McInerney et al., 2020).
+2. *Parameters.* With correlated errors, the sampling covariance of least-squares
+   estimates is σ²(JᵀJ)⁻¹ JᵀRJ (JᵀJ)⁻¹ (the "sandwich"; R is the correlation
+   matrix of the errors, J the sensitivity of the simulated temperature to each
+   parameter on each day). The n_eff likelihood widens every parameter's
+   variance by the same factor, (1 + ρ)/(1 − ρ). Each parameter needs a factor
+   of about 1 + 2·Σ_k r_J(k)·r_e(k), with r_J the autocorrelation of its
+   sensitivity and r_e that of the errors.
+   That is close to the full allowance for slow errors when the parameter's
+   effect varies slowly (the constant a1, the seasonal amplitude a6 and timing
+   a7). It is much smaller when the effect varies from day to day (the air
+   temperature and relaxation coefficients a2 and a3). With one factor for all
+   parameters, the factor must be large enough for the slowest parameter.
+   Validation V4 computes this formula and compares it with the measured spread
+   of the estimates; they agree closely. With fast + slow errors, the daily ρ
+   made a7's interval about 1.5 times too narrow (measured 1.54; the formula
+   predicts 1.59), and the weekly ρ gave it the right
+   width. The cost is that intervals of the fast-varying parameters are wider
+   than necessary, by a factor of about two to three in V4. That happens with
+   either ρ: it is a property of a single effective sample size. The two errors
+   are not equal: an interval that is too wide errs on the side of caution, one
+   that is too narrow claims more than the data show.
+3. *The larger of the two estimates.* The weekly option is never less
+   persistent than consecutive days show. The week-to-week estimate alone is
+   imprecise when errors are only weakly correlated. Taking the larger then errs
+   towards wider intervals, and changes nothing for AR(1) errors (V4, V9).
+
+This is a documented, validated approximation, not a published method by name.
+The principled refinements are an error model with a fast and a slow part, and
+parameter-specific (sandwich) widths for the posterior (Ribatet et al., 2012).
+Neither is implemented. Use `rho_timescale: "daily"` to reproduce results made
+with the earlier default, or to check how much a conclusion depends on the
+choice.
+
 **What the validation shows** ([validation/REPORT.md](../validation/REPORT.md)).
 On synthetic data from a known truth, 90% prediction intervals contained about
 90% of new observations for versions 5 and 8 with every likelihood, and with the
@@ -385,9 +504,10 @@ values at least 90% of the time for both versions (V4). The exact AR(1)
 likelihood's intervals for version 8 contained the truth only about 75% of the
 time: its parameters trade off against each other and that posterior is far from
 normal. The sampler was cross-checked against emcee's stretch move. On three real
-rivers, 90% intervals contained 84.5–89% of daily values in years not used for
-calibration, and for 7-day means 39–62% with `iid` against 83–88% with the
-default (V5). On the same rivers, the parameters published by Piccolroaz et al.
+rivers, with the default settings, 90% intervals contained 85–89.6% of daily
+values in years not used for calibration (84.5–89.6% across all settings
+tested), and for 7-day means 89–94%, against 83–88% with `rho_timescale:
+"daily"` and 39–62% with `iid` (V5). On the same rivers, the parameters published by Piccolroaz et al.
 (2016) lay inside these intervals for every converged run of versions 3–5. For
 versions 7 and 8 on the Mentue and version 8 on the Rhône several lay outside:
 there many parameter combinations fit almost equally well, and the published
@@ -450,6 +570,20 @@ band is not the upper edge of a weekly mean or a yearly peak. The probability
 is only as good as the model and its error model: check the coverage on
 validation years first (§16; example 03).
 
+**What the validation shows** (V9). On synthetic data, where the model and its
+error model are exactly right, the stated probabilities for yearly statistics
+(highest daily mean, highest 7-day mean, days above a threshold) came true as
+often as stated, and the 50% and 90% ranges contained the measured value 44–58%
+and 86–94% of the time. On the three Swiss rivers, for years not used for
+calibration, version 8's probabilities were closer to what happened than the
+share of past years in which the limit was exceeded (Brier skill score
+0.08–0.42), but its 90% ranges contained the measured value in only 73–93% of
+river-years (67–87% with `rho_timescale: "daily"`): the model can be off by a
+few tenths of a degree for a whole summer, which the error model (AR(1) errors
+of constant size) represents only in part. Version 5 did no better than past
+years for the yearly peaks (−0.03 and −0.04; −0.11 and −0.12 with the daily
+ρ): on the Rhône it predicted almost the same peak every year.
+
 **Comparing two scenarios** (for example observed versus naturalised flow): run
 FORWARD once per scenario from the same chain with `save_ensemble: true`, and
 for the second run set `forward_options.reuse_sample_indices_from` to the first
@@ -484,6 +618,8 @@ change one-sided.
 | Invalid version, run mode, integrator, objective, time resolution, `prc`, bounds | loading config | error |
 | Stability of the chosen integrator (B vs. limit, §6) | before each user-facing simulation | warning; error if >10% of days exceed it |
 | Simulated temperature not finite or above `max_plausible_twat` (60 °C) | after each user-facing simulation | error |
+| Negative relaxation rate B, or a daily simulation that zigzags (§7) | after calibration, before DE-MCMC sampling, FORWARD runs | warning |
+| ρ at its limit of 0.99; exact likelihood with weekly or monthly scoring (§12) | DE-MCMC | warning |
 | Recomputed objective matches the calibration result | after calibration | error |
 | Discharge outside the calibrated range | FORWARD runs | warning |
 | Segment warm-up too short | gap-tolerant runs | warning |
@@ -498,7 +634,22 @@ change one-sided.
   assume the river behaves the same way in the period predicted (no new dam,
   effluent, abstraction pattern or loss of shading in between). Predictions for
   conditions outside the calibration range (air temperature, discharge) are
-  extrapolations; check the θ-range warning.
+  extrapolations; check the θ-range warning. In validation V10, calibrating on
+  the coolest (or highest-flow) third of each Swiss river's years and predicting
+  the warmest (or lowest-flow) third cost at most 0.07 °C of RMSE compared with
+  calibrating on the middle third, but a single extreme period can still be
+  missed: in the Mentue's 2003 heatwave, the model calibrated on the three
+  coolest summers put August's highest daily temperature 1.9 °C above the
+  measured one.
+- **Choose a version that suits the river.** Where discharge drives the summer
+  temperature (the Rhône here), versions without a discharge term (3–5) did
+  hardly better than simple alternatives, and version 5's probabilities for
+  yearly peaks were no better than going by past years (V5, V9, V10). Compare
+  versions on validation years or by cross-validation (§11).
+- **Probabilities for yearly statistics are approximate on real rivers.** Their
+  computation is right (V9, synthetic data), but on the Swiss rivers version
+  8's 90% ranges for yearly peaks contained the measured value in 73–93% of
+  years not used for calibration (V9). Report them with that caveat.
 - **Different parameter sets can fit equally well** (equifinality), especially
   for versions 7 and 8. Inspect the dotty plots; a parameter at a bound suggests
   the bounds are too narrow. Prefer the simplest version that validates well.
@@ -530,14 +681,18 @@ change one-sided.
 [validation/REPORT.md](../validation/REPORT.md), produced by
 `validation/run_all.py`: identical results to the original Fortran on real
 inputs for every version and Fortran integrator (to 5×10⁻⁶ °C, the precision of
-its printed output); all 30 published RMSE values of Piccolroaz et al. (2016)
+its printed output), and identical calibration scores and weekly and monthly
+averages, with and without gaps; all 30 published RMSE values of Piccolroaz et al. (2016)
 reproduced to within 0.001 °C, and their parameters recovered by recalibration
 except where the parameters trade off (versions 7 and 8 on two rivers, where
 recalibration fits slightly better with different parameters and the same
 predictions, and where the original program itself returns different
 parameters on every run); recovery of a known truth; calibrated intervals
 on synthetic data; out-of-sample performance on three real rivers; numerical
-accuracy; gaps; and exact answers from the workflow and scenario tools. The test
+accuracy; gaps; exact answers from the workflow and scenario tools;
+probabilities of exceeding a limit, on synthetic data and real rivers (V9); and
+predictions for warmer and lower-flow years than those calibrated on (V10). V5,
+V9 and V10 do not pass all their criteria; the report says where and why. The test
 suite (`pytest tests/`) also compares against the Fortran and checks each
 safeguard above.
 
@@ -602,3 +757,20 @@ These are deliberate; each is covered by tests.
   306–312.
 - Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A. and
   Rubin, D. B. (2013). *Bayesian Data Analysis*, 3rd edn. CRC Press (split-R̂).
+- Bayley, G. V. and Hammersley, J. M. (1946). The "effective" number of
+  independent observations in an autocorrelated time series. *Supplement to the
+  Journal of the Royal Statistical Society*, 8, 184–197.
+- Poppick, A., Moyer, E. J. and Stein, M. L. (2017). Estimating trends in the
+  global mean temperature record. *Advances in Statistical Climatology,
+  Meteorology and Oceanography*, 3, 33–53.
+- Evin, G., Thyer, M., Kavetski, D., McInerney, D. and Kuczera, G. (2014).
+  Comparison of joint versus postprocessor approaches for hydrological
+  uncertainty estimation accounting for error autocorrelation and
+  heteroscedasticity. *Water Resources Research*, 50, 2350–2375.
+- McInerney, D., Thyer, M., Kavetski, D., Laugesen, R., Tuteja, N. and
+  Kuczera, G. (2020). Multi-temporal hydrological residual error modeling for
+  seamless subseasonal streamflow forecasting. *Water Resources Research*, 56,
+  e2019WR026979.
+- Ribatet, M., Cooley, D. and Davison, A. C. (2012). Bayesian inference from
+  composite likelihoods, with an application to spatial extremes. *Statistica
+  Sinica*, 22, 813–845.

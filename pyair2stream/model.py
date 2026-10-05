@@ -165,6 +165,63 @@ def warn_on_stability(data: CommonData, error_fraction: float = STABILITY_ERROR_
     return report
 
 
+# Successive daily changes of a simulated water temperature are positively correlated (about
+# +0.5 on the Swiss rivers); a simulation that zigzags from one day to the next gives about -1.
+OSCILLATION_CHANGE_CORR = -0.5
+
+
+def check_daily_plausibility(data: CommonData) -> dict:
+    """
+    Warn if the simulation at the current `data.par` is physically implausible in a
+    way its score may not show (run after `call_model`):
+
+    - the relaxation rate B (`compute_B_series`) is negative on some day, so water
+      temperature moves away from equilibrium instead of towards it;
+    - the simulated daily temperature zigzags from one day to the next (the
+      correlation of successive daily changes is below OSCILLATION_CHANGE_CORR).
+
+    With weekly or monthly scoring a zigzag averages out within each block, so such
+    a parameter set can score as well as a sensible one; in validation V4 (case J),
+    weekly-scored calibrations with bounds that allow a negative a2 and a3 often
+    ended on one. Returns the numbers behind the warnings.
+    """
+    B = compute_B_series(data)
+    valid = np.isfinite(B)
+    if data.version not in (3, 5):
+        valid &= (data.Q != -999.0) & (data.Q > 0.0)
+    n_negative = int(np.sum(valid & (B < 0.0)))
+    min_B = float(np.min(B[valid])) if np.any(valid) else None
+
+    if data.gap_tolerant and data.segments:
+        segments = [(int(a), int(b)) for a, b in data.segments]
+    else:
+        segments = [(0, data.n_tot - 1)]
+    first, second = [], []
+    for start, end in segments:
+        sim = np.asarray(data.Twat_mod[max(start, 365):end + 1], dtype=np.float64)
+        change = np.diff(sim)
+        ok = np.isfinite(change[:-1]) & np.isfinite(change[1:])
+        first.append(change[:-1][ok])
+        second.append(change[1:][ok])
+    first = np.concatenate(first) if first else np.empty(0)
+    second = np.concatenate(second) if second else np.empty(0)
+    change_corr = None
+    if len(first) >= 30 and np.std(first) > 0 and np.std(second) > 0:
+        change_corr = float(np.corrcoef(first, second)[0, 1])
+
+    if n_negative:
+        print(f"Warning: the relaxation rate B is negative on {n_negative} days (lowest {min_B:.3f} per day), "
+              "so the simulated water temperature moves away from equilibrium instead of towards it. This is "
+              "physically impossible. Narrow parameter_bounds so that B stays positive (for versions 3 and 5, "
+              "a3 at least 0); USER_GUIDE.md §9.1 defines B.")
+    if change_corr is not None and change_corr < OSCILLATION_CHANGE_CORR:
+        print(f"Warning: the simulated daily temperature zigzags from one day to the next (correlation of "
+              f"successive daily changes {change_corr:.2f}). This is a numerical artefact, not river behaviour; "
+              "with weekly or monthly scoring it can still score well, because it averages out within each "
+              "block. Narrow parameter_bounds (for example a2 and a3 at least 0) or score daily values.")
+    return {"min_B": min_B, "n_negative_B": n_negative, "change_corr": change_corr}
+
+
 def check_segment_warmup(data: CommonData) -> None:
     """
     Gap-tolerant mode only: warn if `warmup_drop_days` is too short for the

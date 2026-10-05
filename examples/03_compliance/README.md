@@ -46,16 +46,16 @@ warm_days = scenario.exceedance(sims.loc["2010"].T.to_numpy(), 18)   # days abov
 
 | Year | P(7-day mean > 20 °C) | Highest 7-day mean, 90% range | Measured | Days above 18 °C, median (90% range) | Measured |
 |---|---|---|---|---|---|
-| 2010 | 0.95 | 20.0 to 21.5 °C | 21.0 °C | 31 (26 to 36) | 30 |
-| 2011 | 0.80 | 19.6 to 21.2 °C | 19.8 °C | 19 (14 to 25) | 21 |
-| 2012 | 0.53 | 19.3 to 20.9 °C | 19.6 °C | 25 (19 to 31) | 22 |
+| 2010 | 0.91 | 19.8 to 21.7 °C | 21.0 °C | 31 (24 to 36) | 30 |
+| 2011 | 0.75 | 19.4 to 21.4 °C | 19.8 °C | 19 (13 to 26) | 21 |
+| 2012 | 0.51 | 19.2 to 20.9 °C | 19.6 °C | 24 (17 to 33) | 22 |
 
 ![Highest 7-day mean in each simulation](figures/peak_7day_mean.png)
 
-**Reading it.** In 2010 the limit was very likely exceeded (probability 0.95),
+**Reading it.** In 2010 the limit was very likely exceeded (probability 0.91),
 and it was. In 2011 and 2012 the measured peaks, 19.8 and 19.6 °C, were within a
 few tenths of a degree of the limit. That is closer than the model can resolve,
-and its probabilities (0.80 and 0.53) say so: they leave both outcomes open. All
+and its probabilities (0.75 and 0.51) say so: they leave both outcomes open. All
 measured values lie inside the model's 90% ranges. Report such results as
 probabilities with ranges, not as a yes or no.
 
@@ -63,13 +63,26 @@ probabilities with ranges, not as a yes or no.
 
 - **Daily means only.** The model simulates daily mean temperature. It cannot
   assess limits on daily maximum temperature.
-- **The probabilities are somewhat too confident.** On unseen years, 90% ranges
-  for 7-day means contained the measured value 83–88% of the time
-  ([V5](../../validation/REPORT.md#v5)). Treat probabilities near 0.9 or 0.1 as
+- **The probabilities may be too confident.** On the three Swiss rivers, for
+  years not used for calibration, version 8's 90% ranges for the year's highest
+  7-day mean contained the measured value in 14 of 15 river-years, but for the
+  year's highest daily mean in only 11 of 15 ([V9](../../validation/REPORT.md#v9)).
+  The model can be off by a few tenths of a degree for a whole summer, which
+  these ranges include only in part. Treat probabilities near 0.9 or 0.1 as
   less certain than they look.
 - **The method matters.** With the alternative `likelihood: "exact"` the
-  simulations ran slightly cooler and the probabilities were 0.90, 0.69 and 0.39:
-  lower by up to 0.14. The default keeps the simulations centred on the best fit
+  simulations ran slightly cooler and the probabilities were 0.84, 0.64 and 0.41:
+  lower by up to 0.11. The default keeps the simulations centred on the best fit
+  ([METHODS §12](../../docs/METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc)).
+- **So does the time scale of the error.** The model's errors have a part that
+  changes from day to day and a part that lasts for weeks. The default
+  (`rho_timescale: "weekly"`) includes both (ρ = 0.86 here); `"daily"`, the
+  default before version 0.4.2, matches only the day-to-day part (ρ = 0.70).
+  The daily interval is about the same either way (2.13 against 2.10 °C wide
+  on average), but with `"daily"` the 90% ranges for the highest 7-day mean are
+  up to a fifth narrower (1.5–1.6 °C wide against 1.6–1.9 °C) and the
+  probabilities more confident: 0.95, 0.80 and 0.53. A 7-day mean or a yearly
+  peak depends on the error that lasts for weeks
   ([METHODS §12](../../docs/METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc)).
 - **The answer depends on the definition.** Here a 7-day mean is a moving
   average over the current and previous six days. Use your standard's own

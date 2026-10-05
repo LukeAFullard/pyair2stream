@@ -18,17 +18,28 @@ from common import (WORK, Result, Section, Timer, calibrate, mean_discharge, pub
 SIGMA = 0.5        # °C, noise standard deviation (similar to real residuals)
 RHO = 0.7          # lag-1 autocorrelation of the AR(1) noise (as in real residuals)
 TOL = 0.10         # °C, allowed prediction error against the noise-free truth
+# "two-part" noise: a fast AR(1) plus a slow AR(1) with the same total sd, the structure fitted to the
+# real Swiss residuals (a 2-day and a 3-4 week part; used by V4 and V9).
+TWO_PART = {"fast_share": 0.6, "fast_rho": 0.55, "slow_rho": 0.96}
+
+
+def _ar1_series(n, rho, sd, e):
+    x = np.empty(n)
+    x[0] = sd * e[0]
+    for t in range(1, n):
+        x[t] = rho * x[t - 1] + sd * np.sqrt(1 - rho ** 2) * e[t]
+    return x
 
 
 def noise(n, kind, rng):
     e = rng.standard_normal(n)
     if kind == "iid":
         return SIGMA * e
-    x = np.empty(n)
-    x[0] = SIGMA * e[0]
-    for t in range(1, n):
-        x[t] = RHO * x[t - 1] + SIGMA * np.sqrt(1 - RHO ** 2) * e[t]
-    return x
+    if kind == "two-part":
+        w = TWO_PART["fast_share"]
+        return (_ar1_series(n, TWO_PART["fast_rho"], SIGMA * np.sqrt(w), e)
+                + _ar1_series(n, TWO_PART["slow_rho"], SIGMA * np.sqrt(1 - w), rng.standard_normal(n)))
+    return _ar1_series(n, RHO, SIGMA, e)
 
 
 def truth_series(version, par, period, qmedia, tag="v3"):

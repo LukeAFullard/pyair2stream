@@ -55,11 +55,11 @@ diff = scenario.paired_difference_from_files(
 
 | | Median | 90% range |
 |---|---|---|
-| Average summer (Jun–Aug) change | +0.05 °C | +0.03 to +0.07 °C |
-| Average winter (Dec–Feb) change | −0.07 °C | −0.10 to −0.04 °C |
-| Largest warming on a single day | +0.31 °C | +0.27 to +0.35 °C |
+| Average summer (Jun–Aug) change | +0.05 °C | +0.02 to +0.08 °C |
+| Average winter (Dec–Feb) change | −0.07 °C | −0.11 to −0.03 °C |
+| Largest warming on a single day | +0.32 °C | +0.27 to +0.40 °C |
 | Extra days per year above 18 °C | 1.0 | 0.0 to 2.0 |
-| *Summer change if the runs were not paired* | *+0.05 °C* | *−0.19 to +0.28 °C* |
+| *Summer change if the runs were not paired* | *+0.04 °C* | *−0.31 to +0.40 °C* |
 
 ![Daily effect of the abstraction and the summer average](figures/abstraction_effect.png)
 

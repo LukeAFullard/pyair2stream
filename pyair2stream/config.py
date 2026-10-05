@@ -43,6 +43,13 @@ DEFAULT_NOISE_MODEL = 'ar1'
 # from the best fit, towards slightly worse and cooler predictions (validation/REPORT.md, V5).
 VALID_LIKELIHOODS = ('least_squares', 'exact')
 DEFAULT_LIKELIHOOD = 'least_squares'
+# The time scale at which the AR(1) correlation rho of the errors is estimated (docs/METHODS.md §12).
+# 'weekly' (default): rho reproduces the measured correlation between consecutive 7-day mean errors,
+# the persistence that matters for 7-day means, runs of warm days and seasonal peaks. 'daily': rho is
+# the lag-1 correlation of consecutive days. For errors that really are AR(1) both give the same rho;
+# real model errors also have a slow part (weeks) that the daily estimate misses (validation V4, V9).
+VALID_RHO_TIMESCALES = ('weekly', 'daily')
+DEFAULT_RHO_TIMESCALE = 'weekly'
 
 
 @dataclass

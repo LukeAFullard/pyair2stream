@@ -138,6 +138,7 @@ validation period. The equation is given in [docs/METHODS.md](docs/METHODS.md#5-
 | `goodness_of_fit_*.csv` | N, NSE, R², RMSE, MAE, AIC, BIC for each period |
 | `calibration_*.png`, `validation_*.png`, `full_simulation_*.png` | time-series plots with residuals |
 | `predicted_vs_measured_*.png`, `residual_diagnostics_*.png` | scatter plot; residual histogram, Q-Q and autocorrelation |
+| `bias_by_month_*.csv` / `.png` | mean error by month and season, with 95% intervals: is the model off in one season? |
 | `convergence_*.png`, `dottyplots_*.png`, `0_*.csv` | every parameter set tried during calibration |
 | `calibration_metadata.json`, `parameters.txt` | `Qmedia`, bounds and settings used, needed for later scenario runs |
 | `MCMC_*`, `Forward_Prediction_*`, `parameter_significance_*` | uncertainty results (`DE-MCMC` and `FORWARD` with intervals) |
@@ -162,7 +163,9 @@ The [validation suite](validation/README.md) checks this, and its results are in
 
 - **Same results as the original Fortran**, on real river data, for all five
   model versions and every solution scheme the Fortran has (to 5×10⁻⁶ °C, the
-  precision of the Fortran's output).
+  precision of the Fortran's output). Both programs also compute the same
+  calibration scores (RMS, NSE, KGE) from the same daily, weekly and monthly
+  averages, with and without gaps in the record.
 - **Reproduces the published results.** For three Swiss rivers (Piccolroaz et
   al., 2016), the published parameters give the published calibration and
   validation errors, all 30 of them to within 0.001 °C. Recalibrating with `DE`
@@ -185,12 +188,18 @@ The [validation suite](validation/README.md) checks this, and its results are in
   with typical gaps in the data).
 - **Honest intervals, with known limits.** On such data, 90% prediction
   intervals contain 89–90% of new observations, and 90% parameter intervals
-  contain the true values 91–97% of the time. On the real rivers, prediction
-  intervals contain 84.5–89% of daily values in years not used for calibration,
-  so they are slightly optimistic. One case, the Rhône with version 5, falls
-  just below the report's 85% threshold, so that check is marked as failed. For
-  multi-day quantities such as 7-day means, use `noise_model: "ar1"` (the
-  default); `"iid"` makes those intervals far too narrow.
+  contain the true values 89–97% of the time, also when calibrating on weekly
+  means with `a2` and `a3` bounded at 0 (without that bound, 9 of 30 such
+  calibrations ended on a meaningless set that zigzags from day to day, which
+  pyair2stream now warns about). On the real rivers, with the
+  default settings, prediction intervals contain 85–89.6% of daily values in
+  years not used for calibration, so they are slightly optimistic. With three
+  of the other settings tested, the Rhône with version 5 falls just below the
+  report's 85% threshold (84.5–85.0%), so that check is marked as failed. For
+  7-day means the default intervals contain 89–94% of observed values, against
+  83–88% with `rho_timescale: "daily"` and 39–62% with `noise_model: "iid"`:
+  model errors also have a part that lasts for weeks
+  ([docs/METHODS.md §12](docs/METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc)).
 - **The published parameters and the intervals.** The published parameters lie
   inside pyair2stream's 90% parameter intervals for versions 3–5 on all three
   rivers, for version 7 on the Rhône and for every version on the Dischmabach.
@@ -198,6 +207,23 @@ The [validation suite](validation/README.md) checks this, and its results are in
   outside. These are the cases above where recalibration finds a slightly
   better fit with different parameters: many combinations fit almost equally
   well, and the published set is one of them.
+- **Probabilities that a limit was exceeded: right in principle, approximate
+  in practice.** On synthetic data the stated chances come true as often as
+  they say. On the real rivers, for years not used for calibration, version 8's
+  probabilities for yearly statistics (highest daily mean, highest 7-day mean,
+  days above a threshold) were closer to what happened than going by how often
+  the limit was exceeded in past years, but their 90% ranges contained the
+  measured value in only 73–93% of river-years, so treat them as approximate.
+  Version 5, which has no discharge term, did no better than past years for the
+  yearly peaks: on the Rhône it could not follow the year-to-year changes.
+- **Warmer and lower-flow years.** Calibrated only on the coolest (or
+  highest-flow) third of the years, the model predicted the warmest (or
+  lowest-flow) third almost as well as when calibrated on the middle third (at
+  most 0.07 °C worse) and better than the simple alternatives, with 90%
+  intervals containing 84–92% of the measurements. The exception is version 5
+  on the Rhône, which does no better than the simple alternatives whichever
+  years it is calibrated on. On rivers like the Rhône, use a version with
+  discharge (7 or 8).
 - **Scenario tools give exact answers** where the answer is known.
 
 To run the tests and the validation suite (needs `gfortran`):
@@ -206,7 +232,7 @@ To run the tests and the validation suite (needs `gfortran`):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # or without --quick: the full suite, about an hour
+python validation/run_all.py --quick     # or without --quick: the full suite, about 105 minutes
 ```
 
 ## Examples

@@ -32,7 +32,11 @@ each fold's own mean discharge.
 Each run writes `cv_results.csv`: one row per held-out year with its NSE, KGE,
 RMSE and the parameters fitted without it, then the mean, standard deviation,
 scores over all held-out days together (`pooled`), and 90% confidence intervals
-for the parameters (`jackknife_90_lower`, `jackknife_90_upper`).
+for the parameters (`jackknife_90_lower`, `jackknife_90_upper`). It also writes
+`cv_bias_by_month.png` (and `.csv`): the mean error by month over the held-out
+years, with 95% intervals. Here no month's interval excludes zero for version 8;
+a version that does not suit a river shows a seasonal pattern instead (on the
+Rhône, version 5 was too warm every summer and too cool in spring and autumn).
 
 ## Results
 
