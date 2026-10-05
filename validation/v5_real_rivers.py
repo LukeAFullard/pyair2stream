@@ -168,9 +168,15 @@ def run(ctx) -> Result:
     if len(b):
         conv = b[b.converged]
         res.summary += (f" (B) {int(b.converged.sum())} of {len(b)} MCMC runs converged; 90% interval "
-                        f"coverage of real validation data {conv.coverage.min():.0%}-{conv.coverage.max():.0%}"
+                        f"coverage of real validation data {conv.coverage.min():.1%}-{conv.coverage.max():.1%}"
                         f" (summer {conv['summer coverage (Jun-Aug)'].min():.0%}-"
                         f"{conv['summer coverage (Jun-Aug)'].max():.0%}).")
+        LABELS = {"iid": "iid noise", "ar1": "AR(1), exact likelihood", "ar1-ls": "AR(1), least squares"}
+        outside = b[~b.coverage.between(*PI_RANGE)]
+        if len(outside):
+            res.summary += (f" Outside the accepted {PI_RANGE[0]:.0%}-{PI_RANGE[1]:.0%}: " + "; ".join(
+                f"{r.river} version {r.version} ({LABELS[r['noise model']]}) {r.coverage:.1%}"
+                for _, r in outside.iterrows()) + ".")
         w = {n: conv.loc[conv["noise model"] == n, "7-day mean coverage"] for n in NOISE_MODELS}
         res.notes.append(
             f"7-day means: with iid noise the 90% intervals contained only {w['iid'].min():.0%}-"

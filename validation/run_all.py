@@ -1,7 +1,7 @@
 """
 Run the validation suite and write validation/REPORT.md.
 
-    python validation/run_all.py            # full suite (about 50 minutes on 4 cores)
+    python validation/run_all.py            # full suite (about an hour on 4 cores)
     python validation/run_all.py --quick    # reduced version of every check (about 2 minutes)
     python validation/run_all.py --only V2 V6
 
@@ -41,10 +41,10 @@ def git_state() -> str:
             return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True).stdout.strip()
         except OSError:
             return ""
-    # The run's own outputs (REPORT.md, results/, figures/) are not part of what is validated.
+    # The run's own outputs (REPORT.md, reports/, results/, figures/) are not part of what is validated.
     dirty = " (with uncommitted changes)" if git(
         "status", "--porcelain", "--untracked-files=no", "--", ".", ":!validation/REPORT.md",
-        ":!validation/results", ":!validation/figures") else ""
+        ":!validation/reports", ":!validation/results", ":!validation/figures") else ""
     return f"commit {git('rev-parse', '--short', 'HEAD')}{dirty}"
 
 
