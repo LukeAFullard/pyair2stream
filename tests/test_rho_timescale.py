@@ -51,9 +51,9 @@ def test_weekly_sees_a_slow_component_that_daily_misses():
     x = np.sqrt(0.6) * _ar1(20_000, 0.55, rng) + np.sqrt(0.4) * _ar1(20_000, 0.96, rng)
     daily, weekly = _estimate(x, estimate_ar1_rho), _estimate(x, estimate_ar1_rho_weekly)
     assert daily < 0.85 < weekly
-    # The weekly rho reproduces the week-to-week correlation of the errors.
-    m = x[: len(x) // 7 * 7].reshape(-1, 7).mean(axis=1)
-    assert abs(weekly_mean_correlation(weekly) - np.corrcoef(m[:-1], m[1:])[0, 1]) < 1e-6
+    # The weekly rho reproduces the correlation between each 7-day mean and the one a week later.
+    m = np.convolve(x, np.ones(7) / 7, mode="valid")
+    assert abs(weekly_mean_correlation(weekly) - np.corrcoef(m[:-7], m[7:])[0, 1]) < 1e-6
 
 
 def test_incomplete_weeks_and_segment_boundaries_are_not_paired():
@@ -146,3 +146,96 @@ def test_exact_likelihood_uses_the_day_to_day_rho(tmp_path):
     assert meta["rho_timescale"] == "weekly"
     assert meta["rho_likelihood"] <= meta["rho"]
     assert 0.5 < meta["rho_likelihood"] < 0.9
+
+
+# --- Edge cases ------------------------------------------------------------------------------
+
+def test_windows_never_cross_segment_boundaries():
+    # Two segments whose errors have opposite fixed offsets. A window straddling the boundary
+    # would see a jump; the estimate must equal that of the two segments estimated separately.
+    rng = np.random.default_rng(10)
+    a, b = _ar1(1500, 0.7, rng) + 0.5, _ar1(1500, 0.7, rng) - 0.5
+    x = np.concatenate([a, b])
+    obs = np.full(len(x), 10.0)
+    joint = estimate_ar1_rho_weekly(obs + x, obs, np.ones(len(x), bool), [(0, 1499), (1500, 2999)])
+    # Same data with a 40-day hole between the parts, as one segment: no window can span the hole.
+    x2 = np.concatenate([a, np.zeros(40), b])
+    obs2 = np.full(len(x2), 10.0)
+    obs2[1500:1540] = -999.0
+    holed = estimate_ar1_rho_weekly(obs2 + x2, obs2, np.ones(len(x2), bool), [(0, len(x2) - 1)])
+    assert joint == pytest.approx(holed, abs=1e-12)
+
+
+def test_short_segments_and_unscored_days_are_ignored():
+    rng = np.random.default_rng(11)
+    x = _ar1(2922, 0.7, rng)
+    obs = np.full(len(x), 10.0)
+    full = estimate_ar1_rho_weekly(obs + x, obs, np.ones(len(x), bool), [(0, 2921)])
+    # Adding 13-day segments (too short to hold a pair of windows) changes nothing.
+    segs = [(0, 2921), (2922, 2934)]
+    x3 = np.concatenate([x, 5 * np.ones(13)])
+    obs3 = np.full(len(x3), 10.0)
+    assert estimate_ar1_rho_weekly(obs3 + x3, obs3, np.ones(len(x3), bool), segs) == pytest.approx(full)
+    # Days marked unscored (eval_mask False) are treated like missing days.
+    mask = np.ones(len(x), bool)
+    mask[100:130] = False
+    obs4 = obs.copy()
+    obs4[100:130] = -999.0
+    assert (estimate_ar1_rho_weekly(obs + x, obs, mask, [(0, 2921)])
+            == pytest.approx(estimate_ar1_rho_weekly(obs4 + x, obs4, np.ones(len(x), bool), [(0, 2921)])))
+
+
+def test_constant_errors_give_zero():
+    n = 1000
+    obs = np.full(n, 10.0)
+    args = (obs + 0.3, obs, np.ones(n, bool), [(0, n - 1)])
+    assert estimate_ar1_rho_weekly(*args) == 0.0
+    assert estimate_rho(*args, timescale="weekly") == estimate_rho(*args, timescale="daily") == 0.0
+
+
+def test_fallback_threshold_is_exact():
+    from pyair2stream.uncertainty import WEEK
+    # One segment of n days holds n - 2*WEEK + 1 pairs of windows a week apart.
+    need = WEEK * MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE
+    rng = np.random.default_rng(12)
+    for n, falls_back in ((need + 2 * WEEK - 1, False), (need + 2 * WEEK - 2, True)):
+        x = 0.5 * np.repeat(rng.standard_normal(n // 7 + 1), 7)[:n] + 0.1 * rng.standard_normal(n)
+        obs = np.full(n, 10.0)
+        args = (obs + x, obs, np.ones(n, bool), [(0, n - 1)])
+        weekly, daily = estimate_ar1_rho_weekly(*args), estimate_ar1_rho(*args)
+        assert (weekly == daily) == falls_back
+
+
+def test_estimates_are_deterministic():
+    x = _ar1(2922, 0.75, np.random.default_rng(13))
+    obs = np.full(len(x), 10.0)
+    args = (obs + x, obs, np.ones(len(x), bool), [(0, len(x) - 1)])
+    assert estimate_rho(*args, timescale="weekly") == estimate_rho(*args, timescale="weekly")
+
+
+def test_weekly_resolution_calibration_records_rho_from_daily_errors(tmp_path):
+    """With weekly scoring, rho does not enter the likelihood, but it still sets the daily
+    prediction noise; it is estimated from the daily errors at the chosen time scale."""
+    import json
+    import yaml
+    from pyair2stream.io import read_calibration, read_Tseries
+    from pyair2stream.model import aggregation, statis
+    from pyair2stream.optimization import DE_MCMC_mode
+    cfg = {"station_name": "S", "series": "c", "version": 3, "run_mode": "DE-MCMC", "random_seed": 1,
+           "time_resolution": "1w", "prc": 0.6,
+           "optimization": {"n_run": 30, "n_particles": 10, "mcmc_walkers": 8, "mcmc_steps": 2000},
+           "uncertainty_options": {"strict_convergence": False},
+           # Physically sensible bounds: with weekly scoring and a very short search, negative
+           # relaxation rates can give a day-to-day zigzag whose weekly means still fit.
+           "parameter_bounds": {"min": [0, 0, 0, -1, 0, 0, 0, -1], "max": [15, 1.5, 5, 1, 20, 10, 1, 5]},
+           "paths": {"input_data": "data/switzerland/MAH_2369_calibration.csv", "output_dir": str(tmp_path / "o")}}
+    path = tmp_path / "c.yaml"
+    path.write_text(yaml.safe_dump(cfg))
+    data = read_calibration(str(path))
+    read_Tseries(data, "c")
+    aggregation(data)
+    statis(data)
+    DE_MCMC_mode(data, seed=1)
+    meta = json.load(open(tmp_path / "o" / "MCMC_chain_S_c_1w_meta.json"))
+    assert meta["rho_timescale"] == "weekly"
+    assert 0.6 < meta["rho"] < 0.99

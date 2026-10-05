@@ -195,6 +195,55 @@ def leave_one_year_out(args):
     return rows
 
 
+def sandwich_prediction():
+    """Parameter-interval widths predicted by theory, for version 5 on the synthetic calibration record.
+
+    For least squares with correlated errors (correlation matrix R), the sampling covariance of the
+    estimates is sigma^2 (J'J)^-1 J'RJ (J'J)^-1 (the 'sandwich'), where J holds the sensitivity of
+    the simulated temperature to each parameter on each day. The least-squares likelihood with the
+    effective sample size gives every parameter the covariance sigma^2 c (J'J)^-1, c = (1+rho)/(1-rho).
+    The ratio of the two standard deviations is what the replicates measure as 'replicate spread /
+    posterior SD' (1 = right width, below 1 = too wide, above 1 = too narrow)."""
+    from scipy.linalg import toeplitz
+    from scipy.optimize import brentq
+    from pyair2stream.config import ACTIVE_PARAMS
+    from pyair2stream.uncertainty import weekly_mean_correlation
+    from v3_recovery import TWO_PART
+    version = 5
+    q_cal = mean_discharge(river_csv("MAH_2369", "calibration"))
+    par = np.array(published_params(version, "MAH_2369"), float)
+    truth_series(version, list(par), "calibration", q_cal, tag="v4_theory")
+    csv = os.path.join(WORK, "v4_theory_forcing_calibration.csv")
+    active = list(ACTIVE_PARAMS[version])
+    from common import simulate
+    cols = []
+    for j in active:
+        h = 1e-4 * max(abs(par[j]), 1.0)
+        up, dn = par.copy(), par.copy()
+        up[j] += h
+        dn[j] -= h
+        cols.append((simulate(csv, version, up, "CRN", q_cal, name="v4_theory").Twat_mod[365:]
+                     - simulate(csv, version, dn, "CRN", q_cal, name="v4_theory").Twat_mod[365:]) / (2 * h))
+    J = np.column_stack(cols)
+    k = np.arange(len(J))
+    w, rf, rs = TWO_PART["fast_share"], TWO_PART["fast_rho"], TWO_PART["slow_rho"]
+    jtj_inv = np.linalg.inv(J.T @ J)
+    out = {}
+    for noise_label, acf, weekly_case, daily_case in (("AR(1) noise", RHO ** k, "E", "G"),
+                                                       ("fast + slow noise", w * rf ** k + (1 - w) * rs ** k, "H", "I")):
+        R = toeplitz(acf)
+        sandwich = jtj_inv @ (J.T @ (R @ J)) @ jtj_inv
+        # The rho each estimator converges to on a long record with this correlation.
+        var7 = 7 + 2 * sum((7 - m) * acf[m] for m in range(1, 7))
+        r7 = sum((7 - abs(d - 7)) * acf[d] for d in range(1, 14)) / var7
+        rho_weekly = max(acf[1], brentq(lambda x: weekly_mean_correlation(x) - r7, 0.0, 0.99))
+        for case, rho in ((weekly_case, rho_weekly), (daily_case, acf[1])):
+            c = (1 + rho) / (1 - rho)
+            ratio = np.sqrt(np.diag(sandwich) / (c * np.diag(jtj_inv)))
+            out[case] = {"rho": float(rho), **{f"a{j + 1}": float(x) for j, x in zip(active, ratio)}}
+    return out
+
+
 def run(ctx) -> Result:
     res = Result(
         code="V4", title="Uncertainty intervals are calibrated",
@@ -290,6 +339,35 @@ def run(ctx) -> Result:
         sec_par.tables += [("Parameter-interval coverage, by parameter", cover.map(lambda x: f"{x:.0%}" if pd.notna(x) else "").reset_index()),
                            ("Spread of estimates between replicates / posterior standard deviation (1 = calibrated)",
                             spread.round(2).reset_index())]
+        if not ctx.quick and all(c in spread.columns for c in "EGHI"):
+            theory = sandwich_prediction()
+            rows_t = []
+            for name in spread.index:
+                if name not in theory["E"]:
+                    continue
+                row = {"parameter": name}
+                for c in "EGHI":
+                    row[f"{c}: theory / measured"] = f"{theory[c][name]:.2f} / {spread.loc[name, c]:.2f}"
+                rows_t.append(row)
+            sec_par.tables.append((
+                "Width of parameter intervals, theory and measurement: true spread of the estimates / interval "
+                "standard deviation (1 = right, below 1 = too wide, above 1 = too narrow); E, H weekly rho; "
+                "G, I daily rho", pd.DataFrame(rows_t)))
+            slow = max((n for n in theory["H"] if n.startswith("a")), key=lambda n: theory["I"][n])
+            res.notes.append(
+                f"Why the parameter intervals behave as they do (theory). The least-squares likelihood with the "
+                f"effective sample size widens every parameter's interval by the same factor, (1 + rho)/(1 - rho). "
+                f"The spread of each estimate really grows by a factor that depends on how that parameter's effect on "
+                f"the simulated temperature varies over time (the 'sandwich' covariance of least squares with "
+                f"correlated errors): a parameter whose effect changes slowly (here {slow}, the seasonal timing) needs "
+                f"the full allowance for long-lasting errors, a parameter whose effect changes from day to day (a2, "
+                f"a3) much less. The table gives the ratio predicted by that formula next to the one measured over "
+                f"the replicates; they agree closely. With fast + slow noise, the daily rho makes {slow}'s interval "
+                f"{theory['I'][slow]:.1f} times too narrow (theory; measured {spread.loc[slow, 'I']:.2f}); the weekly "
+                f"rho gives it the right width ({theory['H'][slow]:.2f}; measured {spread.loc[slow, 'H']:.2f}) and makes "
+                f"the others wider than necessary. With a single factor for all parameters, the weekly rho is the "
+                f"choice that leaves no parameter's interval too narrow in these tests; intervals of parameters with "
+                f"fast-varying effects are wider than they need to be with either rho.")
         d = pp[(pp.case == "D") & (pp.coverage < PAR_MIN)]
         if len(d):
             res.notes.append(

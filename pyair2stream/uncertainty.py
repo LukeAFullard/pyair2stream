@@ -82,36 +82,47 @@ def estimate_ar1_rho_weekly(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mas
     """
     Estimate rho from the persistence of the errors from one week to the next.
 
-    Within each segment, the days are split into consecutive 7-day blocks (from
-    the segment's start); a block counts if all its days are valid (the same
-    days `estimate_ar1_rho` uses). The correlation r between the mean errors of
-    consecutive complete blocks is measured, and rho is the AR(1) coefficient
-    whose blocks have that correlation (`weekly_mean_correlation(rho) = r`).
-    For errors that really are AR(1) this estimates the same rho as consecutive
-    days; real model errors also persist for weeks, which the lag-1 correlation
-    of consecutive days does not show. With fewer than
-    MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE pairs of consecutive complete weeks it falls
+    For every 7-day window whose days are all valid (the same days
+    `estimate_ar1_rho` uses) and that is followed, within the same segment, by
+    another complete 7-day window starting 7 days later, the two windows' mean
+    errors form a pair. r is the correlation over all such pairs (every
+    starting day, so the result does not depend on where weeks are taken to
+    begin), and rho is the AR(1) coefficient whose consecutive weekly means
+    have that correlation (`weekly_mean_correlation(rho) = r`). For errors
+    that really are AR(1) this estimates the same rho as consecutive days;
+    real model errors also persist for weeks, which the lag-1 correlation of
+    consecutive days does not show. With fewer pairs than
+    MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE non-overlapping weeks would give, it falls
     back to `estimate_ar1_rho`.
     """
-    valid_mask = eval_mask & (Twat_obs != -999.0)
-    residuals = Twat_mod - Twat_obs
+    valid_mask = (eval_mask & (Twat_obs != -999.0)).astype(bool)
+    residuals = np.where(valid_mask, Twat_mod - Twat_obs, 0.0)
     first, second = [], []
     for start, end in segments:
-        previous = None
-        for b in range(start, end - WEEK + 2, WEEK):
-            if valid_mask[b:b + WEEK].all():
-                mean = float(np.mean(residuals[b:b + WEEK]))
-                if previous is not None:
-                    first.append(previous)
-                    second.append(mean)
-                previous = mean
-            else:
-                previous = None
-    if len(first) < MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE:
-        logging.warning(f"Only {len(first)} pairs of consecutive complete weeks available for the weekly "
-                        f"rho estimate (need >= {MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE}). Using the lag-1 "
-                        "correlation of consecutive days instead.")
+        n = end - start + 1
+        if n < 2 * WEEK:
+            continue
+        valid_cum = np.concatenate([[0], np.cumsum(valid_mask[start:end + 1])])
+        resid_cum = np.concatenate([[0.0], np.cumsum(residuals[start:end + 1])])
+        n_windows = n - WEEK + 1
+        complete = (valid_cum[WEEK:WEEK + n_windows] - valid_cum[:n_windows]) == WEEK
+        means = (resid_cum[WEEK:WEEK + n_windows] - resid_cum[:n_windows]) / WEEK
+        i = np.arange(n_windows - WEEK)
+        ok = complete[i] & complete[i + WEEK]
+        first.append(means[i][ok])
+        second.append(means[i + WEEK][ok])
+    first = np.concatenate(first) if first else np.empty(0)
+    second = np.concatenate(second) if second else np.empty(0)
+    if len(first) < WEEK * MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE:
+        logging.warning(f"Only {len(first)} pairs of complete 7-day windows a week apart are available for the "
+                        f"weekly rho estimate (need >= {WEEK * MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE}, about "
+                        f"{MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE + 1} complete weeks). Using the lag-1 correlation of "
+                        "consecutive days instead.")
         return estimate_ar1_rho(Twat_mod, Twat_obs, eval_mask, segments)
+    # Errors that do not vary (to rounding of the running sums) carry no persistence to measure.
+    scale = max(float(np.max(np.abs(first))), float(np.max(np.abs(second))), 1e-300)
+    if np.std(first) <= 1e-9 * scale or np.std(second) <= 1e-9 * scale:
+        return 0.0
     r = np.corrcoef(first, second)[0, 1]
     if not np.isfinite(r) or r <= 0.0:
         return 0.0
