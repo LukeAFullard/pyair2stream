@@ -451,9 +451,10 @@ process has only one. The choice is which of them it should reproduce.
 2. *Parameters.* With correlated errors, the sampling covariance of least-squares
    estimates is σ²(JᵀJ)⁻¹ JᵀRJ (JᵀJ)⁻¹ (the "sandwich"; R is the correlation
    matrix of the errors, J the sensitivity of the simulated temperature to each
-   parameter on each day). The n_eff likelihood widens every parameter by the
-   same factor, (1 + ρ)/(1 − ρ). Each parameter needs a factor of about
-   1 + 2·Σ_k r_J(k)·r_e(k), with r_J the autocorrelation of its sensitivity.
+   parameter on each day). The n_eff likelihood widens every parameter's
+   variance by the same factor, (1 + ρ)/(1 − ρ). Each parameter needs a factor
+   of about 1 + 2·Σ_k r_J(k)·r_e(k), with r_J the autocorrelation of its
+   sensitivity and r_e that of the errors.
    That is close to the full allowance for slow errors when the parameter's
    effect varies slowly (the constant a1, the seasonal amplitude a6 and timing
    a7). It is much smaller when the effect varies from day to day (the air
@@ -464,7 +465,9 @@ process has only one. The choice is which of them it should reproduce.
    made a7's interval 1.6 times too narrow, and the weekly ρ gave it the right
    width. The cost is that intervals of the fast-varying parameters are wider
    than necessary, by a factor of about two to three in V4. That happens with
-   either ρ: it is a property of a single effective sample size.
+   either ρ: it is a property of a single effective sample size. The two errors
+   are not equal: an interval that is too wide errs on the side of caution, one
+   that is too narrow claims more than the data show.
 3. *The larger of the two estimates.* The weekly option is never less
    persistent than consecutive days show. The week-to-week estimate alone is
    imprecise when errors are only weakly correlated. Taking the larger then errs
