@@ -281,8 +281,8 @@ def _fig_design(designs):
     from matplotlib.lines import Line2D
     fig.legend(handles=[Line2D([0], [0], marker="o", lw=0, color=colour[r], label=lab) for r, lab in
                         (("differential", "calibration years (opposite third)"), ("control", "control years (middle third)"),
-                         ("test", "test years (most extreme third)"))],
-               loc="lower center", ncol=3, fontsize=7.5, bbox_to_anchor=(0.5, -0.04))
+                         ("test", "test years (most extreme third)"), ("unused", "not used (left over)"))],
+               loc="lower center", ncol=4, fontsize=7.5, bbox_to_anchor=(0.5, -0.04))
     fig.tight_layout(rect=(0, 0.06, 1, 1))
     return (save_figure(fig, "V10_years.png"),
             "The years of each river by summer air temperature (left) and summer discharge (right), and their role.")
