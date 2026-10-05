@@ -16,12 +16,12 @@ from scipy.optimize import differential_evolution, minimize
 import emcee
 
 import json
-from .config import CommonData, DEFAULT_NOISE_MODEL, DEFAULT_LIKELIHOOD
+from .config import CommonData, DEFAULT_NOISE_MODEL, DEFAULT_LIKELIHOOD, DEFAULT_RHO_TIMESCALE
 from .model import (
     call_model, funcobj, aggregation, statis, warn_on_stability, check_numerical_divergence,
     is_numerically_divergent, NumericalDivergenceError,
 )
-from .uncertainty import estimate_ar1_rho, generate_ar1_noise, build_ar1_runs, ar1_whitened_stats
+from .uncertainty import estimate_rho, generate_ar1_noise, build_ar1_runs, ar1_whitened_stats
 
 # A near-perfect-fit MCMC log-likelihood is capped at this large but finite value rather
 # than returned as a literal np.inf, which poisons emcee's acceptance-ratio arithmetic
@@ -642,8 +642,10 @@ def forward_mode(data: CommonData) -> None:
             elif has_obs:
                 eval_mask_for_rho = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=bool)
                 segments_for_rho = _segments_for(data)
-                rho_used = estimate_ar1_rho(data.Twat_mod, data.Twat_obs, eval_mask_for_rho, segments_for_rho)
-                print(f"Using rho={rho_used:.4f} estimated from this run's own residuals "
+                rho_timescale = uncertainty_options.get('rho_timescale', DEFAULT_RHO_TIMESCALE)
+                rho_used = estimate_rho(data.Twat_mod, data.Twat_obs, eval_mask_for_rho, segments_for_rho,
+                                        rho_timescale)
+                print(f"Using rho={rho_used:.4f} estimated ({rho_timescale}) from this run's own residuals "
                       "(no rho recorded with the chain).")
             else:
                 print("Warning: No residuals available to estimate rho; falling back to rho=0.0 (equivalent to iid)")
@@ -1100,7 +1102,8 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     call_model(data)
     funcobj(data)
 
-    best_rho = estimate_ar1_rho(data.Twat_mod, data.Twat_obs, eval_mask, segments)
+    rho_timescale = uncertainty_options.get('rho_timescale', DEFAULT_RHO_TIMESCALE)
+    best_rho = estimate_rho(data.Twat_mod, data.Twat_obs, eval_mask, segments, rho_timescale)
 
     valid_mask_agg = (data.Twat_obs_agg != -999.0) & eval_mask
     N = int(np.sum(valid_mask_agg))
@@ -1272,6 +1275,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     print("Writing metadata sidecar...")
     sidecar_data = {
         "rho": best_rho,
+        "rho_timescale": rho_timescale,
         "sigma": best_sigma,
         "n_valid_pairs": N,  # N valid points used for variance, proxy for pairs
         "noise_model_used_for_this_run": noise_model,

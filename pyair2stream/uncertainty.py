@@ -9,8 +9,12 @@ for probabilistic forward predictions.
 import numpy as np
 import scipy.signal
 import logging
+from scipy.optimize import brentq
 
 MIN_PAIRS_FOR_RHO_ESTIMATE = 30
+WEEK = 7
+MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE = 20
+MAX_RHO = 0.99
 
 def estimate_ar1_rho(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mask: np.ndarray, segments: list) -> float:
     """
@@ -52,6 +56,90 @@ def estimate_ar1_rho(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mask: np.n
     # Hydrological water temperature residuals are typically positively autocorrelated (persistence);
     # negative serial correlation is disallowed by design in empirical noise estimation.
     return float(np.clip(rho, 0.0, 0.99))
+
+
+def weekly_mean_correlation(rho: float, week: int = WEEK) -> float:
+    """
+    Correlation between the means of two consecutive, non-overlapping blocks of
+    `week` days of a stationary AR(1) process with lag-1 correlation `rho`.
+
+    With c_d the number of day pairs d days apart across the two blocks
+    (c_d = week - |d - week|, d = 1 .. 2*week - 1), the correlation is
+    sum(c_d * rho**d) / (week + 2 * sum_{k<week} (week - k) * rho**k).
+    It rises from 0 (rho = 0) towards 1 (rho -> 1).
+    """
+    if rho <= 0.0:
+        return 0.0
+    d = np.arange(1, 2 * week)
+    cov = np.sum((week - np.abs(d - week)) * rho ** d)
+    k = np.arange(1, week)
+    var = week + 2.0 * np.sum((week - k) * rho ** k)
+    return float(cov / var)
+
+
+def estimate_ar1_rho_weekly(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mask: np.ndarray,
+                            segments: list) -> float:
+    """
+    Estimate rho from the persistence of the errors from one week to the next.
+
+    Within each segment, the days are split into consecutive 7-day blocks (from
+    the segment's start); a block counts if all its days are valid (the same
+    days `estimate_ar1_rho` uses). The correlation r between the mean errors of
+    consecutive complete blocks is measured, and rho is the AR(1) coefficient
+    whose blocks have that correlation (`weekly_mean_correlation(rho) = r`).
+    For errors that really are AR(1) this estimates the same rho as consecutive
+    days; real model errors also persist for weeks, which the lag-1 correlation
+    of consecutive days does not show. With fewer than
+    MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE pairs of consecutive complete weeks it falls
+    back to `estimate_ar1_rho`.
+    """
+    valid_mask = eval_mask & (Twat_obs != -999.0)
+    residuals = Twat_mod - Twat_obs
+    first, second = [], []
+    for start, end in segments:
+        previous = None
+        for b in range(start, end - WEEK + 2, WEEK):
+            if valid_mask[b:b + WEEK].all():
+                mean = float(np.mean(residuals[b:b + WEEK]))
+                if previous is not None:
+                    first.append(previous)
+                    second.append(mean)
+                previous = mean
+            else:
+                previous = None
+    if len(first) < MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE:
+        logging.warning(f"Only {len(first)} pairs of consecutive complete weeks available for the weekly "
+                        f"rho estimate (need >= {MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE}). Using the lag-1 "
+                        "correlation of consecutive days instead.")
+        return estimate_ar1_rho(Twat_mod, Twat_obs, eval_mask, segments)
+    r = np.corrcoef(first, second)[0, 1]
+    if not np.isfinite(r) or r <= 0.0:
+        return 0.0
+    if r >= weekly_mean_correlation(MAX_RHO):
+        return MAX_RHO
+    return float(brentq(lambda x: weekly_mean_correlation(x) - r, 0.0, MAX_RHO))
+
+
+def estimate_rho(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mask: np.ndarray, segments: list,
+                 timescale: str = 'weekly') -> float:
+    """
+    rho at the chosen time scale.
+
+    'daily': the lag-1 correlation of consecutive days (`estimate_ar1_rho`).
+    'weekly': the larger of that and the week-to-week estimate
+    (`estimate_ar1_rho_weekly`). The week-to-week estimate captures errors that
+    persist for weeks; taking the larger of the two means the result is never
+    less persistent than the day-to-day correlation shows. For AR(1) errors
+    both estimate the same rho; the week-to-week estimate alone is imprecise
+    when the errors are only weakly correlated, and taking the larger then errs
+    towards wider intervals.
+    """
+    if timescale == 'daily':
+        return estimate_ar1_rho(Twat_mod, Twat_obs, eval_mask, segments)
+    if timescale == 'weekly':
+        return max(estimate_ar1_rho(Twat_mod, Twat_obs, eval_mask, segments),
+                   estimate_ar1_rho_weekly(Twat_mod, Twat_obs, eval_mask, segments))
+    raise ValueError(f"Invalid rho_timescale '{timescale}'. Must be 'weekly' or 'daily'.")
 
 
 def build_ar1_runs(valid_mask: np.ndarray, segments: list) -> list:

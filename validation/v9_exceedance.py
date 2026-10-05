@@ -28,8 +28,18 @@ STATS = ("highest daily mean", "highest 7-day mean", "days above threshold")
 STAT_COLOUR = dict(zip(STATS, (BLUE, ORANGE, AQUA)))
 RANGES = (0.5, 0.9)                     # central ranges whose coverage is tested
 STATED = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)   # stated probabilities in the reliability table
-REPLICATES = {5: 30, 8: 12}             # synthetic data sets per model version (as V4)
+# Synthetic cases (label, version, noise in the data, rho time scale or None for the default, data sets,
+# judged). Fast + slow noise (as measured on real rivers) can only be approximated by AR(1): those cases
+# are reported, not judged; the two of them use identical data and differ only in how rho is estimated.
+SYN_CASES = (
+    ("version 5, AR(1) noise", 5, "ar1", None, 30, True),
+    ("version 8, AR(1) noise", 8, "ar1", None, 12, True),
+    ("version 5, fast + slow noise", 5, "two-part", None, 30, False),
+    ("version 5, fast + slow noise, rho from consecutive days", 5, "two-part", "daily", 30, False),
+)
 REAL_VERSIONS = (5, 8)
+REAL_RHO = (None, "daily")              # real rivers: the default (weekly) and the daily option
+RHO_LABEL = {None: "weekly (default)", "daily": "daily (option)"}
 N_SAMPLES = 1000
 WARM_SEASON = (6, 7, 8, 9)
 MIN_WARM_SEASON_OBSERVED = 0.8          # a year is used if at least this share of June-September is observed
@@ -96,14 +106,17 @@ def _forward_ensemble(version, par_best, chain, csv, qmedia, folder, seed):
     return scenario.load_ensemble(os.path.join(folder, "fwd", "Forward_Prediction_Ensemble_S_c_1d.npz"))
 
 
-def _calibrate_mcmc(version, csv, qmedia, folder, tag, seed):
-    """DE-MCMC with the default error model and likelihood; None if it did not converge."""
+def _calibrate_mcmc(version, csv, qmedia, folder, tag, seed, rho_timescale=None):
+    """DE-MCMC with the default error model and likelihood (and rho time scale unless given); None if it
+    did not converge."""
     from pyair2stream.optimization import DE_MCMC_mode
     out = os.path.join(folder, "out")
     cfg = {"version": version, "integrator": "CRN", "run_mode": "DE-MCMC", "objective_function": "NSE",
            "random_seed": seed, "Qmedia": qmedia, "parameter_bounds": AUTHORS_BOUNDS,
            "optimization": {**DE_SETTINGS, "mcmc_walkers": 32, "mcmc_steps": 20000},
            "paths": {"input_data": csv, "output_dir": out}}
+    if rho_timescale:
+        cfg["uncertainty_options"] = {"rho_timescale": rho_timescale}
     data = load(cfg, tag)
     try:
         with quiet():
@@ -116,23 +129,25 @@ def _calibrate_mcmc(version, csv, qmedia, folder, tag, seed):
 # --- Part A: synthetic data with a known truth ------------------------------------------------
 
 def _synthetic(args):
-    version, r = args
-    tag = f"v9_{version}_{r}"
+    case, r = args
+    label, version, kind, rho_timescale = case[:4]
+    tag = f"v9_{SYN_CASES.index(case)}_{r}"
     folder = os.path.join(WORK, tag)
     os.makedirs(folder, exist_ok=True)
     q_cal = mean_discharge(river_csv("MAH_2369", "calibration"))
     par_true = published_params(version, "MAH_2369")
     src_c, truth_c = truth_series(version, par_true, "calibration", q_cal, tag=tag)
     src_v, truth_v = truth_series(version, par_true, "validation", q_cal, tag=tag)
-    rng = np.random.default_rng(90000 + 100 * version + r)
+    # The same data for cases with the same noise and version, whatever the rho time scale.
+    rng = np.random.default_rng((90000 if kind == "ar1" else 95000) + 100 * version + r)
     cal_csv, val_csv = os.path.join(folder, "cal.csv"), os.path.join(folder, "val.csv")
-    obs_c = np.round(truth_c + noise(len(truth_c), "ar1", rng), 3)
-    obs_v = np.round(truth_v + noise(len(truth_v), "ar1", rng), 3)
+    obs_c = np.round(truth_c + noise(len(truth_c), kind, rng), 3)
+    obs_v = np.round(truth_v + noise(len(truth_v), kind, rng), 3)
     src_c.assign(T_water=obs_c).to_csv(cal_csv, index=False)
     src_v.assign(T_water=obs_v).to_csv(val_csv, index=False)
-    fit = _calibrate_mcmc(version, cal_csv, q_cal, folder, tag, seed=r + 1)
+    fit = _calibrate_mcmc(version, cal_csv, q_cal, folder, tag, seed=r + 1, rho_timescale=rho_timescale)
     if fit is None:
-        return {"version": version, "replicate": r, "converged": False, "years": []}
+        return {"case": label, "replicate": r, "converged": False, "years": []}
     data, chain = fit
     ens, dates = _forward_ensemble(version, data.par_best, chain, val_csv, q_cal, folder, seed=r + 1)
     warm = float(np.quantile(truth_c, WARM_QUANTILE))
@@ -141,22 +156,25 @@ def _synthetic(args):
     for year, stats in year_statistics(ens, dates, obs_v, warm):
         for name, (sims, value) in stats.items():
             years.append({"statistic": name, "year": year, "pit": pit(sims, value, prng)})
-    return {"version": version, "replicate": r, "converged": True, "years": years}
+    rho = json.load(open(chain.replace(".csv", "_meta.json")))["rho"]
+    return {"case": label, "replicate": r, "converged": True, "years": years, "rho": rho}
 
 
 # --- Part B: real rivers, years not used for calibration --------------------------------------
 
 def _real(args):
-    st, version = args
-    tag = f"v9r_{st}_{version}"
+    st, version, rho_timescale = args
+    tag = f"v9r_{st}_{version}_{rho_timescale or 'default'}"
     folder = os.path.join(WORK, tag)
     os.makedirs(folder, exist_ok=True)
     cal, val = river_csv(st, "calibration"), river_csv(st, "validation")
     q_cal = mean_discharge(cal)
-    fit = _calibrate_mcmc(version, cal, q_cal, folder, tag, seed=1)
+    fit = _calibrate_mcmc(version, cal, q_cal, folder, tag, seed=1, rho_timescale=rho_timescale)
     if fit is None:
-        return {"river": RIVERS[st], "version": version, "converged": False, "rows": []}
+        return {"river": RIVERS[st], "version": version, "rho time scale": RHO_LABEL[rho_timescale],
+                "converged": False, "rows": []}
     data, chain = fit
+    rho = json.load(open(chain.replace(".csv", "_meta.json")))["rho"]
     ens, dates = _forward_ensemble(version, data.par_best, chain, val, q_cal, folder, seed=1)
     cal_df = pd.read_csv(cal, parse_dates=["Date"])
     obs_c = cal_df.T_water.to_numpy(float)
@@ -170,7 +188,8 @@ def _real(args):
     rows = []
     for year, stats in year_statistics(ens, dates, obs_v, warm):
         for name, (sims, value) in stats.items():
-            row = {"river": RIVERS[st], "version": version, "year": year, "statistic": name,
+            row = {"river": RIVERS[st], "version": version, "rho time scale": RHO_LABEL[rho_timescale],
+                   "rho": round(float(rho), 3), "year": year, "statistic": name,
                    "threshold (°C)": round(warm, 2) if name == "days above threshold" else "",
                    "measured": value, "median": float(np.median(sims)),
                    "pit": pit(sims, value, prng)}
@@ -180,7 +199,8 @@ def _real(args):
             row["events"] = [(float(lim), float(np.mean(sims > lim)), float(np.mean(past_values[name] > lim)),
                               float(value > lim)) for lim in limits[name]]
             rows.append(row)
-    return {"river": RIVERS[st], "version": version, "converged": True, "rows": rows,
+    return {"river": RIVERS[st], "version": version, "rho time scale": RHO_LABEL[rho_timescale],
+            "converged": True, "rows": rows,
             "past years": {name: len(v) for name, v in past_values.items()}}
 
 
@@ -203,7 +223,10 @@ def run(ctx) -> Result:
                "percentile of the calibration years' daily temperatures. "
                "(A) Synthetic data as in V4 (Mentue forcing, the published version 5 and 8 parameters as the "
                "truth, AR(1) noise with sd 0.5 °C and lag-1 correlation 0.7; 30 and 12 data sets, each with "
-               "three later years). For each year and statistic, the measured value's position among the "
+               "three later years). Two more sets of 30 version 5 data sets use noise made of a fast (2-day) and "
+               "a slow (3-4 week) part, as measured on the real rivers, with rho estimated from week-to-week "
+               "persistence (the default) or from consecutive days (the 'daily' option), on identical data. "
+               "For each year and statistic, the measured value's position among the "
                "simulations is recorded (the share of simulations below it; ties in day counts split at "
                "random). If the probabilities are right, a limit with a stated chance p of being exceeded is "
                "exceeded in a share p of cases, and the central 50% and 90% ranges contain the measured value "
@@ -213,17 +236,20 @@ def run(ctx) -> Result:
                "statistic over the calibration years. The package's probabilities are scored against what "
                "was measured with the Brier score (mean squared difference between the probability and the "
                "outcome, 1 or 0), and compared with the past-years alternative: the share of calibration "
-               "years in which the limit was exceeded.",
-        criterion=f"(A) For each version and statistic, the share of measured values inside the central 50% and "
-                  f"90% ranges lies within the range expected by chance around 50% and 90% (central "
-                  f"{COVERAGE_CONFIDENCE:.0%} binomial range for the number of years tested). (B) For each "
-                  f"version and statistic, the package's Brier score is lower than the past-years "
-                  f"alternative's (Brier skill score above 0).")
-    reps = {5: 3} if ctx.quick else REPLICATES
-    jobs_a = [(v, r) for v, n in reps.items() for r in range(n)]
+               "years in which the limit was exceeded. Both rivers' versions are run with the default rho "
+               "time scale (weekly) and with the daily option.",
+        criterion=f"(A) For each version and statistic with AR(1) noise, the share of measured values inside the "
+                  f"central 50% and 90% ranges lies within the range expected by chance around 50% and 90% "
+                  f"(central {COVERAGE_CONFIDENCE:.0%} binomial range for the number of years tested); the fast + "
+                  f"slow cases are reported, not judged. (B) With the default settings, for each version and "
+                  f"statistic, the package's Brier score is lower than the past-years alternative's (Brier skill "
+                  f"score above 0); the daily option is reported for comparison.")
+    cases = SYN_CASES[:1] if ctx.quick else SYN_CASES
+    reps = {c[0]: (3 if ctx.quick else c[4]) for c in cases}
+    jobs_a = [(c, r) for c in cases for r in range(reps[c[0]])]
     stations = ["MAH_2369"] if ctx.quick else list(RIVERS)
     versions_b = (5,) if ctx.quick else REAL_VERSIONS
-    jobs_b = [(st, v) for st in stations for v in versions_b]
+    jobs_b = [(st, v, rt) for st in stations for v in versions_b for rt in ((None,) if ctx.quick else REAL_RHO)]
     with Timer() as t:
         with ProcessPoolExecutor(max_workers=ctx.workers) as ex:
             fut_b = [ex.submit(_real, j) for j in jobs_b]
@@ -232,41 +258,54 @@ def run(ctx) -> Result:
     res.seconds = t.seconds
 
     # Part A
-    a = pd.DataFrame([dict(version=o["version"], replicate=o["replicate"], **y)
+    a = pd.DataFrame([dict(case=o["case"], replicate=o["replicate"], **y)
                       for o in out_a if o["converged"] for y in o["years"]])
-    n_conv = {v: sum(o["converged"] for o in out_a if o["version"] == v) for v in reps}
+    n_conv = {c: sum(o["converged"] for o in out_a if o["case"] == c) for c in reps}
+    mean_rho = {c: float(np.mean([o["rho"] for o in out_a if o["case"] == c and o["converged"]] or [np.nan]))
+                for c in reps}
+    judged = {c[0]: c[5] for c in cases}
     rows_a, rel_rows, ok_a = [], [], True
-    for (v, name), g in a.groupby(["version", "statistic"], sort=False):
-        u = g.pit.to_numpy()
-        row = {"version": v, "statistic": name, "data sets (converged)": f"{n_conv[v]} of {reps[v]}",
-               "years tested": len(u)}
-        for level in RANGES:
-            inside = float(np.mean(np.abs(u - 0.5) <= level / 2))
-            lo, hi = coverage_band(len(u), level)
-            row[f"inside {level:.0%} range"] = inside
-            row[f"accepted ({level:.0%} range)"] = f"{lo:.0%}-{hi:.0%}"
-            ok_a &= lo <= inside <= hi
-        rows_a.append(row)
-        rel = {"version": v, "statistic": name}
-        for p in STATED:
-            rel[f"stated {p:.0%}"] = f"{np.mean(u > 1 - p):.0%}"
-        rel_rows.append(rel)
-    ok_a &= all(n_conv[v] == reps[v] for v in reps)
+    for c in reps:
+        for name in STATS:
+            g = a[(a.case == c) & (a.statistic == name)]
+            if g.empty:
+                continue
+            u = g.pit.to_numpy()
+            row = {"case": c, "statistic": name, "data sets (converged)": f"{n_conv[c]} of {reps[c]}",
+                   "mean rho": round(mean_rho[c], 2), "years tested": len(u)}
+            for level in RANGES:
+                inside = float(np.mean(np.abs(u - 0.5) <= level / 2))
+                lo, hi = coverage_band(len(u), level)
+                row[f"inside {level:.0%} range"] = inside
+                row[f"accepted ({level:.0%} range)"] = f"{lo:.0%}-{hi:.0%}" if judged[c] else "not judged"
+                if judged[c]:
+                    ok_a &= lo <= inside <= hi
+            rows_a.append(row)
+            rel = {"case": c, "statistic": name}
+            for p in STATED:
+                rel[f"stated {p:.0%}"] = f"{np.mean(u > 1 - p):.0%}"
+            rel_rows.append(rel)
+    ok_a &= all(n_conv[c] == reps[c] for c in reps if judged[c])
     table_a = pd.DataFrame(rows_a)
     table_rel = pd.DataFrame(rel_rows)
+    judged_a = table_a[table_a.case.map(judged)]
 
     # Part B
-    b_rows = [r for o in out_b if o["converged"] for r in o["rows"]]
-    b = pd.DataFrame(b_rows)
-    brier_rows, ok_b = [], all(o["converged"] for o in out_b)
-    for (v, name), g in b.groupby(["version", "statistic"], sort=False):
+    default = RHO_LABEL[None]
+    b_all = pd.DataFrame([r for o in out_b if o["converged"] for r in o["rows"]])
+    b = b_all[b_all["rho time scale"] == default] if len(b_all) else b_all
+    brier_rows, ok_b = [], all(o["converged"] for o in out_b if o["rho time scale"] == default)
+    for (v, ts, name), g in b_all.groupby(["version", "rho time scale", "statistic"], sort=False):
         ev = np.array([e for evs in g.events for e in evs])          # limit, p model, p past, outcome
         bs_model = float(np.mean((ev[:, 1] - ev[:, 3]) ** 2))
         bs_past = float(np.mean((ev[:, 2] - ev[:, 3]) ** 2))
         skill = 1 - bs_model / bs_past if bs_past > 0 else np.nan
-        ok_b &= bool(np.isfinite(skill) and skill > 0)
+        if ts == default:
+            ok_b &= bool(np.isfinite(skill) and skill > 0)
         inside = {level: float(np.mean(np.abs(g.pit - 0.5) <= level / 2)) for level in RANGES}
-        brier_rows.append({"version": v, "statistic": name, "river-years": len(g), "limits tested": len(ev),
+        brier_rows.append({"version": v, "rho time scale": ts,
+                           "mean rho": round(float(g.drop_duplicates("river").rho.mean()), 2),
+                           "statistic": name, "river-years": len(g), "limits tested": len(ev),
                            "limits exceeded": int(ev[:, 3].sum()),
                            "Brier score, pyair2stream": round(bs_model, 3),
                            "Brier score, past years": round(bs_past, 3), "Brier skill score": round(skill, 2),
@@ -284,20 +323,28 @@ def run(ctx) -> Result:
     table_river = pd.DataFrame(by_river)
     res.passed = bool(ok_a and ok_b)
 
-    res.summary = (f"(A) Synthetic data: the 90% ranges contained the measured yearly statistic "
-                   f"{table_a['inside 90% range'].min():.0%}-{table_a['inside 90% range'].max():.0%} of the time "
-                   f"across versions and statistics, and the 50% ranges {table_a['inside 50% range'].min():.0%}-"
-                   f"{table_a['inside 50% range'].max():.0%}"
+    res.summary = (f"(A) Synthetic data with AR(1) noise: the 90% ranges contained the measured yearly statistic "
+                   f"{judged_a['inside 90% range'].min():.0%}-{judged_a['inside 90% range'].max():.0%} of the time "
+                   f"across versions and statistics, and the 50% ranges {judged_a['inside 50% range'].min():.0%}-"
+                   f"{judged_a['inside 50% range'].max():.0%}"
                    f"{'' if ok_a else ' (outside the accepted range in some cases, see table)'}.")
+    two = table_a[~table_a.case.map(judged)]
+    if len(two):
+        parts = [f"{c.split(', ', 2)[-1] if 'consecutive' in c else 'weekly rho (default)'} "
+                 f"{g['inside 90% range'].min():.0%}-{g['inside 90% range'].max():.0%}"
+                 for c, g in two.groupby("case", sort=False)]
+        res.summary += f" With fast + slow noise, 90% ranges held: {'; '.join(parts)}."
     if len(table_brier):
-        res.summary += (f" (B) Real rivers, years not used for calibration: Brier skill score against the "
-                        f"past-years alternative {table_brier['Brier skill score'].min():.2f} to "
-                        f"{table_brier['Brier skill score'].max():.2f} (above 0: better); the 90% ranges "
-                        f"contained the measured statistic in {table_brier['inside 90% range'].min():.0%}-"
-                        f"{table_brier['inside 90% range'].max():.0%} of river-years.")
-    for t in (table_a, table_brier):
-        for col in [c for c in t.columns if c.startswith("inside ")]:
-            t[col] = t[col].map(lambda x: f"{x:.0%}")
+        tb = table_brier[table_brier["rho time scale"] == default]
+        res.summary += (f" (B) Real rivers, years not used for calibration, default settings: Brier skill score "
+                        f"against the past-years alternative {tb['Brier skill score'].min():.2f} to "
+                        f"{tb['Brier skill score'].max():.2f} (above 0: better); the 90% ranges contained the "
+                        f"measured statistic in {tb['inside 90% range'].min():.0%}-{tb['inside 90% range'].max():.0%} "
+                        f"of river-years.")
+        td = table_brier[table_brier["rho time scale"] != default]
+        if len(td):
+            res.summary += (f" With rho from consecutive days: {td['inside 90% range'].min():.0%}-"
+                            f"{td['inside 90% range'].max():.0%}.")
 
     res.sections.append(Section(
         "A. Synthetic data: do the stated probabilities come true?",
@@ -334,7 +381,31 @@ def run(ctx) -> Result:
             "On real rivers the package's probabilities were closer to what happened than the past-years "
             "alternative for every statistic: they use the year's own weather and flow, which past years cannot.")
     if len(table_brier):
-        worse = table_brier[table_brier["Brier skill score"] <= 0]
+        rows_rho = []
+        for (v, name), g in table_brier.groupby(["version", "statistic"], sort=False):
+            w_ = g[g["rho time scale"] == default]
+            d_ = g[g["rho time scale"] != default]
+            if len(w_) and len(d_):
+                rows_rho.append(f"version {v}, {name}: {w_['inside 90% range'].iloc[0]:.0%} weekly vs "
+                                f"{d_['inside 90% range'].iloc[0]:.0%} daily")
+        if rows_rho:
+            rb = table_brier.drop_duplicates(["version", "rho time scale"])
+            res.notes.append(
+                "rho time scale on the real rivers. 90% ranges containing the measured yearly statistic: "
+                + "; ".join(rows_rho) + ". Mean rho: " + "; ".join(
+                    f"version {r.version} {r['rho time scale']} {r['mean rho']:.2f}" for _, r in rb.iterrows())
+                + ". rho from week-to-week persistence is larger because real model errors also persist for "
+                  "weeks, which the correlation of consecutive days does not show.")
+        if len(two):
+            res.notes.append(
+                "With synthetic fast + slow noise (part A), mean rho was " + "; ".join(
+                    f"{mean_rho[c]:.2f} ({'daily option' if 'consecutive' in c else 'weekly default'})"
+                    for c in two.case.unique()) + ". The 90% ranges of yearly statistics held " + "; ".join(
+                    f"{g['inside 90% range'].min():.0%}-{g['inside 90% range'].max():.0%} "
+                    f"({'daily option' if 'consecutive' in c else 'weekly default'})"
+                    for c, g in two.groupby("case", sort=False)) + ".")
+        table_brier_default = table_brier[table_brier["rho time scale"] == default]
+        worse = table_brier_default[table_brier_default["Brier skill score"] <= 0]
         if len(worse):
             res.notes.append(
                 "Where the package did not beat the past-years alternative: " + "; ".join(
@@ -365,19 +436,26 @@ def run(ctx) -> Result:
                 f"similar amount for a whole summer (see the mean errors by river), which widens the true "
                 f"uncertainty of a yearly peak. Treat probabilities for yearly statistics on real rivers as "
                 f"approximate, and check them on your own validation years.")
+    # Shares as percentages for the report (after the notes, which use the numbers).
+    for t in (table_a, table_brier):
+        for col in [c for c in t.columns if c.startswith("inside ")]:
+            t[col] = t[col].map(lambda x: f"{x:.0%}")
     return res
 
 
 def _fig_reliability(a, reps):
     import matplotlib.pyplot as plt
     plot_style()
-    versions = sorted(reps)
-    fig, axes = plt.subplots(1, len(versions), figsize=(4.2 * len(versions) + 0.6, 4.0), squeeze=False)
+    cases = [c for c in reps if (a.case == c).any()]
+    ncol = min(2, len(cases))
+    nrow = int(np.ceil(len(cases) / ncol))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(4.4 * ncol + 0.6, 4.1 * nrow), squeeze=False)
     grid = np.linspace(0.05, 0.95, 19)
-    for ax, v in zip(axes[0], versions):
+    for k, c in enumerate(cases):
+        ax = axes[k // ncol][k % ncol]
         ax.plot([0, 1], [0, 1], color=INK2, lw=0.9, ls=(0, (4, 3)), zorder=1)
         for name in STATS:
-            u = a[(a.version == v) & (a.statistic == name)].pit.to_numpy()
+            u = a[(a.case == c) & (a.statistic == name)].pit.to_numpy()
             if not len(u):
                 continue
             ax.plot(grid, [np.mean(u > 1 - p) for p in grid], color=STAT_COLOUR[name], marker="o", ms=3.5,
@@ -385,9 +463,13 @@ def _fig_reliability(a, reps):
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         ax.set_aspect("equal")
-        ax.set_xlabel("Chance of exceeding the limit, stated by the package")
-        ax.set_title(f"Version {v} ({len(a[(a.version == v)]) // len(STATS)} years tested)")
-    axes[0][0].set_ylabel("Share of cases in which the limit was exceeded")
+        ax.set_title(f"{c[0].upper() + c[1:]}\n({len(a[a.case == c]) // len(STATS)} years tested)", fontsize=9)
+        if k // ncol == nrow - 1:
+            ax.set_xlabel("Chance of exceeding the limit, stated by the package")
+        if k % ncol == 0:
+            ax.set_ylabel("Share of cases in which\nthe limit was exceeded")
+    for k in range(len(cases), nrow * ncol):
+        axes[k // ncol][k % ncol].set_visible(False)
     axes[0][0].legend(loc="upper left", fontsize=7.5)
     fig.suptitle("Synthetic data: stated chances against how often the limit was exceeded", y=1.02)
     return (save_figure(fig, "V9_reliability.png"),

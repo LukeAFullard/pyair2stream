@@ -16,13 +16,14 @@ import pandas as pd
 
 from common import (AUTHORS_BOUNDS, DE_SETTINGS, RIVERS, VERSIONS, WORK, Result, Section, Timer, calibrate, daily,
                     load, mean_discharge, metrics, params_at_bounds, quiet, river_csv, simulate, plot_style,
-                    save_figure, reference_line, SERIES, BLUE, ORANGE, INK, INK2, LIGHT_GREY, GRID)
+                    save_figure, reference_line, SERIES, BLUE, ORANGE, AQUA, INK, INK2, LIGHT_GREY, GRID)
 
 PI_VERSIONS = (5, 8)
 # Error models: iid; AR(1) with the exact AR(1) likelihood; AR(1) noise with the least-squares likelihood
 # and the effective sample size (uncertainty_options.likelihood).
-NOISE_MODELS = ("iid", "ar1", "ar1-ls")
-NOISE_LABEL = {"iid": "iid", "ar1": "ar1, exact likelihood", "ar1-ls": "ar1, least-squares likelihood"}
+NOISE_MODELS = ("iid", "ar1", "ar1-ls", "ar1-ls-daily")
+NOISE_LABEL = {"iid": "iid", "ar1": "ar1, exact likelihood", "ar1-ls": "ar1, least-squares likelihood",
+               "ar1-ls-daily": "ar1, least-squares likelihood, rho from consecutive days"}
 PI_RANGE = (0.85, 0.95)       # accepted coverage of the 90% interval on real held-out years
 SUMMER = (6, 7, 8)
 
@@ -63,8 +64,10 @@ def _interval(args):
            "random_seed": 1, "Qmedia": q_cal, "parameter_bounds": AUTHORS_BOUNDS,
            "optimization": {**DE_SETTINGS, "mcmc_walkers": 32, "mcmc_steps": 20000},
            "uncertainty_options": {"noise_model": "iid" if noise == "iid" else "ar1",
-                                   "likelihood": "least_squares" if noise == "ar1-ls" else "exact"},
+                                   "likelihood": "least_squares" if noise.startswith("ar1-ls") else "exact"},
            "paths": {"input_data": cal, "output_dir": out}}
+    if noise.endswith("-daily"):
+        cfg["uncertainty_options"]["rho_timescale"] = "daily"
     row = {"river": RIVERS[st], "version": v, "noise model": noise}
     data = load(cfg, tag)
     try:
@@ -100,7 +103,7 @@ def _interval(args):
     obs_w = obs_w.mean().to_numpy()
     if (st, v, noise) == ("MAH_2369", 8, "ar1-ls"):
         row["_band"] = (pd.DatetimeIndex(dates), env.Twat_mod_lower.to_numpy(), env.Twat_mod_upper.to_numpy(), obs)
-    return {**row, "converged": True, "steps": meta["steps_run"],
+    return {**row, "converged": True, "steps": meta["steps_run"], "rho": round(float(meta["rho"]), 3),
             "coverage": float(inside[ok].mean()),
             "summer coverage (Jun-Aug)": float(inside[summer].mean()),
             "7-day mean coverage": float(np.mean((obs_w[full] >= lo[full]) & (obs_w[full] <= hi[full]))),
@@ -126,7 +129,8 @@ def run(ctx) -> Result:
                "line regression of water temperature on same-day air temperature. (B) For versions 5 and 8, "
                "DE-MCMC (32 walkers, run until converged, at most 20,000 steps) is run on the calibration "
                "years with each error model (iid; AR(1) with the exact likelihood; AR(1) with the least-squares "
-               "likelihood, the default), and a FORWARD run gives 90% prediction intervals for the "
+               "likelihood, with rho from week-to-week persistence (the default) or from consecutive days), and "
+               "a FORWARD run gives 90% prediction intervals for the "
                "validation years. The share of real observations inside them is recorded, for the whole "
                "year and for summer (June-August), when temperature limits are usually at stake.",
         criterion=f"(A) In every river, every version predicts the validation years with a lower RMSE than "
@@ -171,22 +175,26 @@ def run(ctx) -> Result:
                         f"coverage of real validation data {conv.coverage.min():.1%}-{conv.coverage.max():.1%}"
                         f" (summer {conv['summer coverage (Jun-Aug)'].min():.0%}-"
                         f"{conv['summer coverage (Jun-Aug)'].max():.0%}).")
-        LABELS = {"iid": "iid noise", "ar1": "AR(1), exact likelihood", "ar1-ls": "AR(1), least squares"}
+        LABELS = {"iid": "iid noise", "ar1": "AR(1), exact likelihood", "ar1-ls": "AR(1), least squares",
+                  "ar1-ls-daily": "AR(1), least squares, daily rho"}
         outside = b[~b.coverage.between(*PI_RANGE)]
         if len(outside):
             res.summary += (f" Outside the accepted {PI_RANGE[0]:.0%}-{PI_RANGE[1]:.0%}: " + "; ".join(
                 f"{r.river} version {r.version} ({LABELS[r['noise model']]}) {r.coverage:.2%}"
                 for _, r in outside.iterrows()) + ".")
         w = {n: conv.loc[conv["noise model"] == n, "7-day mean coverage"] for n in NOISE_MODELS}
+        rho = {n: conv.loc[conv["noise model"] == n, "rho"] for n in NOISE_MODELS}
         res.notes.append(
             f"7-day means: with iid noise the 90% intervals contained only {w['iid'].min():.0%}-"
-            f"{w['iid'].max():.0%} of the observed 7-day mean temperatures; with AR(1) noise, "
-            f"{w['ar1-ls'].min():.0%}-{w['ar1-ls'].max():.0%} with the least-squares likelihood (the default) "
-            f"and {w['ar1'].min():.0%}-{w['ar1'].max():.0%} with the exact AR(1) likelihood. With iid noise the "
-            f"simulated day-to-day errors average out within a week, but real model errors persist for days. "
-            f"Use noise_model: ar1 (the default) whenever the quantity of interest spans several days (7-day "
-            f"means, runs of consecutive days), and treat even those intervals as somewhat narrow: real errors "
-            f"persist longer than the AR(1) model assumes.")
+            f"{w['iid'].max():.0%} of the observed 7-day mean temperatures; with AR(1) noise and the least-squares "
+            f"likelihood, {w['ar1-ls'].min():.0%}-{w['ar1-ls'].max():.0%} with rho from week-to-week persistence "
+            f"(the default; rho {rho['ar1-ls'].min():.2f}-{rho['ar1-ls'].max():.2f}) and "
+            f"{w['ar1-ls-daily'].min():.0%}-{w['ar1-ls-daily'].max():.0%} with rho from consecutive days (rho "
+            f"{rho['ar1-ls-daily'].min():.2f}-{rho['ar1-ls-daily'].max():.2f}); with the exact AR(1) likelihood, "
+            f"{w['ar1'].min():.0%}-{w['ar1'].max():.0%}. With iid noise the simulated day-to-day errors average "
+            f"out within a week, but real model errors persist for days to weeks. Use noise_model: ar1 (the "
+            f"default) whenever the quantity of interest spans several days (7-day means, runs of consecutive "
+            f"days).")
         bias = {n: conv.loc[conv["noise model"] == n, "band centre bias (°C)"] -
                    conv.loc[conv["noise model"] == n, "best-fit bias (°C)"] for n in NOISE_MODELS}
         exact = bias["ar1"]
@@ -225,7 +233,8 @@ def run(ctx) -> Result:
             "B. Do 90% prediction intervals contain 90% of real measurements?",
             "For versions 5 and 8, intervals were made for the validation years from a calibration on the "
             "earlier years, with each error model (iid noise; AR(1) noise with the exact AR(1) likelihood; AR(1) "
-            "noise with the least-squares likelihood, the default), and compared with what was measured: day by "
+            "noise with the least-squares likelihood and rho from week-to-week persistence, the default, or from "
+            "consecutive days), and compared with what was measured: day by "
             "day, in summer, and for 7-day means (computed within each simulated series). The last two columns "
             "show where the band is centred: its median minus the measured temperature, and the same for the "
             "best fit.",
@@ -267,9 +276,10 @@ def _fig_coverage(b):
     fig, axes = plt.subplots(1, 3, figsize=(12, 3.9), sharey=True)
     for ax, col, title in zip(axes, ("coverage", "summer coverage (Jun-Aug)", "7-day mean coverage"),
                               ("Daily, whole year", "Daily, summer (June-August)", "7-day means")):
-        for k, (noise, colour) in enumerate((("iid", LIGHT_GREY), ("ar1", ORANGE), ("ar1-ls", BLUE))):
+        for k, (noise, colour) in enumerate((("iid", LIGHT_GREY), ("ar1", ORANGE), ("ar1-ls-daily", AQUA),
+                                              ("ar1-ls", BLUE))):
             g = b[b["noise model"] == noise]
-            ax.bar(np.arange(len(g)) + (k - 1) * 0.27, g[col] * 100, 0.25, color=colour)
+            ax.bar(np.arange(len(g)) + (k - 1.5) * 0.2, g[col] * 100, 0.19, color=colour)
         reference_line(ax, 90, "nominal 90%")
         g = b[b["noise model"] == "iid"]
         ax.set_xticks(np.arange(len(g)), [f"{rv} v{v}" for rv, v in zip(g.river, g.version)], fontsize=7.5,
@@ -277,14 +287,14 @@ def _fig_coverage(b):
         ax.grid(axis="x", visible=False)
         ax.set(title=title, ylim=(0, 105))
     axes[0].set_ylabel("Validation measurements inside\nthe 90% interval (%)")
-    fig.legend(handles=[Patch(color=LIGHT_GREY, label="noise model iid"),
-                        Patch(color=ORANGE, label="noise model ar1, exact likelihood"),
-                        Patch(color=BLUE, label="noise model ar1, least-squares likelihood (default)")],
-               loc="lower center", bbox_to_anchor=(0.5, -0.12), ncol=3, fontsize=8)
+    fig.legend(handles=[Patch(color=LIGHT_GREY, label="iid"),
+                        Patch(color=ORANGE, label="ar1, exact likelihood"),
+                        Patch(color=AQUA, label="ar1, least squares, rho from consecutive days"),
+                        Patch(color=BLUE, label="ar1, least squares, rho from weekly persistence (default)")],
+               loc="lower center", bbox_to_anchor=(0.5, -0.14), ncol=2, fontsize=8)
     return (save_figure(fig, "V5_interval_coverage.png"),
-            "Share of real validation-year measurements inside the 90% interval. Daily values: slightly below 90% "
-            "with every error model. 7-day means: only AR(1) noise comes close, best with the default "
-            "least-squares likelihood (blue).")
+            "Share of real validation-year measurements inside the 90% interval, by error model. Daily values "
+            "depend little on the error model; 7-day means need AR(1) noise.")
 
 
 def _fig_band(band):
