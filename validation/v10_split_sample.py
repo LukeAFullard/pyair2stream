@@ -73,28 +73,32 @@ def _fit(args):
            "paths": {"input_data": cal_csv, "output_dir": out}}
     row = {"river": RIVERS[st], "version": version, "split": split, "calibrated on": role}
     data = load(cfg, tag)
+    converged = True
     try:
         with quiet():
             DE_MCMC_mode(data, seed=1)
-    except RuntimeError:
-        return {**row, "converged": False}
+    except RuntimeError:            # not converged: no intervals, but the DE best fit (par_best) stands
+        converged = False
     full_csv = os.path.join(folder, "full.csv")
     df.assign(Date=df.Date.dt.strftime("%Y-%m-%d")).to_csv(full_csv, index=False)
     fcfg = {"version": version, "integrator": "CRN", "run_mode": "FORWARD", "Qmedia": qmedia,
             "parameters_forward": [float(x) for x in data.par_best],
-            "forward_options": {"enable_prediction_intervals": True,
-                                "mcmc_chain_path": os.path.join(out, "MCMC_chain_S_c_1d.csv"),
-                                "n_samples": 1000, "random_seed": 1},
             "paths": {"input_data": full_csv, "output_dir": os.path.join(folder, "fwd")}}
+    if converged:
+        fcfg["forward_options"] = {"enable_prediction_intervals": True,
+                                   "mcmc_chain_path": os.path.join(out, "MCMC_chain_S_c_1d.csv"),
+                                   "n_samples": 1000, "random_seed": 1}
     fdata = load(fcfg, tag + "_fwd")
     with quiet():
         forward_mode(fdata)
-    env = pd.read_csv(os.path.join(folder, "fwd", "Forward_Prediction_Envelopes_S_c_1d.csv"))
     obs = df.T_water.to_numpy(float)
     sim = fdata.Twat_mod[365:].astype(float)
     test = year.isin(test_years).to_numpy() & np.isfinite(obs)
     summer = test & df.Date.dt.month.isin(SUMMER).to_numpy()
-    inside = (obs >= env.Twat_mod_lower.to_numpy()) & (obs <= env.Twat_mod_upper.to_numpy())
+    if converged:
+        env = pd.read_csv(os.path.join(folder, "fwd", "Forward_Prediction_Envelopes_S_c_1d.csv"))
+        lower, upper = env.Twat_mod_lower.to_numpy(), env.Twat_mod_upper.to_numpy()
+        inside = (obs >= lower) & (obs <= upper)
     m_all, m_sum = metrics(obs[test], sim[test]), metrics(obs[summer], sim[summer])
     # The simple alternatives, fitted on the same calibration years.
     bench_cal = os.path.join(folder, "bench_cal.csv")
@@ -103,13 +107,14 @@ def _fit(args):
     df[year.isin(test_years)].to_csv(bench_test, index=False)
     obs_t = df.T_water[year.isin(test_years)].to_numpy(float)
     simple = {name: metrics(obs_t, pred)["RMSE"] for name, pred in _benchmarks(bench_cal, bench_test).items()}
-    return {**row, "converged": True, "Qmedia": qmedia,
+    return {**row, "converged": converged, "Qmedia": qmedia,
             "RMSE": m_all["RMSE"], "summer RMSE": m_sum["RMSE"], "summer bias": m_sum["bias"],
-            "coverage": float(inside[test].mean()), "summer coverage": float(inside[summer].mean()),
+            "coverage": float(inside[test].mean()) if converged else np.nan,
+            "summer coverage": float(inside[summer].mean()) if converged else np.nan,
             "best simple alternative": min(simple, key=simple.get),
             "best simple alternative RMSE": min(simple.values()),
-            "_series": (df.Date.to_numpy(), obs, sim, env.Twat_mod_lower.to_numpy(), env.Twat_mod_upper.to_numpy())
-            if (st, version, split, role) == ("MAH_2369", 8, "warm", "differential") else None}
+            "_series": (df.Date.to_numpy(), obs, sim, lower, upper)
+            if converged and (st, version, split, role) == ("MAH_2369", 8, "warm", "differential") else None}
 
 
 def run(ctx) -> Result:
@@ -133,7 +138,8 @@ def run(ctx) -> Result:
                   f"test years with a lower RMSE than both simple alternatives fitted on the same years, and its "
                   f"90% intervals contain at least {MIN_COVERAGE:.0%} of the test years' measurements. (The "
                   f"criterion for intervals is lower than V5's 85% because these years lie outside the "
-                  f"calibration conditions by design; the cost of extrapolating is reported, not judged.)")
+                  f"calibration conditions by design; the cost of extrapolating is reported, not judged. An MCMC "
+                  f"run that does not converge gives no intervals, and its case does not meet the criterion.)")
     stations = ["MAH_2369"] if ctx.quick else list(RIVERS)
     versions = (8,) if ctx.quick else VERSIONS_TESTED
     splits = ("warm",) if ctx.quick else tuple(SPLITS)
@@ -155,20 +161,19 @@ def run(ctx) -> Result:
         o.pop("_series", None)
     fits = pd.DataFrame(out)
 
-    rows, ok = [], bool(fits.converged.all())
+    def pct(x):
+        return f"{x:.1%}" if np.isfinite(x) else "MCMC not converged"
+
+    rows, ok = [], True
     for (river, v, split), g in fits.groupby(["river", "version", "split"], sort=False):
         d = g[g["calibrated on"] == "differential"].iloc[0]
         c = g[g["calibrated on"] == "control"].iloc[0]
-        if not (d.converged and c.converged):
-            rows.append({"river": river, "version": v, "split": split, "converged": False, "pass": False})
-            ok = False
-            continue
         st = {r: s for s, r in RIVERS.items()}[river]
         sets = next(s for s_, sp, _, s in designs if s_ == st and sp == split)
-        passed = bool(d["RMSE"] < d["best simple alternative RMSE"] and d["coverage"] >= MIN_COVERAGE)
+        passed = bool(d.converged and d["RMSE"] < d["best simple alternative RMSE"] and d["coverage"] >= MIN_COVERAGE)
         ok &= passed
         rows.append({
-            "river": river, "version": v, "split": split, "converged": True,
+            "river": river, "version": v, "split": split, "MCMC converged": bool(d.converged and c.converged),
             "test years": ", ".join(map(str, sets["test"])),
             "calibrated on (differential)": ", ".join(map(str, sets["differential"])),
             "control years": ", ".join(map(str, sets["control"])),
@@ -178,20 +183,33 @@ def run(ctx) -> Result:
             "summer bias, differential (°C)": round(d["summer bias"], 2),
             "best simple alternative, differential years (RMSE °C)":
                 f"{d['best simple alternative']} {d['best simple alternative RMSE']:.3f}",
-            "90% interval coverage, differential": f"{d['coverage']:.1%}",
-            "summer coverage, differential": f"{d['summer coverage']:.1%}",
-            "90% interval coverage, control": f"{c['coverage']:.1%}",
-            "pass": passed})
+            "90% interval coverage, differential": pct(d["coverage"]),
+            "summer coverage, differential": pct(d["summer coverage"]),
+            "90% interval coverage, control": pct(c["coverage"]),
+            "pass": passed,
+            "_beats": bool(d["RMSE"] < d["best simple alternative RMSE"]), "_coverage": d["coverage"]})
     table = pd.DataFrame(rows)
     res.passed = ok
-    good = table[table.converged]
-    cost = good["cost of extrapolating (°C)"]
-    cov = good["90% interval coverage, differential"].str.rstrip("%").astype(float)
+    cost = table["cost of extrapolating (°C)"]
+    cov = table["_coverage"].dropna()
+    n_beat = int(table["_beats"].sum())
     res.summary = (f"Calibrated on the opposite third of the years, the model predicted the warmest and the "
-                   f"lowest-flow years {'better than both simple alternatives in every case' if bool(good['pass'].all()) else 'with mixed results (see table)'}; "
+                   f"lowest-flow years better than both simple alternatives in {n_beat} of {len(table)} cases; "
                    f"extrapolating changed the RMSE by {cost.min():+.2f} to {cost.max():+.2f} °C compared with "
-                   f"calibrating on the middle years, and the 90% intervals contained {cov.min():.1f}-{cov.max():.1f}% "
-                   f"of the test years' measurements.")
+                   f"calibrating on the middle years, and the 90% intervals contained {cov.min():.1%}-{cov.max():.1%} "
+                   f"of the test years' measurements")
+    low = table[table["_coverage"] < MIN_COVERAGE]
+    not_conv = fits[~fits.converged]
+    extra = []
+    if len(low):
+        extra.append("below " + f"{MIN_COVERAGE:.0%}: " + "; ".join(
+            f"{r.river} version {r.version}, {r.split} split ({r['_coverage']:.1%})" for _, r in low.iterrows()))
+    if len(not_conv):
+        extra.append("MCMC did not converge within 20,000 steps for " + "; ".join(
+            f"{r.river} version {r.version}, {r.split} split, calibrated on the {r['calibrated on']} years"
+            for _, r in not_conv.iterrows()) + " (no intervals; counted as not meeting the criterion)")
+    res.summary += (" (" + "; ".join(extra) + ")." if extra else ".")
+    table = table.drop(columns=["_beats", "_coverage"])
     res.sections.append(Section(
         "Which years were used",
         "Each point is a year. The test years (the most extreme third) are predicted from a calibration on the "
@@ -204,7 +222,7 @@ def run(ctx) -> Result:
         "from the differential calibration minus the RMSE from the control.",
         figures=[f for f in (_fig_results(fits), _fig_example(example)) if f],
         tables=[("Differential split-sample test", table)]))
-    worst_bias = good.loc[good["summer bias, differential (°C)"].abs().idxmax()]
+    worst_bias = table.loc[table["summer bias, differential (°C)"].abs().idxmax()]
     res.notes.append(
         f"The largest summer bias after extrapolating was {worst_bias['summer bias, differential (°C)']:+.2f} °C "
         f"({worst_bias['river']}, version {worst_bias['version']}, {worst_bias['split']} split), against "
@@ -248,7 +266,7 @@ def _fig_design(designs):
 def _fig_results(fits):
     import matplotlib.pyplot as plt
     plot_style()
-    ok = fits[fits.converged]
+    ok = fits
     keys = list(dict.fromkeys(zip(ok.river, ok.version, ok.split)))
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(10, 0.36 * len(keys) + 1.4), sharey=True)
     for i, (river, v, split) in enumerate(keys):
