@@ -272,6 +272,16 @@ def run(ctx) -> Result:
                            "Brier score, past years": round(bs_past, 3), "Brier skill score": round(skill, 2),
                            "inside 50% range": inside[0.5], "inside 90% range": inside[0.9]})
     table_brier = pd.DataFrame(brier_rows)
+    by_river = []
+    if len(b):
+        bb = b.assign(inside90=b.pit.sub(0.5).abs() <= 0.45, error=b.measured - b["median"])
+        for (v, river, name), g in bb.groupby(["version", "river", "statistic"], sort=False):
+            by_river.append({"version": v, "river": river, "statistic": name, "years": len(g),
+                             "inside 90% range": f"{int(g.inside90.sum())} of {len(g)}",
+                             "measured minus predicted median, mean": round(float(g.error.mean()), 2),
+                             "correlation, predicted median vs measured":
+                                 round(float(np.corrcoef(g["median"], g.measured)[0, 1]), 2) if len(g) >= 5 else ""})
+    table_river = pd.DataFrame(by_river)
     res.passed = bool(ok_a and ok_b)
 
     res.summary = (f"(A) Synthetic data: the 90% ranges contained the measured yearly statistic "
@@ -310,8 +320,10 @@ def run(ctx) -> Result:
             "figure shows, for version 8, the predicted ranges of each year's statistics and what was measured. "
             "The Brier score measures how close the probabilities were to what happened (0 is perfect); the "
             "past-years alternative gives each limit the share of calibration years in which it was exceeded.",
-            figures=[_fig_real(b, 8 if 8 in versions_b else versions_b[0])],
+            figures=[_fig_real(b, v) for v in sorted(set(b.version), reverse=True)],
             tables=[("B. Probabilities scored against the past-years alternative (Brier score)", table_brier),
+                    ("B. By river: how often the 90% range held, and the mean error of the predicted median",
+                     table_river),
                     ("B. Each river-year: predicted median and ranges, and the measured value", shown)]))
     res.notes.append(
         "Part A tests the calculation of probabilities and ranges from the saved simulations, where the model "
@@ -321,6 +333,36 @@ def run(ctx) -> Result:
         res.notes.append(
             "On real rivers the package's probabilities were closer to what happened than the past-years "
             "alternative for every statistic: they use the year's own weather and flow, which past years cannot.")
+    if len(table_brier):
+        worse = table_brier[table_brier["Brier skill score"] <= 0]
+        if len(worse):
+            res.notes.append(
+                "Where the package did not beat the past-years alternative: " + "; ".join(
+                    f"version {r.version}, {r.statistic} (Brier skill score {r['Brier skill score']:.2f})"
+                    for _, r in worse.iterrows()) + ". See the table by river.")
+        # The river with the most years shows whether a version follows the year-to-year changes.
+        river = b.groupby("river").year.nunique().idxmax()
+        parts = []
+        for v in sorted(set(b.version)):
+            g = b[(b.river == river) & (b.version == v) & (b.statistic == "highest 7-day mean")]
+            if len(g) >= 5:
+                parts.append(f"version {v}: predicted median {g['median'].min():.2f}-{g['median'].max():.2f} °C, "
+                             f"correlation with the measured peak {np.corrcoef(g['median'], g.measured)[0, 1]:.2f}")
+        if parts:
+            g = b[(b.river == river) & (b.statistic == "highest 7-day mean")]
+            res.notes.append(
+                f"Year-to-year changes: on the {river} the measured highest 7-day mean ranged from "
+                f"{g.measured.min():.2f} to {g.measured.max():.2f} °C over the years tested ({'; '.join(parts)}). "
+                f"A version that cannot follow these changes gives probabilities no better than past years; "
+                f"compare versions by cross-validation before relying on one (example 06).")
+        cov = b.assign(inside90=b.pit.sub(0.5).abs() <= 0.45).groupby(["version", "statistic"]).inside90.mean()
+        res.notes.append(
+            f"On real rivers the 90% ranges of yearly statistics contained the measured value in "
+            f"{cov.min():.0%}-{cov.max():.0%} of river-years, so they are too narrow, while on synthetic data "
+            f"(part A) they hold. The error model (AR(1), the same all year) describes day-to-day model errors; "
+            f"on real rivers the model can also be off by a similar amount for a whole summer (see the mean "
+            f"errors by river), which widens the true uncertainty of a yearly peak. Treat probabilities for "
+            f"yearly statistics on real rivers as approximate, and check them on your own validation years.")
     return res
 
 
@@ -359,17 +401,23 @@ def _fig_real(b, version):
     keys = list(dict.fromkeys(zip(g.river, g.year)))
     fig, axes = plt.subplots(1, len(STATS), figsize=(11, 0.32 * len(keys) + 1.6), sharey=True)
     for ax, name in zip(axes, STATS):
+        ax.axvline(0, color=INK2, lw=0.8, ls=(0, (4, 3)), zorder=1)
         for i, (river, year) in enumerate(keys):
             r = g[(g.river == river) & (g.year == year) & (g.statistic == name)]
             if not len(r):
                 continue
             r = r.iloc[0]
             y = len(keys) - 1 - i
-            ax.plot(r["90% range"], [y, y], color=LIGHT_GREY, lw=5, solid_capstyle="butt", zorder=2)
-            ax.plot(r["50% range"], [y, y], color=BLUE, lw=5, solid_capstyle="butt", alpha=0.6, zorder=3)
+            m = r["median"]
+            ax.plot([r["90% range"][0] - m, r["90% range"][1] - m], [y, y], color=LIGHT_GREY, lw=5,
+                    solid_capstyle="butt", zorder=2)
+            ax.plot([r["50% range"][0] - m, r["50% range"][1] - m], [y, y], color=BLUE, lw=5,
+                    solid_capstyle="butt", alpha=0.6, zorder=3)
             inside = r["90% range"][0] <= r["measured"] <= r["90% range"][1]
-            ax.scatter(r["measured"], y, s=22, color="#0b0b0b" if inside else ORANGE, zorder=4)
-        ax.set_title(name + (" (days)" if name == "days above threshold" else " (°C)"), fontsize=9)
+            ax.scatter(r["measured"] - m, y, s=22, color="#0b0b0b" if inside else ORANGE, zorder=4)
+        unit = "days" if name == "days above threshold" else "°C"
+        ax.set_title(name, fontsize=9)
+        ax.set_xlabel(f"relative to the predicted median ({unit})", fontsize=8)
         ax.grid(axis="y", visible=False)
     axes[0].set_yticks(range(len(keys))[::-1], [f"{river} {year}" for river, year in keys], fontsize=7.5)
     from matplotlib.lines import Line2D
@@ -379,7 +427,8 @@ def _fig_real(b, version):
                              Line2D([0], [0], marker="o", lw=0, color=ORANGE, label="measured, outside the 90% range")],
                     loc="upper center", bbox_to_anchor=(-0.7, -0.08), ncol=4, fontsize=7.5)
     fig.suptitle(f"Real rivers, version {version}: predicted ranges for years not used for calibration", y=1.0)
-    return (save_figure(fig, "V9_real_rivers.png"),
+    return (save_figure(fig, f"V9_real_rivers_v{version}.png"),
             f"Version {version}: the predicted 50% and 90% ranges of each year's statistics (from 1000 "
-            f"simulations, over the days that were measured) and the measured value. 'Days above threshold' "
-            f"uses each river's own threshold (90th percentile of its calibration-year temperatures).")
+            f"simulations, over the days that were measured) and the measured value, all relative to the "
+            f"predicted median (dashed line). 'Days above threshold' uses each river's own threshold (90th "
+            f"percentile of its calibration-year temperatures).")
