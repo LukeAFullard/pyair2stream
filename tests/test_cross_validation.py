@@ -9,8 +9,9 @@ from pyair2stream.cross_validation import (
 )
 
 @pytest.fixture
-def dummy_data():
+def dummy_data(tmp_path):
     data = CommonData()
+    data.folder = str(tmp_path)  # calibration runs write their history here, not the working directory
     n_tot = 365 * 4
     data.n_tot = n_tot
     data.date = np.zeros((n_tot, 3), dtype=np.int32)
