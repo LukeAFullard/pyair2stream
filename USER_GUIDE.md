@@ -96,7 +96,11 @@ Start with 8 (or 5 without discharge) and compare with simpler versions on the
 is over-fitted; prefer the simplest version that validates well.
 Cross-validation (example [06](examples/06_cross_validation/README.md)) is the
 most thorough comparison. On the three Swiss rivers, versions 7 and 8 predicted
-unseen years best ([validation V5](validation/REPORT.md#v5)).
+unseen years best ([validation V5](validation/REPORT.md#v5)). On the Rhône,
+whose summer temperature depends strongly on discharge, the versions without a
+discharge term (3–5) did hardly better than simple alternatives, and version 5's
+probabilities for yearly peaks were no better than going by past years
+([V9](validation/REPORT.md#v9), [V10](validation/REPORT.md#v10)).
 
 ### Integrator (`integrator`)
 
@@ -535,7 +539,12 @@ set `uncertainty_options.save_ensemble: true` and use `pyair2stream.scenario`
 (the default) matters: it keeps each simulated error series realistically
 persistent.
 Example [03](examples/03_compliance/README.md) computes the probability that a
-7-day mean limit was exceeded.
+7-day mean limit was exceeded. Such probabilities are computed correctly (on
+synthetic data they come true as often as they say), but on real rivers the
+ranges for yearly peaks were too narrow: version 8's 90% ranges contained the
+measured value in 67–87% of years not used for calibration
+([validation V9](validation/REPORT.md#v9)). Treat them as approximate, and
+check them on your own validation years.
 
 **Comparing two scenarios.** To get an uncertainty band for the *difference*
 (for example abstraction minus natural flow), both runs must use the same

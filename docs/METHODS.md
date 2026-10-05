@@ -450,6 +450,19 @@ band is not the upper edge of a weekly mean or a yearly peak. The probability
 is only as good as the model and its error model: check the coverage on
 validation years first (§16; example 03).
 
+**What the validation shows** (V9). On synthetic data, where the model and its
+error model are exactly right, the stated probabilities for yearly statistics
+(highest daily mean, highest 7-day mean, days above a threshold) came true as
+often as stated, and the 50% and 90% ranges contained the measured value 42–58%
+and 86–94% of the time. On the three Swiss rivers, for years not used for
+calibration, version 8's probabilities were closer to what happened than the
+share of past years in which the limit was exceeded (Brier skill score
+0.13–0.41), but its 90% ranges contained the measured value in only 67–87% of
+river-years: the model can be off by a few tenths of a degree for a whole
+summer, which the error model (day-to-day AR(1) errors of constant size) does
+not represent. Version 5 did no better than past years for the yearly peaks
+(−0.11 and −0.12): on the Rhône it predicted almost the same peak every year.
+
 **Comparing two scenarios** (for example observed versus naturalised flow): run
 FORWARD once per scenario from the same chain with `save_ensemble: true`, and
 for the second run set `forward_options.reuse_sample_indices_from` to the first
@@ -498,7 +511,20 @@ change one-sided.
   assume the river behaves the same way in the period predicted (no new dam,
   effluent, abstraction pattern or loss of shading in between). Predictions for
   conditions outside the calibration range (air temperature, discharge) are
-  extrapolations; check the θ-range warning.
+  extrapolations; check the θ-range warning. In validation V10, calibrating on
+  the coolest (or highest-flow) third of each Swiss river's years and predicting
+  the warmest (or lowest-flow) third cost at most 0.07 °C of RMSE compared with
+  calibrating on the middle third, but a single extreme period can still be
+  missed (the Mentue's 2003 heatwave).
+- **Choose a version that suits the river.** Where discharge drives the summer
+  temperature (the Rhône here), versions without a discharge term (3–5) did
+  hardly better than simple alternatives, and version 5's probabilities for
+  yearly peaks were no better than going by past years (V5, V9, V10). Compare
+  versions on validation years or by cross-validation (§11).
+- **Probabilities for yearly statistics are approximate on real rivers.** Their
+  computation is right (V9, synthetic data), but on the Swiss rivers version
+  8's 90% ranges for yearly peaks contained the measured value in 67–87% of
+  years not used for calibration (V9). Report them with that caveat.
 - **Different parameter sets can fit equally well** (equifinality), especially
   for versions 7 and 8. Inspect the dotty plots; a parameter at a bound suggests
   the bounds are too narrow. Prefer the simplest version that validates well.
@@ -530,14 +556,18 @@ change one-sided.
 [validation/REPORT.md](../validation/REPORT.md), produced by
 `validation/run_all.py`: identical results to the original Fortran on real
 inputs for every version and Fortran integrator (to 5×10⁻⁶ °C, the precision of
-its printed output); all 30 published RMSE values of Piccolroaz et al. (2016)
+its printed output), and identical calibration scores and weekly and monthly
+averages, with and without gaps; all 30 published RMSE values of Piccolroaz et al. (2016)
 reproduced to within 0.001 °C, and their parameters recovered by recalibration
 except where the parameters trade off (versions 7 and 8 on two rivers, where
 recalibration fits slightly better with different parameters and the same
 predictions, and where the original program itself returns different
 parameters on every run); recovery of a known truth; calibrated intervals
 on synthetic data; out-of-sample performance on three real rivers; numerical
-accuracy; gaps; and exact answers from the workflow and scenario tools. The test
+accuracy; gaps; exact answers from the workflow and scenario tools;
+probabilities of exceeding a limit, on synthetic data and real rivers (V9); and
+predictions for warmer and lower-flow years than those calibrated on (V10). V5,
+V9 and V10 do not pass all their criteria; the report says where and why. The test
 suite (`pytest tests/`) also compares against the Fortran and checks each
 safeguard above.
 

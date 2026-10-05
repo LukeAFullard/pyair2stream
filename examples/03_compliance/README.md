@@ -63,10 +63,13 @@ probabilities with ranges, not as a yes or no.
 
 - **Daily means only.** The model simulates daily mean temperature. It cannot
   assess limits on daily maximum temperature.
-- **The probabilities are somewhat too confident.** On unseen years, 90% ranges
-  for 7-day means contained the measured value 83–88% of the time
-  ([V5](../../validation/REPORT.md#v5)). Treat probabilities near 0.9 or 0.1 as
-  less certain than they look.
+- **The probabilities are too confident.** On the three Swiss rivers, for years
+  not used for calibration, version 8's 90% ranges for the year's highest 7-day
+  mean contained the measured value in 13 of 15 river-years, and for the year's
+  highest daily mean in 10 of 15 ([V9](../../validation/REPORT.md#v9)). The
+  model can be off by a few tenths of a degree for a whole summer, which these
+  ranges do not include. Treat probabilities near 0.9 or 0.1 as less certain
+  than they look.
 - **The method matters.** With the alternative `likelihood: "exact"` the
   simulations ran slightly cooler and the probabilities were 0.90, 0.69 and 0.39:
   lower by up to 0.14. The default keeps the simulations centred on the best fit

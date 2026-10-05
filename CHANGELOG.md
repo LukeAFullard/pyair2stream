@@ -35,6 +35,16 @@
 - Validation: one full report per check (`validation/reports/`), with figures;
   V2 compares the published parameters with 90% intervals around the same
   least-squares estimator (part F); V4 and V5 test both likelihoods.
+- Validation V1 part B: the calibration score (RMS, NSE, KGE) and the weekly and
+  monthly averages it uses agree with the original Fortran, with and without
+  gaps in the record and for two values of `prc`.
+- Validation V9: probabilities that a yearly statistic exceeded a limit. They
+  come true as often as stated on synthetic data; on the Swiss rivers version 8's
+  beat going by past years, but their 90% ranges held in only 67–87% of years,
+  and version 5's did no better than past years for the yearly peaks.
+- Validation V10: calibrating on the coolest (or highest-flow) years and
+  predicting the warmest (or lowest-flow) ones cost at most 0.07 °C of RMSE;
+  version 5 does not suit the Rhône whichever years it is calibrated on.
 
 ## [0.4.0] - 2026-09-25
 

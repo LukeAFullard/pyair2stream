@@ -162,7 +162,9 @@ The [validation suite](validation/README.md) checks this, and its results are in
 
 - **Same results as the original Fortran**, on real river data, for all five
   model versions and every solution scheme the Fortran has (to 5×10⁻⁶ °C, the
-  precision of the Fortran's output).
+  precision of the Fortran's output). Both programs also compute the same
+  calibration scores (RMS, NSE, KGE) from the same daily, weekly and monthly
+  averages, with and without gaps in the record.
 - **Reproduces the published results.** For three Swiss rivers (Piccolroaz et
   al., 2016), the published parameters give the published calibration and
   validation errors, all 30 of them to within 0.001 °C. Recalibrating with `DE`
@@ -198,6 +200,23 @@ The [validation suite](validation/README.md) checks this, and its results are in
   outside. These are the cases above where recalibration finds a slightly
   better fit with different parameters: many combinations fit almost equally
   well, and the published set is one of them.
+- **Probabilities that a limit was exceeded: right in principle, approximate
+  in practice.** On synthetic data the stated chances come true as often as
+  they say. On the real rivers, for years not used for calibration, version 8's
+  probabilities for yearly statistics (highest daily mean, highest 7-day mean,
+  days above a threshold) were closer to what happened than going by how often
+  the limit was exceeded in past years, but their 90% ranges contained the
+  measured value in only 67–87% of river-years, so treat them as approximate.
+  Version 5, which has no discharge term, did no better than past years for the
+  yearly peaks: on the Rhône it could not follow the year-to-year changes.
+- **Warmer and lower-flow years.** Calibrated only on the coolest (or
+  highest-flow) third of the years, the model predicted the warmest (or
+  lowest-flow) third almost as well as when calibrated on the middle third (at
+  most 0.07 °C worse) and better than the simple alternatives, with 90%
+  intervals containing 83–91% of the measurements. The exception is version 5
+  on the Rhône, which does no better than the simple alternatives whichever
+  years it is calibrated on. On rivers like the Rhône, use a version with
+  discharge (7 or 8).
 - **Scenario tools give exact answers** where the answer is known.
 
 To run the tests and the validation suite (needs `gfortran`):

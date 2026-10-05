@@ -54,9 +54,12 @@ That README gives their sources, periods and licence.
 ## What this does and does not show
 
 It shows that the software computes what it claims to, that calibration finds
-the right answer when one is known, and that the uncertainty intervals have the
-coverage they state under the conditions tested. It also shows how well the
-model does on three real rivers.
+the right answer when one is known, and that the uncertainty intervals and
+probabilities have the coverage they state when the model is right. It also
+shows how well the model does on three real rivers, including where the
+approach falls short there: intervals for new years are slightly narrow (V5),
+ranges for yearly peaks are too narrow (V9), and a version without discharge
+does not suit a river like the Rhône (V5, V9, V10).
 
 It does not show that the model suits your river. Check that with your own data:
 calibrate on some years and test on others, as V5 does and as the examples show.
