@@ -188,7 +188,10 @@ The [validation suite](validation/README.md) checks this, and its results are in
   with typical gaps in the data).
 - **Honest intervals, with known limits.** On such data, 90% prediction
   intervals contain 89–90% of new observations, and 90% parameter intervals
-  contain the true values 91–97% of the time. On the real rivers, with the
+  contain the true values 89–97% of the time, also when calibrating on weekly
+  means with `a2` and `a3` bounded at 0 (without that bound, 9 of 30 such
+  calibrations ended on a meaningless set that zigzags from day to day, which
+  pyair2stream now warns about). On the real rivers, with the
   default settings, prediction intervals contain 85–89.6% of daily values in
   years not used for calibration, so they are slightly optimistic. With three
   of the other settings tested, the Rhône with version 5 falls just below the
