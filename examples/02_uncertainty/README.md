@@ -62,7 +62,7 @@ measurements, it also reports how many fall inside:
 Interval check: 89.1% of 1095 observed days lie inside the 90% prediction interval.
 ```
 
-That is close to 90%, slightly below. The validation suite found 85–89% on the
+That is close to 90%, slightly below. The validation suite found 84.5–89% on the
 three Swiss rivers ([V5](../../validation/REPORT.md#v5)): the model's errors
 are somewhat larger in years it has not seen, so the intervals are slightly
 optimistic for new years.

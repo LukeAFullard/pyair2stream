@@ -618,7 +618,7 @@ decision, check:
 4. **Uncertainty**: if you report a band, the reported coverage is close to the
    nominal level, ideally on validation data and in the season your limit
    applies to (errors can be larger in some seasons). Bands for new years are usually
-   slightly narrow (85–89% for 90% bands on the Swiss rivers,
+   slightly narrow (84.5–89% for 90% bands on the Swiss rivers,
    [validation V5](validation/REPORT.md#v5)). For 7-day means, runs of days or
    other multi-day quantities, keep `noise_model: "ar1"` (the default) and compute them from
    the saved simulations (§12). Report probabilities with their ranges, not as

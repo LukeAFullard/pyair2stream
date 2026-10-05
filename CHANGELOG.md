@@ -18,13 +18,14 @@
   autocorrelation of the errors by the effective sample size n(1 − ρ)/(1 + ρ).
   The previous exact AR(1) likelihood is still available as `likelihood:
   "exact"`. On real rivers the exact AR(1) likelihood moved the parameters away
-  from the best fit, so its prediction bands were centred on slightly worse and
-  cooler predictions (Mentue validation years: up to 0.05 °C cooler, RMSE up to
-  8% higher). The new default stays on the best fit, its parameter intervals
-  contained the truth at least 90% of the time for versions 5 and 8 in the
-  known-truth test (version 8: about 75% before), and its 7-day mean bands held
-  better on real rivers. Prediction intervals and probabilities from DE-MCMC and
-  FORWARD runs change; rerun them.
+  from the best fit, so its prediction bands were centred on slightly worse
+  predictions (validation V5: band centres up to 0.11 °C from the best fit's,
+  against 0.01 °C with the new default). The new default stays on the best
+  fit, its parameter intervals contained the truth at least 90% of the time for
+  versions 5 and 8 in the known-truth test (version 8: about 75% before), and
+  its 7-day mean bands held better on real rivers (83–88% against 76–88%).
+  Prediction intervals and probabilities from DE-MCMC and FORWARD runs change;
+  rerun them.
 
 ### Added
 - A warning when `T_air` is outside −60 to 60 °C or `T_water` outside −2 to

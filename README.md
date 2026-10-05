@@ -184,11 +184,20 @@ The [validation suite](validation/README.md) checks this, and its results are in
   calibration predicts other years to within 0.04 °C of the truth (0.06 °C
   with typical gaps in the data).
 - **Honest intervals, with known limits.** On such data, 90% prediction
-  intervals contain 89–90% of new observations. On the real rivers they contain
-  85–89% of daily values in years not used for calibration, so they are slightly
-  optimistic (one case falls just below the report's 85% threshold, so that
-  check is marked as failed). For multi-day quantities such as 7-day means, use
-  `noise_model: "ar1"` (the default); `"iid"` makes those intervals far too narrow.
+  intervals contain 89–90% of new observations, and 90% parameter intervals
+  contain the true values 91–97% of the time. On the real rivers, prediction
+  intervals contain 84.5–89% of daily values in years not used for calibration,
+  so they are slightly optimistic. One case, the Rhône with version 5, falls
+  just below the report's 85% threshold, so that check is marked as failed. For
+  multi-day quantities such as 7-day means, use `noise_model: "ar1"` (the
+  default); `"iid"` makes those intervals far too narrow.
+- **The published parameters and the intervals.** The published parameters lie
+  inside pyair2stream's 90% parameter intervals for versions 3–5 on all three
+  rivers, for version 7 on the Rhône and for every version on the Dischmabach.
+  For versions 7 and 8 on the Mentue and version 8 on the Rhône several lie
+  outside. These are the cases above where recalibration finds a slightly
+  better fit with different parameters: many combinations fit almost equally
+  well, and the published set is one of them.
 - **Scenario tools give exact answers** where the answer is known.
 
 To run the tests and the validation suite (needs `gfortran`):

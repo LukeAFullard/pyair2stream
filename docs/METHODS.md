@@ -385,17 +385,20 @@ values at least 90% of the time for both versions (V4). The exact AR(1)
 likelihood's intervals for version 8 contained the truth only about 75% of the
 time: its parameters trade off against each other and that posterior is far from
 normal. The sampler was cross-checked against emcee's stretch move. On three real
-rivers, 90% intervals contained 85–89% of daily values in years not used for
+rivers, 90% intervals contained 84.5–89% of daily values in years not used for
 calibration, and for 7-day means 39–62% with `iid` against 83–88% with the
-default (V5).
+default (V5). On the same rivers, the parameters published by Piccolroaz et al.
+(2016) lay inside these intervals for every converged run of versions 3–5. For
+versions 7 and 8 on the Mentue and version 8 on the Rhône several lay outside:
+there many parameter combinations fit almost equally well, and the published
+set is not where a least-squares calibration on these data lands (V2).
 
 **Where the chain is centred.** With the default least-squares likelihood the
-chain is centred on the DE best fit. With `likelihood: "exact"` it can be centred
-elsewhere, also for versions whose parameters do not trade off: on the Mentue,
-the median parameters of the exact AR(1) chain predicted the validation years
-with an RMSE of 1.01 instead of 0.93 °C for version 3 (0.83 instead of 0.80 for
-version 5, 0.79 instead of 0.78 for version 8) and 0.03–0.05 °C cooler. For a
-limit on warm water, a cooler band would understate the chance of exceedance.
+chain is centred on the DE best fit: in V5 the centre of the band stayed within
+0.01 °C of the best fit's. With `likelihood: "exact"` it can be centred
+elsewhere, also for versions whose parameters do not trade off: in V5 it moved
+by up to 0.11 °C (cooler, Dischmabach version 5). For a limit on warm water, a
+cooler band would understate the chance of exceedance.
 
 **Outputs:** `MCMC_chain_*.csv` (post-burn-in samples), `MCMC_chain_*_meta.json`
 (σ, ρ, diagnostics, coverage, excluded draws), `MCMC_envelopes_*.csv`, and the
