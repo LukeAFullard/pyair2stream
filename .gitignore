@@ -28,3 +28,7 @@ examples/*/output/
 validation/work/
 !validation/figures/*.png
 !validation/results/*.csv
+
+# Deep-research working files (the final report is delivered separately)
+research_notes/
+reports/
