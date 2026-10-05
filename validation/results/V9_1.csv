@@ -1,7 +1,13 @@
-version,statistic,data sets (converged),years tested,inside 50% range,accepted (50% range),inside 90% range,accepted (90% range)
-5,highest daily mean,30 of 30,90,51%,37%-63%,94%,81%-97%
-5,highest 7-day mean,30 of 30,90,50%,37%-63%,93%,81%-97%
-5,days above threshold,30 of 30,90,58%,37%-63%,92%,81%-97%
-8,highest daily mean,12 of 12,36,53%,28%-72%,86%,75%-100%
-8,highest 7-day mean,12 of 12,36,42%,28%-72%,86%,75%-100%
-8,days above threshold,12 of 12,36,42%,28%-72%,86%,75%-100%
+case,statistic,data sets (converged),mean rho,years tested,inside 50% range,accepted (50% range),inside 90% range,accepted (90% range)
+"version 5, AR(1) noise",highest daily mean,30 of 30,0.71,90,53%,37%-63%,94%,81%-97%
+"version 5, AR(1) noise",highest 7-day mean,30 of 30,0.71,90,49%,37%-63%,94%,81%-97%
+"version 5, AR(1) noise",days above threshold,30 of 30,0.71,90,58%,37%-63%,92%,81%-97%
+"version 8, AR(1) noise",highest daily mean,12 of 12,0.72,36,56%,28%-72%,89%,75%-100%
+"version 8, AR(1) noise",highest 7-day mean,12 of 12,0.72,36,47%,28%-72%,86%,75%-100%
+"version 8, AR(1) noise",days above threshold,12 of 12,0.72,36,44%,28%-72%,89%,75%-100%
+"version 5, fast + slow noise",highest daily mean,30 of 30,0.87,90,53%,not judged,91%,not judged
+"version 5, fast + slow noise",highest 7-day mean,30 of 30,0.87,90,46%,not judged,96%,not judged
+"version 5, fast + slow noise",days above threshold,30 of 30,0.87,90,50%,not judged,92%,not judged
+"version 5, fast + slow noise, rho from consecutive days",highest daily mean,30 of 30,0.71,90,52%,not judged,90%,not judged
+"version 5, fast + slow noise, rho from consecutive days",highest 7-day mean,30 of 30,0.71,90,39%,not judged,83%,not judged
+"version 5, fast + slow noise, rho from consecutive days",days above threshold,30 of 30,0.71,90,41%,not judged,78%,not judged

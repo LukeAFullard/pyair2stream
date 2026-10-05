@@ -1,91 +1,91 @@
-river,version,year,statistic,threshold (°C),measured,median,50% range,90% range
-Mentue,5,2010,highest daily mean,,21.7,20.76,20.40 to 21.19,19.97 to 21.77
-Mentue,5,2010,highest 7-day mean,,20.95,20.05,19.75 to 20.41,19.33 to 20.88
-Mentue,5,2010,days above threshold,17.45,37.0,35.0,33.00 to 38.00,29.00 to 41.00
-Mentue,5,2011,highest daily mean,,20.15,20.44,20.11 to 20.83,19.66 to 21.44
-Mentue,5,2011,highest 7-day mean,,19.76,19.73,19.44 to 20.09,18.88 to 20.56
-Mentue,5,2011,days above threshold,17.45,29.0,25.0,22.00 to 27.00,18.00 to 31.00
-Mentue,5,2012,highest daily mean,,20.47,20.74,20.41 to 21.07,19.96 to 21.63
-Mentue,5,2012,highest 7-day mean,,19.62,19.53,19.23 to 19.86,18.78 to 20.33
-Mentue,5,2012,days above threshold,17.45,32.0,35.0,32.00 to 39.00,27.00 to 44.00
-Mentue,8,2010,highest daily mean,,21.7,21.5,21.15 to 21.84,20.73 to 22.34
-Mentue,8,2010,highest 7-day mean,,20.95,20.79,20.48 to 21.06,20.04 to 21.48
-Mentue,8,2010,days above threshold,17.45,37.0,37.0,35.00 to 39.00,32.00 to 42.00
-Mentue,8,2011,highest daily mean,,20.15,21.14,20.79 to 21.56,20.26 to 22.04
-Mentue,8,2011,highest 7-day mean,,19.76,20.4,20.11 to 20.73,19.64 to 21.16
-Mentue,8,2011,days above threshold,17.45,29.0,26.0,24.00 to 28.00,20.00 to 32.00
-Mentue,8,2012,highest daily mean,,20.47,21.35,20.99 to 21.71,20.50 to 22.23
-Mentue,8,2012,highest 7-day mean,,19.62,20.04,19.77 to 20.36,19.32 to 20.82
-Mentue,8,2012,days above threshold,17.45,32.0,35.0,32.00 to 38.00,28.00 to 42.00
-Rhône,5,2005,highest daily mean,,11.46,11.63,11.26 to 12.01,10.85 to 12.66
-Rhône,5,2005,highest 7-day mean,,10.06,10.93,10.60 to 11.28,10.19 to 11.85
-Rhône,5,2005,days above threshold,9.3,48.0,60.0,50.00 to 71.00,38.00 to 85.00
-Rhône,5,2006,highest daily mean,,11.04,11.72,11.38 to 12.08,10.95 to 12.68
-Rhône,5,2006,highest 7-day mean,,10.2,11.12,10.81 to 11.47,10.39 to 12.00
-Rhône,5,2006,days above threshold,9.3,59.0,64.0,55.00 to 75.00,42.00 to 88.00
-Rhône,5,2007,highest daily mean,,11.43,11.4,11.06 to 11.76,10.68 to 12.40
-Rhône,5,2007,highest 7-day mean,,10.07,10.69,10.39 to 11.02,9.99 to 11.57
-Rhône,5,2007,days above threshold,9.3,78.0,56.0,45.75 to 66.00,33.00 to 80.00
-Rhône,5,2008,highest daily mean,,11.1,11.51,11.18 to 11.88,10.72 to 12.52
-Rhône,5,2008,highest 7-day mean,,10.35,10.9,10.55 to 11.23,10.15 to 11.89
-Rhône,5,2008,days above threshold,9.3,53.0,61.0,52.00 to 72.00,37.00 to 86.00
-Rhône,5,2009,highest daily mean,,9.92,11.57,11.22 to 11.92,10.78 to 12.53
-Rhône,5,2009,highest 7-day mean,,9.27,10.9,10.56 to 11.22,10.14 to 11.75
-Rhône,5,2009,days above threshold,9.3,19.0,67.0,57.00 to 77.00,40.00 to 93.00
-Rhône,5,2010,highest daily mean,,12.16,11.59,11.22 to 11.98,10.75 to 12.63
-Rhône,5,2010,highest 7-day mean,,11.11,10.95,10.59 to 11.37,10.13 to 11.86
-Rhône,5,2010,days above threshold,9.3,90.0,59.0,48.00 to 67.00,36.00 to 81.00
-Rhône,5,2011,highest daily mean,,11.23,11.6,11.28 to 11.95,10.79 to 12.55
-Rhône,5,2011,highest 7-day mean,,10.26,10.9,10.57 to 11.21,10.12 to 11.72
-Rhône,5,2011,days above threshold,9.3,71.0,67.0,56.00 to 77.00,41.00 to 94.00
-Rhône,5,2012,highest daily mean,,10.49,11.67,11.33 to 12.11,10.89 to 12.69
-Rhône,5,2012,highest 7-day mean,,9.69,10.99,10.67 to 11.34,10.23 to 11.90
-Rhône,5,2012,days above threshold,9.3,35.0,69.0,59.00 to 79.00,45.00 to 92.00
-Rhône,5,2013,highest daily mean,,10.56,11.75,11.38 to 12.13,10.87 to 12.72
-Rhône,5,2013,highest 7-day mean,,9.81,11.02,10.68 to 11.37,10.20 to 11.92
-Rhône,5,2013,days above threshold,9.3,63.0,61.0,52.00 to 71.00,37.95 to 84.00
-Rhône,8,2005,highest daily mean,,11.46,10.78,10.56 to 11.00,10.30 to 11.39
-Rhône,8,2005,highest 7-day mean,,10.06,10.12,9.94 to 10.31,9.72 to 10.64
-Rhône,8,2005,days above threshold,9.3,48.0,55.0,48.00 to 63.00,37.00 to 73.05
-Rhône,8,2006,highest daily mean,,11.04,10.8,10.57 to 11.04,10.30 to 11.44
-Rhône,8,2006,highest 7-day mean,,10.2,10.06,9.90 to 10.27,9.67 to 10.61
-Rhône,8,2006,days above threshold,9.3,59.0,52.0,45.00 to 60.00,35.00 to 70.00
-Rhône,8,2007,highest daily mean,,11.43,10.65,10.46 to 10.91,10.22 to 11.26
-Rhône,8,2007,highest 7-day mean,,10.07,9.93,9.75 to 10.12,9.56 to 10.43
-Rhône,8,2007,days above threshold,9.3,78.0,42.0,36.00 to 49.00,27.00 to 59.00
-Rhône,8,2008,highest daily mean,,11.1,10.71,10.49 to 10.97,10.19 to 11.38
-Rhône,8,2008,highest 7-day mean,,10.35,9.95,9.79 to 10.16,9.56 to 10.54
-Rhône,8,2008,days above threshold,9.3,53.0,39.0,33.00 to 46.00,25.00 to 56.00
-Rhône,8,2009,highest daily mean,,9.92,10.32,10.13 to 10.54,9.89 to 10.97
-Rhône,8,2009,highest 7-day mean,,9.27,9.75,9.57 to 9.94,9.34 to 10.29
-Rhône,8,2009,days above threshold,9.3,19.0,27.0,21.00 to 34.00,14.00 to 44.00
-Rhône,8,2010,highest daily mean,,12.16,11.02,10.80 to 11.29,10.51 to 11.70
-Rhône,8,2010,highest 7-day mean,,11.11,10.29,10.08 to 10.50,9.82 to 10.85
-Rhône,8,2010,days above threshold,9.3,90.0,58.0,51.00 to 66.00,42.00 to 76.00
-Rhône,8,2011,highest daily mean,,11.23,11.4,11.17 to 11.65,10.91 to 12.09
-Rhône,8,2011,highest 7-day mean,,10.26,10.58,10.40 to 10.78,10.20 to 11.11
-Rhône,8,2011,days above threshold,9.3,71.0,94.0,85.75 to 102.00,73.95 to 114.00
-Rhône,8,2012,highest daily mean,,10.49,10.95,10.65 to 11.27,10.33 to 11.81
-Rhône,8,2012,highest 7-day mean,,9.69,9.89,9.71 to 10.04,9.50 to 10.37
-Rhône,8,2012,days above threshold,9.3,35.0,39.0,33.00 to 46.00,24.00 to 56.00
-Rhône,8,2013,highest daily mean,,10.56,10.59,10.41 to 10.81,10.14 to 11.19
-Rhône,8,2013,highest 7-day mean,,9.81,9.9,9.73 to 10.08,9.52 to 10.38
-Rhône,8,2013,days above threshold,9.3,63.0,40.0,33.00 to 48.00,23.00 to 59.00
-Dischmabach,5,2010,highest daily mean,,10.56,10.24,9.90 to 10.57,9.47 to 11.09
-Dischmabach,5,2010,highest 7-day mean,,10.02,9.48,9.18 to 9.82,8.82 to 10.35
-Dischmabach,5,2010,days above threshold,8.42,34.0,27.0,22.00 to 32.00,16.00 to 39.00
-Dischmabach,5,2011,highest daily mean,,10.26,10.08,9.76 to 10.44,9.37 to 11.00
-Dischmabach,5,2011,highest 7-day mean,,10.06,9.4,9.07 to 9.75,8.65 to 10.33
-Dischmabach,5,2011,days above threshold,8.42,48.0,24.0,19.00 to 29.00,13.00 to 38.00
-Dischmabach,5,2012,highest daily mean,,10.72,10.22,9.92 to 10.53,9.51 to 11.12
-Dischmabach,5,2012,highest 7-day mean,,10.38,9.45,9.16 to 9.76,8.79 to 10.28
-Dischmabach,5,2012,days above threshold,8.42,38.0,30.0,25.00 to 36.00,18.00 to 46.00
-Dischmabach,8,2010,highest daily mean,,10.56,10.32,10.06 to 10.67,9.71 to 11.13
-Dischmabach,8,2010,highest 7-day mean,,10.02,9.5,9.26 to 9.78,8.93 to 10.16
-Dischmabach,8,2010,days above threshold,8.42,34.0,28.0,24.00 to 32.00,19.00 to 37.00
-Dischmabach,8,2011,highest daily mean,,10.26,10.6,10.29 to 10.91,9.87 to 11.45
-Dischmabach,8,2011,highest 7-day mean,,10.06,9.9,9.63 to 10.24,9.28 to 10.68
-Dischmabach,8,2011,days above threshold,8.42,48.0,33.0,29.00 to 37.00,23.00 to 44.00
-Dischmabach,8,2012,highest daily mean,,10.72,10.64,10.34 to 11.01,9.94 to 11.54
-Dischmabach,8,2012,highest 7-day mean,,10.38,9.91,9.64 to 10.21,9.26 to 10.63
-Dischmabach,8,2012,days above threshold,8.42,38.0,35.0,30.00 to 39.25,24.00 to 46.00
+river,version,rho time scale,rho,year,statistic,threshold (°C),measured,median,50% range,90% range
+Mentue,5,weekly (default),0.884,2010,highest daily mean,,21.7,20.58,20.19 to 21.01,19.63 to 21.68
+Mentue,5,weekly (default),0.884,2010,highest 7-day mean,,20.95,19.99,19.64 to 20.41,19.01 to 21.00
+Mentue,5,weekly (default),0.884,2010,days above threshold,17.45,37.0,35.0,32.00 to 38.00,27.00 to 43.00
+Mentue,5,weekly (default),0.884,2011,highest daily mean,,20.15,20.34,19.93 to 20.74,19.39 to 21.34
+Mentue,5,weekly (default),0.884,2011,highest 7-day mean,,19.76,19.76,19.32 to 20.14,18.68 to 20.70
+Mentue,5,weekly (default),0.884,2011,days above threshold,17.45,29.0,24.0,21.00 to 28.00,16.00 to 33.00
+Mentue,5,weekly (default),0.884,2012,highest daily mean,,20.47,20.65,20.28 to 21.05,19.81 to 21.65
+Mentue,5,weekly (default),0.884,2012,highest 7-day mean,,19.62,19.53,19.16 to 19.92,18.67 to 20.53
+Mentue,5,weekly (default),0.884,2012,days above threshold,17.45,32.0,34.0,29.75 to 40.00,24.00 to 49.00
+Mentue,8,weekly (default),0.858,2010,highest daily mean,,21.7,21.34,20.97 to 21.76,20.45 to 22.40
+Mentue,8,weekly (default),0.858,2010,highest 7-day mean,,20.95,20.72,20.36 to 21.11,19.91 to 21.71
+Mentue,8,weekly (default),0.858,2010,days above threshold,17.45,37.0,37.0,35.00 to 40.00,31.00 to 43.00
+Mentue,8,weekly (default),0.858,2011,highest daily mean,,20.15,21.08,20.70 to 21.44,20.21 to 22.01
+Mentue,8,weekly (default),0.858,2011,highest 7-day mean,,19.76,20.41,20.08 to 20.80,19.56 to 21.33
+Mentue,8,weekly (default),0.858,2011,days above threshold,17.45,29.0,26.0,23.00 to 29.00,19.00 to 33.00
+Mentue,8,weekly (default),0.858,2012,highest daily mean,,20.47,21.26,20.89 to 21.65,20.36 to 22.24
+Mentue,8,weekly (default),0.858,2012,highest 7-day mean,,19.62,20.04,19.68 to 20.41,19.14 to 20.92
+Mentue,8,weekly (default),0.858,2012,days above threshold,17.45,32.0,34.0,30.00 to 38.00,26.00 to 44.00
+Rhône,5,weekly (default),0.954,2005,highest daily mean,,11.46,11.35,10.92 to 11.86,10.36 to 12.48
+Rhône,5,weekly (default),0.954,2005,highest 7-day mean,,10.06,10.84,10.39 to 11.32,9.85 to 11.97
+Rhône,5,weekly (default),0.954,2005,days above threshold,9.3,48.0,61.0,44.00 to 78.00,22.00 to 102.00
+Rhône,5,weekly (default),0.954,2006,highest daily mean,,11.04,11.34,10.89 to 11.80,10.25 to 12.61
+Rhône,5,weekly (default),0.954,2006,highest 7-day mean,,10.2,10.96,10.53 to 11.41,9.93 to 12.23
+Rhône,5,weekly (default),0.954,2006,days above threshold,9.3,59.0,64.0,50.00 to 80.00,27.95 to 101.05
+Rhône,5,weekly (default),0.954,2007,highest daily mean,,11.43,11.13,10.74 to 11.59,10.12 to 12.31
+Rhône,5,weekly (default),0.954,2007,highest 7-day mean,,10.07,10.6,10.23 to 11.04,9.65 to 11.75
+Rhône,5,weekly (default),0.954,2007,days above threshold,9.3,78.0,56.0,40.00 to 75.00,17.95 to 100.05
+Rhône,5,weekly (default),0.954,2008,highest daily mean,,11.1,11.18,10.75 to 11.61,10.09 to 12.35
+Rhône,5,weekly (default),0.954,2008,highest 7-day mean,,10.35,10.8,10.37 to 11.24,9.72 to 11.91
+Rhône,5,weekly (default),0.954,2008,days above threshold,9.3,53.0,62.0,43.00 to 77.00,18.00 to 102.00
+Rhône,5,weekly (default),0.954,2009,highest daily mean,,9.92,11.3,10.86 to 11.73,10.25 to 12.43
+Rhône,5,weekly (default),0.954,2009,highest 7-day mean,,9.27,10.8,10.39 to 11.22,9.81 to 11.89
+Rhône,5,weekly (default),0.954,2009,days above threshold,9.3,19.0,68.0,49.75 to 85.00,25.00 to 110.00
+Rhône,5,weekly (default),0.954,2010,highest daily mean,,12.16,11.29,10.85 to 11.73,10.25 to 12.47
+Rhône,5,weekly (default),0.954,2010,highest 7-day mean,,11.11,10.82,10.40 to 11.31,9.80 to 12.04
+Rhône,5,weekly (default),0.954,2010,days above threshold,9.3,90.0,59.0,43.00 to 76.00,20.95 to 100.00
+Rhône,5,weekly (default),0.954,2011,highest daily mean,,11.23,11.24,10.87 to 11.70,10.31 to 12.39
+Rhône,5,weekly (default),0.954,2011,highest 7-day mean,,10.26,10.76,10.34 to 11.14,9.82 to 11.77
+Rhône,5,weekly (default),0.954,2011,days above threshold,9.3,71.0,65.0,45.75 to 83.00,25.00 to 109.00
+Rhône,5,weekly (default),0.954,2012,highest daily mean,,10.49,11.45,11.06 to 11.94,10.43 to 12.56
+Rhône,5,weekly (default),0.954,2012,highest 7-day mean,,9.69,10.92,10.51 to 11.36,9.93 to 12.02
+Rhône,5,weekly (default),0.954,2012,days above threshold,9.3,35.0,71.0,54.00 to 87.00,28.00 to 107.00
+Rhône,5,weekly (default),0.954,2013,highest daily mean,,10.56,11.56,11.05 to 12.03,10.43 to 12.80
+Rhône,5,weekly (default),0.954,2013,highest 7-day mean,,9.81,10.93,10.47 to 11.34,9.84 to 12.06
+Rhône,5,weekly (default),0.954,2013,days above threshold,9.3,63.0,63.0,47.00 to 78.00,24.95 to 97.00
+Rhône,8,weekly (default),0.914,2005,highest daily mean,,11.46,10.67,10.45 to 10.93,10.11 to 11.33
+Rhône,8,weekly (default),0.914,2005,highest 7-day mean,,10.06,10.17,9.93 to 10.44,9.61 to 10.85
+Rhône,8,weekly (default),0.914,2005,days above threshold,9.3,48.0,56.0,43.00 to 68.25,27.00 to 87.00
+Rhône,8,weekly (default),0.914,2006,highest daily mean,,11.04,10.69,10.45 to 10.96,10.14 to 11.43
+Rhône,8,weekly (default),0.914,2006,highest 7-day mean,,10.2,10.13,9.90 to 10.35,9.62 to 10.78
+Rhône,8,weekly (default),0.914,2006,days above threshold,9.3,59.0,51.0,40.00 to 65.25,23.95 to 84.00
+Rhône,8,weekly (default),0.914,2007,highest daily mean,,11.43,10.57,10.33 to 10.85,10.00 to 11.27
+Rhône,8,weekly (default),0.914,2007,highest 7-day mean,,10.07,9.99,9.75 to 10.23,9.47 to 10.63
+Rhône,8,weekly (default),0.914,2007,days above threshold,9.3,78.0,40.0,30.00 to 52.00,17.00 to 71.00
+Rhône,8,weekly (default),0.914,2008,highest daily mean,,11.1,10.55,10.29 to 10.83,9.95 to 11.31
+Rhône,8,weekly (default),0.914,2008,highest 7-day mean,,10.35,9.99,9.74 to 10.23,9.43 to 10.62
+Rhône,8,weekly (default),0.914,2008,days above threshold,9.3,53.0,38.0,27.00 to 50.00,15.00 to 70.00
+Rhône,8,weekly (default),0.914,2009,highest daily mean,,9.92,10.17,9.96 to 10.45,9.63 to 10.87
+Rhône,8,weekly (default),0.914,2009,highest 7-day mean,,9.27,9.78,9.55 to 10.02,9.27 to 10.41
+Rhône,8,weekly (default),0.914,2009,days above threshold,9.3,19.0,26.5,17.00 to 39.00,7.00 to 56.00
+Rhône,8,weekly (default),0.914,2010,highest daily mean,,12.16,10.95,10.70 to 11.24,10.35 to 11.67
+Rhône,8,weekly (default),0.914,2010,highest 7-day mean,,11.11,10.32,10.09 to 10.58,9.77 to 10.95
+Rhône,8,weekly (default),0.914,2010,days above threshold,9.3,90.0,57.0,46.00 to 72.00,30.00 to 92.00
+Rhône,8,weekly (default),0.914,2011,highest daily mean,,11.23,11.3,11.06 to 11.58,10.73 to 12.02
+Rhône,8,weekly (default),0.914,2011,highest 7-day mean,,10.26,10.64,10.42 to 10.88,10.15 to 11.25
+Rhône,8,weekly (default),0.914,2011,days above threshold,9.3,71.0,95.0,81.00 to 108.00,63.00 to 127.00
+Rhône,8,weekly (default),0.914,2012,highest daily mean,,10.49,10.93,10.62 to 11.28,10.24 to 11.84
+Rhône,8,weekly (default),0.914,2012,highest 7-day mean,,9.69,9.95,9.73 to 10.18,9.44 to 10.56
+Rhône,8,weekly (default),0.914,2012,days above threshold,9.3,35.0,40.0,28.00 to 53.00,15.00 to 69.00
+Rhône,8,weekly (default),0.914,2013,highest daily mean,,10.56,10.52,10.27 to 10.76,9.98 to 11.14
+Rhône,8,weekly (default),0.914,2013,highest 7-day mean,,9.81,9.96,9.74 to 10.21,9.45 to 10.60
+Rhône,8,weekly (default),0.914,2013,days above threshold,9.3,63.0,41.0,29.00 to 54.00,15.00 to 73.00
+Dischmabach,5,weekly (default),0.938,2010,highest daily mean,,10.56,9.97,9.58 to 10.44,9.06 to 11.06
+Dischmabach,5,weekly (default),0.938,2010,highest 7-day mean,,10.02,9.46,9.03 to 9.87,8.52 to 10.48
+Dischmabach,5,weekly (default),0.938,2010,days above threshold,8.42,34.0,27.0,19.00 to 34.00,9.00 to 46.00
+Dischmabach,5,weekly (default),0.938,2011,highest daily mean,,10.26,9.91,9.49 to 10.32,9.00 to 10.96
+Dischmabach,5,weekly (default),0.938,2011,highest 7-day mean,,10.06,9.38,8.96 to 9.83,8.41 to 10.45
+Dischmabach,5,weekly (default),0.938,2011,days above threshold,8.42,48.0,23.0,16.00 to 32.00,7.00 to 47.00
+Dischmabach,5,weekly (default),0.938,2012,highest daily mean,,10.72,10.05,9.67 to 10.46,9.15 to 11.10
+Dischmabach,5,weekly (default),0.938,2012,highest 7-day mean,,10.38,9.4,9.03 to 9.82,8.54 to 10.46
+Dischmabach,5,weekly (default),0.938,2012,days above threshold,8.42,38.0,29.0,18.00 to 40.25,9.00 to 58.05
+Dischmabach,8,weekly (default),0.865,2010,highest daily mean,,10.56,10.26,9.91 to 10.58,9.48 to 11.13
+Dischmabach,8,weekly (default),0.865,2010,highest 7-day mean,,10.02,9.54,9.24 to 9.85,8.77 to 10.37
+Dischmabach,8,weekly (default),0.865,2010,days above threshold,8.42,34.0,27.0,22.00 to 33.00,15.00 to 41.00
+Dischmabach,8,weekly (default),0.865,2011,highest daily mean,,10.26,10.44,10.11 to 10.79,9.65 to 11.37
+Dischmabach,8,weekly (default),0.865,2011,highest 7-day mean,,10.06,9.91,9.59 to 10.26,9.09 to 10.82
+Dischmabach,8,weekly (default),0.865,2011,days above threshold,8.42,48.0,33.0,27.00 to 38.00,19.00 to 46.05
+Dischmabach,8,weekly (default),0.865,2012,highest daily mean,,10.72,10.56,10.20 to 10.96,9.73 to 11.48
+Dischmabach,8,weekly (default),0.865,2012,highest 7-day mean,,10.38,9.95,9.56 to 10.27,9.09 to 10.77
+Dischmabach,8,weekly (default),0.865,2012,days above threshold,8.42,38.0,34.0,28.00 to 41.00,19.00 to 50.05
