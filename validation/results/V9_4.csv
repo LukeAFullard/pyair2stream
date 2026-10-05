@@ -1,0 +1,19 @@
+version,river,statistic,years,inside 90% range,"measured minus predicted median, mean","correlation, predicted median vs measured"
+5,Mentue,highest daily mean,3,3 of 3,0.13,
+5,Mentue,highest 7-day mean,3,2 of 3,0.34,
+5,Mentue,days above threshold,3,3 of 3,1.0,
+8,Mentue,highest daily mean,3,1 of 3,-0.56,
+8,Mentue,highest 7-day mean,3,3 of 3,-0.3,
+8,Mentue,days above threshold,3,3 of 3,0.0,
+5,Rhône,highest daily mean,9,6 of 9,-0.56,-0.28
+5,Rhône,highest 7-day mean,9,4 of 9,-0.84,0.0
+5,Rhône,days above threshold,9,6 of 9,-5.33,-0.64
+8,Rhône,highest daily mean,9,6 of 9,0.24,0.53
+8,Rhône,highest 7-day mean,9,7 of 9,0.04,0.65
+8,Rhône,days above threshold,9,5 of 9,7.78,0.53
+5,Dischmabach,highest daily mean,3,3 of 3,0.33,
+5,Dischmabach,highest 7-day mean,3,2 of 3,0.71,
+5,Dischmabach,days above threshold,3,2 of 3,13.0,
+8,Dischmabach,highest daily mean,3,3 of 3,-0.0,
+8,Dischmabach,highest 7-day mean,3,3 of 3,0.38,
+8,Dischmabach,days above threshold,3,2 of 3,8.0,

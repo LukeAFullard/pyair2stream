@@ -515,7 +515,9 @@ change one-sided.
   the coolest (or highest-flow) third of each Swiss river's years and predicting
   the warmest (or lowest-flow) third cost at most 0.07 °C of RMSE compared with
   calibrating on the middle third, but a single extreme period can still be
-  missed (the Mentue's 2003 heatwave).
+  missed: in the Mentue's 2003 heatwave, the model calibrated on the three
+  coolest summers put August's highest daily temperature 1.9 °C above the
+  measured one.
 - **Choose a version that suits the river.** Where discharge drives the summer
   temperature (the Rhône here), versions without a discharge term (3–5) did
   hardly better than simple alternatives, and version 5's probabilities for

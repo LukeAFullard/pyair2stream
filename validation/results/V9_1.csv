@@ -1,0 +1,7 @@
+version,statistic,data sets (converged),years tested,inside 50% range,accepted (50% range),inside 90% range,accepted (90% range)
+5,highest daily mean,30 of 30,90,51%,37%-63%,94%,81%-97%
+5,highest 7-day mean,30 of 30,90,50%,37%-63%,93%,81%-97%
+5,days above threshold,30 of 30,90,58%,37%-63%,92%,81%-97%
+8,highest daily mean,12 of 12,36,53%,28%-72%,86%,75%-100%
+8,highest 7-day mean,12 of 12,36,42%,28%-72%,86%,75%-100%
+8,days above threshold,12 of 12,36,42%,28%-72%,86%,75%-100%

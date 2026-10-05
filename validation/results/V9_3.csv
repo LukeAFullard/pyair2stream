@@ -1,0 +1,7 @@
+version,statistic,river-years,limits tested,limits exceeded,"Brier score, pyair2stream","Brier score, past years",Brier skill score,inside 50% range,inside 90% range
+5,highest daily mean,15,45,30,0.233,0.21,-0.11,40%,80%
+5,highest 7-day mean,15,45,36,0.266,0.238,-0.12,20%,53%
+5,days above threshold,15,45,30,0.187,0.236,0.21,40%,73%
+8,highest daily mean,15,45,30,0.183,0.21,0.13,40%,67%
+8,highest 7-day mean,15,45,36,0.14,0.238,0.41,40%,87%
+8,days above threshold,15,45,30,0.142,0.236,0.4,40%,67%

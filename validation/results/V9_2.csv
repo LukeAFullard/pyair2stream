@@ -1,0 +1,7 @@
+version,statistic,stated 10%,stated 20%,stated 30%,stated 40%,stated 50%,stated 60%,stated 70%,stated 80%,stated 90%
+5,highest daily mean,6%,13%,27%,33%,40%,54%,63%,81%,91%
+5,highest 7-day mean,6%,19%,22%,36%,49%,54%,67%,78%,89%
+5,days above threshold,6%,13%,27%,36%,49%,58%,71%,79%,90%
+8,highest daily mean,11%,19%,25%,42%,53%,56%,67%,78%,92%
+8,highest 7-day mean,8%,19%,28%,42%,47%,58%,61%,72%,89%
+8,days above threshold,6%,14%,28%,28%,33%,44%,56%,64%,81%
