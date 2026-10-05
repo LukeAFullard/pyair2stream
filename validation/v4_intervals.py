@@ -111,7 +111,7 @@ def sampler_crosscheck(r):
     cfg = {"version": 8, "integrator": "CRN", "run_mode": "DE-MCMC", "objective_function": "NSE",
            "random_seed": r + 1, "Qmedia": q_cal, "parameter_bounds": AUTHORS_BOUNDS,
            "optimization": {"n_run": 300, "n_particles": 15, "mcmc_walkers": 32, "mcmc_steps": 100000},
-           "uncertainty_options": {"noise_model": "ar1"},
+           "uncertainty_options": {"noise_model": "ar1", "likelihood": "exact"},     # as case D
            "paths": {"input_data": os.path.join(folder, "cal.csv"), "output_dir": out}}
     original, factor = opt._make_sampler, opt.MCMC_TAU_FACTOR
 
