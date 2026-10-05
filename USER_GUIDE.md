@@ -442,6 +442,7 @@ optimization:
 uncertainty_options:
   noise_model: "ar1"            # the default; "iid" is also available (see below)
   likelihood: "least_squares"   # the default; "exact" is also available (see below)
+  rho_timescale: "weekly"       # the default; "daily" is also available (see below)
   prediction_interval: 90       # % width of the band
   save_ensemble: false          # true: also save every simulated series (.npz)
   strict_convergence: true      # default: stop with an error if not converged
@@ -469,24 +470,43 @@ walks through this):
   spanning several days they do not: on the Swiss rivers, 90% bands for 7-day
   means contained 39–62% of observed values with `"iid"` and 83–88% with
   `"ar1"` ([validation V5](validation/REPORT.md#v5)). Keep the default `"ar1"`.
+- **`rho_timescale`.** How the persistence of the errors (ρ) is measured. Model
+  errors have a fast part, which changes from day to day, and a slow part,
+  which lasts weeks (a dry summer, a change the model does not represent). The
+  default, `"weekly"`, sets ρ so that errors of 7-day means persist from one
+  week to the next as they did in the calibration; it is never lower than the
+  correlation of consecutive days. `"daily"` uses only the correlation of
+  consecutive days, which ignores the slow part. Daily bands are about the
+  same either way. Bands for weekly means, yearly peaks and probabilities that
+  a limit was exceeded are wider with `"weekly"`, and held better on real
+  rivers: 90% bands for 7-day means contained 88.5–93.6% of observed values
+  with `"weekly"` against 82.7–87.8% with `"daily"` ([V5](validation/REPORT.md#v5)).
+  Keep the default; use `"daily"` to reproduce results made with version 0.4.1
+  or earlier. Why the weekly scale is right in theory, not only in these
+  tests: [docs/METHODS.md §12](docs/METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc).
 - **`likelihood`.** How the sampler judges a parameter set. The default,
   `"least_squares"`, keeps the band centred on the best fit (the least-squares
   fit, as the original authors calibrated) and widens the uncertainty because
   daily errors are not independent. The alternative, `"exact"` (the exact
   AR(1) likelihood), pays more attention to day-to-day changes than to the
-  overall level: on the Swiss rivers it moved the band slightly cooler (by up
-  to 0.05 °C) and made predictions slightly worse ([V5](validation/REPORT.md#v5)).
-  Keep the default.
+  overall level: on the Swiss rivers it moved the band's centre by up to
+  0.11 °C from the best fit's and made predictions slightly worse
+  ([V5](validation/REPORT.md#v5)). Keep the default.
 - **Parameters.** For versions with many parameters (especially 8), several
   combinations fit almost equally well, so individual values are uncertain.
-  With the default likelihood, 90% parameter intervals contained the true
-  values about 90% of the time or more in a test with known parameters
-  ([V4](validation/REPORT.md#v4)). Rely on predictions rather than individual
-  parameter values; parameters that trade off move together, so do not combine
-  the ends of several intervals.
+  With the defaults, 90% parameter intervals contained the true values about
+  90% of the time or more in a test with known parameters
+  ([V4](validation/REPORT.md#v4)). One allowance for persistent errors sets
+  the width of every parameter's interval. It is about right for the
+  parameters that act slowly (the constant `a1`, the seasonal amplitude `a6`
+  and timing `a7`), and makes the intervals of the fast-acting ones (`a2`,
+  `a3`) two to three times wider than they need to be. With `rho_timescale:
+  "daily"`, `a7`'s interval was too narrow when the errors had a slow part.
+  Rely on predictions rather than individual parameter values; parameters that
+  trade off move together, so do not combine the ends of several intervals.
 
 Outputs: `MCMC_chain_*.csv` (parameter samples), `MCMC_chain_*_meta.json`
-(settings, diagnostics, residual σ and ρ, coverage), `MCMC_envelopes_*.csv`
+(settings, diagnostics, residual σ, ρ and how it was estimated, coverage), `MCMC_envelopes_*.csv`
 (`Twat_mod_lower`, `Twat_mod_p50`, `Twat_mod_upper` per day),
 `parameter_significance_*.csv` (mean, SD and 95% interval of each parameter)
 and `parameter_correlation_*.png`.
@@ -636,8 +656,8 @@ decision, check:
    applies to (errors can be larger in some seasons). Bands for new years are usually
    slightly narrow (84.5–89% for 90% bands on the Swiss rivers,
    [validation V5](validation/REPORT.md#v5)). For 7-day means, runs of days or
-   other multi-day quantities, keep `noise_model: "ar1"` (the default) and compute them from
-   the saved simulations (§12). Report probabilities with their ranges, not as
+   other multi-day quantities, keep `noise_model: "ar1"` and `rho_timescale:
+   "weekly"` (the defaults) and compute them from the saved simulations (§12). Report probabilities with their ranges, not as
    a yes or no.
 5. **Scope**: the model gives **daily means**. A limit on daily maxima or on
    sub-daily values needs a separate, justified step. Scenario inputs outside

@@ -140,7 +140,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         )
 
     # Paths mapping
-    paths = config.get('paths', {})
+    paths = config.get('paths') or {}
 
     # Gap-tolerant mode configuration
     data.gap_tolerant = bool(config.get('gap_tolerant', False))
@@ -199,10 +199,10 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
             "Must be 'value' or 'range'."
         )
 
-    data.forward_options = config.get('forward_options', {})
+    data.forward_options = config.get('forward_options') or {}
 
     # Parse uncertainty_options
-    uncertainty_options = config.get('uncertainty_options', {})
+    uncertainty_options = config.get('uncertainty_options') or {}
     noise_model = uncertainty_options.get('noise_model', DEFAULT_NOISE_MODEL)
     ar1_rho = uncertainty_options.get('ar1_rho', None)
 
@@ -266,7 +266,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         "max_divergent_fraction": max_divergent_fraction,
     }
 
-    cv_config_dict = config.get('cross_validation', {})
+    cv_config_dict = config.get('cross_validation') or {}
     if cv_config_dict and cv_config_dict.get('enabled', False):
         from .cross_validation import CVConfig
         data.cross_validation = CVConfig(
@@ -279,7 +279,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
             optimizer_overrides=cv_config_dict.get('optimizer_overrides', None)
         )
 
-    opt_config = config.get('optimization', {})
+    opt_config = config.get('optimization') or {}
     data.n_run = int(opt_config.get('n_run', opt_config.get('n_runs', 100)))
     # Accepted for compatibility with Fortran-style configs but not used: the
     # 0_*.csv history always records every evaluated parameter set.

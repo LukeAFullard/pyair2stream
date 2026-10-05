@@ -1,5 +1,73 @@
 # Changelog
 
+## [0.4.2] - 2026-10-05
+
+### Fixed
+- ⚠ DE-MCMC with weekly or monthly scoring (`time_resolution` `Nw` or `1m`) and
+  the least-squares likelihood (the default since 0.4.1) applied the daily
+  effective sample size n(1 − ρ)/(1 + ρ) to the weekly or monthly means. Means
+  of blocks of days are much less correlated from block to block than days are,
+  so parameter intervals and prediction bands were too wide (parameter
+  intervals by a factor of 1.6–4.4 for ρ = 0.5–0.95). The likelihood now uses
+  the exact factor for block means of AR(1) errors, n/n_eff = 1 + 2·r_b/(1 − ρ^m)
+  (docs/METHODS.md §12), recorded as `likelihood_variance_factor` in the
+  chain's `_meta.json`. Daily scoring is unchanged. The methods documentation
+  said ρ played no part with weekly or monthly scoring; that held only for the
+  exact AR(1) likelihood, which now warns that it treats block errors as
+  independent.
+- A configuration section left empty, for example `uncertainty_options:` with
+  every line under it commented out, stopped with `AttributeError`. It now
+  means the defaults, as when the section is absent.
+
+### Changed
+- ⚠ **ρ, the error persistence behind DE-MCMC intervals and FORWARD
+  probabilities, is now estimated from week-to-week persistence by default**
+  (`uncertainty_options.rho_timescale: "weekly"`). The previous estimate, the
+  correlation of consecutive days' errors, is still available as
+  `rho_timescale: "daily"`. Model errors have a fast part (days) and a slow part
+  (weeks to a season); matched to consecutive days, ρ ignores the slow part, so
+  bands for weekly to seasonal quantities (a 7-day mean, a yearly peak, the
+  probability a limit was exceeded) were too narrow and the interval for the
+  seasonal timing parameter `a7` was 1.6 times too narrow in the known-truth
+  test. The weekly estimate is the larger of the consecutive-day ρ and the ρ
+  that reproduces the correlation of 7-day mean errors one week apart. It falls
+  back to the consecutive-day ρ when fewer than 20 weeks of scored errors are
+  available. The reasons, in theory and in the validation, are in
+  docs/METHODS.md §12.
+  Daily bands barely change. Bands for weekly and longer quantities, and
+  intervals for the parameters, widen where the errors have a slow part; the
+  intervals of the fast-acting parameters (`a2`, `a3`) are wider than they need
+  to be, as they were with the daily ρ. Prediction intervals and probabilities
+  from DE-MCMC and FORWARD runs change; rerun them. A FORWARD run that reuses a
+  0.4.1 chain keeps that chain's ρ, recorded in its `_meta.json`.
+- The exact AR(1) likelihood (`likelihood: "exact"`) always uses the
+  consecutive-day ρ, which is what it models; `rho_timescale` then sets only the
+  ρ of the error added to predictions. The chain's `_meta.json` records both
+  (`rho`, `rho_likelihood`) and `rho_timescale`.
+
+### Added
+- A warning when ρ reaches its limit of 0.99, which usually means a systematic
+  error such as a seasonal bias; and a note when a FORWARD run reuses a chain
+  whose ρ was estimated at another time scale than the run's `rho_timescale`
+  (for example a 0.4.1 chain, whose ρ came from consecutive days).
+- `bias_by_month_<period>_*.csv`/`.png` (calibration and validation) and
+  `cv_bias_by_month.csv`/`.png` (cross-validation, held-out years): the mean
+  error by calendar month, season and year with a 95% interval from the
+  year-to-year spread, to show a bias in one season that a whole-year score
+  hides (docs/METHODS.md §7). Cross-validation folds now keep their dates
+  (`FoldResult.dates_held_out`), and `cross_validate(..., return_folds=True)`
+  also returns the folds.
+- Validation V1 part B: the calibration score (RMS, NSE, KGE) and the weekly and
+  monthly averages it uses agree with the original Fortran, with and without
+  gaps in the record and for two values of `prc`.
+- Validation V9: probabilities that a yearly statistic exceeded a limit. They
+  come true as often as stated on synthetic data; on the Swiss rivers version 8's
+  beat going by past years, but their 90% ranges held in only 67–87% of years,
+  and version 5's did no better than past years for the yearly peaks.
+- Validation V10: calibrating on the coolest (or highest-flow) years and
+  predicting the warmest (or lowest-flow) ones cost at most 0.07 °C of RMSE;
+  version 5 does not suit the Rhône whichever years it is calibrated on.
+
 ## [0.4.1] - 2026-10-04
 
 ### Fixed
@@ -32,26 +100,9 @@
   50 °C, which usually means a missing-value code other than `-999` (such as
   `-99` or `-9999`) or a unit error. The values are still used as given.
 - A clearer message when a gap-tolerant run's file has no water temperatures.
-- `bias_by_month_<period>_*.csv`/`.png` (calibration and validation) and
-  `cv_bias_by_month.csv`/`.png` (cross-validation, held-out years): the mean
-  error by calendar month, season and year with a 95% interval from the
-  year-to-year spread, to show a bias in one season that a whole-year score
-  hides (docs/METHODS.md §7). Cross-validation folds now keep their dates
-  (`FoldResult.dates_held_out`), and `cross_validate(..., return_folds=True)`
-  also returns the folds.
 - Validation: one full report per check (`validation/reports/`), with figures;
   V2 compares the published parameters with 90% intervals around the same
   least-squares estimator (part F); V4 and V5 test both likelihoods.
-- Validation V1 part B: the calibration score (RMS, NSE, KGE) and the weekly and
-  monthly averages it uses agree with the original Fortran, with and without
-  gaps in the record and for two values of `prc`.
-- Validation V9: probabilities that a yearly statistic exceeded a limit. They
-  come true as often as stated on synthetic data; on the Swiss rivers version 8's
-  beat going by past years, but their 90% ranges held in only 67–87% of years,
-  and version 5's did no better than past years for the yearly peaks.
-- Validation V10: calibrating on the coolest (or highest-flow) years and
-  predicting the warmest (or lowest-flow) ones cost at most 0.07 °C of RMSE;
-  version 5 does not suit the Rhône whichever years it is calibrated on.
 
 ## [0.4.0] - 2026-09-25
 

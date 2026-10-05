@@ -61,7 +61,8 @@ def estimate_ar1_rho(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mask: np.n
 def weekly_mean_correlation(rho: float, week: int = WEEK) -> float:
     """
     Correlation between the means of two consecutive, non-overlapping blocks of
-    `week` days of a stationary AR(1) process with lag-1 correlation `rho`.
+    `week` days (7 by default; any block length) of a stationary AR(1) process
+    with lag-1 correlation `rho`.
 
     With c_d the number of day pairs d days apart across the two blocks
     (c_d = week - |d - week|, d = 1 .. 2*week - 1), the correlation is
@@ -75,6 +76,41 @@ def weekly_mean_correlation(rho: float, week: int = WEEK) -> float:
     k = np.arange(1, week)
     var = week + 2.0 * np.sum((week - k) * rho ** k)
     return float(cov / var)
+
+
+def scoring_block_days(time_res: str) -> int:
+    """
+    Days behind each scored value at a `time_resolution`: 1 for '1d', 7N for
+    'Nw', and 30 for '1m' (calendar months have 28-31 days).
+    """
+    if time_res == '1d':
+        return 1
+    if time_res == '1m':
+        return 30
+    if time_res.endswith('w') and time_res[:-1].isdigit() and int(time_res[:-1]) > 0:
+        return WEEK * int(time_res[:-1])
+    raise ValueError(f"Invalid time_resolution '{time_res}'. Must be '1d', 'Nw' or '1m'.")
+
+
+def mean_error_variance_factor(rho: float, block_days: int = 1) -> float:
+    """
+    Variance of the mean of n consecutive scored errors relative to n independent
+    errors, when daily errors are AR(1) with lag-1 correlation `rho` and each
+    scored value is the mean of a block of `block_days` days.
+
+    Block means k >= 1 blocks apart have correlation r_b * rho**(m*(k-1)), with
+    m = block_days and r_b = `weekly_mean_correlation(rho, m)` the correlation
+    of adjacent blocks, so the factor is 1 + 2 r_b / (1 - rho**m) (for large n).
+    For daily values (m = 1, r_b = rho) this is (1 + rho) / (1 - rho). The
+    least-squares likelihood uses n divided by this factor as the effective
+    number of independent values.
+    """
+    if rho <= 0.0:
+        return 1.0
+    m = int(block_days)
+    if m == 1:
+        return (1.0 + rho) / (1.0 - rho)
+    return 1.0 + 2.0 * weekly_mean_correlation(rho, m) / (1.0 - rho ** m)
 
 
 def estimate_ar1_rho_weekly(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mask: np.ndarray,
@@ -146,11 +182,18 @@ def estimate_rho(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mask: np.ndarr
     towards wider intervals.
     """
     if timescale == 'daily':
-        return estimate_ar1_rho(Twat_mod, Twat_obs, eval_mask, segments)
-    if timescale == 'weekly':
-        return max(estimate_ar1_rho(Twat_mod, Twat_obs, eval_mask, segments),
-                   estimate_ar1_rho_weekly(Twat_mod, Twat_obs, eval_mask, segments))
-    raise ValueError(f"Invalid rho_timescale '{timescale}'. Must be 'weekly' or 'daily'.")
+        rho = estimate_ar1_rho(Twat_mod, Twat_obs, eval_mask, segments)
+    elif timescale == 'weekly':
+        rho = max(estimate_ar1_rho(Twat_mod, Twat_obs, eval_mask, segments),
+                  estimate_ar1_rho_weekly(Twat_mod, Twat_obs, eval_mask, segments))
+    else:
+        raise ValueError(f"Invalid rho_timescale '{timescale}'. Must be 'weekly' or 'daily'.")
+    if rho >= MAX_RHO:
+        logging.warning(f"rho reached its upper limit of {MAX_RHO}: the model's errors persist for months. This "
+                        "usually means a systematic error, such as a bias in one season (see the "
+                        "bias_by_month output). Intervals for multi-week quantities will be wide, and the "
+                        "model may not suit this river.")
+    return rho
 
 
 def build_ar1_runs(valid_mask: np.ndarray, segments: list) -> list:

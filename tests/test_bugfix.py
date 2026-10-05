@@ -28,7 +28,7 @@ def test_mcmc_autocorr_invalid_json():
     data.date = np.array([[2000, 1, 1], [2000, 1, 2], [2000, 1, 3]])
     data.station = "test"
     data.series = "test"
-    data.time_res = "daily"
+    data.time_res = "1d"
     data.mod_num = "RK4"
     data.model = "version_7"
     data.fun_obj = "NSE"
@@ -68,7 +68,7 @@ def test_mcmc_autocorr_invalid_json():
             DE_MCMC_mode(data)
 
             # Check json
-            json_file = os.path.join(temp_dir, f"MCMC_chain_test_test_daily_meta.json")
+            json_file = os.path.join(temp_dir, f"MCMC_chain_test_test_1d_meta.json")
             with open(json_file, 'r') as f:
                 content = json.load(f)
 

@@ -122,6 +122,20 @@ def test_config_option(tmp_path):
             assert read_calibration(str(path)).uncertainty_options["rho_timescale"] == ok
 
 
+def test_empty_config_sections_use_the_defaults(tmp_path):
+    """A section whose every line is commented out is null in YAML; it means the defaults."""
+    from pyair2stream.io import read_calibration
+    path = tmp_path / "c.yaml"
+    path.write_text("station_name: S\nseries: c\nversion: 5\nrun_mode: DE\n"
+                    "paths:\n  input_data: data/switzerland/MAH_2369_calibration.csv\n"
+                    f"  output_dir: {tmp_path / 'o'}\n"
+                    "uncertainty_options:\n#  rho_timescale: daily\n"
+                    "optimization:\nforward_options:\ncross_validation:\nparameter_bounds:\n")
+    data = read_calibration(str(path))
+    assert data.uncertainty_options["rho_timescale"] == "weekly"
+    assert data.uncertainty_options["likelihood"] == "least_squares"
+
+
 def test_exact_likelihood_uses_the_day_to_day_rho(tmp_path):
     """With likelihood 'exact', the likelihood removes the day-to-day correlation with the
     lag-1 rho; rho_timescale sets the rho of the prediction noise (recorded as 'rho')."""
@@ -214,8 +228,9 @@ def test_estimates_are_deterministic():
 
 
 def test_weekly_resolution_calibration_records_rho_from_daily_errors(tmp_path):
-    """With weekly scoring, rho does not enter the likelihood, but it still sets the daily
-    prediction noise; it is estimated from the daily errors at the chosen time scale."""
+    """With weekly scoring, rho is still estimated from the daily errors at the chosen time
+    scale: it sets the daily prediction noise and, through the correlation of block means,
+    the effective sample size of the least-squares likelihood."""
     import json
     import yaml
     from pyair2stream.io import read_calibration, read_Tseries
@@ -239,3 +254,46 @@ def test_weekly_resolution_calibration_records_rho_from_daily_errors(tmp_path):
     meta = json.load(open(tmp_path / "o" / "MCMC_chain_S_c_1w_meta.json"))
     assert meta["rho_timescale"] == "weekly"
     assert 0.6 < meta["rho"] < 0.99
+
+
+def test_rho_at_its_limit_warns(caplog):
+    """Errors that drift with the seasons (a systematic error) push rho to its cap; say so."""
+    n = 4 * 365
+    err = 0.8 * np.sin(2 * np.pi * np.arange(n) / 365.0)
+    with caplog.at_level("WARNING"):
+        assert _estimate(err, lambda *a: estimate_rho(*a, "weekly")) == 0.99
+    assert "upper limit" in caplog.text and "bias_by_month" in caplog.text
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        _estimate(_ar1(n, 0.7, np.random.default_rng(2)), lambda *a: estimate_rho(*a, "weekly"))
+    assert "upper limit" not in caplog.text
+
+
+@pytest.mark.parametrize("sidecar_extra,option,expect_note", [
+    ({}, "weekly", True),                              # a 0.4.1 chain (consecutive days) under the new default
+    ({}, "daily", False),
+    ({"rho_timescale": "weekly"}, "weekly", False),
+    ({"rho_timescale": "weekly"}, "daily", True),
+])
+def test_forward_says_when_the_chains_rho_is_from_another_time_scale(tmp_path, capsys, sidecar_extra, option,
+                                                                    expect_note):
+    import json
+    import pandas as pd
+    from tests.test_report04_uncertainty_and_mcmc import _build_calibration_data
+    from pyair2stream.optimization import forward_mode
+    data = _build_calibration_data(str(tmp_path / "f"))
+    data.Twat_obs[:] = -999.0
+    data.runmode = "FORWARD"
+    chain_path = str(tmp_path / "chain.csv")
+    pd.DataFrame(np.random.default_rng(0).random((10, 8)) * 0.5,
+                 columns=[f"par_{i + 1}" for i in range(8)]).to_csv(chain_path, index=False)
+    with open(chain_path.replace(".csv", "_meta.json"), "w") as f:
+        json.dump({"rho": 0.8, "sigma": 0.5, **sidecar_extra}, f)
+    data.forward_options = {"enable_prediction_intervals": True, "mcmc_chain_path": chain_path,
+                            "n_samples": 5, "random_seed": 42}
+    data.uncertainty_options = {"noise_model": "ar1", "ar1_rho": None, "rho_timescale": option,
+                                "max_divergent_fraction": 1.0}
+    forward_mode(data)
+    out = capsys.readouterr().out
+    assert "Using rho=0.8000 carried from calibration run" in out
+    assert ("was estimated at the" in out) == expect_note

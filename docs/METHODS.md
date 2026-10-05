@@ -332,8 +332,8 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
 2. **Likelihood** (how well a parameter set explains the data), computed on the
    same scored values as the objective (§7), assuming normally distributed errors
    of constant size (the size is estimated, not supplied). A model's daily errors
-   usually persist from one day to the next (lag-1 autocorrelation ρ, estimated
-   once from the DE fit's daily residuals, limited to 0–0.99), so n days of
+   persist (AR(1) correlation ρ, estimated once from the DE fit's daily
+   residuals, limited to 0–0.99; see "How ρ is estimated" below), so n days of
    errors carry the information of fewer independent ones.
    - `noise_model: "ar1"` with `likelihood: "least_squares"` (the default):
      log L = −(n_eff/2)·ln(SSE/n), with n_eff = n·(1−ρ)/(1+ρ), the usual
@@ -352,8 +352,18 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
      log L = −(n/2)·ln(SSE/n). With autocorrelated errors this understates
      parameter uncertainty, and makes intervals for multi-day quantities far too
      narrow.
-   With weekly or monthly scoring there are no consecutive scored days, so ρ
-   plays no part in the likelihood. Each likelihood replaces the error size by
+   With weekly or monthly scoring (§7) each scored value is the mean of a block
+   of m days (m = 7N for `"Nw"`, 30 for `"1m"`), and block means are much less
+   correlated from one block to the next than days are. The least-squares
+   likelihood then uses n_eff = n / [1 + 2·r_b/(1 − ρ^m)], with r_b the
+   correlation between the means of adjacent blocks of AR(1) errors (the
+   formula under "How ρ is estimated", with m days in place of 7); for m = 1
+   this is n·(1−ρ)/(1+ρ). The
+   daily n_eff applied to block means would make parameter intervals 1.6–4.4
+   times too wide for ρ = 0.5–0.95. The exact AR(1) likelihood needs consecutive
+   scored days; with weekly or monthly scoring it treats the block errors as
+   independent and warns, since its intervals are then too narrow if errors
+   persist from block to block. Each likelihood replaces the error size by
    its best estimate; this gives the same result as treating the error size as
    unknown with the standard non-informative prior (∝ 1/σ) and averaging over it.
 3. **Sampling.** `mcmc_walkers` (default 32) chains ("walkers") are started
@@ -392,6 +402,80 @@ is about the same width under both. They differ for multi-day quantities (weekly
 means, days in a row above a threshold): use the raw ensemble for those
 (`save_ensemble: true`, and `pyair2stream.scenario`), never averages of the
 daily percentiles.
+
+**How ρ is estimated** (`uncertainty_options.rho_timescale`).
+
+- `"weekly"` (the default). Every 7-day window of scored, observed days is paired
+  with the complete 7-day window that starts 7 days later, and the correlation r
+  of their mean errors is measured. ρ is the AR(1) value whose 7-day means have
+  that correlation: r = Σ_{d=1..13} (7 − |d − 7|)·ρ^d / (7 + 2·Σ_{k=1..6} (7 − k)·ρ^k).
+  The larger of this and the lag-1 correlation of consecutive days is used. It
+  needs at least 140 pairs (about 21 complete weeks); otherwise the lag-1 value
+  is used, with a warning.
+- `"daily"`: the lag-1 correlation of consecutive scored days.
+
+Both need daily observations. A window counts only if all 7 days are scored,
+so with many missing days (for example a measurement every other day) the
+lag-1 value is used. With fewer than 30 pairs of consecutive scored days, ρ is
+0, with a warning, and bands for multi-day quantities are then too narrow.
+
+ρ sets the noise added to predictions and n_eff in the least-squares likelihood.
+The exact likelihood always uses the lag-1 correlation, because removing the
+correlation of consecutive days (eₜ − ρ·eₜ₋₁) is a day-scale operation. The
+chain's `_meta.json` records `rho`, `rho_timescale`, `rho_likelihood`,
+`scoring_block_days` and `likelihood_variance_factor` (n/n_eff). FORWARD runs
+use the chain's ρ, and say so when it was estimated at another time scale than
+their own `rho_timescale` (chains from version 0.4.1 or earlier used
+consecutive days). If ρ reaches its limit of 0.99, a warning says so: errors
+that persist for months usually mean a systematic error, such as a bias in one
+season (§7, mean error by month and season).
+
+**Why the weekly scale (theory).** Real model errors have two memories at once:
+on the Swiss rivers a fast part that fades in about two days (57–76% of the
+error variance) and a slow part lasting three to five weeks (24–43%). An AR(1)
+process has only one. The choice is which of them it should reproduce.
+
+1. *Predictions.* Compliance quantities are built from many days (7-day means,
+   runs of warm days, summer peaks). The uncertainty of an m-day mean depends on
+   every error correlation up to lag m: Var = σ²/m · [1 + 2·Σ_{k<m} (1 − k/m)·r_k]
+   (Bayley and Hammersley, 1946). Matched to consecutive days, an AR(1) ignores
+   the slow part. On the Swiss rivers it understated the variance of 30–90-day
+   mean errors by a factor of two to three. Matched to week-to-week persistence,
+   the variance it implies was 1.2–1.4 times the measured one for 7–14-day means
+   and about right (0.83–1.3) at 60–90 days. A noise model that understates
+   low-frequency variability gives intervals that are too narrow (Poppick et al.,
+   2017). In hydrology, ignoring error persistence underestimates the
+   uncertainty of aggregated quantities (Evin et al., 2014), and reliable
+   intervals at several time scales need errors at several time scales
+   (McInerney et al., 2020).
+2. *Parameters.* With correlated errors, the sampling covariance of least-squares
+   estimates is σ²(JᵀJ)⁻¹ JᵀRJ (JᵀJ)⁻¹ (the "sandwich"; R is the correlation
+   matrix of the errors, J the sensitivity of the simulated temperature to each
+   parameter on each day). The n_eff likelihood widens every parameter by the
+   same factor, (1 + ρ)/(1 − ρ). Each parameter needs a factor of about
+   1 + 2·Σ_k r_J(k)·r_e(k), with r_J the autocorrelation of its sensitivity.
+   That is close to the full allowance for slow errors when the parameter's
+   effect varies slowly (the constant a1, the seasonal amplitude a6 and timing
+   a7). It is much smaller when the effect varies from day to day (the air
+   temperature and relaxation coefficients a2 and a3). With one factor for all
+   parameters, the factor must be large enough for the slowest parameter.
+   Validation V4 computes this formula and compares it with the measured spread
+   of the estimates; they agree closely. With fast + slow errors, the daily ρ
+   made a7's interval 1.6 times too narrow, and the weekly ρ gave it the right
+   width. The cost is that intervals of the fast-varying parameters are wider
+   than necessary, by a factor of about two to three in V4. That happens with
+   either ρ: it is a property of a single effective sample size.
+3. *The larger of the two estimates.* The weekly option is never less
+   persistent than consecutive days show. The week-to-week estimate alone is
+   imprecise when errors are only weakly correlated. Taking the larger then errs
+   towards wider intervals, and changes nothing for AR(1) errors (V4, V9).
+
+This is a documented, validated approximation, not a published method by name.
+The principled refinements are an error model with a fast and a slow part, and
+parameter-specific (sandwich) widths for the posterior (Ribatet et al., 2012).
+Neither is implemented. Use `rho_timescale: "daily"` to reproduce results made
+with the earlier default, or to check how much a conclusion depends on the
+choice.
 
 **What the validation shows** ([validation/REPORT.md](../validation/REPORT.md)).
 On synthetic data from a known truth, 90% prediction intervals contained about
@@ -650,3 +734,20 @@ These are deliberate; each is covered by tests.
   306–312.
 - Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A. and
   Rubin, D. B. (2013). *Bayesian Data Analysis*, 3rd edn. CRC Press (split-R̂).
+- Bayley, G. V. and Hammersley, J. M. (1946). The "effective" number of
+  independent observations in an autocorrelated time series. *Supplement to the
+  Journal of the Royal Statistical Society*, 8, 184–197.
+- Poppick, A., Moyer, E. J. and Stein, M. L. (2017). Estimating trends in the
+  global mean temperature record. *Advances in Statistical Climatology,
+  Meteorology and Oceanography*, 3, 33–53.
+- Evin, G., Thyer, M., Kavetski, D., McInerney, D. and Kuczera, G. (2014).
+  Comparison of joint versus postprocessor approaches for hydrological
+  uncertainty estimation accounting for error autocorrelation and
+  heteroscedasticity. *Water Resources Research*, 50, 2350–2375.
+- McInerney, D., Thyer, M., Kavetski, D., Laugesen, R., Tuteja, N. and
+  Kuczera, G. (2020). Multi-temporal hydrological residual error modeling for
+  seamless subseasonal streamflow forecasting. *Water Resources Research*, 56,
+  e2019WR026979.
+- Ribatet, M., Cooley, D. and Davison, A. C. (2012). Bayesian inference from
+  composite likelihoods, with an application to spatial extremes. *Statistica
+  Sinica*, 22, 813–845.

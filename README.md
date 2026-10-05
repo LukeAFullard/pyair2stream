@@ -192,8 +192,11 @@ The [validation suite](validation/README.md) checks this, and its results are in
   intervals contain 84.5–89% of daily values in years not used for calibration,
   so they are slightly optimistic. One case, the Rhône with version 5, falls
   just below the report's 85% threshold, so that check is marked as failed. For
-  multi-day quantities such as 7-day means, use `noise_model: "ar1"` (the
-  default); `"iid"` makes those intervals far too narrow.
+  multi-day quantities such as 7-day means, keep `noise_model: "ar1"` and
+  `rho_timescale: "weekly"` (the defaults): `"iid"` makes those intervals far
+  too narrow and `"daily"` somewhat too narrow, because model errors also have
+  a part that lasts for weeks
+  ([docs/METHODS.md §12](docs/METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc)).
 - **The published parameters and the intervals.** The published parameters lie
   inside pyair2stream's 90% parameter intervals for versions 3–5 on all three
   rivers, for version 7 on the Rhône and for every version on the Dischmabach.

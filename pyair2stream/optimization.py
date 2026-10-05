@@ -21,7 +21,8 @@ from .model import (
     call_model, funcobj, aggregation, statis, warn_on_stability, check_numerical_divergence,
     is_numerically_divergent, NumericalDivergenceError,
 )
-from .uncertainty import estimate_rho, estimate_ar1_rho, generate_ar1_noise, build_ar1_runs, ar1_whitened_stats
+from .uncertainty import (estimate_rho, estimate_ar1_rho, generate_ar1_noise, build_ar1_runs, ar1_whitened_stats,
+                          mean_error_variance_factor, scoring_block_days)
 
 # A near-perfect-fit MCMC log-likelihood is capped at this large but finite value rather
 # than returned as a literal np.inf, which poisons emcee's acceptance-ratio arithmetic
@@ -86,12 +87,15 @@ def _ar1_log_likelihood(residuals: np.ndarray, rho: float, runs: list) -> float:
     return -0.5 * N * np.log(sse_u / N) + 0.5 * n_runs * np.log(1.0 - rho ** 2)
 
 
-def _least_squares_log_likelihood(residuals: np.ndarray, rho: float, runs: list) -> float:
+def _least_squares_log_likelihood(residuals: np.ndarray, rho: float, runs: list, block_days: int = 1) -> float:
     """
     Concentrated least-squares (iid Gaussian) log-likelihood with the effective number of
-    independent observations n_eff = n (1 - rho) / (1 + rho) in place of n. Its maximum is the
-    least-squares fit; its spread is widened for lag-1 autocorrelation rho of the residuals
-    (the variance of a mean of AR(1) errors is larger by n / n_eff). Equal to
+    independent observations n_eff in place of n. Its maximum is the least-squares fit; its
+    spread is widened for the autocorrelation of the errors: n_eff = n / factor, with factor the
+    variance of a mean of the scored errors relative to independent ones for daily AR(1) errors
+    with lag-1 correlation rho (`mean_error_variance_factor`). For daily scoring
+    n_eff = n (1 - rho) / (1 + rho); with weekly or monthly scoring each scored value is a block
+    mean (`block_days` days), whose errors are much less correlated from block to block. Equal to
     `_iid_log_likelihood` when rho = 0.
     """
     if not runs:
@@ -101,7 +105,10 @@ def _least_squares_log_likelihood(residuals: np.ndarray, rho: float, runs: list)
     sse = float(np.sum(e ** 2))
     if sse == 0:
         return MCMC_MAX_LOG_LIKELIHOOD
-    n_eff = n * (1.0 - rho) / (1.0 + rho)
+    if block_days == 1:
+        n_eff = n * (1.0 - rho) / (1.0 + rho)
+    else:
+        n_eff = n / mean_error_variance_factor(rho, block_days)
     return -0.5 * n_eff * np.log(sse / n)
 
 
@@ -627,10 +634,14 @@ def forward_mode(data: CommonData) -> None:
             # interval does not depend on the data being predicted and two scenario runs
             # use the same noise (their paired difference then cancels it exactly).
             sidecar_rho = None
+            sidecar_timescale = None
             if os.path.exists(sidecar_path):
                 try:
                     with open(sidecar_path, 'r') as f:
-                        sidecar_rho = json.load(f).get('rho')
+                        sidecar = json.load(f)
+                    sidecar_rho = sidecar.get('rho')
+                    # Chains written before rho_timescale existed (0.4.1 and earlier) used consecutive days.
+                    sidecar_timescale = sidecar.get('rho_timescale', 'daily')
                 except Exception as e:
                     print(f"Warning: Failed to read rho from sidecar {sidecar_path} ({e}).")
             if ar1_rho_override is not None:
@@ -639,6 +650,12 @@ def forward_mode(data: CommonData) -> None:
             elif sidecar_rho is not None:
                 rho_used = float(sidecar_rho)
                 print(f"Using rho={rho_used:.4f} carried from calibration run {sidecar_path}")
+                rho_timescale = uncertainty_options.get('rho_timescale', DEFAULT_RHO_TIMESCALE)
+                if sidecar_timescale != rho_timescale:
+                    print(f"Note: that rho was estimated at the '{sidecar_timescale}' time scale, not this run's "
+                          f"rho_timescale '{rho_timescale}' (which applies only when the chain records no rho). "
+                          "To change it, rerun DE-MCMC with the time scale wanted, or set "
+                          "uncertainty_options.ar1_rho.")
             elif has_obs:
                 eval_mask_for_rho = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=bool)
                 segments_for_rho = _segments_for(data)
@@ -1091,7 +1108,6 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     uncertainty_options = data.uncertainty_options or {}
     noise_model = uncertainty_options.get('noise_model', DEFAULT_NOISE_MODEL)
     likelihood = uncertainty_options.get('likelihood', DEFAULT_LIKELIHOOD)
-    ar1_log_likelihood = _least_squares_log_likelihood if likelihood == 'least_squares' else _ar1_log_likelihood
 
     eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=np.bool_)
     segments = _segments_for(data)
@@ -1109,6 +1125,15 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     # sets the rho of the simulated prediction noise and of the least-squares effective sample size.
     rho_likelihood = (estimate_ar1_rho(data.Twat_mod, data.Twat_obs, eval_mask, segments)
                       if likelihood == 'exact' else best_rho)
+    # With weekly or monthly scoring each scored value is the mean of a block of days.
+    block_days = scoring_block_days(data.time_res)
+    variance_factor = (mean_error_variance_factor(rho_likelihood, block_days)
+                       if noise_model == 'ar1' and likelihood == 'least_squares' else None)
+    if noise_model == 'ar1' and likelihood == 'exact' and block_days > 1:
+        print(f"Warning: with time_resolution '{data.time_res}' no two scored values are consecutive days, so "
+              "the exact AR(1) likelihood treats the scored errors as independent and the parameter intervals "
+              "are too narrow if the errors persist from one block to the next. The default likelihood, "
+              "'least_squares', allows for that persistence.")
 
     valid_mask_agg = (data.Twat_obs_agg != -999.0) & eval_mask
     N = int(np.sum(valid_mask_agg))
@@ -1138,7 +1163,9 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         # -- daily and aggregated coincide at 1d resolution.
         if noise_model == 'ar1':
             residuals = data.Twat_mod_agg - data.Twat_obs_agg
-            return ar1_log_likelihood(residuals, rho_likelihood, ar1_runs)
+            if likelihood == 'least_squares':
+                return _least_squares_log_likelihood(residuals, rho_likelihood, ar1_runs, block_days)
+            return _ar1_log_likelihood(residuals, rho_likelihood, ar1_runs)
         else:
             mod = data.Twat_mod_agg[valid_mask_agg]
             obs = data.Twat_obs_agg[valid_mask_agg]
@@ -1282,6 +1309,8 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         "rho": best_rho,
         "rho_timescale": rho_timescale,
         "rho_likelihood": rho_likelihood,
+        "scoring_block_days": block_days,
+        "likelihood_variance_factor": variance_factor,
         "sigma": best_sigma,
         "n_valid_pairs": N,  # N valid points used for variance, proxy for pairs
         "noise_model_used_for_this_run": noise_model,
