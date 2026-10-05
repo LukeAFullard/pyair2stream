@@ -175,7 +175,7 @@ def run(ctx) -> Result:
         outside = b[~b.coverage.between(*PI_RANGE)]
         if len(outside):
             res.summary += (f" Outside the accepted {PI_RANGE[0]:.0%}-{PI_RANGE[1]:.0%}: " + "; ".join(
-                f"{r.river} version {r.version} ({LABELS[r['noise model']]}) {r.coverage:.1%}"
+                f"{r.river} version {r.version} ({LABELS[r['noise model']]}) {r.coverage:.2%}"
                 for _, r in outside.iterrows()) + ".")
         w = {n: conv.loc[conv["noise model"] == n, "7-day mean coverage"] for n in NOISE_MODELS}
         res.notes.append(

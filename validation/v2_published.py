@@ -963,5 +963,12 @@ def run(ctx) -> Result:
                      "individual parameter values, are what the model should be relied on for.")
         else:
             note += " Every published value lies inside at least one of the two intervals."
+        not_conv = f_detail[~mc_ok]
+        if len(not_conv):
+            cases = sorted({f"{r.river} version {r.version}" for r in not_conv.itertuples()})
+            note += (f" The MCMC run for {', '.join(cases)} did not converge within the step limit and gives no "
+                     f"interval; the jackknife intervals there contain "
+                     f"{int(not_conv['published inside (jackknife)'].astype(bool).sum())} of {len(not_conv)} "
+                     f"published values. A run that does not converge is reported, not used.")
         res.notes.append(note)
     return res
