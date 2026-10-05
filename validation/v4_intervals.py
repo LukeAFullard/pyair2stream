@@ -325,7 +325,7 @@ def run(ctx) -> Result:
             ratio = (jk["jackknife width"] / jk["MCMC width"]).groupby(jk.version).median()
         shown = by_version.map(lambda x: f"{x:.0%}" if pd.notna(x) else "")
         if "MCMC covers" in jk:
-            shown["median width, jackknife / MCMC"] = ratio.round(1).map(lambda x: "" if pd.isna(x) else x)
+            shown["median width, jackknife / MCMC (exact likelihood)"] = ratio.round(1).map(lambda x: "" if pd.isna(x) else x)
         res.sections.append(Section(
             "Parameter intervals from cross-validation",
             f"For {N_JACKKNIFE} replicates per model version, leave-one-year-out cross-validation through the "
@@ -346,9 +346,14 @@ def run(ctx) -> Result:
                 f"time across versions {', '.join(map(str, JACKKNIFE_VERSIONS))}, so they are approximate 90% "
                 f"intervals, a little narrow for some versions.")
         if "MCMC covers" in jk and pd.notna(by_version.loc[8, "MCMC (same replicates)"]):
-            note += (f" For version 8 they were closer to 90% than the MCMC parameter intervals on the same "
-                     f"replicates ({cover[8]:.0%} against {by_version.loc[8, 'MCMC (same replicates)']:.0%}), and "
-                     f"about {ratio[8]:.1f} times as wide.")
+            note += (f" For version 8 they were closer to 90% than the MCMC parameter intervals with the exact AR(1) "
+                     f"likelihood on the same replicates ({cover[8]:.0%} against "
+                     f"{by_version.loc[8, 'MCMC (same replicates)']:.0%}), and about {ratio[8]:.1f} times as wide.")
+            if "MCMC least squares (same replicates)" in by_version:
+                note += (f" The MCMC intervals with the least-squares likelihood (the default) contained the true "
+                         f"values {by_version.loc[8, 'MCMC least squares (same replicates)']:.0%} of the time for "
+                         f"version 8 and {by_version.loc[5, 'MCMC least squares (same replicates)']:.0%} for "
+                         f"version 5.")
         if low:
             note += f" For versions {', '.join(map(str, low))} they fell below {JACKKNIFE_OK:.0%}."
         note += (f" With {N_JACKKNIFE} replicates per version, each share is uncertain by several percentage "

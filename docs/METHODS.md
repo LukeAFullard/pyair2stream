@@ -297,9 +297,10 @@ number of blocks in the whole record (years, or groups of `n_years_per_fold`):
 When every block is held out (m = n) this is the standard delete-one-block
 jackknife; the first years are never held out, so the sum over n blocks is
 estimated as n/m times the sum over the m folds. In validation V4 these 90%
-intervals contained the true parameters 83–94% of the time for every version,
-closer to 90% than the MCMC parameter intervals for version 8 (85% against
-75%), at about 1.8 times their width. For versions 4, 7 and 8 set `Qmedia`
+intervals contained the true parameters 83–94% of the time for every version.
+On the same data, the DE-MCMC parameter intervals (§12, default likelihood)
+contained them 97% of the time for version 5 and 91% for version 8. For
+versions 4, 7 and 8 set `Qmedia`
 explicitly, so that every fold uses the same discharge scaling.
 
 A cross-validation run does not also produce a single final calibration.

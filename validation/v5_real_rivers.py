@@ -189,11 +189,15 @@ def run(ctx) -> Result:
             f"persist longer than the AR(1) model assumes.")
         bias = {n: conv.loc[conv["noise model"] == n, "band centre bias (°C)"] -
                    conv.loc[conv["noise model"] == n, "best-fit bias (°C)"] for n in NOISE_MODELS}
+        exact = bias["ar1"]
+        largest = exact.loc[exact.abs().idxmax()]
+        cooler = int((exact < 0).sum())
         res.notes.append(
             f"Where the band is centred: the median of the band minus the measured temperature, compared with the "
             f"same for the best fit. With the least-squares likelihood (the default) the band's centre stays within "
             f"{bias['ar1-ls'].abs().max():.2f} °C of the best fit's. With the exact AR(1) likelihood it moves by up "
-            f"to {bias['ar1'].abs().max():.2f} °C (mostly cooler): that likelihood weighs day-to-day changes more "
+            f"to {abs(largest):.2f} °C ({'cooler' if largest < 0 else 'warmer'} in that case; cooler in {cooler} of "
+            f"{len(exact)} runs): that likelihood weighs day-to-day changes more "
             f"than the overall level, and a model that is not exactly right is then pulled towards parameters "
             f"that fit the level slightly worse. This is why the least-squares likelihood is the default "
             f"(uncertainty_options.likelihood).")
