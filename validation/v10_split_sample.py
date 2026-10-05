@@ -183,11 +183,14 @@ def run(ctx) -> Result:
             "summer bias, differential (°C)": round(d["summer bias"], 2),
             "best simple alternative, differential years (RMSE °C)":
                 f"{d['best simple alternative']} {d['best simple alternative RMSE']:.3f}",
+            "best simple alternative, control years (RMSE °C)":
+                f"{c['best simple alternative']} {c['best simple alternative RMSE']:.3f}",
             "90% interval coverage, differential": pct(d["coverage"]),
             "summer coverage, differential": pct(d["summer coverage"]),
             "90% interval coverage, control": pct(c["coverage"]),
             "pass": passed,
-            "_beats": bool(d["RMSE"] < d["best simple alternative RMSE"]), "_coverage": d["coverage"]})
+            "_beats": bool(d["RMSE"] < d["best simple alternative RMSE"]),
+            "_control_beats": bool(c["RMSE"] < c["best simple alternative RMSE"]), "_coverage": d["coverage"]})
     table = pd.DataFrame(rows)
     res.passed = ok
     cost = table["cost of extrapolating (°C)"]
@@ -209,7 +212,15 @@ def run(ctx) -> Result:
             f"{r.river} version {r.version}, {r.split} split, calibrated on the {r['calibrated on']} years"
             for _, r in not_conv.iterrows()) + " (no intervals; counted as not meeting the criterion)")
     res.summary += (" (" + "; ".join(extra) + ")." if extra else ".")
-    table = table.drop(columns=["_beats", "_coverage"])
+    lost = table[~table["_beats"]]
+    if len(lost):
+        res.notes.append(
+            "Where the model did not beat the simple alternatives: " + "; ".join(
+                f"{r.river} version {r.version}, {r.split} split (calibrated on the middle years it "
+                f"{'did' if r['_control_beats'] else 'did not either'})" for _, r in lost.iterrows()) +
+            ". Where it fails whichever years it is calibrated on, the cause is the model version on that river, "
+            "not extrapolation: compare the RMSE of the two calibrations, and the versions in V5.")
+    table = table.drop(columns=["_beats", "_control_beats", "_coverage"])
     res.sections.append(Section(
         "Which years were used",
         "Each point is a year. The test years (the most extreme third) are predicted from a calibration on the "
@@ -223,12 +234,25 @@ def run(ctx) -> Result:
         figures=[f for f in (_fig_results(fits), _fig_example(example)) if f],
         tables=[("Differential split-sample test", table)]))
     worst_bias = table.loc[table["summer bias, differential (°C)"].abs().idxmax()]
+    wb = worst_bias["summer bias, differential (°C)"]
     res.notes.append(
-        f"The largest summer bias after extrapolating was {worst_bias['summer bias, differential (°C)']:+.2f} °C "
-        f"({worst_bias['river']}, version {worst_bias['version']}, {worst_bias['split']} split), against "
-        f"{worst_bias['summer bias, control (°C)']:+.2f} °C from the control calibration. A model that is too cool in "
-        f"warm years understates the chance that a warm-water limit was exceeded; check the bias in the season "
-        f"of interest on your own data (USER_GUIDE §9).")
+        f"Summer bias on the test years ranged from {table['summer bias, differential (°C)'].min():+.2f} to "
+        f"{table['summer bias, differential (°C)'].max():+.2f} °C after extrapolating, against "
+        f"{table['summer bias, control (°C)'].min():+.2f} to {table['summer bias, control (°C)'].max():+.2f} °C from "
+        f"the control calibrations; the largest was {wb:+.2f} °C ({worst_bias['river']}, version "
+        f"{worst_bias['version']}, {worst_bias['split']} split). A model that is too warm in the season of a limit "
+        f"overstates the chance that a warm-water limit was exceeded, and one that is too cool understates it; "
+        f"check the bias in that season on your own data (USER_GUIDE §9).")
+    note = f"The cost of extrapolating was small in every case ({cost.min():+.2f} to {cost.max():+.2f} °C of RMSE)"
+    if example is not None:
+        dates, obs, sim = pd.DatetimeIndex(example[0]), example[1], example[2]
+        aug = (dates >= "2003-08-01") & (dates <= "2003-08-31") & np.isfinite(obs)
+        if aug.any():
+            diff = float(np.nanmax(sim[aug]) - np.nanmax(obs[aug]))
+            note += (f", but a single extreme period can still be missed: in the Mentue's 2003 heatwave (figure), "
+                     f"the highest daily temperature of August from the model calibrated on the three coolest "
+                     f"summers was {abs(diff):.1f} °C {'above' if diff > 0 else 'below'} the measured one")
+    res.notes.append(note + ".")
     res.notes.append("With three to ten years per third, these results describe these rivers and years; they are "
                      "evidence about how the model extrapolates, not a guarantee for other rivers or larger changes.")
     return res
