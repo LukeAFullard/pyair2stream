@@ -671,7 +671,11 @@ that statistic. Settings:
 cross_validation:
   threshold: 18             # °C, for "days above threshold" (default: 90th percentile of the measurements)
   season_months: [6, 7, 8, 9]   # a year counts if 80% of these months was measured (default: the 4 warmest)
+  min_train_years: 0        # hold out every year but the first: the check needs as many years as possible
 ```
+
+It uses the error model of `uncertainty_options` (`noise_model`, `rho_timescale`),
+as a FORWARD run does. With fewer than about 5 held-out years it says little.
 
 **Parameter confidence intervals.** The rows `jackknife_90_lower` and
 `jackknife_90_upper` give approximate 90% intervals for each parameter, worked

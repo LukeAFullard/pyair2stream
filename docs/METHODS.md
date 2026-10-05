@@ -596,11 +596,10 @@ band is not the upper edge of a weekly mean or a yearly peak.
 days is not always its typical error. In years not used for calibration, the
 simulated yearly peak was on average 0.6–0.8 °C too high on the Mentue with
 version 8, and with version 5 up to 0.9 °C too high on the Rhône and 0.5 °C too
-low on the Dischmabach (V11). Random error
-of the typical size cannot remove such a bias, so the ranges of yearly
-statistics then miss the measured value more often than they state. Daily
-values and 7-day means are not affected in the same way: their ranges hold
-(V5, V10). For a yearly statistic:
+low on the Dischmabach (V11). Random error of the typical size cannot remove
+such a bias, so the ranges of yearly statistics then miss the measured value
+more often than they state. Ranges for daily values and 7-day means are much
+less affected (V5, V10). For a yearly statistic:
 
 1. Run a cross-validation of the calibration years (§11) with the `threshold`
    and season of the question. `cv_yearly_statistics_summary.csv` shows how
