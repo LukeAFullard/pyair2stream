@@ -232,7 +232,7 @@ To run the tests and the validation suite (needs `gfortran`):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # or without --quick: the full suite, about 75 minutes
+python validation/run_all.py --quick     # or without --quick: the full suite, about 105 minutes
 ```
 
 ## Examples

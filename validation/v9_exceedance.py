@@ -463,7 +463,9 @@ def _fig_reliability(a, reps):
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         ax.set_aspect("equal")
-        ax.set_title(f"{c[0].upper() + c[1:]}\n({len(a[a.case == c]) // len(STATS)} years tested)", fontsize=9)
+        name = c[0].upper() + c[1:]
+        name = name.replace(", rho from", ",\nrho from")
+        ax.set_title(f"{name}\n({len(a[a.case == c]) // len(STATS)} years tested)", fontsize=9)
         if k // ncol == nrow - 1:
             ax.set_xlabel("Chance of exceeding the limit, stated by the package")
         if k % ncol == 0:
@@ -471,6 +473,7 @@ def _fig_reliability(a, reps):
     for k in range(len(cases), nrow * ncol):
         axes[k // ncol][k % ncol].set_visible(False)
     axes[0][0].legend(loc="upper left", fontsize=7.5)
+    fig.tight_layout(h_pad=2.5)
     fig.suptitle("Synthetic data: stated chances against how often the limit was exceeded", y=1.02)
     return (save_figure(fig, "V9_reliability.png"),
             "For limits set at every level of the package's predicted distribution, the share of cases in which "

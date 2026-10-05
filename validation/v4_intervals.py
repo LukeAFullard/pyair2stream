@@ -547,22 +547,22 @@ def _fig_prediction_coverage(df):
     plot_style()
     df = df[df.converged]
     cases = list(dict.fromkeys(df.case))
-    fig, ax = plt.subplots(figsize=(10, 3.8))
+    fig, ax = plt.subplots(figsize=(12.5, 4.0))
     rng = np.random.default_rng(0)
     for i, c in enumerate(cases):
         y = df[df.case == c]["held-out coverage"].to_numpy() * 100
         colour = LIGHT_GREY if "mis-specified" in c else BLUE
         ax.scatter(i + rng.uniform(-0.13, 0.13, len(y)), y, s=16, color=colour, alpha=0.8, zorder=3)
         ax.hlines(y.mean(), i - 0.28, i + 0.28, color=INK, lw=1.6, zorder=4)
-    reference_line(ax, 90, "nominal 90%")
+    reference_line(ax, 90)
     short = {"A": "A\nversion 5\niid noise", "B": "B\nversion 5\nexact AR(1)", "C": "C\nversion 5\nwrong model",
              "D": "D\nversion 8\nexact AR(1)", "E": "E\nversion 5\nleast squares", "F": "F\nversion 8\nleast squares",
              "G": "G\nas E,\ndaily rho", "H": "H\nfast + slow\nnoise", "I": "I\nas H,\ndaily rho",
              "J": "J\nweekly scoring,\nauthors' bounds", "K": "K\nweekly scoring,\na2, a3 >= 0"}
-    ax.set_xticks(range(len(cases)), [short.get(c[0], c) for c in cases], fontsize=7.5)
+    ax.set_xticks(range(len(cases)), [short.get(c[0], c) for c in cases], fontsize=7)
     ax.grid(axis="x", visible=False)
     ax.set_ylabel("Held-out observations inside\nthe 90% interval (%)")
-    ax.set_title("Prediction-interval coverage, one point per replicate (black: mean)")
+    ax.set_title("Prediction-interval coverage, one point per replicate (black: mean; dashed: nominal 90%)")
     return (save_figure(fig, "V4_interval_coverage.png"),
             "Each point is one synthetic data set. Mean coverage is at the nominal 90% in every case, including the "
             "deliberately wrong noise model (grey): for single days the noise model hardly matters.")
@@ -579,8 +579,8 @@ def _fig_rho_timescale(rt):
             if len(r):
                 v = float(r["parameter coverage"].iloc[0]) * 100
                 ax.bar(i + (j - 0.5) * 0.36, v, 0.32, color=colour, label=ts if i == 0 else None, zorder=3)
-                ax.annotate(f"{v:.0f}%", (i + (j - 0.5) * 0.36, v), xytext=(0, 3), textcoords="offset points",
-                            ha="center", fontsize=7.5, color=INK2)
+                ax.annotate(f"{v:.0f}%", (i + (j - 0.5) * 0.36, v), xytext=(0, -4), textcoords="offset points",
+                            ha="center", va="top", fontsize=8, color="white", fontweight="bold")
     reference_line(ax, 90, "nominal 90%")
     ax.set_xticks(range(len(groups)), [f"{g}" for g in groups])
     ax.set_ylim(0, 105)
