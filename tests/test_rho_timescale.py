@@ -120,3 +120,29 @@ def test_config_option(tmp_path):
                 read_calibration(str(path))
         else:
             assert read_calibration(str(path)).uncertainty_options["rho_timescale"] == ok
+
+
+def test_exact_likelihood_uses_the_day_to_day_rho(tmp_path):
+    """With likelihood 'exact', the likelihood removes the day-to-day correlation with the
+    lag-1 rho; rho_timescale sets the rho of the prediction noise (recorded as 'rho')."""
+    import json
+    import yaml
+    from pyair2stream.io import read_calibration, read_Tseries
+    from pyair2stream.model import aggregation, statis
+    from pyair2stream.optimization import DE_MCMC_mode
+    cfg = {"station_name": "S", "series": "c", "version": 3, "run_mode": "DE-MCMC", "random_seed": 1,
+           "optimization": {"n_run": 30, "n_particles": 10, "mcmc_walkers": 8, "mcmc_steps": 2000},
+           "uncertainty_options": {"likelihood": "exact", "rho_timescale": "weekly", "strict_convergence": False},
+           "parameter_bounds": {"min": [-5, -5, -5, -1, 0, 0, 0, -1], "max": [15, 1.5, 5, 1, 20, 10, 1, 5]},
+           "paths": {"input_data": "data/switzerland/MAH_2369_calibration.csv", "output_dir": str(tmp_path / "o")}}
+    path = tmp_path / "c.yaml"
+    path.write_text(yaml.safe_dump(cfg))
+    data = read_calibration(str(path))
+    read_Tseries(data, "c")
+    aggregation(data)
+    statis(data)
+    DE_MCMC_mode(data, seed=1)
+    meta = json.load(open(tmp_path / "o" / "MCMC_chain_S_c_1d_meta.json"))
+    assert meta["rho_timescale"] == "weekly"
+    assert meta["rho_likelihood"] <= meta["rho"]
+    assert 0.5 < meta["rho_likelihood"] < 0.9

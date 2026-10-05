@@ -21,7 +21,7 @@ from .model import (
     call_model, funcobj, aggregation, statis, warn_on_stability, check_numerical_divergence,
     is_numerically_divergent, NumericalDivergenceError,
 )
-from .uncertainty import estimate_rho, generate_ar1_noise, build_ar1_runs, ar1_whitened_stats
+from .uncertainty import estimate_rho, estimate_ar1_rho, generate_ar1_noise, build_ar1_runs, ar1_whitened_stats
 
 # A near-perfect-fit MCMC log-likelihood is capped at this large but finite value rather
 # than returned as a literal np.inf, which poisons emcee's acceptance-ratio arithmetic
@@ -1104,6 +1104,11 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
 
     rho_timescale = uncertainty_options.get('rho_timescale', DEFAULT_RHO_TIMESCALE)
     best_rho = estimate_rho(data.Twat_mod, data.Twat_obs, eval_mask, segments, rho_timescale)
+    # The exact AR(1) likelihood removes the day-to-day correlation (e_t - rho * e_{t-1}), a
+    # day-scale operation, so it always uses the correlation of consecutive days. rho_timescale
+    # sets the rho of the simulated prediction noise and of the least-squares effective sample size.
+    rho_likelihood = (estimate_ar1_rho(data.Twat_mod, data.Twat_obs, eval_mask, segments)
+                      if likelihood == 'exact' else best_rho)
 
     valid_mask_agg = (data.Twat_obs_agg != -999.0) & eval_mask
     N = int(np.sum(valid_mask_agg))
@@ -1133,7 +1138,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         # -- daily and aggregated coincide at 1d resolution.
         if noise_model == 'ar1':
             residuals = data.Twat_mod_agg - data.Twat_obs_agg
-            return ar1_log_likelihood(residuals, best_rho, ar1_runs)
+            return ar1_log_likelihood(residuals, rho_likelihood, ar1_runs)
         else:
             mod = data.Twat_mod_agg[valid_mask_agg]
             obs = data.Twat_obs_agg[valid_mask_agg]
@@ -1276,6 +1281,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     sidecar_data = {
         "rho": best_rho,
         "rho_timescale": rho_timescale,
+        "rho_likelihood": rho_likelihood,
         "sigma": best_sigma,
         "n_valid_pairs": N,  # N valid points used for variance, proxy for pairs
         "noise_model_used_for_this_run": noise_model,
