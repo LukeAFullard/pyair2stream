@@ -243,13 +243,14 @@ def run(ctx) -> Result:
         f"{worst_bias['version']}, {worst_bias['split']} split). A model that is too warm in the season of a limit "
         f"overstates the chance that a warm-water limit was exceeded, and one that is too cool understates it; "
         f"check the bias in that season on your own data (USER_GUIDE §9).")
-    note = f"The cost of extrapolating was small in every case ({cost.min():+.2f} to {cost.max():+.2f} °C of RMSE)"
+    note = (f"The cost of extrapolating ranged from {cost.min():+.2f} to {cost.max():+.2f} °C of RMSE"
+            f"{' (small in every case)' if cost.max() <= 0.1 else ''}")
     if example is not None:
         dates, obs, sim = pd.DatetimeIndex(example[0]), example[1], example[2]
         aug = (dates >= "2003-08-01") & (dates <= "2003-08-31") & np.isfinite(obs)
         if aug.any():
             diff = float(np.nanmax(sim[aug]) - np.nanmax(obs[aug]))
-            note += (f", but a single extreme period can still be missed: in the Mentue's 2003 heatwave (figure), "
+            note += (f"; a single extreme period can still be missed: in the Mentue's 2003 heatwave (figure), "
                      f"the highest daily temperature of August from the model calibrated on the three coolest "
                      f"summers was {abs(diff):.1f} °C {'above' if diff > 0 else 'below'} the measured one")
     res.notes.append(note + ".")

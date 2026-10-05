@@ -356,13 +356,15 @@ def run(ctx) -> Result:
                 f"A version that cannot follow these changes gives probabilities no better than past years; "
                 f"compare versions by cross-validation before relying on one (example 06).")
         cov = b.assign(inside90=b.pit.sub(0.5).abs() <= 0.45).groupby(["version", "statistic"]).inside90.mean()
-        res.notes.append(
-            f"On real rivers the 90% ranges of yearly statistics contained the measured value in "
-            f"{cov.min():.0%}-{cov.max():.0%} of river-years, so they are too narrow, while on synthetic data "
-            f"(part A) they hold. The error model (AR(1), the same all year) describes day-to-day model errors; "
-            f"on real rivers the model can also be off by a similar amount for a whole summer (see the mean "
-            f"errors by river), which widens the true uncertainty of a yearly peak. Treat probabilities for "
-            f"yearly statistics on real rivers as approximate, and check them on your own validation years.")
+        if cov.min() < 0.8:
+            res.notes.append(
+                f"On real rivers the 90% ranges of yearly statistics contained the measured value in "
+                f"{cov.min():.0%}-{cov.max():.0%} of river-years, so they are too narrow"
+                f"{', while on synthetic data (part A) they hold' if ok_a else ''}. The error model (AR(1), the "
+                f"same all year) describes day-to-day model errors; on real rivers the model can also be off by a "
+                f"similar amount for a whole summer (see the mean errors by river), which widens the true "
+                f"uncertainty of a yearly peak. Treat probabilities for yearly statistics on real rivers as "
+                f"approximate, and check them on your own validation years.")
     return res
 
 
