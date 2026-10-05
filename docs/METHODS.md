@@ -202,6 +202,20 @@ AIC = n·ln(SSE/n) + 2(k+1) and BIC = n·ln(SSE/n) + (k+1)·ln(n), where SSE is 
 sum of squared errors and k the number of fitted parameters (the +1 is the error
 variance). AIC and BIC assume independent errors (§16).
 
+**Mean error by month and season** (`bias_by_month_*.csv` and `.png`, for the
+calibration and validation periods; `cv_bias_by_month.*` for the held-out years
+of a cross-validation). A model can score well over the year and still be too
+warm in summer and too cool in spring. For each calendar month, each season
+(December counted with January and February of the same year) and the whole
+year, the daily errors (simulated − measured) are first averaged within each
+year; a month counts in a year if it has at least 10 days with both values (a
+season 30, a year 120). The bias is the mean of these yearly values, with the
+95% interval mean ± t₀.₉₇₅,ₙ₋₁ · sd/√n over the n years (none with fewer than
+two). Days are not used as independent values because errors persist from day
+to day and can last a whole season, so an interval from daily values would be
+far too narrow. An interval that excludes zero means the model is consistently
+biased in that month or season.
+
 ## 8. Calibration
 
 Parameters are searched only within `parameter_bounds` (8 minimum and 8 maximum
@@ -281,7 +295,9 @@ LATHYP:
    In gap-tolerant mode the fold's air temperature and discharge are also hidden
    during calibration, so the fold becomes a gap.
 4. `cv_results.csv` lists each fold's scores and parameters, plus the mean and
-   standard deviation across folds and "pooled" scores over all held-out days.
+   standard deviation across folds and "pooled" scores over all held-out days;
+   `cv_bias_by_month.*` gives the mean error by month and season over the
+   held-out days (§7).
 
 Large variation of the parameters between folds means they are poorly determined
 by the data (equifinality). The spread between folds (`std`) is not a confidence

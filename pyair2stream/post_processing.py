@@ -72,6 +72,96 @@ def gap_aware_acf(residuals: pd.Series, max_lag: int) -> tuple:
     return lags, acf, n_pairs
 
 
+MONTH_NAMES = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
+SEASONS = (('Dec-Feb', (12, 1, 2)), ('Mar-May', (3, 4, 5)), ('Jun-Aug', (6, 7, 8)), ('Sep-Nov', (9, 10, 11)))
+MIN_DAYS_MONTH = 10         # a month of one year counts if it has at least this many days with both values
+MIN_DAYS_SEASON = 30
+MIN_DAYS_YEAR = 120
+
+
+def bias_by_month(dates, obs, sim) -> tuple:
+    """
+    Mean error (simulated - observed, °C) by calendar month, by season and over
+    the whole year, with a 95% confidence interval.
+
+    Daily errors are autocorrelated and the model can be off for a whole season,
+    so days are not independent. Each period is therefore first averaged within
+    each year (a month counts in a year if it has at least MIN_DAYS_MONTH days
+    with both values; a season, MIN_DAYS_SEASON; a year, MIN_DAYS_YEAR). The
+    bias is the mean of these yearly values and the interval is
+    mean ± t(0.975, n_years - 1) · sd / sqrt(n_years); it needs at least two
+    years. Seasons follow the calendar year (December counts with January and
+    February of the same year).
+
+    Returns
+    -------
+    table : DataFrame, one row per month, season and 'All year' (period, n_years,
+        n_days, bias, ci95_lower, ci95_upper, rmse).
+    yearly : DataFrame of the yearly values (period, year, n_days, bias).
+    """
+    from scipy.stats import t as student_t
+    dates = pd.DatetimeIndex(dates)
+    err = np.asarray(sim, dtype=np.float64) - np.asarray(obs, dtype=np.float64)
+    ok = np.isfinite(err)
+    df = pd.DataFrame({'year': dates.year[ok], 'month': dates.month[ok], 'err': err[ok]})
+    groups = [(MONTH_NAMES[m - 1], (m,), MIN_DAYS_MONTH) for m in range(1, 13)]
+    groups += [(name, months, MIN_DAYS_SEASON) for name, months in SEASONS]
+    groups += [('All year', tuple(range(1, 13)), MIN_DAYS_YEAR)]
+    rows, yearly = [], []
+    for name, months, min_days in groups:
+        sub = df[df.month.isin(months)]
+        per_year = sub.groupby('year').err.agg(['size', 'mean'])
+        per_year = per_year[per_year['size'] >= min_days]
+        for year, r in per_year.iterrows():
+            yearly.append({'period': name, 'year': int(year), 'n_days': int(r['size']), 'bias': float(r['mean'])})
+        n = len(per_year)
+        bias = float(per_year['mean'].mean()) if n else np.nan
+        half = (float(student_t.ppf(0.975, n - 1) * per_year['mean'].std(ddof=1) / np.sqrt(n))
+                if n >= 2 else np.nan)
+        used = sub[sub.year.isin(per_year.index)]
+        rows.append({'period': name, 'n_years': n, 'n_days': int(len(used)), 'bias': bias,
+                     'ci95_lower': bias - half, 'ci95_upper': bias + half,
+                     'rmse': float(np.sqrt(np.mean(used.err ** 2))) if len(used) else np.nan})
+    return pd.DataFrame(rows), pd.DataFrame(yearly, columns=['period', 'year', 'n_days', 'bias'])
+
+
+def write_bias_by_month(dates, obs, sim, folder: str, name: str, title: str) -> pd.DataFrame:
+    """Write `<name>.csv` (the table of `bias_by_month`) and `<name>.png`/`.pdf`: the mean error of each
+    calendar month with its 95% interval, and each year's value. Returns the table."""
+    table, yearly = bias_by_month(dates, obs, sim)
+    table.round(4).to_csv(os.path.join(folder, f"{name}.csv"), index=False)
+    months = table[table.period.isin(MONTH_NAMES)].reset_index(drop=True)
+    if not months.n_years.any():
+        return table
+    x = np.arange(1, 13)
+    fig, ax = plt.subplots(figsize=(18 / 2.54, 9 / 2.54))
+    ax.axhline(0, color='black', linewidth=0.8, linestyle='--')
+    first = True
+    for i, m in enumerate(MONTH_NAMES):
+        ys = yearly.loc[yearly.period == m, 'bias'].to_numpy()
+        if len(ys):
+            ax.scatter(np.full(len(ys), x[i]) + np.linspace(-0.15, 0.15, len(ys)), ys, s=9, color='#56B4E9',
+                       alpha=0.8, zorder=2, label='one year' if first else None)
+            first = False
+    has_ci = months.ci95_lower.notna()
+    yerr = np.vstack([months.bias - months.ci95_lower, months.ci95_upper - months.bias])
+    ax.errorbar(x[has_ci], months.bias[has_ci], yerr=yerr[:, has_ci], fmt='o', color='#0072B2', ecolor='#0072B2',
+                elinewidth=1.4, capsize=3, markersize=5, zorder=3, label='mean over years, with 95% interval')
+    ax.plot(x[~has_ci], months.bias[~has_ci], 'o', color='#0072B2', markersize=5, zorder=3)
+    ax.set_xticks(x)
+    ax.set_xticklabels(MONTH_NAMES)
+    ax.set_ylabel('Simulated − measured (°C)')
+    n_years = int(months.n_years.max())
+    ax.set_title(f'{title}: mean error by month ({n_years} year{"s" if n_years != 1 else ""})')
+    ax.legend(loc='best', fontsize=8)
+    ax.grid(True, axis='y', alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(folder, f"{name}.png"), dpi=300)
+    plt.savefig(os.path.join(folder, f"{name}.pdf"), dpi=300)
+    plt.close()
+    return table
+
+
 def _envelope_on_dates(data: CommonData, dates) -> pd.DataFrame:
     """
     This run's prediction-interval envelope (MCMC for a calibration run, forward
@@ -390,6 +480,12 @@ def post_process(data: CommonData, toll: float = None):
 
             metrics_str = (f"\nNSE={nse:.3f}, R²={r2:.3f}, RMSE={rmse:.2f}°C, MAE={mae:.2f}°C (n={n})"
                            f"\nAIC={aic:.1f}, BIC={bic:.1f}") if (not np.isnan(nse) and not np.isnan(rmse)) else ""
+
+            # Mean error by month and season, from the daily values (is the model off in one season?)
+            if output_name != "full_simulation" and (df['Twat_obs'].notna() & df['Twat_mod'].notna()).any():
+                write_bias_by_month(dates, df['Twat_obs'], df['Twat_mod'], data.folder,
+                                    f"bias_by_month_{output_name}_{data.runmode}_{data.fun_obj}_{data.station}",
+                                    title_prefix)
         else:
             rmse = np.nan
             mae = np.nan

@@ -138,6 +138,7 @@ validation period. The equation is given in [docs/METHODS.md](docs/METHODS.md#5-
 | `goodness_of_fit_*.csv` | N, NSE, R², RMSE, MAE, AIC, BIC for each period |
 | `calibration_*.png`, `validation_*.png`, `full_simulation_*.png` | time-series plots with residuals |
 | `predicted_vs_measured_*.png`, `residual_diagnostics_*.png` | scatter plot; residual histogram, Q-Q and autocorrelation |
+| `bias_by_month_*.csv` / `.png` | mean error by month and season, with 95% intervals: is the model off in one season? |
 | `convergence_*.png`, `dottyplots_*.png`, `0_*.csv` | every parameter set tried during calibration |
 | `calibration_metadata.json`, `parameters.txt` | `Qmedia`, bounds and settings used, needed for later scenario runs |
 | `MCMC_*`, `Forward_Prediction_*`, `parameter_significance_*` | uncertainty results (`DE-MCMC` and `FORWARD` with intervals) |

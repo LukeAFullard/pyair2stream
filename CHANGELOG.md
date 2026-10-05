@@ -32,6 +32,13 @@
   50 °C, which usually means a missing-value code other than `-999` (such as
   `-99` or `-9999`) or a unit error. The values are still used as given.
 - A clearer message when a gap-tolerant run's file has no water temperatures.
+- `bias_by_month_<period>_*.csv`/`.png` (calibration and validation) and
+  `cv_bias_by_month.csv`/`.png` (cross-validation, held-out years): the mean
+  error by calendar month, season and year with a 95% interval from the
+  year-to-year spread, to show a bias in one season that a whole-year score
+  hides (docs/METHODS.md §7). Cross-validation folds now keep their dates
+  (`FoldResult.dates_held_out`), and `cross_validate(..., return_folds=True)`
+  also returns the folds.
 - Validation: one full report per check (`validation/reports/`), with figures;
   V2 compares the published parameters with 90% intervals around the same
   least-squares estimator (part F); V4 and V5 test both likelihoods.

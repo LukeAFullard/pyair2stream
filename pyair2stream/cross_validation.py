@@ -97,6 +97,7 @@ class FoldResult:
     # Raw validation arrays, used for computing the pooled out-of-sample metrics
     obs_held_out: np.ndarray = field(repr=False)
     sim_held_out: np.ndarray = field(repr=False)
+    dates_held_out: Optional[pd.DatetimeIndex] = field(default=None, repr=False)
 
 
 # --------------------------------------------------------------------------
@@ -397,6 +398,8 @@ def run_leave_one_year_out_cv(
                     rmse=rmse,
                     obs_held_out=obs_scored,
                     sim_held_out=sim[idx].copy(),
+                    dates_held_out=pd.DatetimeIndex(pd.to_datetime(
+                        {'year': data.date[idx, 0], 'month': data.date[idx, 1], 'day': data.date[idx, 2]})),
                 ))
             finally:
                 _restore_fold(data, idx, orig_twat, orig_tair, orig_q)
@@ -449,12 +452,29 @@ def jackknife_rows(par: np.ndarray, n_blocks: int, level: float = JACKKNIFE_LEVE
             {"fold": f"jackknife_{pct}_upper", **{f"p{i + 1}": v for i, v in enumerate(centre + half)}}]
 
 
-def cross_validate(data: CommonData, run_mode: str) -> pd.DataFrame:
+def cross_validate(data: CommonData, run_mode: str, return_folds: bool = False):
     """Run the cross-validation configured in `data.cross_validation` and return the
-    `cv_results.csv` table, including jackknife parameter intervals (see `summarize`)."""
+    `cv_results.csv` table, including jackknife parameter intervals (see `summarize`).
+    With `return_folds`, also return the list of FoldResult (held-out series per fold)."""
     cv_config = data.cross_validation
     results = run_leave_one_year_out_cv(data, cv_config, run_mode)
-    return summarize(results, n_blocks=count_blocks(data, cv_config))
+    table = summarize(results, n_blocks=count_blocks(data, cv_config))
+    return (table, results) if return_folds else table
+
+
+def held_out_series(results: list[FoldResult]) -> tuple:
+    """Dates, observed and simulated daily values of every fold's held-out days, concatenated
+    (missing or unscored days as NaN): the out-of-sample predictions of the cross-validation."""
+    dates, obs, sim = [], [], []
+    for r in results:
+        if r.dates_held_out is None:
+            continue
+        dates.append(r.dates_held_out)
+        obs.append(np.where(r.obs_held_out == MISSING_DATA_SENTINEL, np.nan, r.obs_held_out))
+        sim.append(np.where(r.sim_held_out == MISSING_DATA_SENTINEL, np.nan, r.sim_held_out))
+    if not dates:
+        return pd.DatetimeIndex([]), np.array([]), np.array([])
+    return dates[0].append(dates[1:]), np.concatenate(obs), np.concatenate(sim)
 
 
 def summarize(results: list[FoldResult], n_blocks: Optional[int] = None) -> pd.DataFrame:

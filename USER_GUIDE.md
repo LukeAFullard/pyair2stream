@@ -306,6 +306,7 @@ station, series label and time resolution.
 | `full_simulation_*.png` | the same over the whole record |
 | `predicted_vs_measured_*.png` | scatter of simulated vs. observed |
 | `residual_diagnostics_*.png` | residual histogram, normal Q-Q plot and autocorrelation: check the assumptions behind uncertainty bands |
+| `bias_by_month_<period>_*.csv` / `.png` | mean error (simulated − measured) for each calendar month, each season and the whole year, with a 95% interval: is the model off in one season? ([docs/METHODS.md §7](docs/METHODS.md#7-measuring-the-fit)) |
 | `0_*.csv`, `convergence_*.png`, `dottyplots_*.png` | every parameter set tried; best score so far vs. evaluations (should flatten out); score vs. each parameter |
 | `calibration_metadata.json` | `Qmedia`, calibrated flow range, version, integrator, parameters, seed (not written by `FORWARD` runs) |
 | `parameters.txt` | the bounds actually used |
@@ -313,7 +314,7 @@ station, series label and time resolution.
 | `sensitivity_*` | §11 |
 | `MCMC_*`, `parameter_significance_*`, `parameter_correlation_*` | §11 |
 | `Forward_Prediction_*`, `forward_projection*.png` | §12 |
-| `cv_results.csv` | §13 |
+| `cv_results.csv`, `cv_bias_by_month.*` | §13 |
 
 **Reading the scores.** NSE: 1 is perfect, 0 is no better than the long-term mean;
 NSE above 0.9 is common for daily water temperature with this model.
@@ -356,6 +357,7 @@ scores.
 | `draws ... were excluded as numerically divergent` | Use `CRN`/`EXP`, or check the chain and bounds ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `paired_difference_from_files: ... differs` | The two scenario runs did not use the same parameter draws ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `Warning: warmup_drop_days=... is shorter than` | Gap-tolerant: increase `warmup_drop_days` as suggested ([§10](#10-gap-tolerant-mode)). |
+| (no message) Good overall scores, but `bias_by_month_*.png` shows the model too warm or too cool in some months | A whole-year score can hide a seasonal bias. Compare model versions ([§4](#4-choosing-a-model-version-and-integrator)); where discharge drives the summer temperature, use version 7 or 8. If a bias remains in the season of your limit, report it: a model that is too warm overstates the chance a warm-water limit was exceeded, one that is too cool understates it. |
 
 ### 9.1 Numerical stability and the choice of integrator
 
@@ -594,8 +596,10 @@ cross_validation:
 With the defaults, the first two years are always used for training only. The run
 writes `cv_results.csv` (one row per held-out year with NSE, KGE, RMSE on daily
 values and the fitted parameters, plus `mean`, `std` and `pooled` rows) instead
-of the usual outputs. Large differences in parameters between years mean the
-data do not pin them down well.
+of the usual outputs, and `cv_bias_by_month.csv`/`.png`: the mean error by month
+and season over the held-out years, so a seasonal bias shows up out of sample.
+Large differences in parameters between years mean the data do not pin them
+down well.
 
 **Parameter confidence intervals.** The rows `jackknife_90_lower` and
 `jackknife_90_upper` give approximate 90% intervals for each parameter, worked
@@ -623,7 +627,10 @@ decision, check:
 2. **Plausible parameters**: none sits exactly on a bound (dotty plots,
    `1_*.out`).
 3. **Residuals**: no strong pattern over time or with temperature
-   (`residual_diagnostics_*.png`).
+   (`residual_diagnostics_*.png`), and no clear bias in the months your limit
+   applies to (`bias_by_month_validation_*.png`, or `cv_bias_by_month.png` from
+   cross-validation): a 95% interval that excludes zero means the model is
+   consistently too warm or too cool in that month.
 4. **Uncertainty**: if you report a band, the reported coverage is close to the
    nominal level, ideally on validation data and in the season your limit
    applies to (errors can be larger in some seasons). Bands for new years are usually

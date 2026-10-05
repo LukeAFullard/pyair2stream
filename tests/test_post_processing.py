@@ -106,6 +106,9 @@ class TestPostProcessing(unittest.TestCase):
         qq_file = f"predicted_vs_measured_calibration_{self.data.runmode}_{self.data.fun_obj}_{self.data.station}.png"
         self.assertTrue(os.path.exists(os.path.join(self.data.folder, qq_file)), f"Expected QQ file {qq_file} was not generated.")
 
+        bias_file = f"bias_by_month_calibration_{self.data.runmode}_{self.data.fun_obj}_{self.data.station}.csv"
+        self.assertTrue(os.path.exists(os.path.join(self.data.folder, bias_file)), f"Expected {bias_file}.")
+
     def test_post_processing_forward_mode(self):
         self.data.runmode = 'FORWARD'
         self.data.n_tot = 380

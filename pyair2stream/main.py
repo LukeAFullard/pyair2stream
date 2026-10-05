@@ -287,12 +287,18 @@ def main():
 
     if getattr(data, 'cross_validation', None):
         if data.runmode in ('PSO', 'DE', 'LATHYP'):
-            from .cross_validation import cross_validate
+            from .cross_validation import cross_validate, held_out_series
+            from .post_processing import write_bias_by_month
             if data.version in (4, 7, 8) and data.Qmedia_user is None:
                 print("Note: Qmedia is recomputed for each fold. Set Qmedia: in the config so every "
                       "fold uses the same discharge scaling; otherwise the parameters also move with it.")
-            df = cross_validate(data, data.runmode)
+            df, folds = cross_validate(data, data.runmode, return_folds=True)
             df.to_csv(os.path.join(data.folder, "cv_results.csv"), index=False)
+            # Mean error by month and season over the held-out years (out of sample).
+            dates, obs, sim = held_out_series(folds)
+            if np.isfinite(obs - sim).any():
+                write_bias_by_month(dates, obs, sim, data.folder, "cv_bias_by_month",
+                                    "Cross-validation, held-out years")
             print("Cross-validation completed.")
             print(df)
             print(JACKKNIFE_NOTE)
