@@ -26,10 +26,10 @@ After the DE calibration, the sampler runs in blocks of 1,000 steps until its
 results are stable, and reports:
 
 ```
-  5000 steps: max autocorrelation time 28.2, max split-Rhat 1.0089
-MCMC converged after 5000 steps (at least 50 x the autocorrelation time, split-Rhat below 1.01).
+  6000 steps: max autocorrelation time 34.7, max split-Rhat 1.0097
+MCMC converged after 6000 steps (at least 50 x the autocorrelation time, split-Rhat below 1.01).
 ...
-Interval check: 90.4% of 2907 observed days lie inside the 90% prediction interval.
+Interval check: 91.0% of 2907 observed days lie inside the 90% prediction interval.
 ```
 
 **Check both lines before using the results.**
@@ -59,7 +59,7 @@ writes the interval for every day to
 measurements, it also reports how many fall inside:
 
 ```
-Interval check: 89.1% of 1095 observed days lie inside the 90% prediction interval.
+Interval check: 89.3% of 1095 observed days lie inside the 90% prediction interval.
 ```
 
 That is close to 90%, slightly below. The validation suite found 84.5–89% on the
@@ -86,17 +86,27 @@ points fall outside it.*
   sets are judged by their least-squares fit, with the uncertainty widened
   because daily errors are not independent. The band therefore stays centred on
   the best fit. The alternative, `"exact"`, centred this example's band about
-  0.05 °C cooler and gave lower probabilities of exceeding a limit (example
+  0.04 °C cooler and gave lower probabilities of exceeding a limit (example
   03) ([V5](../../validation/REPORT.md#v5)).
+- **`rho_timescale`** is left at its default, `"weekly"`: how strongly the
+  model's errors persist (ρ) is matched to their persistence from one week to
+  the next (ρ = 0.86 here), not only from one day to the next (ρ = 0.70). Real
+  model errors have a part that lasts for weeks. For a single day this hardly
+  changes the interval; for 7-day means and yearly peaks it does (example 03).
 - **`random_seed`** makes the whole run repeatable.
 
 ## About the parameters
 
 `output/calibration/parameter_significance_DE-MCMC_Mentue.csv` lists each
-parameter's mean and 95% range. They are centred on the best fit in
-`calibration_metadata.json` (for example `a5`: 2.55 in the best fit, 2.72 ±
-0.38 in the chain). In a test with known parameters, such 90% ranges contained
-the true value at least 90% of the time ([V4](../../validation/REPORT.md#v4)).
+parameter's mean and 95% range. They lie around the best fit in
+`calibration_metadata.json`, though not always symmetrically: for example `a5`
+is 2.55 in the best fit, and 3.00 on average in the chain, with a 95% range of
+1.87 to 4.47. In a test with known parameters, such 90% ranges contained the
+true value at least 90% of the time ([V4](../../validation/REPORT.md#v4)). In
+that test (version 5) the ranges of the slowly acting parameters (`a1`, `a6`,
+`a7`) were about the right width, and those of the fast-acting ones (`a2`,
+`a3`) wider than they needed to be, which errs on the side of caution
+([METHODS §12](../../docs/METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc)).
 
 Version 8's parameters trade off against each other: several combinations fit
 almost equally well, so each range is wide, and parameters move together.

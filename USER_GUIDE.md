@@ -497,11 +497,12 @@ walks through this):
   With the defaults, 90% parameter intervals contained the true values about
   90% of the time or more in a test with known parameters
   ([V4](validation/REPORT.md#v4)). One allowance for persistent errors sets
-  the width of every parameter's interval. It is about right for the
-  parameters that act slowly (the constant `a1`, the seasonal amplitude `a6`
-  and timing `a7`), and makes the intervals of the fast-acting ones (`a2`,
-  `a3`) two to three times wider than they need to be. With `rho_timescale:
-  "daily"`, `a7`'s interval was too narrow when the errors had a slow part.
+  the width of every parameter's interval. In that test (version 5) it was
+  about right for the parameters that act slowly (the constant `a1`, the
+  seasonal amplitude `a6` and timing `a7`), and made the intervals of the
+  fast-acting ones (`a2`, `a3`) two to three times wider than they needed to
+  be. With `rho_timescale: "daily"`, `a7`'s interval was too narrow when the
+  errors had a slow part.
   Rely on predictions rather than individual parameter values; parameters that
   trade off move together, so do not combine the ends of several intervals.
 
