@@ -32,6 +32,32 @@ JACKKNIFE_NOTE = (
 )
 
 
+def write_yearly_statistics_check(data: CommonData, folds) -> None:
+    """Write cv_yearly_statistics.csv and cv_yearly_statistics_summary.csv: did the predicted
+    ranges of yearly statistics hold in the held-out years (docs/METHODS.md §11)?"""
+    from .config import DEFAULT_NOISE_MODEL
+    from .cross_validation import check_yearly_statistics
+    cv = data.cross_validation
+    per_year, summary = check_yearly_statistics(
+        folds, threshold=cv.threshold, season_months=cv.season_months,
+        noise_model=(data.uncertainty_options or {}).get('noise_model', DEFAULT_NOISE_MODEL),
+        seed=data.random_seed)
+    if per_year.empty:
+        print("Yearly statistics check: no held-out year had enough of its season measured.")
+        return
+    per_year.to_csv(os.path.join(data.folder, "cv_yearly_statistics.csv"), index=False)
+    summary.to_csv(os.path.join(data.folder, "cv_yearly_statistics_summary.csv"), index=False)
+    print(f"Yearly statistics in the held-out years (threshold {per_year.threshold.iloc[0]:.2f} degC, "
+          f"season months {per_year.season_months.iloc[0]}):")
+    for r in summary.itertuples():
+        print(f"  {r.statistic}: inside the 90% range in {r.share_inside_90:.0%} of {r.n_years} years "
+              f"(expected by chance {r.expected_inside_90_low:.0%}-{r.expected_inside_90_high:.0%}); "
+              f"measured minus predicted median {r.mean_deviation:+.2f} "
+              f"(95% CI {r.mean_deviation_ci95_lower:+.2f} to {r.mean_deviation_ci95_upper:+.2f})")
+    print("A confidence interval that excludes zero means the model is biased in that statistic; "
+          "scenario.correct_statistic corrects for it (docs/METHODS.md §13).")
+
+
 def run_optimizer(data: CommonData) -> None:
     """
     Dispatches to the correct optimizer based on data.runmode, passing
@@ -303,6 +329,7 @@ def main():
             print("Cross-validation completed.")
             print(df)
             print(JACKKNIFE_NOTE)
+            write_yearly_statistics_check(data, folds)
 
             t2 = time.time()
             print(f"Computation time was {t2 - t1:.4f} seconds.")

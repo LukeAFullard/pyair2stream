@@ -3,7 +3,7 @@ Run example 03: the probability that a temperature limit was exceeded.
 
     python examples/03_compliance/run.py
 
-Steps 1 and 2 are the two pyair2stream commands in the README. Step 3, the
+Steps 1-3 are the three pyair2stream commands in the README. Step 4, the
 analysis, is below: it uses every simulated series, not the daily interval.
 """
 import os
@@ -19,58 +19,76 @@ import pandas as pd
 from pyair2stream import scenario
 
 LIMIT_7DAY = 20.0      # °C, illustrative limit on the 7-day mean water temperature
-WARM_DAY = 18.0        # °C, illustrative threshold for counting warm days
+WARM_DAY = 18.0        # °C, illustrative threshold for counting warm days (also in check.yaml)
 YEARS = (2010, 2011, 2012)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 OUT = os.path.join(HERE, "output")
 
-# Steps 1 and 2: calibrate with uncertainty, then simulate 2010-2012 1000 times.
-for step in ("calibrate", "predict"):
+# Steps 1-3: calibrate with uncertainty, simulate 2010-2012 1000 times, and check the
+# yearly statistics by cross-validation of the calibration years.
+for step in ("calibrate", "predict", "check"):
     subprocess.run([sys.executable, "-m", "pyair2stream.main", "--config", f"examples/03_compliance/{step}.yaml"],
                    cwd=REPO, check=True)
 
-# Step 3. `ens` holds 1000 simulated series (rows) of daily water temperature, each
+# Step 4. `ens` holds 1000 simulated series (rows) of daily water temperature, each
 # with its own parameters and its own model error; `dates` labels the columns.
 ens, dates = scenario.load_ensemble(os.path.join(OUT, "prediction", "Forward_Prediction_Ensemble_Mentue_c_1d.npz"))
-sims = pd.DataFrame(ens.T, index=dates)            # one column per simulation
-week = sims.rolling(7).mean()                      # 7-day means, within each simulation
+stats = scenario.year_statistics(ens, dates, threshold=WARM_DAY)    # each year's statistics, per simulation
+
+# The cross-validation check: how far the measured statistic was from the predicted median
+# in each held-out calibration year (measured minus median).
+check = pd.read_csv(os.path.join(OUT, "check", "cv_yearly_statistics.csv"))
+deviations = {name: check.loc[check.statistic == name, "deviation"] for name in scenario.YEARLY_STATISTICS}
+print("\n" + pd.read_csv(os.path.join(OUT, "check", "cv_yearly_statistics_summary.csv"))[
+    ["statistic", "n_years", "share_inside_90", "mean_deviation", "mean_deviation_ci95_lower",
+     "mean_deviation_ci95_upper"]].round(2).to_string(index=False))
 
 # The measured temperatures, used here only to check the answer.
 obs = pd.read_csv(os.path.join(REPO, "data", "switzerland", "MAH_2369_validation.csv"),
                   parse_dates=["Date"], index_col="Date").T_water
-obs_week = obs.rolling(7).mean()
+measured = scenario.year_statistics(obs.to_numpy(), obs.index, threshold=WARM_DAY)
 
 rows, peaks = [], {}
 for year in YEARS:
-    y = str(year)
-    peak = week.loc[y].max().to_numpy()            # each simulation's highest 7-day mean
-    warm = scenario.exceedance(sims.loc[y].T.to_numpy(), WARM_DAY)   # warm days, per simulation
-    peaks[year] = peak
+    peak = stats[year]["highest 7-day mean"]                                       # one value per simulation
+    peak_c = scenario.correct_statistic(peak, deviations["highest 7-day mean"], seed=year)
+    warm = stats[year]["days above threshold"]
+    warm_c = scenario.correct_statistic(warm, deviations["days above threshold"], seed=year)
+    peaks[year] = (peak, peak_c)
     rows.append({
         "year": year,
         f"P(7-day mean > {LIMIT_7DAY:g} °C)": round(float(np.mean(peak > LIMIT_7DAY)), 2),
-        "highest 7-day mean (°C), 90% range": f"{np.percentile(peak, 5):.1f} to {np.percentile(peak, 95):.1f}",
-        "measured highest 7-day mean (°C)": round(float(obs_week.loc[y].max()), 1),
+        "P, corrected": round(float(np.mean(peak_c > LIMIT_7DAY)), 2),
+        "highest 7-day mean, 90% range (°C)": f"{np.percentile(peak, 5):.1f} to {np.percentile(peak, 95):.1f}",
+        "90% range, corrected": f"{np.percentile(peak_c, 5):.1f} to {np.percentile(peak_c, 95):.1f}",
+        "measured (°C)": round(float(measured[year]["highest 7-day mean"][0]), 1),
         f"days above {WARM_DAY:g} °C, median (90% range)":
             f"{np.median(warm):.0f} ({np.percentile(warm, 5):.0f} to {np.percentile(warm, 95):.0f})",
-        f"measured days above {WARM_DAY:g} °C": int((obs.loc[y] > WARM_DAY).sum()),
+        "days, corrected": f"{np.median(warm_c):.0f} ({np.percentile(warm_c, 5):.0f} to {np.percentile(warm_c, 95):.0f})",
+        "days, measured": int(measured[year]["days above threshold"][0]),
     })
 table = pd.DataFrame(rows)
 table.to_csv(os.path.join(OUT, "compliance_summary.csv"), index=False)
-with pd.option_context("display.width", 200, "display.max_columns", 10):
+with pd.option_context("display.width", 250, "display.max_columns", 12):
     print("\n" + table.to_string(index=False))
 
 fig, axes = plt.subplots(1, len(YEARS), figsize=(9, 3), sharey=True)
+bins = np.arange(17.0, 23.01, 0.25)
 for ax, year in zip(axes, YEARS):
-    ax.hist(peaks[year], bins=np.arange(17.5, 23.01, 0.25), color="tab:blue", alpha=0.6)
+    peak, peak_c = peaks[year]
+    ax.hist(peak, bins=bins, color="tab:gray", alpha=0.45, label="uncorrected")
+    ax.hist(peak_c, bins=bins, color="tab:blue", alpha=0.6, label="corrected")
     ax.axvline(LIMIT_7DAY, color="black", ls="--", lw=1)
-    ax.axvline(obs_week.loc[str(year)].max(), color="tab:red", lw=2)
-    ax.set(title=f"{year}: P(exceeded) = {np.mean(peaks[year] > LIMIT_7DAY):.2f}",
-           xlabel="Highest 7-day mean (°C)")
+    ax.axvline(measured[year]["highest 7-day mean"][0], color="tab:red", lw=2)
+    ax.set_title(f"{year}: P(exceeded) = {np.mean(peak_c > LIMIT_7DAY):.2f}\n(uncorrected "
+                 f"{np.mean(peak > LIMIT_7DAY):.2f})", fontsize=10)
+    ax.set_xlabel("Highest 7-day mean (°C)")
 axes[0].set_ylabel("Simulations")
-fig.suptitle(f"Blue: 1000 simulations. Dashed: the {LIMIT_7DAY:g} °C limit. Red: measured.", fontsize=9, y=0.02)
+axes[0].legend(fontsize=7, loc="upper left")
+fig.suptitle(f"1000 simulations, corrected by cross-validation (blue) and not (grey). Dashed: the "
+             f"{LIMIT_7DAY:g} °C limit. Red: measured.", fontsize=9, y=0.02)
 fig.tight_layout(rect=(0, 0.06, 1, 1))
 os.makedirs(os.path.join(HERE, "figures"), exist_ok=True)
 fig.savefig(os.path.join(HERE, "figures", "peak_7day_mean.png"), dpi=130, bbox_inches="tight")

@@ -27,7 +27,8 @@ whether a site is likely to meet a temperature limit, with an uncertainty band.
 - **Runs scenarios** with fixed parameters (`FORWARD`), and compares two
   scenarios with an uncertainty band on the difference.
 - Handles **gaps** in air temperature or discharge (gap-tolerant mode),
-  **cross-validation** by year (with confidence intervals for the parameters), and
+  **cross-validation** by year (with confidence intervals for the parameters,
+  and a check that predicted ranges of yearly statistics hold), and
   **sensitivity analysis**.
 - Uses a **YAML config file and CSV files**, and writes CSV results and plots.
 
@@ -97,8 +98,11 @@ The usual route, each step a worked example:
    `save_ensemble: true`. Work out the quantity your limit is defined on (for
    example the highest 7-day mean) in each simulation; the share above the limit
    is the probability that it was exceeded ([example 03](examples/03_compliance/README.md)).
-4. **Report a probability with its range**, not a yes or no, together with the
-   checks in [User Guide §14](USER_GUIDE.md#14-checklist-for-results-that-support-a-decision).
+4. **Check that quantity by cross-validation** of the calibration years, and
+   correct it for the model's bias on the hottest days
+   (`cv_yearly_statistics.csv`, `scenario.correct_statistic`; example 03).
+5. **Report a probability with its range and the check**, not a yes or no,
+   together with the checks in [User Guide §14](USER_GUIDE.md#14-checklist-for-results-that-support-a-decision).
 
 The model gives daily **means**: a limit on daily maxima needs a separate,
 justified step.
@@ -142,7 +146,8 @@ validation period. The equation is given in [docs/METHODS.md](docs/METHODS.md#5-
 | `convergence_*.png`, `dottyplots_*.png`, `0_*.csv` | every parameter set tried during calibration |
 | `calibration_metadata.json`, `parameters.txt` | `Qmedia`, bounds and settings used, needed for later scenario runs |
 | `MCMC_*`, `Forward_Prediction_*`, `parameter_significance_*` | uncertainty results (`DE-MCMC` and `FORWARD` with intervals) |
-| `sensitivity_*`, `cv_results.csv`, `gaps_summary.txt` | optional analyses |
+| `cv_results.csv`, `cv_yearly_statistics*.csv` | cross-validation: scores and parameters by held-out year; whether the ranges of yearly statistics held, and the model's bias in them |
+| `sensitivity_*`, `gaps_summary.txt` | optional analyses |
 
 Details: [User Guide §8](USER_GUIDE.md#8-understanding-the-output-files).
 
@@ -207,15 +212,18 @@ The [validation suite](validation/README.md) checks this, and its results are in
   outside. These are the cases above where recalibration finds a slightly
   better fit with different parameters: many combinations fit almost equally
   well, and the published set is one of them.
-- **Probabilities that a limit was exceeded: right in principle, approximate
-  in practice.** On synthetic data the stated chances come true as often as
-  they say. On the real rivers, for years not used for calibration, version 8's
-  probabilities for yearly statistics (highest daily mean, highest 7-day mean,
-  days above a threshold) were closer to what happened than going by how often
-  the limit was exceeded in past years, but their 90% ranges contained the
-  measured value in only 73–93% of river-years, so treat them as approximate.
-  Version 5, which has no discharge term, did no better than past years for the
-  yearly peaks: on the Rhône it could not follow the year-to-year changes.
+- **Probabilities that a limit was exceeded: right in principle, checked and
+  corrected in practice.** On synthetic data the stated chances come true as
+  often as they say. On the real rivers the model can be biased on the hottest
+  days (on the Mentue, version 8's yearly peaks came out 0.6–0.8 °C too high),
+  so over 48 held-out years per version the uncorrected 90% ranges for yearly
+  statistics (highest daily mean, highest 7-day mean, days above a threshold)
+  held in only 73–92% of years. A cross-validation of the calibration years
+  measures that bias, and correcting for it brought the 90% ranges to 85–94%
+  ([V11](validation/REPORT.md#v11)). Version 8's probabilities were closer to
+  what happened than going by how often the limit was exceeded in past years.
+  Version 5, which has no discharge term, could not follow the year-to-year
+  changes of the Rhône's summer peaks.
 - **Warmer and lower-flow years.** Calibrated only on the coolest (or
   highest-flow) third of the years, the model predicted the warmest (or
   lowest-flow) third almost as well as when calibrated on the middle third (at

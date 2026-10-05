@@ -37,6 +37,10 @@ for the parameters (`jackknife_90_lower`, `jackknife_90_upper`). It also writes
 years, with 95% intervals. Here no month's interval excludes zero for version 8;
 a version that does not suit a river shows a seasonal pattern instead (on the
 Rhône, version 5 was too warm every summer and too cool in spring and autumn).
+Finally, `cv_yearly_statistics.csv` (and `_summary.csv`) checks each year's
+highest daily mean, highest 7-day mean and days above a threshold: example
+[03](../03_compliance/README.md) uses it to check and correct the probability
+that a limit was exceeded.
 
 ## Results
 

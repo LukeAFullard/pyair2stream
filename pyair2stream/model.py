@@ -641,7 +641,9 @@ def aggregation(data: CommonData) -> None:
                 n_pos = n_pos - count
 
     elif unit == 'm':
-        n_units = int(np.ceil(data.n_tot / 30.5))
+        # At most one month per 28 days, plus partial months at either end. (A count of
+        # n_tot / 30.5 was too small for 360-day records longer than about 60 years.)
+        n_units = (data.n_tot - 365) // 28 + 2
         data.I_inf = np.full((n_units, 3), -999, dtype=np.int32)
         n_days = 0
         month_curr = -999

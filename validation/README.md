@@ -23,6 +23,7 @@ before its result.
 | V8 | Does the documented workflow reproduce the calibration exactly? Do scenario comparisons and threshold counts give exact answers where the answer is known? | The tools used to reach a conclusion must be exact. |
 | V9 | When the package gives a chance that a yearly statistic (highest daily mean, highest 7-day mean, days above a threshold) exceeded a limit, does that happen as often as it says? On real rivers, do these chances beat going by past years? | This is the answer to a compliance question. |
 | V10 | Calibrated only on the coolest (or highest-flow) years, does the model still predict the warmest (or lowest-flow) years, and do its intervals hold? | Limits are breached, and scenarios extrapolate, in exactly those years. |
+| V11 | Over many years not used for calibration, do the predicted ranges of yearly statistics hold? Why not, when they do not? Does the cross-validated correction make them hold? | The answer to a compliance question must carry the confidence it states. |
 
 ## Running it
 
@@ -58,8 +59,10 @@ the right answer when one is known, and that the uncertainty intervals and
 probabilities have the coverage they state when the model is right. It also
 shows how well the model does on three real rivers, including where the
 approach falls short there: intervals for new years are slightly narrow (V5),
-ranges for yearly peaks are too narrow (V9), and a version without discharge
-does not suit a river like the Rhône (V5, V9, V10). Calibrating on weekly or
+uncorrected ranges for yearly statistics miss more often than stated because the
+model can be biased on the hottest days, which the cross-validated correction
+largely fixes (V9, V11), and a version without discharge does not suit a river
+like the Rhône (V5, V9, V10). Calibrating on weekly or
 monthly means needs bounds that keep `a2` and `a3` at least 0 (V4).
 
 It does not show that the model suits your river. Check that with your own data:

@@ -367,6 +367,43 @@ def _hash_file(path: str) -> str:
         return hashlib.sha256(f.read()).hexdigest()
 
 
+def _check_chain_provenance(data: CommonData, sidecar_path: str) -> None:
+    """
+    Refuse a FORWARD run whose model version, integrator or Qmedia differ from those
+    the chain's parameters were fitted under (recorded in the chain's `_meta.json`):
+    the parameters mean something only with them (docs/METHODS.md §4, §6). Chains
+    written before this was recorded (0.4.2 and earlier) cannot be checked; a note
+    says so.
+    """
+    meta = {}
+    if os.path.exists(sidecar_path):
+        try:
+            with open(sidecar_path, 'r') as f:
+                meta = json.load(f)
+        except (OSError, ValueError):
+            meta = {}
+    if not all(k in meta for k in ("version", "integrator", "qmedia")):
+        print(f"Note: {sidecar_path} does not record the model version, integrator and Qmedia the chain was "
+              "fitted with (chains from version 0.4.2 or earlier), so they cannot be checked against this run. "
+              "Make sure they match.")
+        return
+    problems = []
+    if int(meta["version"]) != int(data.version):
+        problems.append(f"model version {meta['version']} (this run: {data.version})")
+    if meta["integrator"] != data.mod_num:
+        problems.append(f"integrator {meta['integrator']} (this run: {data.mod_num})")
+    # 0.1%: a Qmedia typed with a few significant digits is the same one.
+    if data.version not in (3, 5) and not np.isclose(float(meta["qmedia"]), float(data.Qmedia), rtol=1e-3, atol=0.0):
+        problems.append(f"Qmedia {meta['qmedia']} (this run: {float(data.Qmedia)}; they differ by more than 0.1%)")
+    if problems:
+        raise ValueError(
+            f"The MCMC chain {sidecar_path.replace('_meta.json', '.csv')} was fitted with "
+            + "; ".join(problems) + ". Its parameters mean something only with the settings they were "
+            "fitted with: use the calibration's settings (paths.calibration_metadata) or the chain of a "
+            "calibration with this run's settings."
+        )
+
+
 def _check_ensemble_divergence(n_total: int, excluded: list, on_divergent_draw: str,
                                 max_divergent_fraction: float, label: str,
                                 sample_indices=None) -> dict:
@@ -595,6 +632,7 @@ def forward_mode(data: CommonData) -> None:
         if source_chain_converged is False:
             print(f"Warning: the MCMC chain {chain_path} did NOT converge (see {sidecar_path}); "
                   "prediction intervals built from it are not reliable.")
+        _check_chain_provenance(data, sidecar_path)
 
         # Resolve sigma: explicit config override first, then the sidecar written by
         # DE-MCMC (mirroring the `rho` resolution below), matching `rho`'s
@@ -1307,6 +1345,11 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
 
     print("Writing metadata sidecar...")
     sidecar_data = {
+        # What the parameters mean depends on these: a FORWARD run refuses a chain fitted
+        # under different ones (_check_chain_provenance).
+        "version": int(data.version),
+        "integrator": data.mod_num,
+        "qmedia": float(data.Qmedia),
         "rho": best_rho,
         "rho_timescale": rho_timescale,
         "rho_likelihood": rho_likelihood,

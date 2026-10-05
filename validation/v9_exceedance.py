@@ -162,8 +162,24 @@ def _synthetic(args):
 
 # --- Part B: real rivers, years not used for calibration --------------------------------------
 
+def _cv_deviations(st, version, cal, q_cal, warm, tag, quick):
+    """The package's cross-validation of the calibration years and its check of yearly statistics
+    (docs/METHODS.md §11): for each statistic, the deviations (measured minus predicted median) of the
+    held-out years, and the table by statistic."""
+    from pyair2stream.cross_validation import check_yearly_statistics, cross_validate
+    cfg = {"version": version, "integrator": "CRN", "run_mode": "DE", "objective_function": "NSE",
+           "random_seed": 1, "optimization": {"n_run": 40, "n_particles": 8} if quick else dict(DE_SETTINGS),
+           "parameter_bounds": AUTHORS_BOUNDS, "Qmedia": q_cal, "paths": {"input_data": cal},
+           "cross_validation": {"enabled": True, "unit": "year", "min_train_years": 0, "skip_first_year": True}}
+    data = load(cfg, tag + "_cv")
+    with quiet():
+        _, folds = cross_validate(data, "DE", return_folds=True)
+        per_year, summary = check_yearly_statistics(folds, threshold=warm, season_months=list(WARM_SEASON), seed=1)
+    return {name: per_year[per_year.statistic == name].deviation.to_numpy() for name in STATS}, summary
+
+
 def _real(args):
-    st, version, rho_timescale = args
+    st, version, rho_timescale, quick = args
     tag = f"v9r_{st}_{version}_{rho_timescale or 'default'}"
     folder = os.path.join(WORK, tag)
     os.makedirs(folder, exist_ok=True)
@@ -184,6 +200,10 @@ def _real(args):
     past_values = {name: np.array([stats[name][1] for _, stats in past]) for name in STATS}
     limits = {name: np.quantile(v, LIMIT_QUANTILES) for name, v in past_values.items()}
     obs_v = pd.read_csv(val).T_water.to_numpy(float)
+    # Part C: the cross-validated correction, from the calibration years only (default settings).
+    cv_dev, cv_summary = (_cv_deviations(st, version, cal, q_cal, warm, tag, quick)
+                          if rho_timescale is None else (None, None))
+    from pyair2stream import scenario
     prng = np.random.default_rng(7)
     rows = []
     for year, stats in year_statistics(ens, dates, obs_v, warm):
@@ -198,9 +218,24 @@ def _real(args):
                 row[f"{level:.0%} range"] = (float(lo), float(hi))
             row["events"] = [(float(lim), float(np.mean(sims > lim)), float(np.mean(past_values[name] > lim)),
                               float(value > lim)) for lim in limits[name]]
+            if cv_dev is not None and np.isfinite(cv_dev[name]).sum() >= 3:
+                corrected = scenario.correct_statistic(sims, cv_dev[name], seed=int(year))
+                row["pit corrected"] = pit(corrected, value, prng)
+                row["events corrected"] = [(float(lim), float(np.mean(corrected > lim)),
+                                            float(np.mean(past_values[name] > lim)), float(value > lim))
+                                           for lim in limits[name]]
             rows.append(row)
+    cv_rows = []
+    if cv_summary is not None:
+        for r in cv_summary.itertuples():
+            unit = "days" if r.statistic == "days above threshold" else "°C"
+            cv_rows.append({"river": RIVERS[st], "version": version, "statistic": r.statistic,
+                            "held-out calibration years": r.n_years,
+                            "measured minus predicted median": f"{r.mean_deviation:+.2f} {unit}",
+                            "95% CI": f"{r.mean_deviation_ci95_lower:+.2f} to {r.mean_deviation_ci95_upper:+.2f}",
+                            "inside 90% range (cross-validation)": f"{r.share_inside_90:.0%}"})
     return {"river": RIVERS[st], "version": version, "rho time scale": RHO_LABEL[rho_timescale],
-            "converged": True, "rows": rows,
+            "converged": True, "rows": rows, "cv": cv_rows,
             "past years": {name: len(v) for name, v in past_values.items()}}
 
 
@@ -237,19 +272,27 @@ def run(ctx) -> Result:
                "was measured with the Brier score (mean squared difference between the probability and the "
                "outcome, 1 or 0), and compared with the past-years alternative: the share of calibration "
                "years in which the limit was exceeded. Both rivers' versions are run with the default rho "
-               "time scale (weekly) and with the daily option.",
+               "time scale (weekly) and with the daily option. "
+               "(C) The recommended workflow for a compliance question (docs/METHODS.md §13): the package's "
+               "leave-one-year-out cross-validation of the calibration years (every year but the first held out "
+               "once) checks each yearly statistic (cross_validation.check_yearly_statistics, same threshold and "
+               "season), and the simulated statistics of the later years from part B (default settings) are "
+               "corrected with scenario.correct_statistic using the deviations of the held-out calibration "
+               "years only. The corrected ranges and probabilities are scored as in part B.",
         criterion=f"(A) For each version and statistic with AR(1) noise, the share of measured values inside the "
                   f"central 50% and 90% ranges lies within the range expected by chance around 50% and 90% "
                   f"(central {COVERAGE_CONFIDENCE:.0%} binomial range for the number of years tested); the fast + "
                   f"slow cases are reported, not judged. (B) With the default settings, for each version and "
                   f"statistic, the package's Brier score is lower than the past-years alternative's (Brier skill "
-                  f"score above 0); the daily option is reported for comparison.")
+                  f"score above 0); the daily option is reported for comparison. (C) is reported, not judged: "
+                  f"15 river-years are too few to judge coverage, which V11 tests on 48 per version.")
     cases = SYN_CASES[:1] if ctx.quick else SYN_CASES
     reps = {c[0]: (3 if ctx.quick else c[4]) for c in cases}
     jobs_a = [(c, r) for c in cases for r in range(reps[c[0]])]
     stations = ["MAH_2369"] if ctx.quick else list(RIVERS)
     versions_b = (5,) if ctx.quick else REAL_VERSIONS
-    jobs_b = [(st, v, rt) for st in stations for v in versions_b for rt in ((None,) if ctx.quick else REAL_RHO)]
+    jobs_b = [(st, v, rt, ctx.quick) for st in stations for v in versions_b
+              for rt in ((None,) if ctx.quick else REAL_RHO)]
     with Timer() as t:
         with ProcessPoolExecutor(max_workers=ctx.workers) as ex:
             fut_b = [ex.submit(_real, j) for j in jobs_b]
@@ -323,6 +366,23 @@ def run(ctx) -> Result:
     table_river = pd.DataFrame(by_river)
     res.passed = bool(ok_a and ok_b)
 
+    # Part C: the cross-validated correction (default settings).
+    c_rows = []
+    bc = b[b["pit corrected"].notna()] if "pit corrected" in b.columns else b.iloc[0:0]
+    for (v, name), g in bc.groupby(["version", "statistic"], sort=False):
+        ev0 = np.array([e for evs in g.events for e in evs])
+        ev1 = np.array([e for evs in g["events corrected"] for e in evs])
+        bs_past = float(np.mean((ev0[:, 2] - ev0[:, 3]) ** 2))
+        skill = lambda ev: round(1 - float(np.mean((ev[:, 1] - ev[:, 3]) ** 2)) / bs_past, 2) if bs_past > 0 else np.nan
+        c_rows.append({"version": v, "statistic": name, "river-years": len(g),
+                       "inside 50% range": f"{_share(g.pit, 0.5):.0%}",
+                       "inside 50% range, corrected": f"{_share(g['pit corrected'], 0.5):.0%}",
+                       "inside 90% range": f"{_share(g.pit, 0.9):.0%}",
+                       "inside 90% range, corrected": f"{_share(g['pit corrected'], 0.9):.0%}",
+                       "Brier skill score": skill(ev0), "Brier skill score, corrected": skill(ev1)})
+    table_c = pd.DataFrame(c_rows)
+    table_cv = pd.DataFrame([r for o in out_b if o.get("cv") for r in o["cv"]])
+
     res.summary = (f"(A) Synthetic data with AR(1) noise: the 90% ranges contained the measured yearly statistic "
                    f"{judged_a['inside 90% range'].min():.0%}-{judged_a['inside 90% range'].max():.0%} of the time "
                    f"across versions and statistics, and the 50% ranges {judged_a['inside 50% range'].min():.0%}-"
@@ -345,6 +405,13 @@ def run(ctx) -> Result:
         if len(td):
             res.summary += (f" With rho from consecutive days: {td['inside 90% range'].min():.0%}-"
                             f"{td['inside 90% range'].max():.0%}.")
+    if len(table_c):
+        inside_c = [float(x.rstrip("%")) / 100 for x in table_c["inside 90% range, corrected"]]
+        res.summary += (f" (C) With the correction from cross-validation of the calibration years, the 90% ranges "
+                        f"contained the measured statistic in {min(inside_c):.0%}-{max(inside_c):.0%} of "
+                        f"river-years, and the Brier skill score was "
+                        f"{table_c['Brier skill score, corrected'].min():.2f} to "
+                        f"{table_c['Brier skill score, corrected'].max():.2f}.")
 
     res.sections.append(Section(
         "A. Synthetic data: do the stated probabilities come true?",
@@ -356,7 +423,7 @@ def run(ctx) -> Result:
         tables=[("A. Measured yearly statistic inside the central ranges (synthetic data)", table_a),
                 ("A. How often a limit was exceeded, by the chance the package stated (synthetic data)", table_rel)]))
     if len(b):
-        shown = b.drop(columns=["events", "pit"]).copy()
+        shown = b.drop(columns=["events", "pit", "events corrected", "pit corrected"], errors="ignore").copy()
         for col in ("measured", "median"):
             shown[col] = shown[col].round(2)
         for level in RANGES:
@@ -372,6 +439,14 @@ def run(ctx) -> Result:
                     ("B. By river: how often the 90% range held, and the mean error of the predicted median",
                      table_river),
                     ("B. Each river-year: predicted median and ranges, and the measured value", shown)]))
+    if len(table_c):
+        res.sections.append(Section(
+            "C. Real rivers, with the correction from cross-validation",
+            "The same river-years and simulations as part B (default settings). Each statistic is corrected by "
+            "the mean deviation (measured minus predicted median) found by cross-validation of the calibration "
+            "years, with its uncertainty. The second table gives those deviations.",
+            tables=[("C. Coverage and Brier skill score, before and after the correction", table_c),
+                    ("C. Cross-validation of the calibration years: deviation of each yearly statistic", table_cv)]))
     res.notes.append(
         "Part A tests the calculation of probabilities and ranges from the saved simulations, where the model "
         "and its error model are exactly right. Part B tests the whole approach on real rivers, where they are "
@@ -432,15 +507,20 @@ def run(ctx) -> Result:
                 f"On real rivers the 90% ranges of yearly statistics contained the measured value in "
                 f"{cov.min():.0%}-{cov.max():.0%} of river-years, so they are too narrow"
                 f"{', while on synthetic data (part A) they hold' if ok_a else ''}. The error model (AR(1), the "
-                f"same all year) describes day-to-day model errors; on real rivers the model can also be off by a "
-                f"similar amount for a whole summer (see the mean errors by river), which widens the true "
-                f"uncertainty of a yearly peak. Treat probabilities for yearly statistics on real rivers as "
-                f"approximate, and check them on your own validation years.")
+                f"same all year) describes day-to-day model errors; on real rivers the model can also be biased "
+                f"on the hottest days (see the mean errors by river), which random error of the typical size "
+                f"cannot correct. Part C and V11 test the check and correction the package offers for this: a "
+                f"cross-validation of the calibration years measures the bias of each yearly statistic, and "
+                f"scenario.correct_statistic removes it, with its uncertainty.")
     # Shares as percentages for the report (after the notes, which use the numbers).
     for t in (table_a, table_brier):
         for col in [c for c in t.columns if c.startswith("inside ")]:
             t[col] = t[col].map(lambda x: f"{x:.0%}")
     return res
+
+
+def _share(pits, level):
+    return float(np.mean(np.abs(np.asarray(pits, float) - 0.5) <= level / 2))
 
 
 def _fig_reliability(a, reps):

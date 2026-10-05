@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.5.0] - 2026-10-05
+
+### Added
+- ⚠ **A cross-validated check of yearly statistics**, written by every
+  cross-validation run (`cv_yearly_statistics.csv`,
+  `cv_yearly_statistics_summary.csv`; docs/METHODS.md §11). For each held-out
+  year it simulates the highest daily mean, the highest 7-day mean and the
+  number of days above a threshold 1,000 times, from that fold's calibration and
+  error model, and records where the measured value fell. The summary gives how
+  often the 50% and 90% ranges held and the model's mean error in each
+  statistic, with a 95% interval. New options: `cross_validation.threshold` and
+  `cross_validation.season_months`. Why: in years not used for calibration, the
+  model's error on the hottest days is not always its typical error (on the
+  Mentue, version 8's simulated yearly peaks were 0.6–0.8 °C too high), and
+  uncorrected 90% ranges for yearly statistics held in only 73–92% of 48 held-out
+  years per version on the Swiss rivers (validation V11).
+- `scenario.correct_statistic`: corrects a simulated yearly statistic by the mean
+  cross-validated error, with that mean's uncertainty (docs/METHODS.md §13). With
+  it, the 90% ranges held in 85–94% of held-out years (V11). Example 03 now uses
+  the check and the correction.
+- `scenario.year_statistics` (the three yearly statistics, defined as in the
+  check) and `scenario.pit`.
+- Validation V11 (the check and the correction over 48 held-out years per
+  version), and part C of V9 (the correction from cross-validation of the
+  calibration years, applied to the later years).
+
+### Changed
+- ⚠ A FORWARD run with prediction intervals refuses a DE-MCMC chain fitted with
+  another model version, integrator or `Qmedia`. DE-MCMC now records them in the
+  chain's `_meta.json`; chains from 0.4.2 or earlier cannot be checked, and a note
+  says so.
+
+### Fixed
+- Monthly scoring (`time_resolution: "1m"`) of a 360-day-calendar record longer
+  than about 60 years stopped with `IndexError`.
+
 ## [0.4.2] - 2026-10-05
 
 ### Fixed

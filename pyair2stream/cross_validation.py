@@ -65,6 +65,12 @@ class CVConfig:
     optimizer_overrides: Optional[dict] = None  # e.g. {"n_run": 20, "n_particles": 20}
                                                  # to cut per-fold cost vs. the
                                                  # production calibration
+    # Yearly-statistics check (check_yearly_statistics): the threshold for "days above
+    # threshold" (default: 90th percentile of the measured water temperatures) and the
+    # season (calendar months) that must be at least 80% measured for a year to count
+    # (default: the four warmest months).
+    threshold: Optional[float] = None
+    season_months: Optional[list] = None
 
 
 @dataclass
@@ -98,6 +104,12 @@ class FoldResult:
     obs_held_out: np.ndarray = field(repr=False)
     sim_held_out: np.ndarray = field(repr=False)
     dates_held_out: Optional[pd.DatetimeIndex] = field(default=None, repr=False)
+    # Error model of this fold's calibration, from its training years only (as DE-MCMC
+    # estimates it): daily residual SD and AR(1) rho (0 for the iid noise model).
+    sigma: float = float("nan")
+    rho: float = float("nan")
+    # Year label (calendar or water year) of each held-out day.
+    years_held_out: Optional[np.ndarray] = field(default=None, repr=False)
 
 
 # --------------------------------------------------------------------------
@@ -209,6 +221,24 @@ def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarra
         data.Q[idx] = MISSING_DATA_SENTINEL
 
     return orig_twat, orig_tair, orig_q
+
+
+def _fold_error_model(data: CommonData) -> tuple[float, float]:
+    """Daily residual SD and AR(1) rho on the currently observed, scored days (the
+    fold's training days while its observations are hidden), estimated as DE-MCMC
+    estimates them (docs/METHODS.md §12): rho at `uncertainty_options.rho_timescale`,
+    and 0 for the iid noise model."""
+    from .config import DEFAULT_NOISE_MODEL, DEFAULT_RHO_TIMESCALE
+    from .optimization import _daily_residual_sigma, _segments_for
+    from .uncertainty import estimate_rho
+    options = data.uncertainty_options or {}
+    eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=bool)
+    sigma = _daily_residual_sigma(data, eval_mask)
+    rho = 0.0
+    if options.get('noise_model', DEFAULT_NOISE_MODEL) == 'ar1':
+        rho = estimate_rho(data.Twat_mod, data.Twat_obs, eval_mask, _segments_for(data),
+                           options.get('rho_timescale', DEFAULT_RHO_TIMESCALE))
+    return float(sigma), float(rho)
 
 
 def _restore_fold(data: CommonData, idx: np.ndarray, orig_twat: np.ndarray, orig_tair: np.ndarray, orig_q: np.ndarray) -> None:
@@ -374,6 +404,10 @@ def run_leave_one_year_out_cv(
                     detect_segments(data)
 
                 call_model(data)
+                # The fold's observations are still hidden here, so these are the
+                # residuals of its training years: its error model, as DE-MCMC would
+                # estimate it from a calibration on those years.
+                sigma, rho = _fold_error_model(data)
 
                 # Score the held-out days the calibration would score: in
                 # gap-tolerant mode not the unscored start of a segment (§10),
@@ -400,6 +434,9 @@ def run_leave_one_year_out_cv(
                     sim_held_out=sim[idx].copy(),
                     dates_held_out=pd.DatetimeIndex(pd.to_datetime(
                         {'year': data.date[idx, 0], 'month': data.date[idx, 1], 'day': data.date[idx, 2]})),
+                    sigma=sigma,
+                    rho=rho,
+                    years_held_out=assign_year_groups(data, cv_config.water_year_start_month)[idx],
                 ))
             finally:
                 _restore_fold(data, idx, orig_twat, orig_tair, orig_q)
@@ -559,3 +596,128 @@ def summarize(results: list[FoldResult], n_blocks: Optional[int] = None) -> pd.D
         df = pd.concat([df, summary_df], ignore_index=True)
 
     return df
+
+
+# --------------------------------------------------------------------------
+# Out-of-sample check of yearly statistics (docs/METHODS.md §11, §13)
+# --------------------------------------------------------------------------
+
+CHECK_SIMULATIONS = 1000        # simulations per held-out year
+MIN_SEASON_OBSERVED = 0.8       # a year counts if at least this share of its season was measured
+DEFAULT_THRESHOLD_QUANTILE = 0.9
+CHECK_RANGES = (0.5, 0.9)       # central ranges whose coverage is reported
+
+
+def warmest_months(dates, values, n: int = 4) -> list:
+    """The `n` calendar months with the highest mean of `values` (NaN ignored)."""
+    s = pd.Series(np.asarray(values, dtype=np.float64), index=pd.DatetimeIndex(dates)).dropna()
+    return sorted(int(m) for m in s.groupby(s.index.month).mean().nlargest(n).index)
+
+
+def check_yearly_statistics(results: list[FoldResult], threshold: Optional[float] = None,
+                            season_months: Optional[list] = None, noise_model: str = "ar1",
+                            n_simulations: int = CHECK_SIMULATIONS, seed: Optional[int] = None,
+                            return_simulations: bool = False):
+    """
+    Did the predicted ranges of yearly statistics hold in years the model was not
+    calibrated on?
+
+    For every held-out year of a cross-validation, `n_simulations` series are made
+    from that fold's simulation plus random error from the fold's own error model
+    (`FoldResult.sigma`, `.rho`, estimated on its training years only), as a FORWARD
+    run makes them. In each series and in the measurements, the yearly statistics of
+    `scenario.year_statistics` are computed over the days that were measured. A year
+    counts if at least MIN_SEASON_OBSERVED of the days in `season_months` were
+    measured. Parameter uncertainty is not included (each fold has one calibrated
+    parameter set), so the ranges are slightly narrower than those of a FORWARD run
+    from a DE-MCMC chain.
+
+    Returns
+    -------
+    per_year : DataFrame
+        One row per held-out year and statistic: the measured value, the 5th, 25th,
+        50th, 75th and 95th percentiles of the simulations, the PIT (share of
+        simulations below the measured value), whether the measured value lies in
+        the central 50% and 90% ranges, and the deviation (measured minus median),
+        the input of `scenario.correct_statistic`.
+    summary : DataFrame
+        One row per statistic: number of years, share inside the 50% and 90% ranges,
+        the range of shares expected by chance (95%), and the mean deviation with
+        its 95% confidence interval. A confidence interval that excludes zero means
+        the model is biased in that statistic.
+    simulations : dict, only with `return_simulations`
+        {(year, statistic): simulated values}.
+    """
+    from scipy.stats import binom, t as student_t
+    from .scenario import YEARLY_STATISTICS, year_statistics, pit as pit_of
+    from .uncertainty import generate_ar1_noise
+
+    all_dates = pd.DatetimeIndex([]).append([r.dates_held_out for r in results if r.dates_held_out is not None])
+    all_obs = np.concatenate([np.where(r.obs_held_out == MISSING_DATA_SENTINEL, np.nan, r.obs_held_out)
+                              for r in results if r.dates_held_out is not None])
+    if threshold is None:
+        threshold = float(np.nanquantile(all_obs, DEFAULT_THRESHOLD_QUANTILE))
+    if season_months is None:
+        season_months = warmest_months(all_dates, all_obs)
+
+    rows, simulations = [], {}
+    for r in results:
+        if r.dates_held_out is None or not np.isfinite(r.sigma):
+            continue
+        rng = np.random.default_rng(None if seed is None else [int(seed), int(r.fold_id)])
+        obs = np.where(r.obs_held_out == MISSING_DATA_SENTINEL, np.nan, r.obs_held_out)
+        sim = np.where(r.sim_held_out == MISSING_DATA_SENTINEL, np.nan, r.sim_held_out)
+        n_days = len(sim)
+        if noise_model == "ar1":
+            noise = np.array([generate_ar1_noise(n_days, r.sigma, r.rho, [(0, n_days - 1)], rng)
+                              for _ in range(n_simulations)])
+        else:
+            noise = rng.normal(0.0, r.sigma, (n_simulations, n_days))
+        measured = np.isfinite(obs) & np.isfinite(sim)
+        ens = np.where(measured[None, :], sim[None, :] + noise, np.nan)
+        obs_used = np.where(measured, obs, np.nan)
+        years = r.years_held_out if r.years_held_out is not None else r.dates_held_out.year.to_numpy()
+        in_season = np.isin(r.dates_held_out.month, season_months)
+        sim_stats = year_statistics(ens, r.dates_held_out, threshold, years=years)
+        obs_stats = year_statistics(obs_used, r.dates_held_out, threshold, years=years)
+        for year in sorted(sim_stats):
+            season = (years == year) & in_season
+            if not season.any() or measured[season].mean() < MIN_SEASON_OBSERVED:
+                continue
+            for name in YEARLY_STATISTICS:
+                value = float(obs_stats[year][name][0])
+                sims = sim_stats[year][name]
+                sims = sims[np.isfinite(sims)]
+                if not np.isfinite(value) or len(sims) == 0:
+                    continue
+                q = np.percentile(sims, [5, 25, 50, 75, 95])
+                p = pit_of(sims, value, rng)
+                rows.append({"fold": r.label, "year": int(year), "statistic": name, "measured": value,
+                             "p5": q[0], "p25": q[1], "median": q[2], "p75": q[3], "p95": q[4], "pit": p,
+                             "inside_50": bool(0.25 <= p <= 0.75), "inside_90": bool(0.05 <= p <= 0.95),
+                             "deviation": value - q[2], "sigma": r.sigma, "rho": r.rho,
+                             "threshold": threshold, "season_months": " ".join(map(str, season_months))})
+                if return_simulations:
+                    simulations[(int(year), name)] = sims
+    per_year = pd.DataFrame(rows, columns=["fold", "year", "statistic", "measured", "p5", "p25", "median", "p75",
+                                           "p95", "pit", "inside_50", "inside_90", "deviation", "sigma", "rho",
+                                           "threshold", "season_months"])
+    summary = []
+    for name in YEARLY_STATISTICS:
+        sub = per_year[per_year.statistic == name]
+        n = len(sub)
+        row = {"statistic": name, "n_years": n}
+        for level in CHECK_RANGES:
+            col = f"inside_{int(level * 100)}"
+            row[f"share_{col}"] = float(sub[col].mean()) if n else np.nan
+            lo, hi = binom.interval(0.95, n, level) if n else (np.nan, np.nan)
+            row[f"expected_{col}_low"] = lo / n if n else np.nan
+            row[f"expected_{col}_high"] = hi / n if n else np.nan
+        d = sub.deviation.to_numpy()
+        row["mean_deviation"] = float(d.mean()) if n else np.nan
+        half = float(student_t.ppf(0.975, n - 1) * d.std(ddof=1) / np.sqrt(n)) if n >= 2 else np.nan
+        row["mean_deviation_ci95_lower"] = row["mean_deviation"] - half
+        row["mean_deviation_ci95_upper"] = row["mean_deviation"] + half
+        summary.append(row)
+    summary = pd.DataFrame(summary)
+    return (per_year, summary, simulations) if return_simulations else (per_year, summary)
