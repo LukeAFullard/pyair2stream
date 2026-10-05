@@ -13,7 +13,7 @@ before its result.
 
 | Check | Question | Why it matters |
 |---|---|---|
-| V1 | Does it compute the same temperatures as the original Fortran program, on real, variable inputs? | Shows the model equations and solution schemes were translated correctly. |
+| V1 | Does it compute the same temperatures as the original Fortran program, on real, variable inputs? Does it compute the same calibration score, from the same weekly and monthly averages, also when the record has gaps? | Shows the model equations, solution schemes and scoring were translated correctly. |
 | V2 | Given the published parameters, does it reproduce the published model errors for every model version on three Swiss rivers? Does its own calibration, done the way the paper did it, fit at least as well (judged by the original program too) and find the published parameters? Do the published parameters lie inside its uncertainty intervals? | Ties the package to the peer-reviewed results of Piccolroaz et al. (2016). |
 | V3 | When data are made by the model itself from known parameters, does calibration recover them well enough to predict other years? | Only with a known truth can we tell whether calibration finds the right answer. |
 | V4 | Do the 90% uncertainty intervals contain the truth about 90% of the time, with each likelihood the package offers? | An interval is only useful if its stated confidence is honest. |
@@ -21,6 +21,8 @@ before its result.
 | V6 | How accurate are the numerical schemes, does the package stop runs that go wrong, and does the choice of stable scheme matter? | Rules out numerical error as a source of wrong answers. |
 | V7 | Do gaps in the water or air temperature record bias the result? | Real records have gaps. |
 | V8 | Does the documented workflow reproduce the calibration exactly? Do scenario comparisons and threshold counts give exact answers where the answer is known? | The tools used to reach a conclusion must be exact. |
+| V9 | When the package gives a chance that a yearly statistic (highest daily mean, highest 7-day mean, days above a threshold) exceeded a limit, does that happen as often as it says? On real rivers, do these chances beat going by past years? | This is the answer to a compliance question. |
+| V10 | Calibrated only on the coolest (or highest-flow) years, does the model still predict the warmest (or lowest-flow) years, and do its intervals hold? | Limits are breached, and scenarios extrapolate, in exactly those years. |
 
 ## Running it
 
