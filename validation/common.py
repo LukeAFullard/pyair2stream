@@ -155,12 +155,14 @@ def load(cfg: dict, name: str, period: str = "c"):
 
 
 def simulate(csv: str, version: int, par, integrator: str = "CRN", qmedia: float = None,
-             objective: str = "RMS", name: str = "sim"):
-    """FORWARD run of `par` on `csv`; returns the loaded data object after simulation."""
+             objective: str = "RMS", name: str = "sim", **extra):
+    """FORWARD run of `par` on `csv`; returns the loaded data object after simulation.
+    `extra` adds config keys (e.g. time_resolution, prc)."""
     cfg = {"version": version, "integrator": integrator, "run_mode": "FORWARD",
            "objective_function": objective, "parameters_forward": [float(x) for x in par],
            "Qmedia": float(qmedia if qmedia is not None else mean_discharge(csv)),
            "paths": {"input_data": csv}}
+    cfg.update(extra)
     data = load(cfg, name)
     with quiet():
         call_model(data)
