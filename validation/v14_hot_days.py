@@ -183,7 +183,9 @@ def run(ctx) -> Result:
             judged_rows.append({"version": r["version"], "subset": r["subset"], "level": f"{lev}%",
                                 "share inside": f"{share:.1%}", "accepted": f"{lo:.1%}-{hi:.1%}",
                                 "within": "yes" if inside else "no"})
-    res.passed = bool(ok)
+    # The criterion needs every river and year: a quick run (one river, a few years) reports the shares
+    # but does not judge them, as V5 skips its coverage criterion in quick mode.
+    res.passed = True if ctx.quick else bool(ok)
     judged = pd.DataFrame(judged_rows)
 
     shown = cov.copy()
@@ -220,7 +222,8 @@ def run(ctx) -> Result:
 
     vs = sorted(set(cov.version))
     res.summary = (
-        "Share of held-out daily measurements inside the 90% interval, pooled over the rivers: "
+        ("Quick mode (one river, a few years): shares reported, criterion not judged. " if ctx.quick else "")
+        + "Share of held-out daily measurements inside the 90% interval, pooled over the rivers: "
         + "; ".join(f"version {v}: all days {share(v, 'daily', 'all days', 90):.1%}, hottest 10% by prediction "
                     f"{share(v, 'daily', 'hottest 10% by prediction', 90):.1%}, by air temperature "
                     f"{share(v, 'daily', 'hottest 10% by air temperature', 90):.1%}, summer "
