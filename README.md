@@ -158,6 +158,9 @@ Details: [User Guide §8](USER_GUIDE.md#8-understanding-the-output-files).
 - **[docs/METHODS.md](docs/METHODS.md)** — exactly what the software does, step
   by step, its assumptions and limitations, and how it differs from the Fortran.
   Read §16 there before using results to support a decision.
+- **[docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md)** — the published
+  air2stream results pyair2stream reproduces, and the errors found in those
+  publications.
 - **[docs/UNCERTAINTY.md](docs/UNCERTAINTY.md)** — the uncertainty statistics
   and tests explained for water quality scientists: what each means, when, why
   and how to use it, what it rests on, and how to defend it.
@@ -250,6 +253,17 @@ The [validation suite](validation/README.md) checks this, and its results are in
   on the Rhône, which does no better than the simple alternatives whichever
   years it is calibrated on. On rivers like the Rhône, use a version with
   discharge (7 or 8).
+- **An independent group's results, day by day.** Callahan and Moore (2025)
+  published the parameters, inputs and simulated water temperatures of
+  air2stream for 23 rivers in British Columbia, including the 2021 heat dome
+  ([dataset](https://doi.org/10.5281/zenodo.14502248)). Given their parameters
+  and inputs, pyair2stream computes 45 of their 46 simulated series to within
+  0.00013 °C on every day. The 46th is a calibration record starting on
+  1 November that their run read as if it started on 1 January, putting the
+  seasonal cycle ten months out of phase; read that way, pyair2stream
+  reproduces it too ([V15](validation/REPORT.md#v15)). That error, and those
+  found in the other two papers, are documented in
+  [docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md).
 - **On the hottest days.** In held-out years, on the 10% of days predicted to
   be hottest, version 8's 90% intervals held on 91% of days. Version 5's held
   on only 84%: without a discharge term it predicted its hottest days about
@@ -272,7 +286,7 @@ To run the tests and the validation suite (needs `gfortran`):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # or without --quick: the full suite, about 115 minutes
+python validation/run_all.py --quick     # or without --quick: the full suite, about 116 minutes
 ```
 
 ## Examples

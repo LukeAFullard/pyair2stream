@@ -67,6 +67,20 @@
   the 2016 results Crank-Nicolson), and DE calibration with RK4 returns the
   published parameters in all 15 cases. The paper's stated Rhône periods
   (1984–2003 / 2004–2013) are a misprint for the distributed split.
+- Validation V15 and `data/british_columbia/`: the dataset of Callahan and
+  Moore (2025, *Hydrological Processes* 39(1), e70033; Zenodo,
+  https://doi.org/10.5281/zenodo.14502248, CC BY 4.0), with the parameters,
+  inputs and simulated water temperatures of air2stream for 23 rivers in
+  British Columbia. Given their parameters and inputs, pyair2stream computes 45
+  of the 46 published simulated series to within 0.00013 °C on every day, and
+  its calibration fits every station at least as well. The 46th, a
+  calibration record starting on 1 November 2012, was run by its authors as if
+  it started on 1 January (the original program reads records by row); read
+  that way, it is reproduced to 0.00001 °C.
+- [docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md): the published
+  air2stream results pyair2stream reproduces (Toffolon and Piccolroaz, 2015;
+  Piccolroaz et al., 2016; Callahan and Moore, 2025), the errors found in each
+  publication, and the conventions of the original program behind them.
 - Validation V14: prediction intervals on the hottest days of held-out years.
   On the 10% of days predicted to be hottest, version 8's 90% intervals held
   on 91% of days; ⚠ version 5's on 84%, because it predicted those days about

@@ -313,4 +313,5 @@ def _fig(series):
             f"published parameters (dashed: {TOL_SERIES} °C). Blue: records starting on 1 January. Orange: the record "
             "that does not, run with its dates (filled) and read by row from 1 January as the original program "
             "reads it (open). Right: RMSE in the paper's heat-dome and drought windows, published simulation "
-            "against pyair2stream's.")
+            "against pyair2stream's; a point off the line is the misread record, run by pyair2stream with its "
+            "correct dates.")

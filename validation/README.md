@@ -27,13 +27,14 @@ before its result.
 | V12 | Cross-validation hides a year's water temperatures and keeps its air temperature and discharge. Would hiding those inputs too, leaving a buffer around the year, or calibrating on earlier years only change what it reports? | The cross-validation is the evidence for every check of predictions in new years; its design must not flatter the model. |
 | V13 | Given the parameters of the first air2stream paper (Toffolon and Piccolroaz, 2015), does it reproduce that paper's errors, and with which numerical scheme? Does its calibration with that scheme return those parameters? | A second published benchmark, from the model's authors, on the same data. |
 | V14 | In years not used for calibration, do the prediction intervals hold on the days predicted to be hottest and on the days with the hottest air? | Limits are breached on the hottest days. |
+| V15 | Given the parameters and inputs an independent group published for 23 rivers in British Columbia (Callahan and Moore, 2025), does it compute their simulated water temperatures, day by day? Does its own calibration fit at least as well? | Results from other people, rivers and climates, including the 2021 heat dome, compared in full rather than by a summary error. |
 
 ## Running it
 
 From the repository root, with the package installed (`pip install -e .`):
 
 ```bash
-python validation/run_all.py            # full suite, about 115 minutes on 4 cores
+python validation/run_all.py            # full suite, about 116 minutes on 4 cores
 python validation/run_all.py --quick    # reduced version of every check, about 2 minutes
 python validation/run_all.py --only V2 V6
 ```
@@ -54,9 +55,14 @@ other table byte for byte.
 
 ## Data
 
-All checks use the three Swiss rivers in [`data/switzerland/`](../data/switzerland/README.md),
-with the published parameters and model errors of Piccolroaz et al. (2016).
-That README gives their sources, periods and licence.
+Most checks use the three Swiss rivers in [`data/switzerland/`](../data/switzerland/README.md),
+with the published parameters and model errors of Piccolroaz et al. (2016) and
+of Toffolon and Piccolroaz (2015). V15 uses the 23 British Columbia streams of
+Callahan and Moore (2025) in [`data/british_columbia/`](../data/british_columbia/README.md),
+from their published dataset (https://doi.org/10.5281/zenodo.14502248, CC BY
+4.0). Each README gives the sources, periods and licence. The errors found in
+the three publications are documented in
+[docs/PUBLISHED_RESULTS.md](../docs/PUBLISHED_RESULTS.md).
 
 ## What this does and does not show
 

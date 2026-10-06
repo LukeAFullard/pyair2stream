@@ -853,8 +853,11 @@ the cross-validated check and correction of yearly statistics (V11); and that
 the cross-validation's design does not flatter the model (V12); the 30
 published errors of Toffolon and Piccolroaz (2015), computed with RK4, also
 reproduced, and their parameters returned by calibration with RK4 (V13); and
-prediction intervals on the hottest days (V14). V5, V9, V10 and V14 do not pass
-all their criteria; the report says where and why. The test
+prediction intervals on the hottest days (V14); and the simulations published
+by an independent group for 23 rivers in British Columbia, reproduced day by day
+(V15). V5, V9, V10 and V14 do not pass all their criteria; the report says where
+and why. The errors found in the published studies are documented in
+[PUBLISHED_RESULTS.md](PUBLISHED_RESULTS.md). The test
 suite (`pytest tests/`) also compares against the Fortran and checks each
 safeguard above.
 
@@ -874,7 +877,11 @@ These are deliberate; each is covered by tests.
   for validation and FORWARD runs instead of being recomputed.
 - **Seasonal phase** is computed from each row's real date (equivalent for
   records starting on 1 January); FORWARD runs may start on any date, with the
-  warm-up year taking the phase of the rows it copies.
+  warm-up year taking the phase of the rows it copies. The Fortran takes it
+  from the row number and does not check that a record starts on 1 January: a
+  published calibration whose record started on 1 November was run with its
+  seasonal cycle ten months out of phase (V15;
+  [PUBLISHED_RESULTS.md](PUBLISHED_RESULTS.md)).
 - **Checks added**: missing values, implausible values, non-positive discharge,
   unused parameters, integrator stability and divergence (§15); the Fortran
   would run on silently.
@@ -963,3 +970,8 @@ These are deliberate; each is covered by tests.
   intercomparison of a large ensemble of statistical downscaling methods over
   Europe: results from the VALUE perfect predictor cross-validation experiment.
   *International Journal of Climatology*, 39, 3750–3785.
+- Callahan, L. and Moore, R. D. (2025). Evaluation of the hybrid air2stream
+  model for simulating daily stream temperature during extreme summer heat wave
+  and autumn drought conditions. *Hydrological Processes*, 39(1), e70033.
+  Data: Moore, R. D. and Callahan, L. (2024), Zenodo,
+  https://doi.org/10.5281/zenodo.14502248.

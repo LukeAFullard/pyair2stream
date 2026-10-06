@@ -882,7 +882,7 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 
 | Question | pyair2stream's answer |
 |---|---|
-| Is the method tested? | The [validation suite](../validation/REPORT.md) runs 14 checks with stated pass criteria, through the same code a user runs: identical results to the original Fortran, reproduction of the published results, recovery of known truths, coverage of intervals at several levels, and performance on three real rivers. Failures are reported, not hidden. |
+| Is the method tested? | The [validation suite](../validation/REPORT.md) runs 15 checks with stated pass criteria, through the same code a user runs: identical results to the original Fortran, reproduction of the published results, recovery of known truths, coverage of intervals at several levels, and performance on three real rivers. Failures are reported, not hidden. |
 | Is its error rate known? | Yes, as coverage at each level (section [13](#13-choosing-the-level-90-95-or-99)), on synthetic data and real rivers, and at your own site through cross-validation. |
 | Does it rest on published methods? | Each component does (table below). The combination, and three approximations, are pyair2stream's own and documented as such. |
 | Can the result be reproduced? | With `random_seed`, every run gives identical results. Each run records its settings (`calibration_metadata.json`, `_meta.json` with σ, ρ, the chain's content hash and the parameter sets used), and a FORWARD run refuses a chain from a different calibration. |
@@ -891,7 +891,7 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 
 | Component | Published basis | What is pyair2stream's own | Evidence |
 |---|---|---|---|
-| The model | Toffolon and Piccolroaz (2015); Piccolroaz et al. (2016) | a Python version | V1, V2, V13 |
+| The model | Toffolon and Piccolroaz (2015); Piccolroaz et al. (2016); Callahan and Moore (2025) | a Python version | V1, V2, V13, V15 |
 | MCMC calibration | Kuczera and Parent (1998); ter Braak (2006); Foreman-Mackey et al. (2013); Gelman et al. (2013) | | V4 |
 | Autocorrelated error model | Sorooshian and Dracup (1980); Schoups and Vrugt (2010); Evin et al. (2014) | ρ chosen at the weekly scale | V4, V5, V9 |
 | Effective sample size in the likelihood | Bayley and Hammersley (1946); Pauli et al. (2011); Ribatet et al. (2012) | its use with the least-squares likelihood | V4 |
@@ -996,6 +996,11 @@ ranges.
   Hydrology*, 320, 18–36.
 - Brier, G. W. (1950). Verification of forecasts expressed in terms of
   probability. *Monthly Weather Review*, 78, 1–3.
+- Callahan, L. and Moore, R. D. (2025). Evaluation of the hybrid air2stream
+  model for simulating daily stream temperature during extreme summer heat wave
+  and autumn drought conditions. *Hydrological Processes*, 39(1), e70033.
+  Data: Moore, R. D. and Callahan, L. (2024), Zenodo,
+  https://doi.org/10.5281/zenodo.14502248.
 - Coron, L., Andréassian, V., Perrin, C., Lerat, J., Vaze, J., Bourqui, M. and
   Hendrickx, F. (2012). Crash testing hydrological models in contrasted climate
   conditions: an experiment on 216 Australian catchments. *Water Resources

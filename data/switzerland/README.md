@@ -30,7 +30,9 @@ used by the examples (`examples/`) and the validation suite (`validation/`).
   transcribed from the PDFs distributed with the original code
   (`References/Main/`) by a script and checked against a second, manual
   transcription. Blank: parameter not used by the version. The validation
-  suite reproduces these results (V13).
+  suite reproduces these results (V13). The paper's Table 1 gives the Rhône's
+  periods as 1984–2003 and 2004–2013; its results correspond to the split of
+  these files, 1984–2004 and 2005–2013 (`docs/PUBLISHED_RESULTS.md`).
 
 Units: air and water temperature in °C (daily means). Discharge is a daily
 mean whose unit the files do not state; its magnitudes (mean about 1.5 for the
