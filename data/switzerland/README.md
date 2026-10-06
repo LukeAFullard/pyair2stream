@@ -24,6 +24,15 @@ used by the examples (`examples/`) and the validation suite (`validation/`).
   published parameters of every air2stream version (`Parameter_values`) and
   the published calibration and validation RMSE (`AIC`). The validation suite
   reproduces these results (`validation/REPORT.md`, V2).
+- `published/Toffolon_Piccolroaz_ERL2015.csv`: the parameters (Table 1 of the
+  supplementary information) and the calibration and validation RMSE and NSE
+  (Table 2) of Toffolon and Piccolroaz (2015) for the same three rivers,
+  transcribed from the PDFs distributed with the original code
+  (`References/Main/`) by a script and checked against a second, manual
+  transcription. Blank: parameter not used by the version. The validation
+  suite reproduces these results (V13). The paper's Table 1 gives the Rhône's
+  periods as 1984–2003 and 2004–2013; its results correspond to the split of
+  these files, 1984–2004 and 2005–2013 (`docs/PUBLISHED_RESULTS.md`).
 
 Units: air and water temperature in °C (daily means). Discharge is a daily
 mean whose unit the files do not state; its magnitudes (mean about 1.5 for the
@@ -50,6 +59,12 @@ byte-identical to those (SHA-256, first 16 characters):
 | `original/SIO_2011_cv.txt` | `c65c83f2ced6c499` |
 | `original/DAV_2327_cc.txt` | `96aced529be5bdb3` |
 | `original/DAV_2327_cv.txt` | `c8485235c40b2ec7` |
+
+The 2015 values are from:
+
+> Toffolon, M. and Piccolroaz, S. (2015). A hybrid model for river water
+> temperature as a function of air temperature and discharge. *Environmental
+> Research Letters*, 10, 114011. https://doi.org/10.1088/1748-9326/10/11/114011
 
 If you use these data, cite:
 

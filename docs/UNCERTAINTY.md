@@ -294,11 +294,16 @@ was **not** calibrated on: a separate validation file, or cross-validation
 | Synthetic data, model exactly right (V4) | within 1.4 points of the level at every level | | | | |
 | Swiss rivers, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.5% | 98.0–98.2% |
 | Swiss rivers, later validation years (V5) | 43–53% | 75–79% | 85–90% | 91–95% | 95–99.6% |
+| Swiss rivers, the hottest 10% of days by prediction, version 8 (V14) | | 80% | 91% | 95% | |
+| The same, version 5 (no discharge term) (V14) | | 68% | 84% | 92% | |
 
 Up to 95% the bands hold when averaged over many years. In years unlike those
 calibrated on (the validation periods of V5 came after the calibration periods,
 and the model's errors there were somewhat larger), they are somewhat narrower
-than stated. At 99% they miss about twice as many days as stated.
+than stated. At 99% they miss about twice as many days as stated. On the
+hottest days, where limits are breached, version 8's bands held as stated;
+version 5's did not, because it predicted its hottest days about 0.5 °C too
+warm ([V14](../validation/REPORT.md#v14)).
 
 ### What it rests on
 
@@ -390,6 +395,21 @@ for a decision is how well it predicts other years, and whether its stated
 ranges hold there. Cross-validation answers that with your own data, at your own
 site.
 
+### What is hidden, and what is not
+
+Only the year's measured **water temperatures** are hidden. Its air temperature
+and discharge are kept, and the year is predicted from them, just as any real
+prediction is made from the inputs of the period predicted. That is how
+cross-validation is defined: hide what is predicted, keep what it is predicted
+from. The model never uses measured water temperature, so hiding it removes
+everything the year could tell the model about the answer.
+
+Validation [V12](../validation/REPORT.md#v12) checked this on 96 held-out years
+of three Swiss rivers. Hiding the year's air temperature and discharge from the
+calibration as well, or leaving two months unused on each side of the year,
+changed no year's error by more than 0.04 °C, and did not change how often the
+ranges held.
+
 ### How to run it
 
 ```yaml
@@ -462,12 +482,25 @@ corrects.
   ranges too narrow, not too wide.
 - Years are treated as independent. A long drift (a river that slowly changes)
   breaks that.
+- The inputs are measured ones. Cross-validation shows how well the model does
+  with correct air temperature and discharge; a prediction from projected or
+  borrowed inputs (a climate model, another station, a flow scenario) carries
+  their errors on top.
+- Each year is predicted from a calibration on the other years, later ones
+  included. For predicting the future, a test that uses only earlier years is
+  stricter: in V12 it was as accurate, but its 90% intervals held on 87% of days
+  instead of 90%. For predictions of future years, quote the later-years tests
+  ([V5](../validation/REPORT.md#v5), [V10](../validation/REPORT.md#v10)) as well.
 
 ### What it rests on
 
 Cross-validation is a standard way to estimate how well a model predicts new
 data (Stone, 1974), and testing a hydrological model on periods it was not
-calibrated on is a long-standing requirement in hydrology (Klemeš, 1986). The
+calibrated on is a long-standing requirement in hydrology (Klemeš, 1986).
+Hiding what is predicted and keeping what it is predicted from is how both are
+done (Hastie et al., 2009; Coron et al., 2012); using the inputs of the period
+predicted is not "leakage", which is information a real prediction would not
+have (Kaufman et al., 2012). The
 PIT and its histogram are the standard check of probabilistic predictions in
 weather forecasting and hydrology (Dawid, 1984; Hamill, 2001; Gneiting et al.,
 2007; Laio and Tamea, 2007).
@@ -700,6 +733,13 @@ turns their spread into approximate intervals (the delete-one-year jackknife,
 `std` row as an uncertainty: the folds share most of their data, so it is far
 too small.
 
+The jackknife intervals depend on the optimizer too. Where parameters trade
+off, one fold can end on a distant parameter set with almost the same fit, and
+widen the interval. In [V12](../validation/REPORT.md#v12), another optimizer
+seed alone changed version 8's jackknife standard errors by a factor of 0.35 to
+1.55. For poorly determined parameters, treat them as indicative and repeat the
+cross-validation with a second `random_seed`.
+
 ### What the validation shows
 
 On synthetic data with known parameters, the default MCMC intervals (90%)
@@ -842,7 +882,7 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 
 | Question | pyair2stream's answer |
 |---|---|
-| Is the method tested? | The [validation suite](../validation/REPORT.md) runs 11 checks with stated pass criteria, through the same code a user runs: identical results to the original Fortran, reproduction of the published results, recovery of known truths, coverage of intervals at several levels, and performance on three real rivers. Failures are reported, not hidden. |
+| Is the method tested? | The [validation suite](../validation/REPORT.md) runs 15 checks with stated pass criteria, through the same code a user runs: identical results to the original Fortran, reproduction of the published results, recovery of known truths, coverage of intervals at several levels, and performance on three real rivers. Failures are reported, not hidden. |
 | Is its error rate known? | Yes, as coverage at each level (section [13](#13-choosing-the-level-90-95-or-99)), on synthetic data and real rivers, and at your own site through cross-validation. |
 | Does it rest on published methods? | Each component does (table below). The combination, and three approximations, are pyair2stream's own and documented as such. |
 | Can the result be reproduced? | With `random_seed`, every run gives identical results. Each run records its settings (`calibration_metadata.json`, `_meta.json` with σ, ρ, the chain's content hash and the parameter sets used), and a FORWARD run refuses a chain from a different calibration. |
@@ -851,12 +891,12 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 
 | Component | Published basis | What is pyair2stream's own | Evidence |
 |---|---|---|---|
-| The model | Toffolon and Piccolroaz (2015); Piccolroaz et al. (2016) | a Python version | V1, V2 |
+| The model | Toffolon and Piccolroaz (2015); Piccolroaz et al. (2016); Callahan and Moore (2025) | a Python version | V1, V2, V13, V15 |
 | MCMC calibration | Kuczera and Parent (1998); ter Braak (2006); Foreman-Mackey et al. (2013); Gelman et al. (2013) | | V4 |
 | Autocorrelated error model | Sorooshian and Dracup (1980); Schoups and Vrugt (2010); Evin et al. (2014) | ρ chosen at the weekly scale | V4, V5, V9 |
 | Effective sample size in the likelihood | Bayley and Hammersley (1946); Pauli et al. (2011); Ribatet et al. (2012) | its use with the least-squares likelihood | V4 |
 | Probabilities from an ensemble | Wilks (2011) | | V9 |
-| Cross-validation and the PIT | Stone (1974); Klemeš (1986); Dawid (1984); Gneiting et al. (2007) | | V11 |
+| Cross-validation and the PIT | Stone (1974); Klemeš (1986); Hastie et al. (2009); Coron et al. (2012); Dawid (1984); Gneiting et al. (2007) | | V11, V12 |
 | Correction of yearly statistics | Glahn and Lowry (1972); Gneiting et al. (2005) | the shift with its uncertainty, from held-out years | V9 C, V11 |
 | Paired scenarios | common random numbers (Law, 2015) | | V8 |
 
@@ -942,6 +982,7 @@ ranges.
 | Using the `std` row of `cv_results.csv` as a parameter uncertainty | the folds share most of their data | the jackknife rows |
 | Combining the ends of several parameter intervals | parameters trade off (Figure 13) | rely on predictions |
 | Quoting a 99% daily interval unchecked | real errors have heavier tails | check its coverage at your site (section [13](#13-choosing-the-level-90-95-or-99)) |
+| Checking a band only on the days the limit was exceeded | those days were chosen partly because their error was positive: even a correct 90% band is exceeded there far more often than 10% of the time (V14) | check on the days predicted to be hottest, or with the hottest air |
 | Using an unconverged chain | its parameter sets are not a valid sample | more steps or a simpler version |
 
 ---
@@ -955,6 +996,15 @@ ranges.
   Hydrology*, 320, 18–36.
 - Brier, G. W. (1950). Verification of forecasts expressed in terms of
   probability. *Monthly Weather Review*, 78, 1–3.
+- Callahan, L. and Moore, R. D. (2025). Evaluation of the hybrid air2stream
+  model for simulating daily stream temperature during extreme summer heat wave
+  and autumn drought conditions. *Hydrological Processes*, 39(1), e70033.
+  Data: Moore, R. D. and Callahan, L. (2024), Zenodo,
+  https://doi.org/10.5281/zenodo.14502248.
+- Coron, L., Andréassian, V., Perrin, C., Lerat, J., Vaze, J., Bourqui, M. and
+  Hendrickx, F. (2012). Crash testing hydrological models in contrasted climate
+  conditions: an experiment on 216 Australian catchments. *Water Resources
+  Research*, 48, W05552.
 - Daubert v. Merrell Dow Pharmaceuticals, Inc., 509 U.S. 579 (1993).
 - Dawid, A. P. (1984). Statistical theory: the prequential approach. *Journal of
   the Royal Statistical Society A*, 147, 278–292.
@@ -980,9 +1030,14 @@ ranges.
   Society B*, 69, 243–268.
 - Hamill, T. M. (2001). Interpretation of rank histograms for verifying ensemble
   forecasts. *Monthly Weather Review*, 129, 550–560.
+- Hastie, T., Tibshirani, R. and Friedman, J. (2009). *The Elements of
+  Statistical Learning*, 2nd edn. Springer.
 - Jakeman, A. J., Letcher, R. A. and Norton, J. P. (2006). Ten iterative steps
   in development and evaluation of environmental models. *Environmental
   Modelling & Software*, 21, 602–614.
+- Kaufman, S., Rosset, S., Perlich, C. and Stitelman, O. (2012). Leakage in data
+  mining: formulation, detection, and avoidance. *ACM Transactions on Knowledge
+  Discovery from Data*, 6(4), 15.
 - Klemeš, V. (1986). Operational testing of hydrological simulation models.
   *Hydrological Sciences Journal*, 31, 13–24.
 - Kuczera, G. and Parent, E. (1998). Monte Carlo assessment of parameter

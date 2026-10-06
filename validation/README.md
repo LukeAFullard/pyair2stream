@@ -24,33 +24,52 @@ before its result.
 | V9 | When the package gives a chance that a yearly statistic (highest daily mean, highest 7-day mean, days above a threshold) exceeded a limit, does that happen as often as it says? On real rivers, do these chances beat going by past years? | This is the answer to a compliance question. |
 | V10 | Calibrated only on the coolest (or highest-flow) years, does the model still predict the warmest (or lowest-flow) years, and do its intervals hold? | Limits are breached, and scenarios extrapolate, in exactly those years. |
 | V11 | Over many years not used for calibration, do the predicted ranges of yearly statistics hold? Why not, when they do not? Does the cross-validated correction make them hold? | The answer to a compliance question must carry the confidence it states. |
+| V12 | Cross-validation hides a year's water temperatures and keeps its air temperature and discharge. Would hiding those inputs too, leaving a buffer around the year, or calibrating on earlier years only change what it reports? | The cross-validation is the evidence for every check of predictions in new years; its design must not flatter the model. |
+| V13 | Given the parameters of the first air2stream paper (Toffolon and Piccolroaz, 2015), does it reproduce that paper's errors, and with which numerical scheme? Does its calibration with that scheme return those parameters? | A second published benchmark, from the model's authors, on the same data. |
+| V14 | In years not used for calibration, do the prediction intervals hold on the days predicted to be hottest and on the days with the hottest air? | Limits are breached on the hottest days. |
+| V15 | Given the parameters and inputs an independent group published for 23 rivers in British Columbia (Callahan and Moore, 2025), does it compute their simulated water temperatures, day by day? Does its own calibration fit at least as well? | Results from other people, rivers and climates, including the 2021 heat dome, compared in full rather than by a summary error. |
 
 ## Running it
 
 From the repository root, with the package installed (`pip install -e .`):
 
 ```bash
-python validation/run_all.py            # full suite, about 95 minutes on 4 cores
+python validation/run_all.py            # full suite, about 116 minutes on 4 cores
 python validation/run_all.py --quick    # reduced version of every check, about 2 minutes
 python validation/run_all.py --only V2 V6
 ```
+
+With `--only`, the other checks keep their reports from the earlier run, and
+`REPORT.md` names the run each comes from.
 
 V1 needs `gfortran` and the Fortran source (`git submodule update --init`);
 without them it is reported as not run. The run rewrites `REPORT.md`,
 `reports/` (one report per check), `results/` (every table as CSV) and
 `figures/`. Scratch files go to `work/`,
 which is not kept. All random steps are seeded, so a rerun on the same software
-versions gives the same numbers; the report records the versions used. The one
-exception is the original Fortran program's own calibration runs in V2 parts D
-and E: it seeds its random numbers from the clock, so those runs differ each
-time (which is what part D shows). A rerun of the full suite reproduced every
-other table byte for byte.
+versions and the same kind of processor gives the same numbers; the report
+records the versions used. The model is compiled for the processor it runs on,
+so on another processor the last digits of a calculation can differ, and the
+MCMC checks, which amplify such differences, then give results that differ by
+their Monte Carlo noise. The one other exception is the original Fortran
+program's own calibration runs in V2 parts D and E: it seeds its random numbers
+from the clock, so those runs differ each time (which is what part D shows). A
+rerun of the full suite reproduced every other table byte for byte.
+
+The quick run (`--quick`, also run by CI) checks that every check runs; with a
+few replicates or years it cannot judge coverage, so V4, V5 and V14 report
+their coverage there without judging it.
 
 ## Data
 
-All checks use the three Swiss rivers in [`data/switzerland/`](../data/switzerland/README.md),
-with the published parameters and model errors of Piccolroaz et al. (2016).
-That README gives their sources, periods and licence.
+Most checks use the three Swiss rivers in [`data/switzerland/`](../data/switzerland/README.md),
+with the published parameters and model errors of Piccolroaz et al. (2016) and
+of Toffolon and Piccolroaz (2015). V15 uses the 23 British Columbia streams of
+Callahan and Moore (2025) in [`data/british_columbia/`](../data/british_columbia/README.md),
+from their published dataset (https://doi.org/10.5281/zenodo.14502248, CC BY
+4.0). Each README gives the sources, periods and licence. The errors found in
+the three publications are documented in
+[docs/PUBLISHED_RESULTS.md](../docs/PUBLISHED_RESULTS.md).
 
 ## What this does and does not show
 
@@ -63,7 +82,8 @@ uncorrected ranges for yearly statistics miss more often than stated because the
 model can be biased on the hottest days, which the cross-validated correction
 largely fixes (V9, V11), 99% daily intervals are too narrow because real errors
 have heavier tails than assumed (V5, V11), and a version without discharge does
-not suit a river like the Rhône (V5, V9, V10). Calibrating on weekly or
+not suit a river like the Rhône (V5, V9, V10), and its intervals do not hold on
+the hottest days (V14). Calibrating on weekly or
 monthly means needs bounds that keep `a2` and `a3` at least 0 (V4).
 
 It does not show that the model suits your river. Check that with your own data:

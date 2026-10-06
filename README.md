@@ -158,6 +158,9 @@ Details: [User Guide §8](USER_GUIDE.md#8-understanding-the-output-files).
 - **[docs/METHODS.md](docs/METHODS.md)** — exactly what the software does, step
   by step, its assumptions and limitations, and how it differs from the Fortran.
   Read §16 there before using results to support a decision.
+- **[docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md)** — the published
+  air2stream results pyair2stream reproduces, and the errors found in those
+  publications.
 - **[docs/UNCERTAINTY.md](docs/UNCERTAINTY.md)** — the uncertainty statistics
   and tests explained for water quality scientists: what each means, when, why
   and how to use it, what it rests on, and how to defend it.
@@ -191,6 +194,11 @@ The [validation suite](validation/README.md) checks this, and its results are in
   the 15 sets are unstable and the rest give different errors. Calibrating with
   RK4 comes close to the published parameters (within 1% of their ranges) only
   where the water temperature responds slowly: the Mentue, versions 3–5.
+  The first air2stream paper (Toffolon and Piccolroaz, 2015) published other
+  parameters for the same rivers, computed with RK4: with RK4, pyair2stream
+  reproduces all 30 of its errors within their rounding, and its RK4
+  calibration returns those parameters in all 15 cases
+  ([V13](validation/REPORT.md#v13)).
 - **Finds a known truth.** On data made by the model from known parameters,
   calibration predicts other years to within 0.04 °C of the truth (0.06 °C
   with typical gaps in the data).
@@ -245,6 +253,37 @@ The [validation suite](validation/README.md) checks this, and its results are in
   on the Rhône, which does no better than the simple alternatives whichever
   years it is calibrated on. On rivers like the Rhône, use a version with
   discharge (7 or 8).
+- **An independent group's results, day by day.** Callahan and Moore (2025)
+  published the parameters, inputs and simulated water temperatures of
+  air2stream for 23 rivers in British Columbia, including the 2021 heat dome
+  ([dataset](https://doi.org/10.5281/zenodo.14502248)). Given their parameters
+  and inputs, pyair2stream computes 45 of their 46 simulated series to within
+  0.00013 °C on every day. The 46th is a calibration record starting on
+  1 November that their run read as if it started on 1 January, putting the
+  seasonal cycle ten months out of phase; read that way, pyair2stream
+  reproduces it too ([V15](validation/REPORT.md#v15)). Its own calibration
+  reaches other parameter values, fitting as well or better, but at the 19
+  stations where its uncertainty intervals could be computed, 137 of the 152
+  published values lie inside them: many combinations fit these data. The
+  exception is one station whose published calibration is far from the best
+  fit; recalibrated, it predicts 2021–2022 with RMSE 0.76 °C instead of
+  1.09 °C. That error, and those
+  found in the other two papers, are documented in
+  [docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md).
+- **On the hottest days.** In held-out years, on the 10% of days predicted to
+  be hottest, version 8's 90% intervals held on 91% of days. Version 5's held
+  on only 84%: without a discharge term it predicted its hottest days about
+  0.5 °C too warm ([V14](validation/REPORT.md#v14)). Check intervals on hot
+  days by choosing the days from the prediction or the air temperature, not
+  from the measurements.
+- **A fair cross-validation.** It hides a year's water temperatures and
+  predicts the year from its own air temperature and discharge, the standard
+  design. Hiding those inputs from the calibration too, or leaving two months
+  unused around the year, changed no held-out year's error by more than
+  0.04 °C ([V12](validation/REPORT.md#v12)). Calibrating on earlier years only
+  was as accurate, but its 90% intervals held on 87% of days rather than 90%:
+  for predictions of future years, the later-years tests above are the
+  relevant ones.
 - **Scenario tools give exact answers** where the answer is known.
 
 To run the tests and the validation suite (needs `gfortran`):
@@ -253,7 +292,7 @@ To run the tests and the validation suite (needs `gfortran`):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # or without --quick: the full suite, about 95 minutes
+python validation/run_all.py --quick     # or without --quick: the full suite, about 116 minutes
 ```
 
 ## Examples

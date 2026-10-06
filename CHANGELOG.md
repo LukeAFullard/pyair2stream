@@ -45,6 +45,54 @@
   rests on in the literature, and how to defend it), with figures drawn by
   `docs/figures/make_uncertainty_figures.py`. A test checks that every link in
   the documentation resolves.
+- Validation V12: does the cross-validation's design flatter the model? It
+  hides a held-out year's water temperatures and predicts the year from its own
+  air temperature and discharge, the standard design (docs/METHODS.md §11 now
+  explains why, with references). Over 96 held-out river-years, hiding the
+  inputs from the calibration too changed no year's RMSE by more than
+  0.034 °C (against gap-tolerant mode with the inputs kept), and a 60-day
+  buffer around the year by no more than 0.041 °C.
+  Calibrating on earlier years only was as accurate, but its 90% intervals held
+  on 87.1% of days against 89.6%: for predictions of future years, quote the
+  later-years tests (V5, V10) as well. ⚠ Jackknife parameter intervals depend
+  on the optimizer: another seed alone changed version 8's jackknife standard
+  errors by a factor of 0.35–1.55; check poorly determined parameters with a
+  second `random_seed`. `validation/run_all.py --only` now keeps the other
+  checks in `REPORT.md`.
+- Validation V13: the parameters and errors of the first air2stream paper
+  (Toffolon and Piccolroaz, 2015), transcribed to
+  `data/switzerland/published/Toffolon_Piccolroaz_ERL2015.csv`. With RK4 all
+  30 published errors are reproduced within their rounding (with
+  Crank-Nicolson they are missed by up to 0.32 °C: the 2015 results used RK4,
+  the 2016 results Crank-Nicolson), and DE calibration with RK4 returns the
+  published parameters in all 15 cases. The paper's stated Rhône periods
+  (1984–2003 / 2004–2013) are a misprint for the distributed split.
+- Validation V15 and `data/british_columbia/`: the dataset of Callahan and
+  Moore (2025, *Hydrological Processes* 39(1), e70033; Zenodo,
+  https://doi.org/10.5281/zenodo.14502248, CC BY 4.0), with the parameters,
+  inputs and simulated water temperatures of air2stream for 23 rivers in
+  British Columbia. Given their parameters and inputs, pyair2stream computes 45
+  of the 46 published simulated series to within 0.00013 °C on every day, and
+  its calibration fits every station at least as well. The 46th, a
+  calibration record starting on 1 November 2012, was run by its authors as if
+  it started on 1 January (the original program reads records by row); read
+  that way, it is reproduced to 0.00001 °C. The published parameters are not
+  where pyair2stream's calibration lands (same values at 1 of 23 stations), but
+  where its DE-MCMC sampler converged (19 stations, with chains of up to
+  100,000 steps), 137 of 152 published values lie inside its 90% intervals.
+  The exception is station 08HA002, whose published calibration is far from
+  the best fit: recalibrated, it predicts 2021–2022 with RMSE 0.76 °C instead
+  of 1.09 °C.
+- [docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md): the published
+  air2stream results pyair2stream reproduces (Toffolon and Piccolroaz, 2015;
+  Piccolroaz et al., 2016; Callahan and Moore, 2025), the errors found in each
+  publication, and the conventions of the original program behind them.
+- Validation V14: prediction intervals on the hottest days of held-out years.
+  On the 10% of days predicted to be hottest, version 8's 90% intervals held
+  on 91% of days; ⚠ version 5's on 84%, because it predicted those days about
+  0.5 °C too warm. Checking intervals only on the days with the highest
+  measurements is a biased test: there even a correct 90% interval is exceeded
+  on 14.5–21.4% of days.
 
 ### Changed
 - ⚠ A FORWARD run with prediction intervals refuses a DE-MCMC chain fitted with

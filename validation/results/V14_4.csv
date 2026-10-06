@@ -1,0 +1,19 @@
+river,version,subset,days,inside 90%,above,below,mean error (predicted - measured),RMSE
+Dischmabach,5,all days,3287,89.5%,3.5%,7.0%,-0.05 °C,0.76 °C
+Dischmabach,5,hottest 10% by prediction,329,80.9%,11.6%,7.6%,-0.35 °C,0.98 °C
+Dischmabach,5,hottest 10% by air temperature,329,75.4%,11.6%,13.1%,-0.20 °C,1.07 °C
+Dischmabach,8,all days,3287,88.5%,6.1%,5.4%,-0.05 °C,0.65 °C
+Dischmabach,8,hottest 10% by prediction,329,95.4%,4.0%,0.6%,-0.24 °C,0.51 °C
+Dischmabach,8,hottest 10% by air temperature,329,90.6%,4.9%,4.6%,-0.10 °C,0.59 °C
+Mentue,5,all days,3652,89.4%,5.2%,5.4%,-0.01 °C,0.72 °C
+Mentue,5,hottest 10% by prediction,366,91.8%,4.4%,3.8%,-0.06 °C,0.62 °C
+Mentue,5,hottest 10% by air temperature,366,93.4%,3.6%,3.0%,-0.09 °C,0.60 °C
+Mentue,8,all days,3652,89.7%,5.0%,5.3%,+0.00 °C,0.70 °C
+Mentue,8,hottest 10% by prediction,366,90.7%,1.1%,8.2%,+0.26 °C,0.67 °C
+Mentue,8,hottest 10% by air temperature,366,91.8%,1.1%,7.1%,+0.18 °C,0.65 °C
+Rhône,5,all days,10565,90.3%,5.7%,4.0%,+0.01 °C,0.93 °C
+Rhône,5,hottest 10% by prediction,1057,82.3%,0.2%,17.5%,+0.90 °C,1.14 °C
+Rhône,5,hottest 10% by air temperature,1097,81.8%,0.4%,17.9%,+0.89 °C,1.14 °C
+Rhône,8,all days,10565,91.0%,4.8%,4.1%,+0.00 °C,0.64 °C
+Rhône,8,hottest 10% by prediction,1057,89.2%,8.3%,2.5%,-0.14 °C,0.66 °C
+Rhône,8,hottest 10% by air temperature,1097,91.3%,5.7%,3.0%,+0.01 °C,0.60 °C

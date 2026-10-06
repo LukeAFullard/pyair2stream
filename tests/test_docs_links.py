@@ -13,6 +13,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOCS = sorted({os.path.join(REPO, p) for p in ("README.md", "USER_GUIDE.md", "CHANGELOG.md")}
               | set(glob.glob(os.path.join(REPO, "docs", "*.md")))
               | set(glob.glob(os.path.join(REPO, "examples", "*", "README.md")))
+              | set(glob.glob(os.path.join(REPO, "data", "*", "README.md")))
               | {os.path.join(REPO, "examples", "README.md"), os.path.join(REPO, "validation", "README.md")})
 LINK = re.compile(r"!?\[[^\]]*\]\(([^)\s]+)\)")
 
