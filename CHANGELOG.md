@@ -78,8 +78,11 @@
   it started on 1 January (the original program reads records by row); read
   that way, it is reproduced to 0.00001 °C. The published parameters are not
   where pyair2stream's calibration lands (same values at 1 of 23 stations), but
-  where its DE-MCMC sampler converged (13 stations), 99 of 104 published values
-  lie inside its 90% intervals.
+  where its DE-MCMC sampler converged (19 stations, with chains of up to
+  100,000 steps), 137 of 152 published values lie inside its 90% intervals.
+  The exception is station 08HA002, whose published calibration is far from
+  the best fit: recalibrated, it predicts 2021–2022 with RMSE 0.76 °C instead
+  of 1.09 °C.
 - [docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md): the published
   air2stream results pyair2stream reproduces (Toffolon and Piccolroaz, 2015;
   Piccolroaz et al., 2016; Callahan and Moore, 2025), the errors found in each
