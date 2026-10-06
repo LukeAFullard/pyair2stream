@@ -143,13 +143,43 @@ example by running several input scenarios.
 
 ## 5. The model's errors: their size and how long they last
 
+This section explains the **error model**, and in particular the setting
+`rho_timescale: "weekly"`. The setting affects every range and probability
+that covers more than a single day. It is also the one part of the method that
+is pyair2stream's own. So it is explained here in full, with the evidence and
+answers to the questions reviewers ask. The formulas are in
+[METHODS §12](METHODS.md#error-persistence-how-it-is-estimated-and-why-the-weekly-scale).
+
+### In short
+
+- The model's daily errors last for a day or two, and they also drift for
+  weeks.
+- pyair2stream describes them with two numbers: their size σ and their
+  persistence ρ.
+- ρ can be measured from one day to the next (`"daily"`), or from one week to
+  the next (`"weekly"`, the default).
+- Both give the same range for a single day.
+- The weekly ρ keeps the slow drift. Ranges for 7-day means, monthly means,
+  yearly peaks and counts of warm days are then realistic. With the daily ρ
+  they are too narrow.
+- Where the errors have no slow drift, the two give the same ρ. Then the
+  weekly choice costs nothing.
+- Keep the default.
+
 ### What it is
 
-The **error model** describes the best-fitting model's daily errors with two
-numbers: their typical size σ and their persistence ρ. pyair2stream uses the
-simplest model of persistence, called AR(1) ("autoregressive of order 1"):
-each day's error is ρ times yesterday's plus something new. It also assumes the
-errors are normally distributed with the same size all year.
+The **error model** describes the best fit's daily errors (simulated minus
+measured temperature) with two numbers:
+
+- **σ** (sigma): their typical size, in °C (the root-mean-square error of the
+  calibration);
+- **ρ** (rho): their persistence, between 0 and 1. It says how much of today's
+  error carries over to tomorrow.
+
+pyair2stream uses the simplest model of persistence, called AR(1)
+("autoregressive of order 1"): each day's error is ρ times yesterday's error,
+plus something new. It also assumes that the errors are normally distributed,
+with the same size all year.
 
 ### Why persistence matters
 
@@ -165,72 +195,319 @@ size with ρ = 0.86, as pyair2stream generates them.*
 
 This matters because a compliance question is usually about several days: a
 7-day mean, a run of warm days, a summer peak. Errors that are new every day
-cancel out in an average; errors that persist do not (Figure 5). If the error
-model ignored persistence, the range for a 7-day mean would be far too narrow:
-on the Swiss rivers, 90% ranges for 7-day means made that way contained only
+cancel out in an average. Errors that persist do not (Figure 5). If the error
+model ignored persistence, the range for a 7-day mean would be far too narrow.
+On the Swiss rivers, 90% ranges for 7-day means made that way contained only
 39–62% of the measured values ([V5](../validation/REPORT.md#v5)).
 
-### How ρ is measured: "weekly", the default
+### Real errors have two memories
 
-Real errors have two memories at once: a fast part that fades within a few days
-and a slow part that lasts weeks (Figure 4), for example a summer when the model
-is slightly too warm throughout. An AR(1) process has only one memory, so a
-choice must be made:
+Figure 4 shows how long the real errors last. They have two parts:
 
-- **`rho_timescale: "weekly"` (the default)** chooses ρ so that the errors of
-  consecutive 7-day means are as correlated as they were in the calibration
-  (and never less persistent than consecutive days show). This follows the
-  persistence that matters for 7-day means and longer.
-- **`"daily"`** uses the correlation of consecutive days. It matches the fast
-  part and ignores the slow part.
+- **a fast part**, which fades within a day or two. This is the weather of a
+  single day that the model misses.
+- **a slow part**, which lasts weeks. This is, for example, a summer when the
+  model runs slightly warm throughout, a dry spell, or a change in the river
+  that the model does not represent.
+
+An AR(1) process has only one memory: its correlation falls by the same factor,
+ρ, every day. So one number cannot follow both parts. A choice must be made:
+which part should ρ follow?
 
 ![The correlation of the real errors falls quickly over the first days, then slowly over weeks; the daily-rho curve follows the first days only; the weekly-rho curve lies above the real one for ten days and below it after.](figures/U04_autocorrelation.png)
 
 *Figure 4. How long an error lasts on the Mentue: its correlation with the error
-k days later. The "daily" ρ (orange) captures only the first few days and says
-nothing lasts beyond a week or two. The default "weekly" ρ (blue) lies between
-the two parts: above the real correlation over the first ten days, below it
-after. No single ρ can follow both.*
+k days later. The "daily" ρ (orange) follows only the first few days, and says
+that nothing lasts beyond a week or two. The default "weekly" ρ (blue) lies
+between the two parts: above the real correlation over the first ten days,
+below it after. No single ρ can follow both.*
+
+What matters in practice is how errors behave when they are averaged over
+several days (Figure 5).
 
 ![Typical error of an average over 1 to 90 days: real errors decline slowly; independent errors decline fast; the weekly-rho curve is slightly above the real one up to a month and close to it at one to two months; the daily-rho curve falls below it beyond a week.](figures/U05_averaging.png)
 
-*Figure 5. The typical error of an average over 1 to 90 days. Errors that are
-new every day (dashed) average out quickly, which real errors (black) do not.
-The default "weekly" ρ (blue) is slightly wider than the real errors up to about
-a month (cautious) and close to them at one to two months; the "daily" ρ
-(orange) is close at a week but increasingly too narrow beyond it.*
+*Figure 5. The typical error of an average over 1 to 90 days, on the Mentue.
+Errors that are new every day (dashed) average out quickly. Real errors
+(black) do not. The default "weekly" ρ (blue) is slightly wider than the real
+errors up to about a month (cautious), and close to them at one to two months.
+The "daily" ρ (orange) is close at a week, but increasingly too narrow beyond
+it.*
 
-### When and how to use it
+### Two ways to measure ρ
 
-Always: it is built into every interval and probability. Keep the defaults
-(`noise_model: "ar1"`, `rho_timescale: "weekly"`). Use `"daily"` only to
-reproduce results from version 0.4.1 or earlier, or to show how much a
-conclusion depends on the choice. σ and ρ are recorded in the chain's
-`_meta.json`, and every `FORWARD` run reuses them, so the uncertainty does not
-depend on the data it is later checked against.
+Figure 6 shows the same errors read in two ways.
+
+![Top: eight weeks of daily errors, with the mean error of each 7-day window. Bottom: the daily estimate correlates consecutive days (0.70); the weekly estimate correlates consecutive 7-day means (0.52) and converts that to rho = 0.86; the default is the larger, 0.86, which sets the parameter ranges, the simulated errors and the cross-validation check.](figures/U15_rho_how.png)
+
+*Figure 6. How the two estimates of ρ are made, on the Mentue (version 8).*
+
+- **`"daily"`** correlates each day's error with the next day's. On the Mentue
+  this gives ρ = 0.70. It sees mostly the fast part.
+- **`"weekly"`** (the default) works in five steps:
+  1. Take every 7-day window in which all days were measured, starting on any
+     day of the week.
+  2. Average the error over the window, and over the 7 days that follow it.
+  3. Correlate the two averages, over all such pairs of windows. On the Mentue:
+     0.52.
+  4. Find the AR(1) whose 7-day averages would correlate that much (Figure 7,
+     left). On the Mentue: ρ = 0.86.
+  5. Use the larger of this value and the daily value.
+
+The weekly ρ is still the persistence from one day to the next of an AR(1).
+Only the way it is measured differs. It is chosen so that the simulated errors
+carry over from one week to the next as much as the real errors did.
+
+![Left: the curve that converts the correlation of consecutive 7-day means into rho, with the daily rho of 0.70 implying 0.25 and the measured 0.52 giving 0.86. Right: for six river and version cases, the measured correlation of consecutive 7-day mean errors (0.52 to 0.81) against what the daily rho implies (0.25 to 0.51).](figures/U16_rho_conversion.png)
+
+*Figure 7. Left: the conversion. If the errors were AR(1) with the daily
+ρ = 0.70, consecutive weeks would correlate only 0.25. They correlate 0.52.
+Right: the same on all three Swiss rivers, versions 5 and 8. Consecutive
+weeks' errors correlate 0.52–0.81, about twice what the daily ρ implies
+(0.25–0.51). That gap is the slow part.*
+
+### What changes, and what does not
+
+**A single day: almost nothing.** σ is the same, so the range for one day is
+almost the same. On the Swiss rivers, the test was years not used for
+calibration. There, 90% daily ranges held on 85.2–89.6% of days with the weekly
+ρ, and on 84.5–89.1% with the daily ρ ([V5](../validation/REPORT.md#v5)).
+
+**Averages over a week or more: a lot.** Figure 8 shows simulated errors with
+each ρ, made from the same random numbers. Day by day they look alike. Over a
+month they do not: the daily ρ averages the errors away.
+
+![Three panels over two years: real errors with their 30-day mean; AR(1) errors with the daily rho, whose 30-day mean stays close to zero; AR(1) errors with the weekly rho, whose 30-day mean drifts like the real one.](figures/U17_rho_series.png)
+
+*Figure 8. Same daily size, different persistence (Mentue). The typical error
+of a 30-day mean is 0.34 °C for the real errors, 0.26 °C with the daily ρ and
+0.37 °C with the weekly ρ.*
+
+Figure 9 and the table below show the same on all three rivers, for averages
+from 1 to 90 days. They also show two other ways to choose a single ρ, for
+comparison.
+
+![For averages over 1 to 90 days, the typical error each single-rho choice gives, divided by the real one, on six river and version cases: month-to-month persistence too wide; weekly closest to 1; matching the size of a 7-day mean and the daily rho too narrow beyond two weeks.](figures/U19_rho_scales.png)
+
+*Figure 9. The typical error of an average, as each choice of ρ gives it,
+divided by the real one. 1 is right. Above 1 the ranges are wider than needed;
+below 1 they are too narrow. Bands: the six river and version cases. Lines:
+their median.*
+
+| Averaging period | daily ρ | ρ matched to the size of a 7-day mean | weekly ρ (default) | ρ matched to month-to-month persistence |
+|---|---|---|---|---|
+| ρ itself | 0.70–0.86 | 0.73–0.88 | 0.86–0.95 | 0.94–0.96 |
+| 1 day | 1.00 | 1.00 | 1.00 | 1.00 |
+| 7 days | 0.94–0.98 | 1.00 | 1.09–1.17 | 1.09–1.26 |
+| 14 days | 0.84–0.90 | 0.90–0.94 | 1.08–1.17 | 1.09–1.38 |
+| 30 days | 0.70–0.77 | 0.75–0.81 | 1.02–1.11 | 1.07–1.46 |
+| 60 days | 0.60–0.68 | 0.65–0.73 | 0.94–1.07 | 1.07–1.46 |
+| 90 days | 0.58–0.70 | 0.62–0.76 | 0.91–1.15 | 1.16–1.42 |
+
+*The typical error of an average, as each choice gives it, divided by the real
+one: ranges over the three Swiss rivers, versions 5 and 8.*
+
+Reading it:
+
+- For a single 7-day mean, the daily ρ is about right in the calibration
+  years. The weekly ρ makes it 9–17% too wide, which is cautious.
+- Beyond two weeks, the daily ρ is too narrow, by about a third at 60–90 days.
+  The weekly ρ stays within about 10–15% of the real errors up to three months.
+- Yearly peaks, counts of warm days and probabilities that a limit was exceeded
+  depend on how errors hang together over a season. So they need the slow part
+  too.
+
+**The parameter ranges: wider.** ρ also sets how much information the
+calibration contains. With persistent errors, n measured days count as only
+n(1 − ρ)/(1 + ρ) independent ones (Figure 17, section 11). With the weekly ρ,
+the Mentue's 2,907 days count as about 220 instead of about 520. So the
+parameter ranges are about 1.5 times wider than with the daily ρ (1.5–1.8 times
+on the three rivers).
+
+**Where ρ is used:**
+
+| Where | What ρ does there |
+|---|---|
+| DE-MCMC: the parameter ranges | sets the effective number of independent days in the default likelihood |
+| DE-MCMC: the band for the calibration years | sets how long the random error added to each simulation lasts |
+| `FORWARD` runs with intervals | the same, for each of the 1,000 series, using the σ and ρ stored with the chain |
+| Cross-validation check (section 8) | the same, with each fold's own σ and ρ |
+| `likelihood: "exact"` (not the default) | always uses the daily ρ, because that likelihood removes the correlation of consecutive days |
+
+### Does it work? The evidence
+
+![For seven tests, the share inside the 90% range with the weekly and the daily rho: synthetic AR(1) errors, the same; synthetic fast plus slow errors, the weekly rho holds and the daily rho does not; real rivers, daily values the same, 7-day means and yearly statistics better with the weekly rho.](figures/U18_rho_evidence.png)
+
+*Figure 10. The validation suite's tests of the two choices: the share of
+cases inside the stated 90% range. For parameter ranges, above 90% is cautious
+and below is over-confident.*
+
+- **Errors that really are AR(1)** (made-up data,
+  [V4](../validation/REPORT.md#v4)). The weekly and daily estimates agree
+  (ρ = 0.70 and 0.69), and every result is the same. The weekly choice costs
+  nothing when there is no slow part.
+- **Errors with a fast and a slow part, built like the real ones** (made-up
+  data, V4 and [V9](../validation/REPORT.md#v9)). How often the 90% ranges
+  contained the truth:
+  - all parameter ranges: 98% with the weekly ρ, 89% with the daily ρ;
+  - the range of the seasonal timing `a7`: 90% against 70%;
+  - the ranges of yearly peaks and counts: 91–96% against 78–90%.
+- **Real rivers, years not used for calibration** (V5, V9). Daily values: the
+  same with both. 90% ranges for 7-day means held 89.1–93.6% of the time with
+  the weekly ρ, against 82.7–87.8% with the daily ρ. Ranges for yearly peaks
+  and counts held in 73–93% of river-years, against 53–87%.
+
+### When to use which
+
+| Situation | Setting |
+|---|---|
+| Any range or probability: intervals, limits, scenarios, cross-validation | `rho_timescale: "weekly"` (the default) |
+| Reproducing results made with version 0.4.1 or earlier | `rho_timescale: "daily"` |
+| Showing how much a conclusion depends on the choice | run both, and report both |
+| You know ρ from another source (expert use) | `uncertainty_options.ar1_rho` in a `FORWARD` run |
+
+The weekly estimate needs at least 140 pairs of complete 7-day windows a week
+apart: about 21 complete weeks of daily measurements. With fewer, or with
+measurements only every other day, the daily value is used, with a warning. A
+few years of daily measurements give thousands of pairs.
+
+### How to set it and check it
+
+```yaml
+uncertainty_options:
+  noise_model: "ar1"        # the default
+  rho_timescale: "weekly"   # the default; or "daily"
+```
+
+- DE-MCMC records `rho`, `rho_timescale` and `rho_likelihood` in
+  `MCMC_chain_*_meta.json`.
+- Every `FORWARD` run prints the ρ it uses, for example
+  `Using rho=0.8585 carried from calibration run ...`.
+- To check it at your site, run a cross-validation (section 8). In
+  `cv_interval_coverage.csv`, the 7-day mean column should be close to the
+  stated levels. In `cv_yearly_statistics_summary.csv`, the yearly statistics'
+  ranges should hold about as often as stated.
+
+### Questions and criticisms
+
+**Is this a standard method?** The parts are standard. AR(1) error models are
+widely used in hydrology (Sorooshian and Dracup, 1980; Schoups and Vrugt, 2010;
+Evin et al., 2014). The effect of persistence on averages is a textbook result
+(Bayley and Hammersley, 1946). Choosing the AR(1) to match how averages carry
+over from one week to the next is pyair2stream's own approximation. It is not
+published under this name. That is why it is explained in full here, tested
+in the validation suite (V4, V5, V9), and why the older choice is still
+available.
+
+**Why not use a model with two memories, a fast one and a slow one?** That is
+the better model, in principle. It is not implemented, for three reasons:
+
+- it adds two more numbers to estimate, alongside up to 8 model parameters;
+- a few years of data contain only a few dozen independent slow episodes, so
+  the size and length of the slow part would be poorly known;
+- the likelihood and the effective number of days would need new formulas,
+  which would need their own validation.
+
+The single weekly ρ meets the coverage targets in the tests. A model with two
+memories remains a possible future improvement.
+
+**Why a week, and not a day or a month?** Figure 9 answers this. Matching a
+day misses the slow part. Matching a month gives ρ = 0.94–0.96, and ranges up
+to 1.46 times too wide. A week is the shortest period over which the slow part
+dominates. The week-to-week match stays within about 0.9 to 1.2 of the real
+errors from 1 to 90 days. A few years of data also give thousands of
+pairs of weeks, so the estimate is stable. And many temperature standards are
+set on 7-day means.
+
+**Why match how the errors carry over between weeks, not the size of a weekly
+mean?** The size of one 7-day mean says nothing about whether the next week is
+likely to be off in the same direction. Yearly peaks, counts of warm days and
+monthly means depend on that. Matching the size of a 7-day mean (ρ =
+0.73–0.88) gets a single 7-day mean right, but it is too narrow for longer
+periods: 0.75–0.81 of the real error at 30 days (Figure 9).
+
+**Doesn't it get the first few days wrong?** A little. It overstates how
+strongly an error carries over to the next few days (Figure 4). This makes
+ranges for averages over 3 to 14 days 5–17% wider than needed. That errs on
+the side of caution. Single-day ranges are not affected.
+
+**Doesn't it make the parameter ranges too wide?** For some parameters, yes.
+One ρ sets the width of every parameter's range.
+
+- Parameters whose effect changes slowly over the year (the constant `a1`, the
+  seasonal size `a6` and timing `a7`) need the full allowance for slow errors.
+  With the daily ρ, the range of `a7` was too narrow: in the test, it contained
+  the truth 70% of the time instead of 90% (V4). With the weekly ρ it held
+  (90%).
+- Parameters whose effect changes from day to day (`a2`, `a3`) then get ranges
+  two to three times wider than they need.
+
+A range that is too wide errs on the side of caution. One that is too narrow
+claims more than the data show. Rely on the predictions, which held their
+stated levels, rather than on single parameter values (section 11).
+
+**Why take the larger of the daily and weekly values?** Two reasons. Errors are
+never less persistent than consecutive days show. And when the errors are only
+weakly correlated, the weekly estimate alone is imprecise; the daily value then
+sets a floor. For errors that really are AR(1), the two agree anyway (0.70 and
+0.69 in V4).
+
+**What if ρ comes out very high (0.99)?** Then the errors last for months. That
+usually means a systematic error, such as a bias in one season. pyair2stream
+warns when this happens. Look at the error by month (section 12), and try
+another model version.
+
+**Why not resample the real errors instead (a block bootstrap)?** Resampling
+blocks of the real errors would keep both memories without a model (Künsch,
+1989). But it needs a block length, which is the same kind of choice. Long
+blocks leave few independent blocks in a few years of data. And it cannot
+produce errors larger than those already seen. It is not implemented. It would
+be a reasonable cross-check.
+
+**Is ρ tuned to make the tests pass?** No. ρ is measured on the calibration
+years only, with a rule fixed in advance. Every `FORWARD` run, and every
+cross-validation fold, uses the σ and ρ measured on its own calibration data.
+The years the tests check were never used to set ρ.
+
+**Does it overlap with the correction of yearly statistics (section 9)?** No.
+ρ sets the *spread* of the simulations. The correction moves their *centre* by
+the model's average error in that statistic. They fix different things, and
+both are needed (V11 used both).
+
+**How much does my conclusion depend on it?** Run once more with
+`rho_timescale: "daily"` and compare. For single days, the answer hardly
+changes. For weekly or longer quantities, the daily setting gives narrower
+ranges and more extreme probabilities. If your conclusion changes between the
+two, say so.
 
 ### Limits
 
+- **One ρ cannot follow two memories.** The weekly ρ is slightly too wide for
+  averages over 3 to 14 days. Real errors that last for months (Figure 8, top)
+  are only partly reproduced.
 - **Heavier tails.** Real errors are occasionally larger than a normal
-  distribution allows. This hardly matters up to 95% intervals but matters at
+  distribution allows. This hardly matters up to 95% intervals, but matters at
   99% (section [13](#13-choosing-the-level-90-95-or-99)).
-- **The same size all year.** Real errors differ by season (on the Swiss rivers
-  by up to about a factor of two between months), while the error model uses
+- **The same size all year.** Real errors differ by season: on the Swiss
+  rivers, by up to about a factor of two between months. The error model uses
   one size for the whole year. Check the coverage in the season of your limit:
   validation V5 reports summer coverage separately.
 - **The past errors are assumed to describe the future ones.** In years unlike
-  the calibration years, errors are often somewhat larger (section [6](#6-daily-prediction-intervals)).
+  the calibration years, errors are often somewhat larger (section
+  [6](#6-daily-prediction-intervals)).
 
 ### What it rests on
 
-Describing model errors as autocorrelated and fitting them alongside the model
-is long established in hydrology (Sorooshian and Dracup, 1980; Schoups and
-Vrugt, 2010; Evin et al., 2014), and errors at several time scales are known to
+Describing model errors as autocorrelated, and fitting them alongside the
+model, is long established in hydrology (Sorooshian and Dracup, 1980; Schoups
+and Vrugt, 2010; Evin et al., 2014). Errors at several time scales are known to
 matter for aggregated quantities (McInerney et al., 2020). The variance of an
-average of correlated values (Figure 5) is a textbook result (Bayley and
-Hammersley, 1946). Choosing ρ at the weekly scale is pyair2stream's own,
-documented approximation; [METHODS §12](METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc)
-gives the reasoning and validation V4, V5 and V9 test it.
+average of correlated values (Figures 5 and 9) is a textbook result (Bayley and
+Hammersley, 1946). So is the effective number of independent values (Zwiers
+and von Storch, 1995). Choosing ρ at the weekly scale is pyair2stream's own,
+documented approximation.
+[METHODS §12](METHODS.md#error-persistence-how-it-is-estimated-and-why-the-weekly-scale) gives
+the formulas and the reasoning, and validation V4, V5 and V9 test it.
 
 ---
 
@@ -322,11 +599,11 @@ The daily band says how uncertain each day is on its own. It does not say how
 uncertain a 7-day mean, a yearly peak or a count of days is, because those depend
 on how the errors of successive days hang together. The only correct way is to
 compute the statistic in each of the 1,000 series, then take the range across
-series (Figure 6).
+series (Figure 11).
 
 ![Left: three simulated series wander inside the daily band. Right: the number of days above 18 °C in 2011, counted in each series, has a 90% range of 13 to 26 days; counting the days on which the band's lower or upper edge is above 18 °C would give 9 and 33.](figures/U06_band_vs_statistic.png)
 
-*Figure 6. Mentue, 2011. Counted series by series, the number of days above 18 °C
+*Figure 11. Mentue, 2011. Counted series by series, the number of days above 18 °C
 has a 90% range of 13 to 26 days, and 21 were measured. Counting the days on
 which the band's lower or upper edge is above 18 °C gives 9 and 33 days: a range
 almost twice as wide, and with no stated chance at all.*
@@ -441,12 +718,12 @@ statistic and records the share below the measured value: the **PIT**
 (probability integral transform). If the predictions are right, the measured
 value is equally likely to fall anywhere among the simulations, so over many
 years the PITs spread evenly between 0 and 1. Their pattern shows what is wrong
-when they do not (Figure 7). The share of years with a PIT between 0.05 and 0.95
+when they do not (Figure 12). The share of years with a PIT between 0.05 and 0.95
 is the coverage of the 90% range.
 
 ![Left: one year's simulations with the measured value at the 31st percentile. Right: four PIT histograms: flat (right), U-shaped (too narrow), humped (too wide), sloping (biased).](figures/U08_pit.png)
 
-*Figure 7. Left: one held-out year; 31% of the simulations lie below the measured
+*Figure 12. Left: one held-out year; 31% of the simulations lie below the measured
 value, so its PIT is 0.31. Right: what many years' PITs look like when the
 ranges are right, too narrow, too wide, or biased (illustration).*
 
@@ -455,14 +732,14 @@ ranges are right, too narrow, too wide, or biased (illustration).*
 Even a perfect 90% range does not contain exactly 90% of a handful of years,
 just as ten coin tosses rarely give exactly five heads. The summary therefore
 gives the range of shares that chance alone produces: with 10 years, anything
-from 7 to 10 inside a 90% range is consistent with a correct range (Figure 8).
+from 7 to 10 inside a 90% range is consistent with a correct range (Figure 13).
 A share outside that range is evidence that the ranges are wrong; a share inside
 it is no proof that they are right, only that the years available cannot show
 otherwise. With fewer than about 5 held-out years the check says little.
 
 ![Two bar charts of the chance of k years inside a correct 90% range: for 10 years, 7 to 10 are expected; for 48 years, 39 to 47.](figures/U09_chance.png)
 
-*Figure 8. How many years a correct 90% range contains by chance: 7–10 of 10
+*Figure 13. How many years a correct 90% range contains by chance: 7–10 of 10
 years, 39–47 of 48 (central 95% of outcomes).*
 
 ### The mean deviation: is the model biased in that statistic?
@@ -513,7 +790,7 @@ weather forecasting and hydrology (Dawid, 1984; Hamill, 2001; Gneiting et al.,
 
 The model's error on the hottest days of the year is not always its typical
 error. Calibrated on the whole year, it can put the summer peak systematically
-too high at one river and too low at another (Figure 9). Random error of the
+too high at one river and too low at another (Figure 14). Random error of the
 typical size cannot fix that: the predicted range is centred in the wrong place,
 so it misses the measured peak more often than it states. On the Swiss rivers,
 uncorrected 90% ranges for yearly statistics held in only 73–92% of 48 held-out
@@ -521,7 +798,7 @@ years per version ([V11](../validation/REPORT.md#v11)).
 
 ![Mean deviation of the yearly peak, with 95% intervals, for three rivers and two model versions; several intervals exclude zero, in both directions.](figures/U10_bias_at_peaks.png)
 
-*Figure 9. The model's average error in the yearly peak, in years held out by
+*Figure 14. The model's average error in the yearly peak, in years held out by
 cross-validation. Orange: a bias whose 95% interval excludes zero. Version 8
 puts the Mentue's peak 0.6–0.8 °C too high; version 5 puts the Rhône's too high
 and the Dischmabach's too low.*
@@ -540,7 +817,7 @@ and the Dischmabach's too low.*
 
 ![Left: deviations of seven held-out years, mean -0.65 °C with its 95% interval. Right: the 2011 highest 7-day mean before and after correction; the probability of exceeding 20 °C falls from 0.75 to 0.33; the measured value was 19.8 °C.](figures/U11_correction.png)
 
-*Figure 10. Example 03. Left: in the seven held-out years of 2003–2009 the
+*Figure 15. Example 03. Left: in the seven held-out years of 2003–2009 the
 measured highest 7-day mean was on average 0.65 °C below the prediction (95%
 interval 0.20–1.10 °C). Right: corrected, the probability that 2011 exceeded a
 20 °C limit falls from 0.75 to 0.33; the measured value was 19.8 °C, below the
@@ -615,14 +892,14 @@ band for the **change itself**.
 ### Why pairing matters
 
 Run alone, each scenario's range is wide, and the two overlap almost entirely
-(Figure 11, left). But most of that width is shared: a parameter set that makes
+(Figure 16, left). But most of that width is shared: a parameter set that makes
 one scenario warm makes the other warm too. Pairing the two runs, so that series
 number k uses the same parameter set and the same daily error in both, cancels
 everything they share. What remains is the uncertainty of the difference.
 
 ![Left: the June-August mean under both scenarios, two overlapping wide histograms. Right: the paired difference is +0.00 to +0.05 °C; an unpaired difference would be -0.57 to +0.63 °C.](figures/U12_paired.png)
 
-*Figure 11. Example 04. Left: each scenario's June–August 2011 mean, with a
+*Figure 16. Example 04. Left: each scenario's June–August 2011 mean, with a
 90% range 0.8 °C wide. Right: the change, paired, is 0.00 to +0.05 °C (90% range);
 subtracting unpaired series would give −0.57 to +0.63 °C and suggest that the
 change could go either way.*
@@ -677,13 +954,15 @@ What goes into it:
 - **The likelihood**: how well a parameter set explains the data. pyair2stream's
   default is the least-squares fit (as the original authors calibrated), with
   the number of days replaced by the **effective number of independent days**.
-  Persistent errors carry less information than independent ones (Figure 12):
+  Persistent errors carry less information than independent ones (Figure 17):
   on the Mentue, 2,907 measured days count as 221 independent ones. Without
-  that allowance the parameter intervals would be far too narrow.
+  that allowance the parameter intervals would be far too narrow. How ρ is
+  chosen, and what the choice does to these intervals, is in section
+  [5](#5-the-models-errors-their-size-and-how-long-they-last).
 
 ![Independent days per day measured fall from 1 at rho 0 towards 0 as rho approaches 1; at rho 0.86, 2907 days count as 221.](figures/U14_effective_n.png)
 
-*Figure 12. The effective sample size: with errors that persist (ρ = 0.86), 2,907
+*Figure 17. The effective sample size: with errors that persist (ρ = 0.86), 2,907
 days carry about as much information as 221 independent ones.*
 
 ### Has it converged?
@@ -708,7 +987,7 @@ meaningful only for parameters where zero means "no effect": `a2`, `a4`, `a5`,
 
 ![Left: a2 and a3 from the chain lie along a narrow diagonal (correlation 0.99). Right: the histogram of a7 with its 90% interval 0.590 to 0.613.](figures/U13_parameters.png)
 
-*Figure 13. Example 03. Left: `a2` and `a3` trade off; many combinations along
+*Figure 18. Example 03. Left: `a2` and `a3` trade off; many combinations along
 the diagonal fit almost equally well. Right: the seasonal timing `a7` is fixed
 precisely (90% interval 0.590–0.613).*
 
@@ -802,12 +1081,12 @@ report it.
 A central L% range should miss the truth (100 − L)% of the time: a 90% range
 about 1 time in 10, a 95% range 1 in 20, a 99% range 1 in 100. For normally
 distributed errors, the half-width grows from 1.64 σ (90%) to 1.96 σ (95%) and
-2.58 σ (99%) (Figure 14). The higher the level, the more it depends on the rare,
+2.58 σ (99%) (Figure 19). The higher the level, the more it depends on the rare,
 large errors, which are the hardest to describe.
 
 ![A normal curve with the 50, 80, 90, 95 and 99% central ranges and their half-widths in multiples of sigma.](figures/U07_levels.png)
 
-*Figure 14. Central ranges of a normal distribution.*
+*Figure 19. Central ranges of a normal distribution.*
 
 ### Setting it
 
@@ -833,7 +1112,7 @@ range you quote beside it.
 
 ![Stated against achieved coverage on the real rivers: days, summer days and 7-day means.](../validation/figures/V5_levels.png)
 
-*Figure 15. Real rivers, later validation years (V5): stated level against the
+*Figure 20. Real rivers, later validation years (V5): stated level against the
 share of measurements inside. On the dashed diagonal the ranges hold; the shaded
 area is the accepted range (a miss rate between half and 1.5 times the stated
 one).*
@@ -945,13 +1224,13 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 ## 16. A worked example, from data to a statement
 
 [Example 03](../examples/03_compliance/README.md) does all of this on the
-Mentue. In short:
+Mentue. `python examples/03_compliance/run.py` runs these three steps, then
+computes the statistics, the correction and the table:
 
 ```bash
 pyair2stream --config examples/03_compliance/calibrate.yaml   # DE-MCMC on 2002-2009: parameters, σ, ρ
 pyair2stream --config examples/03_compliance/predict.yaml     # FORWARD on 2010-2012: 1,000 series
 pyair2stream --config examples/03_compliance/check.yaml       # cross-validation of 2002-2009
-python examples/03_compliance/run.py                          # statistics, correction, table
 ```
 
 | Year | P(7-day mean > 20 °C), corrected | uncorrected | Measured highest 7-day mean |
@@ -972,15 +1251,15 @@ ranges.
 
 | Mistake | Why it is wrong | Instead |
 |---|---|---|
-| Reading a weekly mean, a yearly peak or a count of days off the daily band | the band's edges are not the edges of those statistics (Figure 6) | compute the statistic in each series (section [7](#7-weekly-means-yearly-peaks-days-above-a-limit)) |
+| Reading a weekly mean, a yearly peak or a count of days off the daily band | the band's edges are not the edges of those statistics (Figure 11) | compute the statistic in each series (section [7](#7-weekly-means-yearly-peaks-days-above-a-limit)) |
 | `noise_model: "iid"` for multi-day quantities | errors that are new every day average out, so ranges are far too narrow (Figure 5) | keep `"ar1"` |
-| Reporting an uncorrected probability for a yearly statistic | the model can be biased at the peaks (Figure 9) | check and correct (sections [8](#8-testing-on-years-the-model-has-not-seen-cross-validation), [9](#9-correcting-yearly-statistics-for-the-models-bias)) |
+| Reporting an uncorrected probability for a yearly statistic | the model can be biased at the peaks (Figure 14) | check and correct (sections [8](#8-testing-on-years-the-model-has-not-seen-cross-validation), [9](#9-correcting-yearly-statistics-for-the-models-bias)) |
 | Correcting only when the check shows a bias | the result then steers the method | always correct yearly statistics |
-| Calling 8 of 10 years inside a 90% range a failure | chance alone gives 7–10 (Figure 8) | compare with the range expected by chance |
-| Subtracting two scenario runs that used different parameter sets | the shared uncertainty does not cancel (Figure 11) | `reuse_sample_indices_from` and `paired_difference_from_files` |
+| Calling 8 of 10 years inside a 90% range a failure | chance alone gives 7–10 (Figure 13) | compare with the range expected by chance |
+| Subtracting two scenario runs that used different parameter sets | the shared uncertainty does not cancel (Figure 16) | `reuse_sample_indices_from` and `paired_difference_from_files` |
 | Recomputing `Qmedia` from scenario flows | it cancels the flow change | `paths.calibration_metadata` |
 | Using the `std` row of `cv_results.csv` as a parameter uncertainty | the folds share most of their data | the jackknife rows |
-| Combining the ends of several parameter intervals | parameters trade off (Figure 13) | rely on predictions |
+| Combining the ends of several parameter intervals | parameters trade off (Figure 18) | rely on predictions |
 | Quoting a 99% daily interval unchecked | real errors have heavier tails | check its coverage at your site (section [13](#13-choosing-the-level-90-95-or-99)) |
 | Checking a band only on the days the limit was exceeded | those days were chosen partly because their error was positive: even a correct 90% band is exceeded there far more often than 10% of the time (V14) | check on the days predicted to be hottest, or with the hottest air |
 | Using an unconverged chain | its parameter sets are not a valid sample | more steps or a simpler version |

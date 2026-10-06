@@ -3,123 +3,143 @@
 [![License: CC BY-SA 3.0](https://img.shields.io/badge/License-CC_BY--SA_3.0-lightgrey.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
 
-`pyair2stream` predicts the **daily mean water temperature of a river** from daily
-air temperature and (optionally) river discharge. It is a Python version of
-**air2stream** (Toffolon and Piccolroaz, 2015), a widely used model that fits a
-small physically based equation to your site's own measurements.
+`pyair2stream` predicts the **daily mean water temperature of a river**. It
+needs daily air temperature and, for some model versions, daily river flow
+(discharge). It is a Python version of **air2stream** (Toffolon and
+Piccolroaz, 2015), a widely used model. The model is one small equation, based
+on the physics of a river's heat budget. You fit it to measurements from your
+own site.
 
-Typical uses: filling gaps in a water temperature record, checking what a river's
-temperature would have been under different flows (for example with and without
-water abstraction), projecting temperatures under future climate, and asking
-whether a site is likely to meet a temperature limit, with an uncertainty band.
+You can use it to:
 
-> This is a community port, not the official release by the model's authors. It
-> reproduces the original Fortran results (see [Is it correct?](#is-it-correct))
-> and adds features listed below.
+- fill gaps in a water temperature record;
+- see how a river's temperature would change with a different flow, for
+  example with and without a water abstraction;
+- project water temperature under a future climate;
+- estimate how likely it is that a temperature limit was exceeded, with an
+  uncertainty range.
 
-## What it does
-
-- **Calibrates** the model's 3–8 parameters to your observed water temperature
-  (Differential Evolution by default; also Particle Swarm and Latin Hypercube).
-- **Validates** it on a separate period you supply.
-- **Quantifies uncertainty** in the parameters and gives prediction intervals
-  (`DE-MCMC`), including for new scenarios.
-- **Runs scenarios** with fixed parameters (`FORWARD`), and compares two
-  scenarios with an uncertainty band on the difference.
-- Handles **gaps** in air temperature or discharge (gap-tolerant mode),
-  **cross-validation** by year (with confidence intervals for the parameters,
-  and a check that predicted ranges of yearly statistics hold), and
-  **sensitivity analysis**.
-- Uses a **YAML config file and CSV files**, and writes CSV results and plots.
+> pyair2stream is a community port. The authors of the original model did not
+> write it and do not maintain it. It gives the same results as the original
+> Fortran program ([Is it correct?](#is-it-correct)) and adds new features.
 
 ## Install
 
-Requires Python 3.9 or newer.
+You need Python 3.9 or newer. It is tested on Python 3.9, 3.12 and 3.14.
 
 ```bash
 git clone https://github.com/LukeAFullard/pyair2stream.git
 cd pyair2stream
 pip install .
+pyair2stream --help        # check that it installed
 ```
 
-## Quick start
+## Try it
 
-Calibrate the model on a real Swiss river and test it on later years (under a
-minute), from the repository's top folder:
+Run this from the repository's top folder:
 
 ```bash
 pyair2stream --config examples/01_quickstart/config.yaml
 ```
 
-Results and plots appear in `examples/01_quickstart/output/`; the
+It takes under a minute. It fits the model to 2002–2009 data from the Mentue, a
+small Swiss river. Then it tests the model on 2010–2012, years the fit did not
+use. The results and plots go to `examples/01_quickstart/output/`. The
 [example's README](examples/01_quickstart/README.md) explains them.
 
-To use your own data:
+## Use your own data
 
-1. Make a CSV with one row per day: `Date`, `T_air`, `T_water`, `Discharge`
-   (see [Input data](#input-data)).
-2. Write a `config.yaml` like the one below.
-3. Run `pyair2stream --config config.yaml`.
+There are four steps: prepare the data, write a settings file, run, and read
+the results.
+
+### 1. Prepare your data
+
+Make a CSV file with one row per day:
+
+```csv
+Date,T_air,T_water,Discharge
+2020-01-01,5.2,4.1,12.5
+2020-01-02,4.8,,11.8
+2020-01-03,6.1,4.0,10.2
+```
+
+| Column | Needed? | What it holds |
+|---|---|---|
+| `Date` | always | the date, for example `2020-01-31` |
+| `T_air` | always | daily mean air temperature (°C) |
+| `T_water` | always | daily mean measured water temperature (°C); gaps are fine |
+| `Discharge` | for versions 4, 7 and 8 | daily mean flow, in any unit; it must be above zero |
+
+The rules:
+
+- Give a row for **every** day. Leave a missing value blank, or write `-999`.
+- `T_air` and `Discharge` must have no gaps. If yours have gaps, see
+  [example 05](examples/05_gaps/README.md).
+- The file must start on 1 January and cover at least a year. Several years
+  are better.
+
+Make two files. The model is fitted to the first, the **calibration** file. The
+second, the **validation** file, holds a few other years. The model never sees
+their water temperatures, so they show how well it predicts.
+
+### 2. Write a settings file
+
+The settings go in a YAML file, for example `config.yaml`:
 
 ```yaml
 project_name: "my_river"
 station_name: "Station_A"
 version: 8                 # model version: 3, 4, 5, 7 or 8 (see below)
-run_mode: "DE"             # calibrate with Differential Evolution
-random_seed: 42            # makes results exactly repeatable
+run_mode: "DE"             # fit the model (Differential Evolution)
+random_seed: 42            # gives the same result every time
 
 paths:
   input_data: "data/calibration.csv"
-  validation_data: "data/validation.csv"   # optional
+  validation_data: "data/validation.csv"
   output_dir: "output"
 
-optimization:
-  n_run: 100               # maximum generations
-  n_particles: 10          # population = 10 x 8 parameters
-
-parameter_bounds:          # search ranges for a1..a8 (original authors' ranges)
+parameter_bounds:          # search ranges for the 8 parameters a1..a8
   min: [-5, -5, -5, -1, 0,  0,  0, -1]
   max: [15, 1.5, 5,  1, 20, 10, 1,  5]
 ```
 
-Everything not set uses a sensible default (for example the stable `CRN`
-integrator and the NSE objective). The [User Guide](USER_GUIDE.md#6-configuration-reference)
-lists every option.
+The bounds above are the original authors' ranges and a good start. Any
+setting you leave out has a safe default. The
+[User Guide](USER_GUIDE.md#6-configuration-reference) lists every setting.
 
-## Did a site meet a temperature limit?
+### 3. Run it
 
-The usual route, each step a worked example:
+```bash
+pyair2stream --config config.yaml
+```
 
-1. **Check the model fits your river**: calibrate on years with measured water
-   temperature and check it predicts other years well ([example 01](examples/01_quickstart/README.md)).
-2. **Measure its uncertainty** with `run_mode: "DE-MCMC"`, and check that its
-   ranges hold on years it was not calibrated on ([example 02](examples/02_uncertainty/README.md)).
-3. **Simulate the period in question** 1,000 times with `FORWARD` and
-   `save_ensemble: true`. Work out the quantity your limit is defined on (for
-   example the highest 7-day mean) in each simulation; the share above the limit
-   is the probability that it was exceeded ([example 03](examples/03_compliance/README.md)).
-4. **Check that quantity by cross-validation** of the calibration years, and
-   correct it for the model's bias on the hottest days
-   (`cv_yearly_statistics.csv`, `scenario.correct_statistic`; example 03).
-5. **Report a probability with its range and the check**, not a yes or no,
-   together with the checks in [User Guide §14](USER_GUIDE.md#14-checklist-for-results-that-support-a-decision).
+The paths in the settings file are relative to the folder you run this from.
 
-The model gives daily **means**: a limit on daily maxima needs a separate,
-justified step.
+### 4. Read the results
 
-## Input data
+Start with these files in the output folder:
 
-| Column | Required | Notes |
-|---|---|---|
-| `Date` | yes | one row for every calendar day, e.g. `2020-01-31` |
-| `T_air` | yes | daily mean air temperature (°C); no gaps unless `gap_tolerant: true` |
-| `T_water` | yes | daily mean water temperature (°C); gaps allowed |
-| `Discharge` | versions 4, 7, 8 | daily mean flow (any unit); no gaps, > 0 |
+| File | What it tells you |
+|---|---|
+| `goodness_of_fit_validation_*.csv` | how well the model predicts the validation years. **This is the score that matters.** |
+| `validation_*.png` | measured and simulated temperature over time. Look for long stretches where the model is too warm or too cool. |
+| `bias_by_month_validation_*.png` | the average error in each month. Is the model off in one season? |
+| `1_*.out` | the fitted parameters (line 1), then the calibration and validation scores |
+| `calibration_metadata.json` | what later runs need: the parameters, the mean discharge and the settings |
 
-Leave missing values blank or write `-999`. Calibration and validation files must
-start on 1 January and cover at least a year.
+How to judge the scores:
 
-## Model versions
+- **NSE**: 1 is perfect, and 0 is no better than always guessing the average.
+  Above 0.9 is common for this model.
+- **RMSE**: the typical daily error, in °C. In example 01 it is 0.63 °C in
+  the calibration years and 0.78 °C in the validation years.
+- The validation score is usually a little worse than the calibration score.
+  If it is much worse, the model does not predict well.
+
+[User Guide §8](USER_GUIDE.md#8-understanding-the-output-files) explains every
+output file.
+
+## Which model version?
 
 | Version | Parameters | Uses discharge | Seasonal term |
 |:-:|:-:|:-:|:-:|
@@ -129,193 +149,116 @@ start on 1 January and cover at least a year.
 | 7 | 7 | yes | yes |
 | 8 | 8 | yes | yes |
 
-Start with version 8 if you have good discharge data (or 5 if not), and compare
-with simpler versions: prefer the simplest one that performs well on the
-validation period. The equation is given in [docs/METHODS.md](docs/METHODS.md#5-the-equation-and-model-versions).
+Start with version 8 if you have good discharge data, or version 5 if not.
+Then try simpler versions. Choose the simplest one that predicts the
+validation years well. If the river's summer temperature depends strongly on
+its flow, use version 7 or 8. [docs/METHODS.md](docs/METHODS.md#5-the-equation-and-model-versions)
+gives the equation.
 
-## Outputs
+## Going further
 
-| File | Contents |
+Six worked examples use real data from a Swiss river. Each has a README that
+explains the steps and the results ([examples/README.md](examples/README.md)).
+
+| Example | Question |
 |---|---|
-| `1_*.out` | best parameters (line 1), calibration score (line 2), validation score (line 3) |
-| `2_*.csv`, `3_*.csv` | daily observed and simulated water temperature, calibration and validation periods |
-| `goodness_of_fit_*.csv` | N, NSE, R², RMSE, MAE, AIC, BIC for each period |
-| `calibration_*.png`, `validation_*.png`, `full_simulation_*.png` | time-series plots with residuals |
-| `predicted_vs_measured_*.png`, `residual_diagnostics_*.png` | scatter plot; residual histogram, Q-Q and autocorrelation |
-| `bias_by_month_*.csv` / `.png` | mean error by month and season, with 95% intervals: is the model off in one season? |
-| `convergence_*.png`, `dottyplots_*.png`, `0_*.csv` | every parameter set tried during calibration |
-| `calibration_metadata.json`, `parameters.txt` | `Qmedia`, bounds and settings used, needed for later scenario runs |
-| `MCMC_*`, `Forward_Prediction_*`, `parameter_significance_*` | uncertainty results (`DE-MCMC` and `FORWARD` with intervals) |
-| `cv_results.csv`, `cv_yearly_statistics*.csv` | cross-validation: scores and parameters by held-out year; whether the ranges of yearly statistics held, and the model's bias in them |
-| `sensitivity_*`, `gaps_summary.txt` | optional analyses |
+| [01 Quickstart](examples/01_quickstart/README.md) | Does the model reproduce this river, also in years it was not fitted to? |
+| [02 Uncertainty](examples/02_uncertainty/README.md) | What range of temperatures should we expect, and does that range hold? |
+| [03 Compliance](examples/03_compliance/README.md) | How likely is it that a temperature limit was exceeded? |
+| [04 Scenario](examples/04_scenario/README.md) | What difference would taking 30% of the flow make? |
+| [05 Gaps](examples/05_gaps/README.md) | What should I do about missing data? |
+| [06 Cross-validation](examples/06_cross_validation/README.md) | Does the model predict every year well? Which version should I use? |
 
-Details: [User Guide §8](USER_GUIDE.md#8-understanding-the-output-files).
+**Was a temperature limit exceeded?** Examples 01 to 03 show the usual route:
+
+1. Check that the model predicts your river well (example 01).
+2. Measure its uncertainty with `run_mode: "DE-MCMC"` (example 02).
+3. Simulate the period 1,000 times. The share of simulations above the limit
+   is the probability that it was exceeded (example 03).
+4. Check that answer on the years you calibrated on, and correct it for the
+   model's error on the hottest days (cross-validation, example 03).
+5. Report a probability with its range and the check, not a yes or no. Work
+   through the checklist in [User Guide §14](USER_GUIDE.md#14-checklist-for-results-that-support-a-decision).
+
+The model gives daily **means**. A limit on daily maximum temperature needs an
+extra step, which you must justify.
 
 ## Documentation
 
-- **[USER_GUIDE.md](USER_GUIDE.md)** — how to prepare data, configure, run, read
-  the results, and fix common errors.
-- **[docs/METHODS.md](docs/METHODS.md)** — exactly what the software does, step
-  by step, its assumptions and limitations, and how it differs from the Fortran.
-  Read §16 there before using results to support a decision.
-- **[docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md)** — the published
-  air2stream results pyair2stream reproduces, and the errors found in those
-  publications.
-- **[docs/UNCERTAINTY.md](docs/UNCERTAINTY.md)** — the uncertainty statistics
-  and tests explained for water quality scientists: what each means, when, why
-  and how to use it, what it rests on, and how to defend it.
-- **[validation/REPORT.md](validation/REPORT.md)** — the evidence that it works.
-- [CHANGELOG.md](CHANGELOG.md) — changes between versions.
+| If you want to... | Read |
+|---|---|
+| prepare data, choose settings, run the model and read the results | [USER_GUIDE.md](USER_GUIDE.md) |
+| follow a worked example | [examples/](examples/README.md) |
+| understand the uncertainty ranges and probabilities | [docs/UNCERTAINTY.md](docs/UNCERTAINTY.md) |
+| know exactly what the software computes, and its limits | [docs/METHODS.md](docs/METHODS.md) (read §16 before using results for a decision) |
+| see the evidence that it works | [validation/REPORT.md](validation/REPORT.md) |
+| see which published results it reproduces, and the errors found in them | [docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md) |
+| see what changed between versions | [CHANGELOG.md](CHANGELOG.md) |
 
 ## Is it correct?
 
-The [validation suite](validation/README.md) checks this, and its results are in
+A [validation suite](validation/README.md) tests this. Its results are in
 [validation/REPORT.md](validation/REPORT.md). In short:
 
-- **Same results as the original Fortran**, on real river data, for all five
-  model versions and every solution scheme the Fortran has (to 5×10⁻⁶ °C, the
-  precision of the Fortran's output). Both programs also compute the same
-  calibration scores (RMS, NSE, KGE) from the same daily, weekly and monthly
-  averages, with and without gaps in the record.
-- **Reproduces the published results.** For three Swiss rivers (Piccolroaz et
-  al., 2016), the published parameters give the published calibration and
-  validation errors, all 30 of them to within 0.001 °C. Recalibrating with `DE`
-  returns the published parameters for versions 3, 4 and 5 (to within 1% of
-  their ranges, apart from one flat trade-off on the Rhône) and for versions 7
-  and 8 on the Dischmabach. For versions 7 and 8 on the other two rivers it
-  finds a slightly better fit than the published one, with different
-  parameters but the same predictions (to 0.002 °C). The original program,
-  given both sets, computes the same errors as pyair2stream and agrees that
-  the new ones fit better, so the difference is not a bug. Those published
-  values cannot be reproduced exactly by anyone: the original program itself,
-  run with its distributed settings, returns different parameters on every run
-  there, because its optimiser stops at a different point each time. The published
-  parameters belong to the Crank–Nicolson scheme the paper used: with RK4, 8 of
-  the 15 sets are unstable and the rest give different errors. Calibrating with
-  RK4 comes close to the published parameters (within 1% of their ranges) only
-  where the water temperature responds slowly: the Mentue, versions 3–5.
-  The first air2stream paper (Toffolon and Piccolroaz, 2015) published other
-  parameters for the same rivers, computed with RK4: with RK4, pyair2stream
-  reproduces all 30 of its errors within their rounding, and its RK4
-  calibration returns those parameters in all 15 cases
-  ([V13](validation/REPORT.md#v13)).
-- **Finds a known truth.** On data made by the model from known parameters,
-  calibration predicts other years to within 0.04 °C of the truth (0.06 °C
-  with typical gaps in the data).
-- **Honest intervals, with known limits.** On such data, 90% prediction
-  intervals contain 89–90% of new observations, and 90% parameter intervals
-  contain the true values 89–97% of the time, also when calibrating on weekly
-  means with `a2` and `a3` bounded at 0 (without that bound, 9 of 30 such
-  calibrations ended on a meaningless set that zigzags from day to day, which
-  pyair2stream now warns about). On the real rivers, with the
-  default settings, prediction intervals contain 85–89.6% of daily values in
-  years not used for calibration, so they are slightly optimistic. With three
-  of the other settings tested, the Rhône with version 5 falls just below the
-  report's 85% threshold (84.5–85.0%), so that check is marked as failed. For
-  7-day means the default intervals contain 89–94% of observed values, against
-  83–88% with `rho_timescale: "daily"` and 39–62% with `noise_model: "iid"`:
-  model errors also have a part that lasts for weeks
-  ([docs/METHODS.md §12](docs/METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc)).
-- **Any interval level, with a known record.** The level of every range can be
-  chosen (90% by default). On synthetic data intervals held at every level from
-  50% to 99%. On the real rivers, over 48 held-out years per version, daily
-  intervals held from 50% to 95% (95%: 94.4–94.5% of days) and 7-day means at
-  every level, but 99% daily intervals held only 98.0–98.2% of days (the
-  errors have heavier tails than assumed), and in the later validation years
-  95% intervals held 91–95%. Check the level you report at your site
-  (`cv_interval_coverage.csv`).
-- **The published parameters and the intervals.** The published parameters lie
-  inside pyair2stream's 90% parameter intervals for versions 3–5 on all three
-  rivers, for version 7 on the Rhône and for every version on the Dischmabach.
-  For versions 7 and 8 on the Mentue and version 8 on the Rhône several lie
-  outside. These are the cases above where recalibration finds a slightly
-  better fit with different parameters: many combinations fit almost equally
-  well, and the published set is one of them.
-- **Probabilities that a limit was exceeded: right in principle, checked and
-  corrected in practice.** On synthetic data the stated chances come true as
-  often as they say. On the real rivers the model can be biased on the hottest
-  days (on the Mentue, version 8's yearly peaks came out 0.6–0.8 °C too high),
-  so over 48 held-out years per version the uncorrected 90% ranges for yearly
-  statistics (highest daily mean, highest 7-day mean, days above a threshold)
-  held in only 73–92% of years. A cross-validation of the calibration years
-  measures that bias, and correcting for it brought the 90% ranges to 85–94%
-  ([V11](validation/REPORT.md#v11)); ranges for the highest daily mean stay the
-  least reliable. Version 8's probabilities were closer to what happened than
-  going by how often the limit was exceeded in past years, more so after the
-  correction ([V9](validation/REPORT.md#v9)).
-  Version 5, which has no discharge term, could not follow the year-to-year
-  changes of the Rhône's summer peaks.
-- **Warmer and lower-flow years.** Calibrated only on the coolest (or
-  highest-flow) third of the years, the model predicted the warmest (or
-  lowest-flow) third almost as well as when calibrated on the middle third (at
-  most 0.07 °C worse) and better than the simple alternatives, with 90%
-  intervals containing 84–92% of the measurements. The exception is version 5
-  on the Rhône, which does no better than the simple alternatives whichever
-  years it is calibrated on. On rivers like the Rhône, use a version with
-  discharge (7 or 8).
-- **An independent group's results, day by day.** Callahan and Moore (2025)
-  published the parameters, inputs and simulated water temperatures of
-  air2stream for 23 rivers in British Columbia, including the 2021 heat dome
-  ([dataset](https://doi.org/10.5281/zenodo.14502248)). Given their parameters
-  and inputs, pyair2stream computes 45 of their 46 simulated series to within
-  0.00013 °C on every day. The 46th is a calibration record starting on
-  1 November that their run read as if it started on 1 January, putting the
-  seasonal cycle ten months out of phase; read that way, pyair2stream
-  reproduces it too ([V15](validation/REPORT.md#v15)). Its own calibration
-  reaches other parameter values, fitting as well or better, but at the 19
-  stations where its uncertainty intervals could be computed, 137 of the 152
-  published values lie inside them: many combinations fit these data. The
-  exception is one station whose published calibration is far from the best
-  fit; recalibrated, it predicts 2021–2022 with RMSE 0.76 °C instead of
-  1.09 °C. That error, and those
-  found in the other two papers, are documented in
-  [docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md).
-- **On the hottest days.** In held-out years, on the 10% of days predicted to
-  be hottest, version 8's 90% intervals held on 91% of days. Version 5's held
-  on only 84%: without a discharge term it predicted its hottest days about
-  0.5 °C too warm ([V14](validation/REPORT.md#v14)). Check intervals on hot
-  days by choosing the days from the prediction or the air temperature, not
-  from the measurements.
-- **A fair cross-validation.** It hides a year's water temperatures and
-  predicts the year from its own air temperature and discharge, the standard
-  design. Hiding those inputs from the calibration too, or leaving two months
-  unused around the year, changed no held-out year's error by more than
-  0.04 °C ([V12](validation/REPORT.md#v12)). Calibrating on earlier years only
-  was as accurate, but its 90% intervals held on 87% of days rather than 90%:
-  for predictions of future years, the later-years tests above are the
-  relevant ones.
-- **Scenario tools give exact answers** where the answer is known.
+- **Same results as the original program.** It computes the same water
+  temperatures as the original Fortran program, to 5×10⁻⁶ °C, for every model
+  version and solution method ([V1](validation/REPORT.md#v1)).
+- **Reproduces published results.** The model's authors published results for
+  three Swiss rivers, in 2015 and 2016. Given their parameters, pyair2stream
+  reproduces all 30 published errors of each paper
+  ([V2](validation/REPORT.md#v2), [V13](validation/REPORT.md#v13)). It also
+  reproduces an independent group's simulations for 23 rivers in British
+  Columbia, day by day. One of their 46 series matches only when a date error
+  in their run is copied ([V15](validation/REPORT.md#v15)).
+- **Finds errors in those publications.** Each of the three studies has an
+  error or a missing detail. [docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md)
+  lists them, with the evidence.
+- **Finds a known answer.** On data made by the model from known parameters,
+  the fitted model predicts other years to within 0.04 °C
+  ([V3](validation/REPORT.md#v3)).
+- **Honest uncertainty ranges.** On such data, 90% ranges contain the truth
+  about 90% of the time ([V4](validation/REPORT.md#v4)). On real rivers, in
+  years not used for fitting, they held on 85–89.6% of days. So they are
+  slightly too narrow for new years ([V5](validation/REPORT.md#v5)).
+- **Probabilities need the check.** The model can be too warm on the hottest
+  days. So uncorrected ranges for yearly peaks held in only 73–92% of years.
+  The cross-validation check and correction brought this to 85–94%
+  ([V11](validation/REPORT.md#v11)).
+- **Warmer and lower-flow years.** Fitted on the coolest years, the model
+  predicted the warmest years almost as well: at most 0.07 °C worse. The same
+  held when it was fitted on the highest-flow years and tested on the
+  lowest-flow years ([V10](validation/REPORT.md#v10)).
+- **Where it falls short.** Four checks do not meet all their criteria: V5,
+  V9, V10 and V14. The main reasons are:
+  - 95% and 99% ranges were too narrow in some years not used for fitting;
+  - version 5 (no discharge) does poorly on the Rhône, a river whose summer
+    temperature depends on its flow;
+  - on the hottest days of the three Swiss rivers, version 5's 90% ranges held
+    on only 84% of days. Version 8's held on 91%.
 
-To run the tests and the validation suite (needs `gfortran`):
+  The report gives the details.
+
+To run the tests and the validation suite (V1 needs `gfortran`):
 
 ```bash
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # or without --quick: the full suite, about 116 minutes
+python validation/run_all.py --quick     # about 2 minutes; the full suite takes about 2 hours
 ```
-
-## Examples
-
-Worked examples on a real river, each with a README
-([examples/README.md](examples/README.md)):
-
-| Example | Question |
-|---|---|
-| [01 Quickstart](examples/01_quickstart/README.md) | Can the model reproduce this river, including years it was not calibrated on? |
-| [02 Uncertainty](examples/02_uncertainty/README.md) | What range of temperatures should we expect, and does the range hold? |
-| [03 Compliance](examples/03_compliance/README.md) | How likely is it that a temperature limit was exceeded? |
-| [04 Scenario](examples/04_scenario/README.md) | What difference would abstracting 30% of the flow make? |
-| [05 Gaps](examples/05_gaps/README.md) | What to do with missing data |
-| [06 Cross-validation](examples/06_cross_validation/README.md) | Does the model predict every year well? How firmly do the data fix the parameters? Which version to use? |
 
 ## Differences from the original Fortran
 
-Results match the Fortran for the same settings. The main differences are safer
-defaults (the stable `CRN` integrator and the DE optimizer), checks that stop
-with a clear error instead of producing silently wrong numbers, `Qmedia` kept
-fixed at its calibration value for validation and scenario runs, and the added
-features above. Full list: [docs/METHODS.md §17](docs/METHODS.md#17-differences-from-the-fortran-original).
+With the same settings, the results match the Fortran. The main differences:
+
+- safer defaults: the stable `CRN` solution method and the DE optimiser;
+- clear errors instead of silently wrong numbers, for example for missing days
+  or zero flow;
+- the mean discharge (`Qmedia`) of the calibration is kept for validation and
+  scenario runs, instead of being recomputed;
+- new features: uncertainty, scenarios, gaps, cross-validation and more.
+
+The full list is in [docs/METHODS.md §17](docs/METHODS.md#17-differences-from-the-fortran-original).
 
 ## Citing
 
@@ -325,11 +268,17 @@ Please cite the original model:
 > temperature as a function of air temperature and discharge. *Environmental
 > Research Letters*, 10(11), 114011. https://doi.org/10.1088/1748-9326/10/11/114011
 
-and record the pyair2stream version you used. `pyair2stream` has no tagged
-releases yet, so give the git commit (`git rev-parse HEAD`), e.g.:
+Also record the pyair2stream version you used. There are no tagged releases
+yet, so give the git commit (`git rev-parse HEAD`), for example:
 
 > Water temperatures were simulated with pyair2stream
 > (https://github.com/LukeAFullard/pyair2stream, commit `<sha>`).
+
+## Help
+
+To report a problem or ask a question, open an issue on
+[GitHub](https://github.com/LukeAFullard/pyair2stream/issues). Please include
+your settings file, the full error message and the pyair2stream commit.
 
 ## License
 

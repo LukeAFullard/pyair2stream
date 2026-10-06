@@ -171,9 +171,10 @@ solution of the same equation, CRN differs by 0.04–0.10 °C RMS on the Swiss
 rivers, and EUL by up to about 1 °C even where stable (validation V6). This is
 not an error in the predictions, because the parameters are calibrated with
 the scheme and absorb its behaviour. It does mean that **parameters belong to
-the scheme they were calibrated with**: the published parameters are CRN
-parameters. Calibrating with EXP instead of CRN changed validation RMSE by less
-than 0.03 °C.
+the scheme they were calibrated with**. The parameters published by Piccolroaz
+et al. (2016) are CRN parameters; those of Toffolon and Piccolroaz (2015) are
+RK4 parameters (validation V2 and V13). Calibrating with EXP instead of CRN
+changed validation RMSE by less than 0.03 °C.
 
 ## 7. Measuring the fit
 
@@ -430,7 +431,7 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    same scored values as the objective (§7), assuming normally distributed errors
    of constant size (the size is estimated, not supplied). A model's daily errors
    persist (AR(1) correlation ρ, estimated once from the DE fit's daily
-   residuals, limited to 0–0.99; see "How ρ is estimated" below), so n days of
+   residuals, limited to 0–0.99; see "Error persistence" at the end of this section), so n days of
    errors carry the information of fewer independent ones.
    - `noise_model: "ar1"` with `likelihood: "least_squares"` (the default):
      log L = −(n_eff/2)·ln(SSE/n), with n_eff = n·(1−ρ)/(1+ρ), the usual
@@ -454,7 +455,7 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    correlated from one block to the next than days are. The least-squares
    likelihood then uses n_eff = n / [1 + 2·r_b/(1 − ρ^m)], with r_b the
    correlation between the means of adjacent blocks of AR(1) errors (the
-   formula under "How ρ is estimated", with m days in place of 7); for m = 1
+   formula g_m under "Error persistence" below, with m days); for m = 1
    this is n·(1−ρ)/(1+ρ). The
    daily n_eff applied to block means would make parameter intervals 1.6–4.4
    times too wide for ρ = 0.5–0.95. The exact AR(1) likelihood needs consecutive
@@ -501,83 +502,14 @@ means, days in a row above a threshold): use the raw ensemble for those
 (`save_ensemble: true`, and `pyair2stream.scenario`), never averages of the
 daily percentiles.
 
-**How ρ is estimated** (`uncertainty_options.rho_timescale`).
-
-- `"weekly"` (the default). Every 7-day window of scored, observed days is paired
-  with the complete 7-day window that starts 7 days later, and the correlation r
-  of their mean errors is measured. ρ is the AR(1) value whose 7-day means have
-  that correlation: r = Σ_{d=1..13} (7 − |d − 7|)·ρ^d / (7 + 2·Σ_{k=1..6} (7 − k)·ρ^k).
-  The larger of this and the lag-1 correlation of consecutive days is used. It
-  needs at least 140 pairs (about 21 complete weeks); otherwise the lag-1 value
-  is used, with a warning.
-- `"daily"`: the lag-1 correlation of consecutive scored days.
-
-Both need daily observations. A window counts only if all 7 days are scored,
-so with many missing days (for example a measurement every other day) the
-lag-1 value is used. With fewer than 30 pairs of consecutive scored days, ρ is
-0, with a warning, and bands for multi-day quantities are then too narrow.
-
-ρ sets the noise added to predictions and n_eff in the least-squares likelihood.
-The exact likelihood always uses the lag-1 correlation, because removing the
-correlation of consecutive days (eₜ − ρ·eₜ₋₁) is a day-scale operation. The
-chain's `_meta.json` records `rho`, `rho_timescale`, `rho_likelihood`,
-`scoring_block_days` and `likelihood_variance_factor` (n/n_eff). FORWARD runs
-use the chain's ρ, and say so when it was estimated at another time scale than
-their own `rho_timescale` (chains from version 0.4.1 or earlier used
-consecutive days). If ρ reaches its limit of 0.99, a warning says so: errors
-that persist for months usually mean a systematic error, such as a bias in one
-season (§7, mean error by month and season).
-
-**Why the weekly scale (theory).** Real model errors have two memories at once:
-on the Swiss rivers a fast part that fades in about two days (57–76% of the
-error variance) and a slow part lasting three to five weeks (24–43%). An AR(1)
-process has only one. The choice is which of them it should reproduce.
-
-1. *Predictions.* Compliance quantities are built from many days (7-day means,
-   runs of warm days, summer peaks). The uncertainty of an m-day mean depends on
-   every error correlation up to lag m: Var = σ²/m · [1 + 2·Σ_{k<m} (1 − k/m)·r_k]
-   (Bayley and Hammersley, 1946). Matched to consecutive days, an AR(1) ignores
-   the slow part. On the Swiss rivers it understated the variance of 30–90-day
-   mean errors by a factor of two to three. Matched to week-to-week persistence,
-   the variance it implies was 1.2–1.4 times the measured one for 7–14-day means
-   and about right (0.83–1.3) at 60–90 days. A noise model that understates
-   low-frequency variability gives intervals that are too narrow (Poppick et al.,
-   2017). In hydrology, ignoring error persistence underestimates the
-   uncertainty of aggregated quantities (Evin et al., 2014), and reliable
-   intervals at several time scales need errors at several time scales
-   (McInerney et al., 2020).
-2. *Parameters.* With correlated errors, the sampling covariance of least-squares
-   estimates is σ²(JᵀJ)⁻¹ JᵀRJ (JᵀJ)⁻¹ (the "sandwich"; R is the correlation
-   matrix of the errors, J the sensitivity of the simulated temperature to each
-   parameter on each day). The n_eff likelihood widens every parameter's
-   variance by the same factor, (1 + ρ)/(1 − ρ). Each parameter needs a factor
-   of about 1 + 2·Σ_k r_J(k)·r_e(k), with r_J the autocorrelation of its
-   sensitivity and r_e that of the errors.
-   That is close to the full allowance for slow errors when the parameter's
-   effect varies slowly (the constant a1, the seasonal amplitude a6 and timing
-   a7). It is much smaller when the effect varies from day to day (the air
-   temperature and relaxation coefficients a2 and a3). With one factor for all
-   parameters, the factor must be large enough for the slowest parameter.
-   Validation V4 computes this formula and compares it with the measured spread
-   of the estimates; they agree closely. With fast + slow errors, the daily ρ
-   made a7's interval about 1.5 times too narrow (measured 1.54; the formula
-   predicts 1.59), and the weekly ρ gave it the right
-   width. The cost is that intervals of the fast-varying parameters are wider
-   than necessary, by a factor of about two to three in V4. That happens with
-   either ρ: it is a property of a single effective sample size. The two errors
-   are not equal: an interval that is too wide errs on the side of caution, one
-   that is too narrow claims more than the data show.
-3. *The larger of the two estimates.* The weekly option is never less
-   persistent than consecutive days show. The week-to-week estimate alone is
-   imprecise when errors are only weakly correlated. Taking the larger then errs
-   towards wider intervals, and changes nothing for AR(1) errors (V4, V9).
-
-This is a documented, validated approximation, not a published method by name.
-The principled refinements are an error model with a fast and a slow part, and
-parameter-specific (sandwich) widths for the posterior (Ribatet et al., 2012).
-Neither is implemented. Use `rho_timescale: "daily"` to reproduce results made
-with the earlier default, or to check how much a conclusion depends on the
-choice.
+**How ρ is estimated.** By default (`uncertainty_options.rho_timescale:
+"weekly"`), ρ is the larger of the lag-1 correlation of consecutive days'
+errors and the AR(1) coefficient that reproduces the correlation of
+consecutive 7-day mean errors. `"daily"` uses the lag-1 correlation only. The
+estimators, their properties, where ρ is used, the reasons for the weekly
+scale, the evidence and the alternatives are set out in
+[Error persistence: how it is estimated, and why the weekly scale](#error-persistence-how-it-is-estimated-and-why-the-weekly-scale)
+at the end of this section.
 
 **What the validation shows** ([validation/REPORT.md](../validation/REPORT.md)).
 On synthetic data from a known truth, 90% prediction intervals contained about
@@ -623,6 +555,217 @@ whatever the interval's level).
 Excluding zero only means something for parameters where zero means "no
 effect" (`a2`, `a4`, `a5`, `a6`, `a8`). It says nothing about `a1`, `a3` or the
 seasonal timing `a7`.
+
+### Error persistence: how it is estimated, and why the weekly scale
+
+This subsection documents the one part of the uncertainty method that is
+pyair2stream's own: the choice of the AR(1) persistence ρ. A plain-language
+account, with figures, is in
+[UNCERTAINTY.md §5](UNCERTAINTY.md#5-the-models-errors-their-size-and-how-long-they-last).
+The numbers below come from `docs/figures/make_uncertainty_figures.py`, which
+calibrates versions 5 and 8 on the three Swiss rivers (DE, seed 42), and from
+the validation suite.
+
+**The problem.** The error model is an AR(1) process with one persistence
+parameter ρ (§12, items 2 and 5). Real model errors have two memories. Their
+correlation falls steeply over the first one or two days and then decays
+slowly over weeks (UNCERTAINTY.md, Figure 4). An AR(1) correlation falls by the
+same factor every day, so a single ρ cannot reproduce both. ρ must be chosen
+for the quantities it is used for. Those are mostly aggregates: 7-day means,
+runs of warm days, yearly peaks, counts of days above a threshold, and the
+information content of a long record of daily errors.
+
+**The estimators.** Let eₜ be the error (simulated − measured) on scored day t
+at the DE best fit, within the segments of §10 (one segment without gap-tolerant
+mode), the warm-up year excluded.
+
+- *Daily*, ρ₁: the Pearson correlation of (eₜ₋₁, eₜ) over all pairs of
+  consecutive scored days in the same segment, clipped to [0, 0.99]. With fewer
+  than 30 pairs, ρ₁ = 0, with a warning.
+- *Weekly*, ρ₇. For every start day s such that days s … s + 13 are scored and
+  in one segment, let ē⁽¹⁾ₛ be the mean error over days s … s + 6 and ē⁽²⁾ₛ over
+  s + 7 … s + 13. r₇ is the Pearson correlation of (ē⁽¹⁾ₛ, ē⁽²⁾ₛ) over all such
+  s. Every start day is used, so the result does not depend on the day the
+  weeks start, and the pairs overlap. ρ₇ is the solution of g₇(ρ) = r₇, where
+  for blocks of m days
+
+  `g_m(ρ) = Σ_{d=1}^{2m−1} (m − |d − m|) ρ^d / [m + 2 Σ_{k=1}^{m−1} (m − k) ρ^k]`
+
+  is the correlation between the means of two adjacent, non-overlapping m-day
+  blocks of a stationary AR(1) process. (The numerator is the covariance of the
+  two block sums divided by the variance of one day: there are m − |d − m|
+  pairs of days d apart across the two blocks. The denominator is the variance
+  of one block sum, likewise scaled.) g_m is continuous and strictly increasing
+  on [0, 1), with g_m(0) = 0 and g_m → 1 as ρ → 1, so the solution is unique;
+  it is found by Brent's method. If r₇ ≤ 0, ρ₇ = 0. If r₇ ≥ g₇(0.99) = 0.954,
+  ρ₇ = 0.99. With fewer than 140 pairs (about 21 complete weeks of
+  scored days), ρ₇ is not computed and ρ₁ is used, with a warning.
+- *The default*, `rho_timescale: "weekly"`: ρ = max(ρ₁, ρ₇).
+  `rho_timescale: "daily"`: ρ = ρ₁.
+
+Some values of g₇: g₇(0.3) = 0.05, g₇(0.5) = 0.12, g₇(0.7) = 0.26,
+g₇(0.86) = 0.52. The curve is steep at high ρ, so ρ₇ is not sensitive to the
+sampling error of r₇ there. On the Mentue, r₇ = 0.52 ± 0.05 gives
+ρ₇ = 0.86 ± 0.02.
+
+Both estimates need daily observations. A window counts only if all 7 days
+are scored, so with many missing days (for example a measurement every other
+day) ρ₁ is used. With ρ = 0 (fewer than 30 consecutive pairs), bands for
+multi-day quantities are too narrow.
+
+ρ is estimated once, at the DE best fit, on the calibration's scored days. In a
+cross-validation, each fold estimates its own σ and ρ on its training days. The
+chain's `_meta.json` records `rho`, `rho_timescale`, `rho_likelihood`,
+`scoring_block_days` and `likelihood_variance_factor` (n/n_eff). FORWARD runs
+use the chain's ρ. They say so when it was estimated at another time scale than
+their own `rho_timescale` (chains from version 0.4.1 or earlier used consecutive
+days). If ρ reaches its limit of 0.99, a warning says so: errors that persist
+for months usually mean a systematic error, such as a bias in one season (§7,
+mean error by month and season).
+
+*What kind of estimate it is.* ρ₇ is a moment estimate: the AR(1) that
+reproduces one moment of the real errors, the lag-one autocorrelation of their
+7-day means. It is not a maximum-likelihood estimate, and it does not claim the
+errors are AR(1). If the errors are AR(1), ρ₁ and ρ₇ estimate the same ρ.
+In validation V4, with AR(1) errors, the daily and the default estimates
+averaged 0.691 and 0.699. If the
+errors also have a slow part, ρ₇ > ρ₁. On the Swiss rivers, r₇ was 0.52–0.81,
+where an AR(1) with ρ₁ implies g₇(ρ₁) = 0.25–0.51. So ρ₇ = 0.86–0.95 against
+ρ₁ = 0.70–0.86.
+
+**Where ρ is used.**
+
+| Use | How |
+|---|---|
+| Least-squares likelihood (default) | n_eff = n(1 − ρ)/(1 + ρ) for daily scoring; the block formula of item 2 for weekly or monthly scoring. This sets the width of the posterior, and so of the parameter intervals. |
+| Prediction noise (DE-MCMC band, FORWARD runs) | each simulated series gets eₜ = ρ eₜ₋₁ + σ √(1 − ρ²) zₜ, zₜ standard normal, started from its stationary distribution in each segment |
+| FORWARD runs | ρ is taken from the chain's `_meta.json` (or `uncertainty_options.ar1_rho`), not from the data being predicted |
+| Cross-validation check (§11) | each fold's own σ and ρ |
+| Exact AR(1) likelihood | always ρ₁, because whitening (eₜ − ρ eₜ₋₁) is a day-scale operation |
+
+**Why the weekly scale: predictions.** Compliance quantities are built from
+many days. The variance of the mean of m consecutive errors depends on every
+correlation up to lag m (Bayley and Hammersley, 1946):
+
+  `Var(ē_m) = σ²/m · [1 + 2 Σ_{k=1}^{m−1} (1 − k/m) r_k]`.
+
+Matched to consecutive days, an AR(1)'s correlation dies out within two weeks
+(0.70¹⁴ ≈ 0.007), while the real errors' slow part does not. The table compares
+four single-ρ choices: the typical error of an m-day mean that each implies,
+divided by that of the real errors (six cases: three rivers, versions 5 and
+8).
+
+| m (days) | ρ₁ ("daily") | ρ matching the variance of 7-day means | ρ = max(ρ₁, ρ₇) ("weekly", default) | ρ matching 30-day persistence (g₃₀(ρ) = r₃₀) |
+|---|---|---|---|---|
+| ρ | 0.70–0.86 | 0.73–0.88 | 0.86–0.95 | 0.94–0.96 |
+| 7 | 0.94–0.98 | 1.00 | 1.09–1.17 | 1.09–1.26 |
+| 14 | 0.84–0.90 | 0.90–0.94 | 1.08–1.17 | 1.09–1.38 |
+| 30 | 0.70–0.77 | 0.75–0.81 | 1.02–1.11 | 1.07–1.46 |
+| 60 | 0.60–0.68 | 0.65–0.73 | 0.94–1.07 | 1.07–1.46 |
+| 90 | 0.58–0.70 | 0.62–0.76 | 0.91–1.15 | 1.16–1.42 |
+
+In variance terms, ρ₁ understates the variance of 30–90-day mean errors by a
+factor of 1.7 to 3. The default overstates it by a factor of 1.17–1.37 for 7–14
+days and is within 0.83–1.32 at 60–90 days. Of the four choices, it is the only
+one that stays within about 20% (in standard deviation) of the real errors from
+1 to 90 days. A noise model that understates low-frequency variability gives
+intervals that are too narrow (Poppick et al., 2017). In hydrology, ignoring
+error persistence understates the uncertainty of aggregated quantities (Evin et
+al., 2014). Reliable intervals at several time scales need errors at several
+time scales (McInerney et al., 2020).
+
+Matching the *variance* of 7-day means gets 7 days exactly right, but not the
+persistence *between* weeks, on which yearly peaks, counts and monthly means
+depend. Matching a longer scale (30 days) over-widens every shorter quantity.
+A week is the shortest scale at which the slow part dominates the correlation
+(r₇ is about twice g₇(ρ₁) on every river). It also gives thousands of
+overlapping pairs from a few years of data. And many temperature standards are
+set on 7-day means.
+
+**Why the weekly scale: parameters.** With correlated errors, the sampling
+covariance of least-squares estimates is σ²(JᵀJ)⁻¹ JᵀRJ (JᵀJ)⁻¹ (the
+"sandwich"; R is the correlation matrix of the errors, J the sensitivity of the
+simulated temperature to each parameter on each day). The n_eff likelihood
+widens every parameter's variance by the same factor, (1 + ρ)/(1 − ρ). Each
+parameter needs a factor of about 1 + 2·Σ_k r_J(k)·r_e(k), with r_J the
+autocorrelation of its sensitivity and r_e that of the errors.
+
+- That is close to the full allowance for slow errors when the parameter's
+  effect varies slowly (the constant a1, the seasonal amplitude a6 and timing
+  a7).
+- It is much smaller when the effect varies from day to day (the air
+  temperature and relaxation coefficients a2 and a3).
+
+With one factor for all parameters, the factor must be large enough for the
+slowest parameter. Validation V4 computes this formula and compares it with the
+measured spread of the estimates; they agree closely. With fast + slow errors,
+ρ₁ made a7's interval about 1.5 times too narrow (measured 1.54; the formula
+predicts 1.59). Its 90% interval contained the truth 70% of the time. The
+weekly ρ gave it the right width (90%). The cost is that the intervals of the
+fast-varying parameters are wider than necessary, by a factor of about two to
+three in V4. That happens with either ρ: it is a property of a single effective
+sample size. The two errors are not equal: an interval that is too wide errs on
+the side of caution; one that is too narrow claims more than the data show. On
+the Swiss rivers, the weekly ρ makes n_eff 2.3–3.4 times smaller than ρ₁ does,
+so parameter intervals are 1.5–1.8 times wider.
+
+**Why the larger of the two.** The result is never less persistent than
+consecutive days show. When errors are only weakly correlated, r₇ is small and
+imprecise, because g₇ is flat near 0 (g₇(0.5) = 0.12). ρ₇ alone would then be
+noisy, and ρ₁ sets the floor. For AR(1) errors, taking the larger changes nothing
+(V4, V9).
+
+**The evidence.**
+
+| Test | Weekly ρ (default) | Daily ρ | Check |
+|---|---|---|---|
+| AR(1) errors, synthetic: ρ estimated; 90% parameter intervals containing the truth | 0.699; 97.3% | 0.691; 97.3% | V4 E, G |
+| Fast + slow errors, synthetic: 90% parameter intervals | 98.0% | 89.3% | V4 H, I |
+| Same, interval of a7 alone | 90% | 70% | V4 H, I |
+| Same, 90% ranges of yearly peaks and counts | 91–96% | 78–90% | V9 A |
+| Real rivers, later years: daily values inside 90% intervals | 85.2–89.6% | 84.5–89.1% | V5 |
+| Same, 7-day means | 89.1–93.6% | 82.7–87.8% | V5 |
+| Same, 90% ranges of yearly peaks and counts | 73–93% | 53–87% | V9 B |
+
+The synthetic fast + slow errors are built like the real ones (60% of the
+variance in a part with ρ = 0.55, 40% in a part with ρ = 0.96). The real-river
+tests use years that were not used for calibration.
+
+**Criticisms and alternatives.**
+
+- *The AR(1) is knowingly misspecified, and ρ₇ is not a likelihood estimate.*
+  True. The aim is not to estimate the parameter of a true AR(1), but to choose
+  the single-memory error model whose aggregates behave like the real errors'.
+  The choice is judged by predictive coverage, out of sample (the table above).
+  When the errors are AR(1), nothing is lost.
+- *A two-component error model (fast + slow AR(1)) would be more faithful.*
+  It would. The sum of two AR(1) processes is an ARMA(2,1) process (Box et al.,
+  2015), and sums of AR(1) components can approximate much longer memories
+  (Granger, 1980). It is not implemented. It adds two error parameters to be
+  estimated jointly with up to eight model parameters. A few years of data hold
+  only a few dozen independent slow episodes, so the slow part's variance and
+  time scale are poorly determined. The effective sample size and the
+  likelihood would need new forms and their own validation. It remains the
+  natural refinement.
+- *Parameter-specific widths would avoid over-wide intervals for a2 and a3.*
+  Adjusting the posterior towards the sandwich covariance (Ribatet et al.,
+  2012) would do this. It is not implemented. The current choice errs on the
+  side of caution for those parameters, and predictions are not affected.
+- *A block bootstrap of the residuals would need no error model* (Künsch,
+  1989). It needs a block length, which is the same kind of choice. With long
+  blocks, a few years of data give few independent blocks. And it cannot
+  produce errors larger than those observed. Not implemented; a reasonable
+  cross-check.
+- *Why not choose ρ to maximise coverage in cross-validation?* That would tune
+  the error model to the test and make the test meaningless. ρ is set by a rule
+  fixed in advance, from the calibration data only; the tests then check it.
+- *Seasonal errors.* The errors' size varies by season (§16); ρ and σ are the
+  same all year. Check coverage in the season of the limit (V5 reports summer
+  coverage).
+
+Use `rho_timescale: "daily"` to reproduce results made with version 0.4.1 or
+earlier, or to show how much a conclusion depends on the choice.
+
 
 ## 13. Forward runs and scenario comparisons
 
@@ -949,6 +1092,14 @@ These are deliberate; each is covered by tests.
 - Ribatet, M., Cooley, D. and Davison, A. C. (2012). Bayesian inference from
   composite likelihoods, with an application to spatial extremes. *Statistica
   Sinica*, 22, 813–845.
+- Box, G. E. P., Jenkins, G. M., Reinsel, G. C. and Ljung, G. M. (2015). *Time
+  Series Analysis: Forecasting and Control*, 5th edn. Wiley, Hoboken, NJ.
+- Granger, C. W. J. (1980). Long memory relationships and the aggregation of
+  dynamic models. *Journal of Econometrics*, 14(2), 227–238.
+  https://doi.org/10.1016/0304-4076(80)90092-5
+- Künsch, H. R. (1989). The jackknife and the bootstrap for general stationary
+  observations. *The Annals of Statistics*, 17(3), 1217–1241.
+  https://doi.org/10.1214/aos/1176347265
 - Stone, M. (1974). Cross-validatory choice and assessment of statistical
   predictions. *Journal of the Royal Statistical Society B*, 36, 111–147.
 - Klemeš, V. (1986). Operational testing of hydrological simulation models.

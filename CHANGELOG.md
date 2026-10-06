@@ -99,10 +99,40 @@
   another model version, integrator or `Qmedia`. DE-MCMC now records them in the
   chain's `_meta.json`; chains from 0.4.2 or earlier cannot be checked, and a note
   says so.
+- The README, the User Guide and the example READMEs are rewritten in plain
+  language for new users, with shorter sentences and a clear path: prepare the
+  data, write the settings, run, read the results. New: what to check first in
+  the outputs (USER_GUIDE §8), how to choose calibration and validation years
+  and how to build a daily file from raw data (§5), and where to get help. The
+  README's summary of the validation is shorter; the evidence is unchanged in
+  `validation/REPORT.md`.
+- The weekly error persistence (`rho_timescale: "weekly"`) is documented in
+  full: what it is, why it is used, how it is estimated and used, what it
+  changes, the evidence, when to use the alternative, and answers to likely
+  questions and criticisms (docs/UNCERTAINTY.md §5; docs/METHODS.md §12, "Error
+  persistence"). Five new figures (`docs/figures/U15`–`U19`, drawn by
+  `make_uncertainty_figures.py --rho`) show how the two estimates are made, the
+  conversion from week-to-week correlation to ρ, simulated errors with each ρ,
+  how four single-ρ choices reproduce the real errors from 1 to 90 days on the
+  three Swiss rivers, and the validation evidence. The later figures of
+  UNCERTAINTY.md are renumbered. METHODS no longer quotes a fast/slow split of
+  the error variance that a reproducible fit did not confirm for version 5 on
+  two rivers; it quotes the measured week-to-week correlation instead (0.52–0.81,
+  against 0.25–0.51 implied by the daily ρ).
+- Continuous integration also tests Python 3.14, the newest stable release
+  (3.9, 3.12 and 3.14).
 
 ### Fixed
 - Monthly scoring (`time_resolution: "1m"`) of a 360-day-calendar record longer
   than about 60 years stopped with `IndexError`.
+- Documentation errors: example 02 gave the parameter ranges as 95% ranges
+  with old values (they are 90% ranges: `a5` 2.03 to 4.15); the code in
+  examples 03 and 04 and in USER_GUIDE §12 used paths and names that did not
+  run as written; `full_simulation_*` outputs were described as covering the
+  whole record (they cover the calibration file, on every day);
+  docs/METHODS.md §6 and USER_GUIDE §9.1 called all published parameters
+  Crank–Nicolson parameters (those of Toffolon and Piccolroaz, 2015, are RK4
+  parameters); example run times are updated.
 
 ## [0.4.2] - 2026-10-05
 

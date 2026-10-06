@@ -39,26 +39,32 @@ python validation/run_all.py --quick    # reduced version of every check, about 
 python validation/run_all.py --only V2 V6
 ```
 
-With `--only`, the other checks keep their reports from the earlier run, and
-`REPORT.md` names the run each comes from.
+With `--only`, the other checks keep their reports from the earlier run.
+`REPORT.md` then names the run each report comes from.
 
-V1 needs `gfortran` and the Fortran source (`git submodule update --init`);
-without them it is reported as not run. The run rewrites `REPORT.md`,
-`reports/` (one report per check), `results/` (every table as CSV) and
-`figures/`. Scratch files go to `work/`,
-which is not kept. All random steps are seeded, so a rerun on the same software
-versions and the same kind of processor gives the same numbers; the report
-records the versions used. The model is compiled for the processor it runs on,
-so on another processor the last digits of a calculation can differ, and the
-MCMC checks, which amplify such differences, then give results that differ by
-their Monte Carlo noise. The one other exception is the original Fortran
-program's own calibration runs in V2 parts D and E: it seeds its random numbers
-from the clock, so those runs differ each time (which is what part D shows). A
-rerun of the full suite reproduced every other table byte for byte.
+V1 needs `gfortran` and the Fortran source (`git submodule update --init`).
+Without them, V1 is reported as not run.
 
-The quick run (`--quick`, also run by CI) checks that every check runs; with a
-few replicates or years it cannot judge coverage, so V4, V5 and V14 report
-their coverage there without judging it.
+The run rewrites `REPORT.md`, `reports/` (one report per check), `results/`
+(every table as CSV) and `figures/`. Scratch files go to `work/`, which is not
+kept.
+
+**Will I get the same numbers?** Every random step is seeded. So a rerun with
+the same software versions, on the same kind of processor, gives the same
+numbers. The report records the versions used. There are two exceptions:
+
+- The model is compiled for the processor it runs on. On another processor,
+  the last digits of a calculation can differ. The MCMC checks amplify such
+  small differences, so their results then differ by a small random amount.
+- In V2 parts D and E, the original Fortran program calibrates. It seeds its
+  random numbers from the clock, so those runs differ every time. (Part D
+  shows this.)
+
+A rerun of the full suite reproduced every other table exactly.
+
+**The quick run** (`--quick`, also run by CI) checks that every check runs. It
+uses only a few replicates or years, which is too few to judge coverage. So in
+the quick run, V4, V5 and V14 report their coverage without judging it.
 
 ## Data
 
@@ -73,18 +79,27 @@ the three publications are documented in
 
 ## What this does and does not show
 
-It shows that the software computes what it claims to, that calibration finds
-the right answer when one is known, and that the uncertainty intervals and
-probabilities have the coverage they state when the model is right. It also
-shows how well the model does on three real rivers, including where the
-approach falls short there: intervals for new years are slightly narrow (V5),
-uncorrected ranges for yearly statistics miss more often than stated because the
-model can be biased on the hottest days, which the cross-validated correction
-largely fixes (V9, V11), 99% daily intervals are too narrow because real errors
-have heavier tails than assumed (V5, V11), and a version without discharge does
-not suit a river like the Rhône (V5, V9, V10), and its intervals do not hold on
-the hottest days (V14). Calibrating on weekly or
-monthly means needs bounds that keep `a2` and `a3` at least 0 (V4).
+It shows that:
 
-It does not show that the model suits your river. Check that with your own data:
-calibrate on some years and test on others, as V5 does and as the examples show.
+- the software computes what it claims to;
+- calibration finds the right answer when one is known;
+- the uncertainty ranges and probabilities hold as often as they state, when
+  the model is right.
+
+It also shows how well the model does on real rivers, and where the approach
+falls short there:
+
+- Ranges for new years are slightly too narrow (V5).
+- The model can be too warm on the hottest days. So uncorrected ranges for
+  yearly statistics miss more often than stated. The cross-validated
+  correction largely fixes this (V9, V11).
+- 99% daily ranges are too narrow, because real errors are sometimes larger
+  than the error model allows (V5, V11).
+- A version without discharge does not suit a river like the Rhône (V5, V9,
+  V10). Its ranges also do not hold on the hottest days (V14).
+- Calibrating on weekly or monthly means needs bounds that keep `a2` and `a3`
+  at 0 or above (V4).
+
+It does not show that the model suits your river. Check that with your own
+data: calibrate on some years and test on others, as V5 does and as the
+examples show.
