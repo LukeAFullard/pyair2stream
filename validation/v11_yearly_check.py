@@ -24,13 +24,17 @@ LEVELS = (0.5, 0.9)
 COVERAGE_CONFIDENCE = 0.99          # accepted coverage: central 99% binomial range, as V9
 
 
-def _full_record(st: str) -> str:
-    """The calibration and validation files of a river joined into one record."""
+def _full_record(st: str, write: bool = False) -> str:
+    """The calibration and validation files of a river joined into one record. Written once, by
+    the parent process before the workers start (`write=True`), so no worker reads a half-written
+    file."""
     path = os.path.join(WORK, f"v11_{st}_full.csv")
-    if not os.path.exists(path):
+    if write:
         os.makedirs(WORK, exist_ok=True)
+        tmp = path + ".tmp"
         pd.concat([pd.read_csv(river_csv(st, "calibration")),
-                   pd.read_csv(river_csv(st, "validation"))]).to_csv(path, index=False)
+                   pd.read_csv(river_csv(st, "validation"))]).to_csv(tmp, index=False)
+        os.replace(tmp, path)
     return path
 
 
@@ -106,6 +110,8 @@ def run(ctx) -> Result:
     versions = (8,) if ctx.quick else VERSIONS
     jobs = [(st, v, ctx.quick) for st in stations for v in versions]
     jobs.sort(key=lambda j: j[0] != "SIO_2011")         # the longest record first
+    for st in stations:
+        _full_record(st, write=True)
     with Timer() as t:
         with ProcessPoolExecutor(max_workers=ctx.workers) as ex:
             rows = [r for out in ex.map(_job, jobs) for r in out]
