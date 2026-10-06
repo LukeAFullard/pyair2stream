@@ -1,13 +1,13 @@
-version,rho time scale,mean rho,statistic,river-years,limits tested,limits exceeded,"Brier score, pyair2stream","Brier score, past years",Brier skill score,inside 50% range,inside 90% range
-5,weekly (default),0.93,highest daily mean,15,45,30,0.216,0.21,-0.03,53%,93%
-5,weekly (default),0.93,highest 7-day mean,15,45,36,0.247,0.238,-0.04,20%,80%
-5,weekly (default),0.93,days above threshold,15,45,30,0.173,0.236,0.27,60%,87%
-5,daily (option),0.8,highest daily mean,15,45,30,0.233,0.21,-0.11,40%,80%
-5,daily (option),0.8,highest 7-day mean,15,45,36,0.266,0.238,-0.12,20%,53%
-5,daily (option),0.8,days above threshold,15,45,30,0.187,0.236,0.21,40%,73%
-8,weekly (default),0.88,highest daily mean,15,45,30,0.194,0.21,0.08,40%,73%
-8,weekly (default),0.88,highest 7-day mean,15,45,36,0.138,0.238,0.42,40%,93%
-8,weekly (default),0.88,days above threshold,15,45,30,0.141,0.236,0.4,47%,87%
-8,daily (option),0.72,highest daily mean,15,45,30,0.183,0.21,0.13,40%,67%
-8,daily (option),0.72,highest 7-day mean,15,45,36,0.14,0.238,0.41,40%,87%
-8,daily (option),0.72,days above threshold,15,45,30,0.142,0.236,0.4,40%,67%
+version,rho time scale,mean rho,statistic,river-years,limits tested,limits exceeded,"Brier score, pyair2stream","Brier score, past years",Brier skill score,inside 50% range,inside 80% range,inside 90% range,inside 95% range,inside 99% range
+5,weekly (default),0.93,highest daily mean,15,45,30,0.216,0.21,-0.03,53%,73%,93%,93%,100%
+5,weekly (default),0.93,highest 7-day mean,15,45,36,0.247,0.238,-0.04,20%,67%,80%,87%,100%
+5,weekly (default),0.93,days above threshold,15,45,30,0.173,0.236,0.27,60%,80%,87%,100%,100%
+5,daily (option),0.8,highest daily mean,15,45,30,0.233,0.21,-0.11,40%,67%,80%,80%,87%
+5,daily (option),0.8,highest 7-day mean,15,45,36,0.266,0.238,-0.12,20%,40%,53%,67%,80%
+5,daily (option),0.8,days above threshold,15,45,30,0.187,0.236,0.21,40%,67%,73%,73%,87%
+8,weekly (default),0.88,highest daily mean,15,45,30,0.194,0.21,0.08,40%,67%,73%,93%,93%
+8,weekly (default),0.88,highest 7-day mean,15,45,36,0.138,0.238,0.42,40%,80%,93%,93%,100%
+8,weekly (default),0.88,days above threshold,15,45,30,0.141,0.236,0.4,53%,80%,87%,100%,100%
+8,daily (option),0.72,highest daily mean,15,45,30,0.183,0.21,0.13,40%,60%,67%,87%,100%
+8,daily (option),0.72,highest 7-day mean,15,45,36,0.14,0.238,0.41,40%,67%,87%,87%,100%
+8,daily (option),0.72,days above threshold,15,45,30,0.142,0.236,0.4,40%,60%,67%,73%,87%

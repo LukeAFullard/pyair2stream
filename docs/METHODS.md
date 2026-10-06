@@ -542,6 +542,17 @@ versions 7 and 8 on the Mentue and version 8 on the Rhône several lay outside:
 there many parameter combinations fit almost equally well, and the published
 set is not where a least-squares calibration on these data lands (V2).
 
+**At other levels.** On synthetic data the intervals held at every level tested
+(50%, 80%, 90%, 95% and 99%: mean coverage within 1.4 points of the level, V4).
+On the Swiss rivers, pooled over 48 years held out by cross-validation per
+version, daily intervals held from 50% to 95% (95% intervals: 94.4–94.5% of
+days), but 99% intervals held only 98.0–98.2%: the model's real errors have
+heavier tails than the normal distribution assumed (V11). In the later
+validation years of V5, whose errors were larger than in calibration, daily
+intervals were narrower than stated, more so at high levels (90%: 85–90%; 95%:
+91–95%; 99%: 95–99.6%). 7-day means held at every level (V11: 96–97% at 95%,
+98.6–99.2% at 99%).
+
 **Where the chain is centred.** With the default least-squares likelihood the
 chain is centred on the DE best fit: in V5 the centre of the band stayed within
 0.01 °C of the best fit's. With `likelihood: "exact"` it can be centred
@@ -642,7 +653,9 @@ held-out years per version (V11), the uncorrected 90% ranges held in 79–92% of
 years for version 8 and 73–81% for version 5. After the correction they held
 in 85–94% for both versions, within the range expected by chance, and the
 measured value sat on average at the middle of the simulations (mean PIT
-0.48–0.50, against 0.31–0.52 before). The highest daily mean remained at the
+0.48–0.50, against 0.31–0.52 before). At other levels the corrected ranges held
+in 75–85% of years at 80%, 92–100% at 95% and 100% at 99%, all within the range
+expected by chance. The highest daily mean remained at the
 low end (85%): single-day peaks are the hardest statistic to predict. Applied
 as recommended to genuinely later years (cross-validation of the calibration
 years, then correction of the FORWARD simulations of the validation years; V9
@@ -741,6 +754,13 @@ change one-sided.
   then their intervals were somewhat narrow on real rivers (§12).
 - **Intervals for new years are slightly optimistic**: σ is estimated on the
   calibration years, and errors are usually somewhat larger in other years.
+- **Choose the level knowing its record.** Any level can be set
+  (`prediction_interval`, `parameter_interval`). On the Swiss rivers daily
+  intervals held from 50% to 95%, but 99% daily intervals missed about twice
+  as many days as stated (98.0–98.2% held, V11), and in years unlike the
+  calibration years 95% intervals held 91–95% and 99% intervals 95–99.6% (V5).
+  Before reporting a 95% or 99% daily interval, check it at your site with
+  `cv_interval_coverage.csv` (§11) and on validation years.
 - **Scenario differences** assume the model's error on a given day would be the
   same under both scenarios, so their band shows parameter uncertainty only
   (§13).

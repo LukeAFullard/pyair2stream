@@ -32,7 +32,11 @@
   the MCMC summary `parameter_significance_*.csv` (⚠ 95% before; its columns are
   now named after the level). Its "differs from zero" column stays a test at the
   5% level. The validation tests coverage at 50%, 80%, 90%, 95% and 99% (V4, V5,
-  V9, V10, V11).
+  V9, V10, V11): on synthetic data intervals hold at every level; on the Swiss
+  rivers daily intervals hold from 50% to 95% over 48 held-out years per version,
+  but ⚠ 99% daily intervals held only 98.0–98.2% of days (real errors have
+  heavier tails than the normal distribution assumed), and in the later
+  validation years 95% intervals held 91–95% (V5).
 - Validation V11 (the check and the correction over 48 held-out years per
   version), and part C of V9 (the correction from cross-validation of the
   calibration years, applied to the later years).

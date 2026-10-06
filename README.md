@@ -205,6 +205,14 @@ The [validation suite](validation/README.md) checks this, and its results are in
   83–88% with `rho_timescale: "daily"` and 39–62% with `noise_model: "iid"`:
   model errors also have a part that lasts for weeks
   ([docs/METHODS.md §12](docs/METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc)).
+- **Any interval level, with a known record.** The level of every range can be
+  chosen (90% by default). On synthetic data intervals held at every level from
+  50% to 99%. On the real rivers, over 48 held-out years per version, daily
+  intervals held from 50% to 95% (95%: 94.4–94.5% of days) and 7-day means at
+  every level, but 99% daily intervals held only 98.0–98.2% of days (the
+  errors have heavier tails than assumed), and in the later validation years
+  95% intervals held 91–95%. Check the level you report at your site
+  (`cv_interval_coverage.csv`).
 - **The published parameters and the intervals.** The published parameters lie
   inside pyair2stream's 90% parameter intervals for versions 3–5 on all three
   rivers, for version 7 on the Rhône and for every version on the Dischmabach.
@@ -242,7 +250,7 @@ To run the tests and the validation suite (needs `gfortran`):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # or without --quick: the full suite, about 105 minutes
+python validation/run_all.py --quick     # or without --quick: the full suite, about 95 minutes
 ```
 
 ## Examples

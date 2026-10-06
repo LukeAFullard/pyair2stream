@@ -477,6 +477,13 @@ walks through this):
 - **Coverage.** The console and `MCMC_chain_*_meta.json` report
   `interval_coverage`: the share of observed days inside the band. It should be
   close to `prediction_interval`. Much lower means the band is too narrow.
+- **The level.** `prediction_interval` can be any level, for example 95. On the
+  Swiss rivers daily bands held from 50% to 95% in years not used for
+  calibration (95% bands: 94.4–94.5% of days), but 99% bands held only
+  98.0–98.2%, and in years unlike the calibration years 95% bands held 91–95%
+  ([V5](validation/REPORT.md#v5), [V11](validation/REPORT.md#v11)). Before
+  reporting a 95% or 99% band, check it at your site: cross-validation
+  (§13) writes `cv_interval_coverage.csv` for every level.
 - **`noise_model`.** Real model errors persist from day to day. For a single
   day, `"iid"` and `"ar1"` give bands of about the same width. For anything
   spanning several days they do not: on the Swiss rivers, 90% bands for 7-day
