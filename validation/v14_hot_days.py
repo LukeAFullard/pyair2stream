@@ -264,13 +264,14 @@ def run(ctx) -> Result:
                      "predictions is not its typical error, as V11 found for yearly peaks. Check intervals on hot "
                      "days at your site.")
         res.notes.append(text)
+    ref_above = [side(v, "hottest 10% by measurement", "above", True) for v in vs]
     res.notes.append(
         "Checking an interval only on the days when the measured temperature was highest (for example, the "
         "days a limit was exceeded) is a biased test: those days were chosen partly because their error was "
-        "positive, so even for a correct interval the measurement lies above it at least as often as stated and "
-        "below it less often. The perfect-model reference shows by how much here; the effect is small when the "
-        "season, not the error, decides which days are hottest. To check intervals on hot days, choose the days "
-        "by the prediction or by the air temperature, as here.")
+        "positive, so even for a correct interval the measurement lies above it more often than stated and "
+        f"below it less often. Here a perfect model had the 'measurement' above its 90% interval on "
+        f"{min(ref_above):.0%}-{max(ref_above):.0%} of such days, instead of 5%. To check intervals on hot days, "
+        "choose the days by the prediction or by the air temperature, as here.")
     return res
 
 
