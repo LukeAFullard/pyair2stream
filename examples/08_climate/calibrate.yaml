@@ -1,0 +1,23 @@
+# Example 08, step 1: calibrate with uncertainty (as example 02, step 1).
+# From the repository's top folder:
+#   pyair2stream --config examples/08_climate/calibrate.yaml
+project_name: "climate"
+station_name: "Mentue"
+series: "c"
+time_resolution: "1d"
+version: 8
+integrator: "CRN"
+objective_function: "NSE"
+run_mode: "DE-MCMC"
+random_seed: 42
+
+paths:
+  input_data: "data/switzerland/MAH_2369_calibration.csv"       # 2002-2009
+  output_dir: "examples/08_climate/output/calibration"
+
+parameter_bounds:
+  min: [-5, -5, -5, -1, 0,  0,  0, -1]
+  max: [15, 1.5, 5,  1, 20, 10, 1,  5]
+
+uncertainty_options:
+  noise_model: "ar1"

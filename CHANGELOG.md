@@ -151,6 +151,16 @@
   half the usual number of readings. Text that is not a number stops them with a
   message naming the file, column and line. New options: `na_values` (per file)
   and `min_readings_per_day` (days with fewer readings are left blank).
+- **Examples.** Example 05 (gaps) is expanded, with five figures: checking the
+  data first; missing water temperature filled by the model (July-August 2006
+  hidden: RMSE 0.44 °C against the hidden measurements); interpolation across a
+  three-week air temperature gap; the stretches gap-tolerant mode scores; and
+  how fast scattered gaps reduce the data scored (5% of days missing at random
+  leaves 36% of the measured days). New example 07 prepares input files from
+  raw logger files (merge, check, fill, split, run). New example 08 projects a
+  warmer climate (+2 °C air, with and without 20% less summer flow), with paired
+  changes and checked and corrected yearly peaks. Example 06 adds a sensitivity
+  analysis. The examples index maps tasks to examples.
 
 ### Fixed
 - Monthly scoring (`time_resolution: "1m"`) of a 360-day-calendar record longer

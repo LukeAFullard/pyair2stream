@@ -18,8 +18,9 @@ for each year.
 python examples/06_cross_validation/run.py
 ```
 
-It takes about a minute and a half. It runs [`version5.yaml`](version5.yaml)
-and [`version8.yaml`](version8.yaml). These are ordinary DE settings files for
+It takes about two minutes. It runs [`version5.yaml`](version5.yaml)
+and [`version8.yaml`](version8.yaml), then the sensitivity analysis at the end
+of this page. The first two are ordinary DE settings files for
 the Mentue's 2002–2009 record, with a `cross_validation` block:
 
 ```yaml
@@ -149,6 +150,47 @@ of them lie outside these intervals (for example `a5` = 4.39). They are not at
 the best fit of these data ([validation V2](../../validation/REPORT.md#v2)).
 Instead, they lie further along the same ridge of almost equally good fits.
 
+## Which parameters matter most?
+
+A sensitivity analysis answers a related question: which parameters change the
+simulated temperature most? [`sensitivity.yaml`](sensitivity.yaml) calibrates
+version 8 once on 2002–2009 and sets:
+
+```yaml
+sensitivity_analysis: true
+sensitivity_perturbations: [1.0]          # move each parameter up and down by 1% ...
+sensitivity_perturbation_mode: "range"    # ... of its bound range, so parameters can be compared
+```
+
+It moves one parameter at a time, up and down, and reports the mean change in
+the simulated water temperature (`output/sensitivity/sensitivity_*.csv`):
+
+| Parameter | What it does | Change for 1% of its range |
+|---|---|---|
+| `a3` | how fast the water returns to balance | 1.05 °C |
+| `a2` | the effect of air temperature | 0.72 °C |
+| `a8` | the return to balance, scaled by discharge | 0.40 °C |
+| `a1` | a constant heat input | 0.20 °C |
+| `a5` | a constant, scaled by discharge | 0.16 °C |
+| `a7` | the timing of the yearly cycle | 0.05 °C |
+| `a6` | the size of the yearly cycle | 0.05 °C |
+| `a4` | the discharge exponent | 0.007 °C |
+
+![Mean change in simulated water temperature when each parameter moves by 1% of its range](figures/sensitivity.png)
+
+**Reading it.**
+
+- `a3` and `a2` move the simulation most: how fast the water follows the air,
+  and how strongly.
+- `a4` hardly matters (0.007 °C). This matches the cross-validation above: the
+  data cannot fix `a4`, because it changes so little.
+- The numbers describe small changes near the best fit, one parameter at a
+  time. They ignore trade-offs (`a2` and `a3` move together), and they depend
+  on the width of the bounds.
+- A low sensitivity does not mean a poorly fixed parameter. `a7` changes the
+  simulation little per 1% of its range (3.7 days), yet the data fix it within
+  ±1%, because it shifts the whole yearly cycle.
+
 ## When to use it
 
 Use cross-validation to:
@@ -162,5 +204,5 @@ one set of years.
 
 ## Next
 
-That completes the examples. For results that support a decision, work through
-the checklist in USER_GUIDE [§14](../../USER_GUIDE.md#14-checklist-for-results-that-support-a-decision).
+Example [07](../07_preparing_data/README.md) shows how to prepare your own data
+from raw logger files.

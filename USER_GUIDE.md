@@ -107,8 +107,9 @@ What they mean:
   temperatures.
 
 [§8](#8-understanding-the-output-files) explains every output file.
-[examples/](examples/README.md) has five more worked examples: uncertainty,
-temperature limits, scenarios, gaps and cross-validation.
+[examples/](examples/README.md) has seven more worked examples: uncertainty,
+temperature limits, flow scenarios, gaps, cross-validation and sensitivity,
+preparing data from raw files, and a warmer climate.
 
 ## 4. Choosing a model version and integrator
 
@@ -238,6 +239,9 @@ counts dates with no row as missing days.
   daily mean may be wrong: a day with only daytime readings gives a mean that is
   too high. To leave such days blank, set `min_readings_per_day`, for example
   `merge_timeseries([...], min_readings_per_day=20)` for hourly data.
+
+[Example 07](examples/07_preparing_data/README.md) builds a daily file from raw
+logger files and checks it.
 
 ## 6. Configuration reference
 

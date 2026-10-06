@@ -161,7 +161,7 @@ gives the equation.
 
 ## Going further
 
-Six worked examples use real data from a Swiss river. Each has a README that
+Eight worked examples use real data from a Swiss river. Each has a README that
 explains the steps and the results ([examples/README.md](examples/README.md)).
 
 | Example | Question |
@@ -171,7 +171,9 @@ explains the steps and the results ([examples/README.md](examples/README.md)).
 | [03 Compliance](examples/03_compliance/README.md) | How likely is it that a temperature limit was exceeded? |
 | [04 Scenario](examples/04_scenario/README.md) | What difference would taking 30% of the flow make? |
 | [05 Gaps](examples/05_gaps/README.md) | What should I do about missing data? |
-| [06 Cross-validation](examples/06_cross_validation/README.md) | Does the model predict every year well? Which version should I use? |
+| [06 Cross-validation](examples/06_cross_validation/README.md) | Does the model predict every year well? Which version should I use? Which parameters matter most? |
+| [07 Preparing data](examples/07_preparing_data/README.md) | How do I turn raw logger files into checked daily input files? |
+| [08 Climate](examples/08_climate/README.md) | How much warmer would the river be in a warmer climate? |
 
 **Was a temperature limit exceeded?** Examples 01 to 03 show the usual route:
 

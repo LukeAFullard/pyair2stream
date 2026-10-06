@@ -1,0 +1,26 @@
+# Example 08, step 3: the same years with the air 2 degC warmer and 20% less discharge in June-September.
+# The input file is made by run.py. From the repository's top folder:
+#   pyair2stream --config examples/08_climate/warmer_drier.yaml
+project_name: "climate"
+station_name: "Mentue"
+series: "c"
+time_resolution: "1d"
+version: 8
+integrator: "CRN"
+run_mode: "FORWARD"
+
+paths:
+  input_data: "examples/08_climate/output/warmer_drier_input.csv"
+  output_dir: "examples/08_climate/output/warmer_drier"
+  # The calibration's parameters, version, integrator and mean discharge (Qmedia):
+  calibration_metadata: "examples/08_climate/output/calibration/calibration_metadata.json"
+
+uncertainty_options:
+  noise_model: "ar1"
+  save_ensemble: true
+
+forward_options:
+  enable_prediction_intervals: true
+  mcmc_chain_path: "examples/08_climate/output/calibration/MCMC_chain_Mentue_c_1d.csv"
+  # The same 1,000 parameter sets as the baseline, so the change can be computed set by set:
+  reuse_sample_indices_from: "examples/08_climate/output/baseline/Forward_Prediction_Ensemble_Mentue_c_1d_meta.json"

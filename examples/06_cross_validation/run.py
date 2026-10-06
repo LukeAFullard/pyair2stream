@@ -97,3 +97,22 @@ ax.set(xlabel="Year held out", ylabel="RMSE on that year (°C)", title="Mentue, 
 ax.legend(frameon=False)
 os.makedirs(os.path.join(HERE, "figures"), exist_ok=True)
 fig.savefig(os.path.join(HERE, "figures", "rmse_by_year.png"), dpi=130, bbox_inches="tight")
+
+# Which parameters change the simulated temperature most? A single calibration of version 8,
+# then each parameter moved up and down by 1% of its bound range, one at a time.
+subprocess.run([sys.executable, "-m", "pyair2stream.main", "--config", "examples/06_cross_validation/sensitivity.yaml"],
+               cwd=REPO, check=True)
+sens = pd.read_csv(os.path.join(HERE, "output", "sensitivity", "sensitivity_DE_NSE_Mentue.csv"))
+sens = sens[sens.Status.isin(["Active", "Bounded"])].assign(parameter=lambda d: "a" + d.Parameter.str[4:])
+# The index is in degC per full bound range; per 1% of the range it is easier to read.
+sens = sens.assign(per_1pct=sens.Sensitivity_Index / 100).sort_values("per_1pct", ascending=False)
+print("\nMean change in simulated water temperature (°C) when the parameter moves by 1% of its bound range")
+print(sens[["parameter", "per_1pct", "Status"]].round(3).to_string(index=False))
+
+fig, ax = plt.subplots(figsize=(6, 3.2))
+ax.barh(sens.parameter[::-1], sens.per_1pct[::-1], color=blue)
+ax.set(xlabel="Mean change in water temperature (°C)\nwhen the parameter moves by 1% of its bound range",
+       title="Version 8 on the Mentue: local sensitivity")
+for side in ("right", "top"):
+    ax.spines[side].set_visible(False)
+fig.savefig(os.path.join(HERE, "figures", "sensitivity.png"), dpi=130, bbox_inches="tight")
