@@ -25,10 +25,10 @@ from .model import (call_model, aggregation, statis, funcobj, detect_segments, w
                     check_numerical_divergence, check_segment_warmup, check_daily_plausibility)
 
 JACKKNIFE_NOTE = (
-    "The rows jackknife_90_lower/upper are approximate 90% intervals for the parameters (in "
-    "validation they contained the true values somewhat less than 90% of the time; "
-    "validation/REPORT.md, V4). The 'std' row is only the spread between folds: it is far too "
-    "small to use as an uncertainty."
+    "The rows jackknife_{level}_lower/upper are approximate {level}% intervals for the parameters "
+    "(uncertainty_options.parameter_interval; in validation, 90% intervals contained the true values "
+    "83-94% of the time; validation/REPORT.md, V4). The 'std' row is only the spread between folds: "
+    "it is far too small to use as an uncertainty."
 )
 
 
@@ -36,12 +36,20 @@ def write_yearly_statistics_check(data: CommonData, folds) -> None:
     """Write cv_yearly_statistics.csv and cv_yearly_statistics_summary.csv: did the predicted
     ranges of yearly statistics hold in the held-out years (docs/METHODS.md §11)?"""
     from .config import DEFAULT_NOISE_MODEL
-    from .cross_validation import check_yearly_statistics
+    from .cross_validation import check_yearly_statistics, check_interval_coverage
     cv = data.cross_validation
+    options = data.uncertainty_options or {}
+    level = float(options.get('prediction_interval', 90.0))
+    coverage = check_interval_coverage(folds, extra_level=level,
+                                       noise_model=options.get('noise_model', DEFAULT_NOISE_MODEL),
+                                       seed=data.random_seed)
+    coverage.to_csv(os.path.join(data.folder, "cv_interval_coverage.csv"), index=False)
+    print("Prediction intervals in the held-out years (share of measured days / 7-day means inside):")
+    for r in coverage.to_dict("records"):
+        print(f"  {r['level']:g}% interval: days {r['daily inside']:.1%}, 7-day means {r['7-day inside']:.1%}")
     per_year, summary = check_yearly_statistics(
         folds, threshold=cv.threshold, season_months=cv.season_months,
-        noise_model=(data.uncertainty_options or {}).get('noise_model', DEFAULT_NOISE_MODEL),
-        seed=data.random_seed)
+        noise_model=options.get('noise_model', DEFAULT_NOISE_MODEL), level=level, seed=data.random_seed)
     if per_year.empty:
         print("Yearly statistics check: no held-out year had enough of its season measured.")
         return
@@ -49,11 +57,12 @@ def write_yearly_statistics_check(data: CommonData, folds) -> None:
     summary.to_csv(os.path.join(data.folder, "cv_yearly_statistics_summary.csv"), index=False)
     print(f"Yearly statistics in the held-out years (threshold {per_year.threshold.iloc[0]:.2f} degC, "
           f"season months {per_year.season_months.iloc[0]}):")
-    for r in summary.itertuples():
-        print(f"  {r.statistic}: inside the 90% range in {r.share_inside_90:.0%} of {r.n_years} years "
-              f"(expected by chance {r.expected_inside_90_low:.0%}-{r.expected_inside_90_high:.0%}); "
-              f"measured minus predicted median {r.mean_deviation:+.2f} "
-              f"(95% CI {r.mean_deviation_ci95_lower:+.2f} to {r.mean_deviation_ci95_upper:+.2f})")
+    col = f"inside_{level:g}"
+    for r in summary.to_dict("records"):
+        print(f"  {r['statistic']}: inside the {level:g}% range in {r['share_' + col]:.0%} of {r['n_years']} years "
+              f"(expected by chance {r['expected_' + col + '_low']:.0%}-{r['expected_' + col + '_high']:.0%}); "
+              f"measured minus predicted median {r['mean_deviation']:+.2f} "
+              f"(95% CI {r['mean_deviation_ci95_lower']:+.2f} to {r['mean_deviation_ci95_upper']:+.2f})")
     print("A confidence interval that excludes zero means the model is biased in that statistic; "
           "scenario.correct_statistic corrects for it (docs/METHODS.md §13).")
 
@@ -328,7 +337,7 @@ def main():
                                     "Cross-validation, held-out years")
             print("Cross-validation completed.")
             print(df)
-            print(JACKKNIFE_NOTE)
+            print(JACKKNIFE_NOTE.format(level=f"{(data.uncertainty_options or {}).get('parameter_interval', 90.0):g}"))
             write_yearly_statistics_check(data, folds)
 
             t2 = time.time()

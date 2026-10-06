@@ -17,7 +17,8 @@ import numpy as np
 import pandas as pd
 
 from common import (AUTHORS_BOUNDS, DE_SETTINGS, RIVERS, WORK, Result, Section, Timer, load, quiet, river_csv,
-                    metrics, plot_style, save_figure, BLUE, ORANGE, AQUA, INK2, LIGHT_GREY, MUTED)
+                    metrics, plot_style, save_figure, BLUE, ORANGE, AQUA, INK2, LIGHT_GREY, MUTED, LEVELS,
+                    coverage_by_level)
 from v5_real_rivers import _benchmarks
 
 VERSIONS_TESTED = (5, 8)
@@ -88,6 +89,7 @@ def _fit(args):
         fcfg["forward_options"] = {"enable_prediction_intervals": True,
                                    "mcmc_chain_path": os.path.join(out, "MCMC_chain_S_c_1d.csv"),
                                    "n_samples": 1000, "random_seed": 1}
+        fcfg["uncertainty_options"] = {"save_ensemble": True}
     fdata = load(fcfg, tag + "_fwd")
     with quiet():
         forward_mode(fdata)
@@ -99,6 +101,11 @@ def _fit(args):
         env = pd.read_csv(os.path.join(folder, "fwd", "Forward_Prediction_Envelopes_S_c_1d.csv"))
         lower, upper = env.Twat_mod_lower.to_numpy(), env.Twat_mod_upper.to_numpy()
         inside = (obs >= lower) & (obs <= upper)
+        from pyair2stream import scenario
+        npz = os.path.join(folder, "fwd", "Forward_Prediction_Ensemble_S_c_1d.npz")
+        ens, _ = scenario.load_ensemble(npz)
+        by_level = coverage_by_level(ens[:, test], obs[test])
+        os.remove(npz)
     m_all, m_sum = metrics(obs[test], sim[test]), metrics(obs[summer], sim[summer])
     # The simple alternatives, fitted on the same calibration years.
     bench_cal = os.path.join(folder, "bench_cal.csv")
@@ -110,6 +117,7 @@ def _fit(args):
     return {**row, "converged": converged, "Qmedia": qmedia,
             "RMSE": m_all["RMSE"], "summer RMSE": m_sum["RMSE"], "summer bias": m_sum["bias"],
             "coverage": float(inside[test].mean()) if converged else np.nan,
+            "coverage by level": by_level if converged else {x: np.nan for x in LEVELS},
             "summer coverage": float(inside[summer].mean()) if converged else np.nan,
             "best simple alternative": min(simple, key=simple.get),
             "best simple alternative RMSE": min(simple.values()),
@@ -188,6 +196,8 @@ def run(ctx) -> Result:
             "90% interval coverage, differential": pct(d["coverage"]),
             "summer coverage, differential": pct(d["summer coverage"]),
             "90% interval coverage, control": pct(c["coverage"]),
+            "differential, coverage at " + ", ".join(f"{x}%" for x in LEVELS):
+                " / ".join(pct(d["coverage by level"][x]) for x in LEVELS),
             "pass": passed,
             "_beats": bool(d["RMSE"] < d["best simple alternative RMSE"]),
             "_control_beats": bool(c["RMSE"] < c["best simple alternative RMSE"]), "_coverage": d["coverage"]})

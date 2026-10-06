@@ -228,9 +228,14 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
             raise ValueError(f"ar1_rho must be strictly between -1.0 and 1.0, got {ar1_rho}")
         ar1_rho = float(ar1_rho)
 
+    # Central level (%) of every range the package reports: predictions (daily bands, the
+    # cross-validation check of yearly statistics) and parameters (MCMC summary, jackknife).
     prediction_interval = float(uncertainty_options.get('prediction_interval', 90.0))
     if not (0.0 < prediction_interval < 100.0):
         raise ValueError(f"prediction_interval must be strictly between 0 and 100, got {prediction_interval}")
+    parameter_interval = float(uncertainty_options.get('parameter_interval', 90.0))
+    if not (0.0 < parameter_interval < 100.0):
+        raise ValueError(f"parameter_interval must be strictly between 0 and 100, got {parameter_interval}")
 
     save_ensemble = bool(uncertainty_options.get('save_ensemble', False))
     strict_convergence = bool(uncertainty_options.get('strict_convergence', True))
@@ -269,6 +274,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         "rho_timescale": rho_timescale,
         "ar1_rho": ar1_rho,
         "prediction_interval": prediction_interval,
+        "parameter_interval": parameter_interval,
         "save_ensemble": save_ensemble,
         "strict_convergence": strict_convergence,
         "burnin_fraction": burnin_fraction,

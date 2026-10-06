@@ -26,7 +26,9 @@ from v3_recovery import noise, truth_series
 
 STATS = ("highest daily mean", "highest 7-day mean", "days above threshold")
 STAT_COLOUR = dict(zip(STATS, (BLUE, ORANGE, AQUA)))
-RANGES = (0.5, 0.9)                     # central ranges whose coverage is tested
+RANGES = (0.5, 0.9)                     # central ranges shown for each river-year
+COVER_LEVELS = (0.5, 0.8, 0.9, 0.95, 0.99)   # central ranges whose coverage is reported
+JUDGED_LEVELS = (0.5, 0.8, 0.9, 0.95)   # ... and judged on synthetic data (99% needs far more years)
 STATED = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)   # stated probabilities in the reliability table
 # Synthetic cases (label, version, noise in the data, rho time scale or None for the default, data sets,
 # judged). Fast + slow noise (as measured on real rivers) can only be approximated by AR(1): those cases
@@ -264,8 +266,8 @@ def run(ctx) -> Result:
                "For each year and statistic, the measured value's position among the "
                "simulations is recorded (the share of simulations below it; ties in day counts split at "
                "random). If the probabilities are right, a limit with a stated chance p of being exceeded is "
-               "exceeded in a share p of cases, and the central 50% and 90% ranges contain the measured value "
-               "50% and 90% of the time. "
+               "exceeded in a share p of cases, and the central L% range contains the measured value L% of the "
+               "time at every level L (50, 80, 90, 95 and 99% are reported). "
                "(B) The three Swiss rivers, versions 5 and 8, calibrated on the calibration years and "
                "predicting each later year. Limits are set at the 25th, 50th and 75th percentiles of the "
                "statistic over the calibration years. The package's probabilities are scored against what "
@@ -280,8 +282,9 @@ def run(ctx) -> Result:
                "corrected with scenario.correct_statistic using the deviations of the held-out calibration "
                "years only. The corrected ranges and probabilities are scored as in part B.",
         criterion=f"(A) For each version and statistic with AR(1) noise, the share of measured values inside the "
-                  f"central 50% and 90% ranges lies within the range expected by chance around 50% and 90% "
-                  f"(central {COVERAGE_CONFIDENCE:.0%} binomial range for the number of years tested); the fast + "
+                  f"central 50%, 80%, 90% and 95% ranges lies within the range expected by chance around each "
+                  f"level (central {COVERAGE_CONFIDENCE:.0%} binomial range for the number of years tested; 99% "
+                  f"is reported, as it needs far more years to judge); the fast + "
                   f"slow cases are reported, not judged. (B) With the default settings, for each version and "
                   f"statistic, the package's Brier score is lower than the past-years alternative's (Brier skill "
                   f"score above 0); the daily option is reported for comparison. (C) is reported, not judged: "
@@ -316,12 +319,13 @@ def run(ctx) -> Result:
             u = g.pit.to_numpy()
             row = {"case": c, "statistic": name, "data sets (converged)": f"{n_conv[c]} of {reps[c]}",
                    "mean rho": round(mean_rho[c], 2), "years tested": len(u)}
-            for level in RANGES:
+            for level in COVER_LEVELS:
                 inside = float(np.mean(np.abs(u - 0.5) <= level / 2))
                 lo, hi = coverage_band(len(u), level)
                 row[f"inside {level:.0%} range"] = inside
-                row[f"accepted ({level:.0%} range)"] = f"{lo:.0%}-{hi:.0%}" if judged[c] else "not judged"
-                if judged[c]:
+                judge = judged[c] and level in JUDGED_LEVELS
+                row[f"accepted ({level:.0%} range)"] = f"{lo:.0%}-{hi:.0%}" if judge else "not judged"
+                if judge:
                     ok_a &= lo <= inside <= hi
             rows_a.append(row)
             rel = {"case": c, "statistic": name}
@@ -345,14 +349,14 @@ def run(ctx) -> Result:
         skill = 1 - bs_model / bs_past if bs_past > 0 else np.nan
         if ts == default:
             ok_b &= bool(np.isfinite(skill) and skill > 0)
-        inside = {level: float(np.mean(np.abs(g.pit - 0.5) <= level / 2)) for level in RANGES}
+        inside = {level: float(np.mean(np.abs(g.pit - 0.5) <= level / 2)) for level in COVER_LEVELS}
         brier_rows.append({"version": v, "rho time scale": ts,
                            "mean rho": round(float(g.drop_duplicates("river").rho.mean()), 2),
                            "statistic": name, "river-years": len(g), "limits tested": len(ev),
                            "limits exceeded": int(ev[:, 3].sum()),
                            "Brier score, pyair2stream": round(bs_model, 3),
                            "Brier score, past years": round(bs_past, 3), "Brier skill score": round(skill, 2),
-                           "inside 50% range": inside[0.5], "inside 90% range": inside[0.9]})
+                           **{f"inside {level:.0%} range": inside[level] for level in COVER_LEVELS}})
     table_brier = pd.DataFrame(brier_rows)
     by_river = []
     if len(b):
@@ -381,12 +385,19 @@ def run(ctx) -> Result:
                        "inside 90% range, corrected": f"{_share(g['pit corrected'], 0.9):.0%}",
                        "Brier skill score": skill(ev0), "Brier skill score, corrected": skill(ev1)})
     table_c = pd.DataFrame(c_rows)
+    table_c_levels = pd.DataFrame([
+        {"version": v, "statistic": name, "river-years": len(g),
+         **{f"{level:.0%} range": f"{_share(g.pit, level):.0%} / {_share(g['pit corrected'], level):.0%}"
+            for level in COVER_LEVELS}}
+        for (v, name), g in bc.groupby(["version", "statistic"], sort=False)])
     table_cv = pd.DataFrame([r for o in out_b if o.get("cv") for r in o["cv"]])
 
     res.summary = (f"(A) Synthetic data with AR(1) noise: the 90% ranges contained the measured yearly statistic "
                    f"{judged_a['inside 90% range'].min():.0%}-{judged_a['inside 90% range'].max():.0%} of the time "
                    f"across versions and statistics, and the 50% ranges {judged_a['inside 50% range'].min():.0%}-"
-                   f"{judged_a['inside 50% range'].max():.0%}"
+                   f"{judged_a['inside 50% range'].max():.0%}; the 80% and 95% ranges "
+                   f"{judged_a['inside 80% range'].min():.0%}-{judged_a['inside 80% range'].max():.0%} and "
+                   f"{judged_a['inside 95% range'].min():.0%}-{judged_a['inside 95% range'].max():.0%}"
                    f"{'' if ok_a else ' (outside the accepted range in some cases, see table)'}.")
     two = table_a[~table_a.case.map(judged)]
     if len(two):
@@ -446,6 +457,8 @@ def run(ctx) -> Result:
             "the mean deviation (measured minus predicted median) found by cross-validation of the calibration "
             "years, with its uncertainty. The second table gives those deviations.",
             tables=[("C. Coverage and Brier skill score, before and after the correction", table_c),
+                    ("C. Share of river-years inside the range at each level, uncorrected / corrected",
+                     table_c_levels),
                     ("C. Cross-validation of the calibration years: deviation of each yearly statistic", table_cv)]))
     res.notes.append(
         "Part A tests the calculation of probabilities and ranges from the saved simulations, where the model "

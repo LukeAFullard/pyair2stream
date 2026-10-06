@@ -20,6 +20,8 @@ from pyair2stream import scenario
 
 LIMIT_7DAY = 20.0      # °C, illustrative limit on the 7-day mean water temperature
 WARM_DAY = 18.0        # °C, illustrative threshold for counting warm days (also in check.yaml)
+LEVEL = 90.0           # % width of the reported ranges, e.g. 95 (a level other than 50, 80, 90 or 95 also
+                       # needs uncertainty_options.prediction_interval in check.yaml)
 YEARS = (2010, 2011, 2012)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -42,7 +44,7 @@ stats = scenario.year_statistics(ens, dates, threshold=WARM_DAY)    # each year'
 check = pd.read_csv(os.path.join(OUT, "check", "cv_yearly_statistics.csv"))
 deviations = {name: check.loc[check.statistic == name, "deviation"] for name in scenario.YEARLY_STATISTICS}
 print("\n" + pd.read_csv(os.path.join(OUT, "check", "cv_yearly_statistics_summary.csv"))[
-    ["statistic", "n_years", "share_inside_90", "mean_deviation", "mean_deviation_ci95_lower",
+    ["statistic", "n_years", f"share_inside_{LEVEL:g}", "mean_deviation", "mean_deviation_ci95_lower",
      "mean_deviation_ci95_upper"]].round(2).to_string(index=False))
 
 # The measured temperatures, used here only to check the answer.
@@ -61,12 +63,12 @@ for year in YEARS:
         "year": year,
         f"P(7-day mean > {LIMIT_7DAY:g} °C)": round(float(np.mean(peak > LIMIT_7DAY)), 2),
         "P, corrected": round(float(np.mean(peak_c > LIMIT_7DAY)), 2),
-        "highest 7-day mean, 90% range (°C)": f"{np.percentile(peak, 5):.1f} to {np.percentile(peak, 95):.1f}",
-        "90% range, corrected": f"{np.percentile(peak_c, 5):.1f} to {np.percentile(peak_c, 95):.1f}",
+        f"highest 7-day mean, {LEVEL:g}% range (°C)": "{:.1f} to {:.1f}".format(*scenario.central_range(peak, LEVEL)),
+        f"{LEVEL:g}% range, corrected": "{:.1f} to {:.1f}".format(*scenario.central_range(peak_c, LEVEL)),
         "measured (°C)": round(float(measured[year]["highest 7-day mean"][0]), 1),
-        f"days above {WARM_DAY:g} °C, median (90% range)":
-            f"{np.median(warm):.0f} ({np.percentile(warm, 5):.0f} to {np.percentile(warm, 95):.0f})",
-        "days, corrected": f"{np.median(warm_c):.0f} ({np.percentile(warm_c, 5):.0f} to {np.percentile(warm_c, 95):.0f})",
+        f"days above {WARM_DAY:g} °C, median ({LEVEL:g}% range)":
+            "{:.0f} ({:.0f} to {:.0f})".format(np.median(warm), *scenario.central_range(warm, LEVEL)),
+        "days, corrected": "{:.0f} ({:.0f} to {:.0f})".format(np.median(warm_c), *scenario.central_range(warm_c, LEVEL)),
         "days, measured": int(measured[year]["days above threshold"][0]),
     })
 table = pd.DataFrame(rows)

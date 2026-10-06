@@ -173,12 +173,29 @@ def pit(simulated: np.ndarray, value: float, rng: np.random.Generator) -> float:
     """
     Share of simulated values below `value` (the probability integral transform).
     Ties, which occur for day counts, are split at random. If the predicted
-    distribution is right, this is uniform between 0 and 1: the measured value lies
-    inside the central 90% range (0.05-0.95) 90% of the time.
+    distribution is right, this is uniform between 0 and 1, so for any level L the
+    measured value lies inside the central L% range (PIT between 0.5 - L/200 and
+    0.5 + L/200) L% of the time (`inside_range`).
     """
     s = np.asarray(simulated, dtype=np.float64)
     s = s[np.isfinite(s)]
     return float((np.sum(s < value) + rng.random() * np.sum(s == value)) / len(s))
+
+
+def central_range(values: np.ndarray, level: float, axis=None):
+    """
+    The central `level`% range of `values` (e.g. 90: the 5th and 95th percentiles),
+    along `axis`. NaN values are ignored. Returns (lower, upper).
+    """
+    if not (0.0 < level < 100.0):
+        raise ValueError(f"level must be strictly between 0 and 100 (per cent), got {level}")
+    lo, hi = np.nanpercentile(np.asarray(values, dtype=np.float64), [50.0 - level / 2, 50.0 + level / 2], axis=axis)
+    return lo, hi
+
+
+def inside_range(pit_value, level: float):
+    """Whether a PIT value (`pit`) lies inside the central `level`% range."""
+    return np.abs(np.asarray(pit_value, dtype=np.float64) - 0.5) <= level / 200.0
 
 
 def correct_statistic(values: np.ndarray, deviations, seed=None) -> np.ndarray:

@@ -320,7 +320,7 @@ station, series label and time resolution.
 | `sensitivity_*` | §11 |
 | `MCMC_*`, `parameter_significance_*`, `parameter_correlation_*` | §11 |
 | `Forward_Prediction_*`, `forward_projection*.png` | §12 |
-| `cv_results.csv`, `cv_bias_by_month.*`, `cv_yearly_statistics*.csv` | §13 |
+| `cv_results.csv`, `cv_bias_by_month.*`, `cv_yearly_statistics*.csv`, `cv_interval_coverage.csv` | §13 |
 
 **Reading the scores.** NSE: 1 is perfect, 0 is no better than the long-term mean;
 NSE above 0.9 is common for daily water temperature with this model.
@@ -454,7 +454,8 @@ uncertainty_options:
   noise_model: "ar1"            # the default; "iid" is also available (see below)
   likelihood: "least_squares"   # the default; "exact" is also available (see below)
   rho_timescale: "weekly"       # the default; "daily" is also available (see below)
-  prediction_interval: 90       # % width of the band
+  prediction_interval: 90       # % width of the band; any level, e.g. 95 (see below)
+  parameter_interval: 90        # % width of the parameter intervals (MCMC summary, cross-validation)
   save_ensemble: false          # true: also save every simulated series (.npz)
   strict_convergence: true      # default: stop with an error if not converged
   burnin_fraction: null         # override the automatic burn-in (0-1)
@@ -520,7 +521,8 @@ walks through this):
 Outputs: `MCMC_chain_*.csv` (parameter samples), `MCMC_chain_*_meta.json`
 (settings, diagnostics, residual σ, ρ and how it was estimated, coverage), `MCMC_envelopes_*.csv`
 (`Twat_mod_lower`, `Twat_mod_p50`, `Twat_mod_upper` per day),
-`parameter_significance_*.csv` (mean, SD and 95% interval of each parameter)
+`parameter_significance_*.csv` (mean, SD and `parameter_interval` interval of each
+parameter, and whether it differs from zero at the 5% level)
 and `parameter_correlation_*.png`.
 
 
@@ -675,10 +677,16 @@ cross_validation:
 ```
 
 It uses the error model of `uncertainty_options` (`noise_model`, `rho_timescale`),
-as a FORWARD run does. With fewer than about 5 held-out years it says little.
+as a FORWARD run does, and reports ranges at `prediction_interval`. With fewer
+than about 5 held-out years it says little.
+
+**Coverage at each level.** `cv_interval_coverage.csv` gives, for the 50%, 80%,
+90% and 95% intervals and your `prediction_interval`, the share of held-out days
+and 7-day means that fell inside. Check the level you intend to report.
 
 **Parameter confidence intervals.** The rows `jackknife_90_lower` and
-`jackknife_90_upper` give approximate 90% intervals for each parameter, worked
+`jackknife_90_upper` give approximate 90% intervals for each parameter (the level
+is `uncertainty_options.parameter_interval`; the row names follow it), worked
 out from how much the parameters move between folds (the delete-one-year
 jackknife, [docs/METHODS.md §11](docs/METHODS.md#11-cross-validation)). In a
 test with known parameters they contained the true values 83–94% of the time,

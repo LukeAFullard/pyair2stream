@@ -491,11 +491,13 @@ def jackknife_rows(par: np.ndarray, n_blocks: int, level: float = JACKKNIFE_LEVE
 
 def cross_validate(data: CommonData, run_mode: str, return_folds: bool = False):
     """Run the cross-validation configured in `data.cross_validation` and return the
-    `cv_results.csv` table, including jackknife parameter intervals (see `summarize`).
-    With `return_folds`, also return the list of FoldResult (held-out series per fold)."""
+    `cv_results.csv` table, including jackknife parameter intervals at
+    `uncertainty_options.parameter_interval` (see `summarize`). With `return_folds`,
+    also return the list of FoldResult (held-out series per fold)."""
     cv_config = data.cross_validation
     results = run_leave_one_year_out_cv(data, cv_config, run_mode)
-    table = summarize(results, n_blocks=count_blocks(data, cv_config))
+    level = float((data.uncertainty_options or {}).get('parameter_interval', JACKKNIFE_LEVEL * 100)) / 100
+    table = summarize(results, n_blocks=count_blocks(data, cv_config), level=level)
     return (table, results) if return_folds else table
 
 
@@ -514,7 +516,8 @@ def held_out_series(results: list[FoldResult]) -> tuple:
     return dates[0].append(dates[1:]), np.concatenate(obs), np.concatenate(sim)
 
 
-def summarize(results: list[FoldResult], n_blocks: Optional[int] = None) -> pd.DataFrame:
+def summarize(results: list[FoldResult], n_blocks: Optional[int] = None,
+              level: float = JACKKNIFE_LEVEL) -> pd.DataFrame:
     """
     One row per fold: metrics + calibrated parameter columns (p1..pN), for
     easy mean/std reporting and for checking whether par_best is stable
@@ -525,7 +528,7 @@ def summarize(results: list[FoldResult], n_blocks: Optional[int] = None) -> pd.D
     NSE/KGE/RMSE on the concatenated held-out predictions from all folds,
     weighting all out-of-sample days equally). Given `n_blocks` (the number of
     blocks in the whole record) and at least two folds, three more rows give
-    jackknife standard errors and 90% intervals for the parameters
+    jackknife standard errors and intervals for the parameters at `level` (a fraction)
     (`jackknife_rows`). The 'std' row is only the spread between folds: the folds
     share most of their data, so it understates the parameters' uncertainty.
     """
@@ -591,7 +594,7 @@ def summarize(results: list[FoldResult], n_blocks: Optional[int] = None) -> pd.D
         # Append summary rows
         extra = []
         if n_blocks is not None and len(results) >= 2:
-            extra = jackknife_rows(np.array([r.par_best for r in results]), n_blocks)
+            extra = jackknife_rows(np.array([r.par_best for r in results]), n_blocks, level=level)
         summary_df = pd.DataFrame([mean_row, std_row, pooled_row, *extra])
         df = pd.concat([df, summary_df], ignore_index=True)
 
@@ -605,7 +608,8 @@ def summarize(results: list[FoldResult], n_blocks: Optional[int] = None) -> pd.D
 CHECK_SIMULATIONS = 1000        # simulations per held-out year
 MIN_SEASON_OBSERVED = 0.8       # a year counts if at least this share of its season was measured
 DEFAULT_THRESHOLD_QUANTILE = 0.9
-CHECK_RANGES = (0.5, 0.9)       # central ranges whose coverage is reported
+COVERAGE_LEVELS = (50.0, 80.0, 90.0, 95.0)   # central ranges (%) whose coverage is always reported
+CHANCE_CONFIDENCE = 0.95        # range of coverage expected by chance (binomial)
 
 
 def warmest_months(dates, values, n: int = 4) -> list:
@@ -614,10 +618,61 @@ def warmest_months(dates, values, n: int = 4) -> list:
     return sorted(int(m) for m in s.groupby(s.index.month).mean().nlargest(n).index)
 
 
+def _fold_ensemble(r: FoldResult, noise_model: str, n_simulations: int, rng: np.random.Generator):
+    """`n_simulations` series of a fold's held-out window: its simulation plus random error from its
+    own error model (sigma, rho), as a FORWARD run makes them. Returns (observed, ensemble), with NaN
+    where there is no measurement or no simulation."""
+    from .uncertainty import generate_ar1_noise
+    obs = np.where(r.obs_held_out == MISSING_DATA_SENTINEL, np.nan, r.obs_held_out)
+    sim = np.where(r.sim_held_out == MISSING_DATA_SENTINEL, np.nan, r.sim_held_out)
+    n_days = len(sim)
+    if noise_model == "ar1":
+        noise = np.array([generate_ar1_noise(n_days, r.sigma, r.rho, [(0, n_days - 1)], rng)
+                          for _ in range(n_simulations)])
+    else:
+        noise = rng.normal(0.0, r.sigma, (n_simulations, n_days))
+    measured = np.isfinite(obs) & np.isfinite(sim)
+    return np.where(measured, obs, np.nan), np.where(measured[None, :], sim[None, :] + noise, np.nan)
+
+
+def check_interval_coverage(results: list[FoldResult], levels=COVERAGE_LEVELS, extra_level: Optional[float] = None,
+                            noise_model: str = "ar1", n_simulations: int = CHECK_SIMULATIONS,
+                            seed: Optional[int] = None) -> pd.DataFrame:
+    """
+    Did prediction intervals of each level hold in the held-out years? For each level (%), the share
+    of measured held-out days inside the central range of the fold's simulations (as in
+    `check_yearly_statistics`), and the same for 7-day moving means (all 7 days measured). Days are
+    not independent, so no range expected by chance is given; differences of a few tenths of a
+    percentage point mean nothing. Parameter uncertainty is not included, so the intervals are slightly
+    narrower than a FORWARD run's: coverage here errs low, not high.
+    """
+    levels = sorted(set(levels) | ({float(extra_level)} if extra_level is not None else set()))
+    inside = {(what, lev): [0, 0] for what in ("daily", "7-day") for lev in levels}
+    for r in results:
+        if r.dates_held_out is None or not np.isfinite(r.sigma):
+            continue
+        rng = np.random.default_rng(None if seed is None else [int(seed), int(r.fold_id), 7])
+        obs, ens = _fold_ensemble(r, noise_model, n_simulations, rng)
+        week_obs = pd.Series(obs).rolling(7).mean().to_numpy()
+        week_ens = pd.DataFrame(ens.T).rolling(7).mean().to_numpy().T
+        for what, o, e in (("daily", obs, ens), ("7-day", week_obs, week_ens)):
+            ok = np.isfinite(o)
+            if not ok.any():
+                continue
+            for lev in levels:
+                lo, hi = np.percentile(e[:, ok], [50 - lev / 2, 50 + lev / 2], axis=0)
+                inside[(what, lev)][0] += int(np.sum((o[ok] >= lo) & (o[ok] <= hi)))
+                inside[(what, lev)][1] += int(ok.sum())
+    rows = [{"level": lev, **{f"{what} inside": (inside[(what, lev)][0] / inside[(what, lev)][1]
+                                                if inside[(what, lev)][1] else np.nan) for what in ("daily", "7-day")},
+             "days": inside[("daily", lev)][1], "7-day means": inside[("7-day", lev)][1]} for lev in levels]
+    return pd.DataFrame(rows)
+
+
 def check_yearly_statistics(results: list[FoldResult], threshold: Optional[float] = None,
                             season_months: Optional[list] = None, noise_model: str = "ar1",
-                            n_simulations: int = CHECK_SIMULATIONS, seed: Optional[int] = None,
-                            return_simulations: bool = False):
+                            level: float = 90.0, n_simulations: int = CHECK_SIMULATIONS,
+                            seed: Optional[int] = None, return_simulations: bool = False):
     """
     Did the predicted ranges of yearly statistics hold in years the model was not
     calibrated on?
@@ -632,24 +687,33 @@ def check_yearly_statistics(results: list[FoldResult], threshold: Optional[float
     parameter set), so the ranges are slightly narrower than those of a FORWARD run
     from a DE-MCMC chain.
 
+    `level` (%) is the central range reported for each year (normally
+    `uncertainty_options.prediction_interval`); the summary also gives the coverage
+    of the ranges in COVERAGE_LEVELS, from the same PIT values.
+
     Returns
     -------
     per_year : DataFrame
-        One row per held-out year and statistic: the measured value, the 5th, 25th,
-        50th, 75th and 95th percentiles of the simulations, the PIT (share of
-        simulations below the measured value), whether the measured value lies in
-        the central 50% and 90% ranges, and the deviation (measured minus median),
-        the input of `scenario.correct_statistic`.
+        One row per held-out year and statistic: the measured value, the median and
+        the central `level`% range of the simulations, the PIT (share of simulations
+        below the measured value), whether the measured value lies in that range,
+        and the deviation (measured minus median), the input of
+        `scenario.correct_statistic`.
     summary : DataFrame
-        One row per statistic: number of years, share inside the 50% and 90% ranges,
-        the range of shares expected by chance (95%), and the mean deviation with
-        its 95% confidence interval. A confidence interval that excludes zero means
-        the model is biased in that statistic.
+        One row per statistic: number of years; for each level, the share of years
+        inside the central range and the shares expected by chance (95% binomial
+        range); and the mean deviation with its 95% confidence interval. A
+        confidence interval that excludes zero means the model is biased in that
+        statistic.
     simulations : dict, only with `return_simulations`
         {(year, statistic): simulated values}.
     """
     from scipy.stats import binom, t as student_t
-    from .scenario import YEARLY_STATISTICS, year_statistics, pit as pit_of
+    from .scenario import YEARLY_STATISTICS, year_statistics, pit as pit_of, central_range, inside_range
+    level = float(level)
+    if not (0.0 < level < 100.0):
+        raise ValueError(f"level must be strictly between 0 and 100 (per cent), got {level}")
+    levels = sorted(set(COVERAGE_LEVELS) | {level})
     from .uncertainty import generate_ar1_noise
 
     all_dates = pd.DatetimeIndex([]).append([r.dates_held_out for r in results if r.dates_held_out is not None])
@@ -665,17 +729,8 @@ def check_yearly_statistics(results: list[FoldResult], threshold: Optional[float
         if r.dates_held_out is None or not np.isfinite(r.sigma):
             continue
         rng = np.random.default_rng(None if seed is None else [int(seed), int(r.fold_id)])
-        obs = np.where(r.obs_held_out == MISSING_DATA_SENTINEL, np.nan, r.obs_held_out)
-        sim = np.where(r.sim_held_out == MISSING_DATA_SENTINEL, np.nan, r.sim_held_out)
-        n_days = len(sim)
-        if noise_model == "ar1":
-            noise = np.array([generate_ar1_noise(n_days, r.sigma, r.rho, [(0, n_days - 1)], rng)
-                              for _ in range(n_simulations)])
-        else:
-            noise = rng.normal(0.0, r.sigma, (n_simulations, n_days))
-        measured = np.isfinite(obs) & np.isfinite(sim)
-        ens = np.where(measured[None, :], sim[None, :] + noise, np.nan)
-        obs_used = np.where(measured, obs, np.nan)
+        obs_used, ens = _fold_ensemble(r, noise_model, n_simulations, rng)
+        measured = np.isfinite(obs_used)
         years = r.years_held_out if r.years_held_out is not None else r.dates_held_out.year.to_numpy()
         in_season = np.isin(r.dates_held_out.month, season_months)
         sim_stats = year_statistics(ens, r.dates_held_out, threshold, years=years)
@@ -690,27 +745,28 @@ def check_yearly_statistics(results: list[FoldResult], threshold: Optional[float
                 sims = sims[np.isfinite(sims)]
                 if not np.isfinite(value) or len(sims) == 0:
                     continue
-                q = np.percentile(sims, [5, 25, 50, 75, 95])
+                lower, upper = central_range(sims, level)
+                median = float(np.median(sims))
                 p = pit_of(sims, value, rng)
                 rows.append({"fold": r.label, "year": int(year), "statistic": name, "measured": value,
-                             "p5": q[0], "p25": q[1], "median": q[2], "p75": q[3], "p95": q[4], "pit": p,
-                             "inside_50": bool(0.25 <= p <= 0.75), "inside_90": bool(0.05 <= p <= 0.95),
-                             "deviation": value - q[2], "sigma": r.sigma, "rho": r.rho,
-                             "threshold": threshold, "season_months": " ".join(map(str, season_months))})
+                             "median": median, "level": level, "lower": float(lower), "upper": float(upper),
+                             "pit": p, "inside": bool(inside_range(p, level)), "deviation": value - median,
+                             "sigma": r.sigma, "rho": r.rho, "threshold": threshold,
+                             "season_months": " ".join(map(str, season_months))})
                 if return_simulations:
                     simulations[(int(year), name)] = sims
-    per_year = pd.DataFrame(rows, columns=["fold", "year", "statistic", "measured", "p5", "p25", "median", "p75",
-                                           "p95", "pit", "inside_50", "inside_90", "deviation", "sigma", "rho",
-                                           "threshold", "season_months"])
+    per_year = pd.DataFrame(rows, columns=["fold", "year", "statistic", "measured", "median", "level", "lower",
+                                           "upper", "pit", "inside", "deviation", "sigma", "rho", "threshold",
+                                           "season_months"])
     summary = []
     for name in YEARLY_STATISTICS:
         sub = per_year[per_year.statistic == name]
         n = len(sub)
         row = {"statistic": name, "n_years": n}
-        for level in CHECK_RANGES:
-            col = f"inside_{int(level * 100)}"
-            row[f"share_{col}"] = float(sub[col].mean()) if n else np.nan
-            lo, hi = binom.interval(0.95, n, level) if n else (np.nan, np.nan)
+        for lev in levels:
+            col = f"inside_{lev:g}"
+            row[f"share_{col}"] = float(np.mean(inside_range(sub.pit, lev))) if n else np.nan
+            lo, hi = binom.interval(CHANCE_CONFIDENCE, n, lev / 100) if n else (np.nan, np.nan)
             row[f"expected_{col}_low"] = lo / n if n else np.nan
             row[f"expected_{col}_high"] = hi / n if n else np.nan
         d = sub.deviation.to_numpy()

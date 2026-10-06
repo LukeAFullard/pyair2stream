@@ -21,7 +21,18 @@
   it, the 90% ranges held in 85–94% of held-out years (V11). Example 03 now uses
   the check and the correction.
 - `scenario.year_statistics` (the three yearly statistics, defined as in the
-  check) and `scenario.pit`.
+  check), `scenario.pit`, `scenario.central_range` and `scenario.inside_range`.
+- **Any interval level, checked at every level.** `uncertainty_options.prediction_interval`
+  (default 90) now also sets the ranges of the cross-validation check, whose
+  summary reports coverage at 50%, 80%, 90% and 95% as well;
+  `cv_interval_coverage.csv` gives the share of held-out days and 7-day means
+  inside the interval at each of these levels. New
+  `uncertainty_options.parameter_interval` (default 90) sets the level of the
+  parameter intervals: the jackknife rows of `cv_results.csv` (90% before) and
+  the MCMC summary `parameter_significance_*.csv` (⚠ 95% before; its columns are
+  now named after the level). Its "differs from zero" column stays a test at the
+  5% level. The validation tests coverage at 50%, 80%, 90%, 95% and 99% (V4, V5,
+  V9, V10, V11).
 - Validation V11 (the check and the correction over 48 held-out years per
   version), and part C of V9 (the correction from cross-validation of the
   calibration years, applied to the later years).

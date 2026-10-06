@@ -215,6 +215,8 @@ class TestMain(unittest.TestCase):
         self.assertEqual(summary.loc["highest 7-day mean", "n_years"], 1)
         per_year = pd.read_csv(os.path.join(data.folder, "cv_yearly_statistics.csv")).set_index("statistic")
         self.assertLess(per_year.loc["highest 7-day mean", "deviation"], -0.4)
+        coverage = pd.read_csv(os.path.join(data.folder, "cv_interval_coverage.csv"))
+        self.assertEqual(list(coverage.level), [50.0, 80.0, 90.0, 95.0])
 
 if __name__ == '__main__':
     unittest.main()

@@ -158,3 +158,77 @@ def test_season_months_and_threshold_config(tmp_path):
     path.write_text(yaml.safe_dump(cfg))
     with pytest.raises(ValueError, match="season_months"):
         read_calibration(str(path))
+
+
+# --- Any level, not only 90% ---------------------------------------------------------------
+
+def test_central_range_and_inside_range_at_any_level():
+    x = np.arange(1001, dtype=float)                   # 0..1000: percentiles are the values themselves
+    assert scenario.central_range(x, 90) == pytest.approx((50.0, 950.0))
+    assert scenario.central_range(x, 95) == pytest.approx((25.0, 975.0))
+    assert scenario.central_range(x, 50) == pytest.approx((250.0, 750.0))
+    assert list(scenario.inside_range([0.02, 0.03, 0.5, 0.97, 0.98], 95)) == [False, True, True, True, False]
+    with pytest.raises(ValueError):
+        scenario.central_range(x, 100)
+
+
+@pytest.mark.parametrize("level", [80.0, 95.0, 97.5])
+def test_check_reports_the_chosen_level(level):
+    per_year, summary = check_yearly_statistics(_folds(40), threshold=16.0, level=level, n_simulations=400, seed=4)
+    assert (per_year.level == level).all()
+    # The per-year range is the central range of the simulations, and 'inside' follows from the PIT.
+    assert ((per_year.lower <= per_year["median"]) & (per_year["median"] <= per_year.upper)).all()
+    assert (per_year.inside == scenario.inside_range(per_year.pit, level)).all()
+    for lev in (50, 80, 90, 95, level):                # always these, and the chosen one
+        col = f"share_inside_{lev:g}"
+        assert col in summary.columns
+        # With the right error model, every level holds within the range expected by chance.
+        for r in summary.to_dict("records"):
+            assert r[f"expected_inside_{lev:g}_low"] <= r[col] <= r[f"expected_inside_{lev:g}_high"]
+
+
+def test_parameter_interval_sets_the_jackknife_level(tmp_path):
+    import yaml
+    from pyair2stream.io import read_calibration
+    from pyair2stream.cross_validation import summarize
+    cfg = {"run_mode": "DE", "paths": {"output_dir": str(tmp_path)},
+           "uncertainty_options": {"parameter_interval": 95}}
+    (tmp_path / "c.yaml").write_text(yaml.safe_dump(cfg))
+    assert read_calibration(str(tmp_path / "c.yaml")).uncertainty_options["parameter_interval"] == 95.0
+    folds = _folds(4)
+    for k, f in enumerate(folds):
+        f.par_best = np.full(8, 1.0 + 0.1 * k)
+    table = summarize(folds, n_blocks=5, level=0.95)
+    assert {"jackknife_95_lower", "jackknife_95_upper"} <= set(table.fold)
+    wide = table.set_index("fold")
+    narrow = summarize(folds, n_blocks=5, level=0.90).set_index("fold")
+    assert wide.loc["jackknife_95_upper", "p1"] > narrow.loc["jackknife_90_upper", "p1"]
+    cfg["uncertainty_options"]["parameter_interval"] = 100
+    (tmp_path / "c.yaml").write_text(yaml.safe_dump(cfg))
+    with pytest.raises(ValueError, match="parameter_interval"):
+        read_calibration(str(tmp_path / "c.yaml"))
+
+
+def test_parameter_summary_interval_follows_the_level_and_the_zero_test_stays_at_95():
+    from pyair2stream.post_processing import parameter_summary
+    rng = np.random.default_rng(0)
+    chain = pd.DataFrame({"par_1": rng.normal(1.8, 1.0, 200000),       # 0 at about the 3.6th percentile
+                          "par_2": rng.normal(0.0, 1.0, 200000)})
+    t90 = parameter_summary(chain, 90).set_index("Parameter")
+    t50 = parameter_summary(chain, 50).set_index("Parameter")
+    assert t90.loc["par_2", "90%_CI_Upper"] == pytest.approx(1.645, abs=0.02)
+    assert t50.loc["par_2", "50%_CI_Upper"] == pytest.approx(0.674, abs=0.02)
+    # par_1: the 90% interval excludes 0 but the 95% one does not, so it is not "significant".
+    assert t90.loc["par_1", "90%_CI_Lower"] > 0
+    assert not t90.loc["par_1", "Significantly_Diff_From_Zero"]
+    assert t50.loc["par_1", "Significantly_Diff_From_Zero"] == t90.loc["par_1", "Significantly_Diff_From_Zero"]
+
+
+def test_interval_coverage_holds_at_every_level_when_the_error_model_is_right():
+    from pyair2stream.cross_validation import check_interval_coverage
+    cov = check_interval_coverage(_folds(40), extra_level=97.5, n_simulations=500, seed=5).set_index("level")
+    assert list(cov.index) == [50.0, 80.0, 90.0, 95.0, 97.5]
+    for level, r in cov.iterrows():
+        assert abs(r["daily inside"] - level / 100) < 0.02
+        assert abs(r["7-day inside"] - level / 100) < 0.04
+    assert cov["days"].iloc[0] == sum(int((f.obs_held_out != -999).sum()) for f in _folds(40))

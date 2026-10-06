@@ -331,6 +331,13 @@ LATHYP:
    mean deviation with its 95% confidence interval. Parameter uncertainty is not
    included (each fold has one parameter set), so these ranges are slightly
    narrower than a FORWARD run's (§13).
+6. **Coverage at each level** (`cv_interval_coverage.csv`). From the same
+   simulations, the share of measured held-out days, and of 7-day moving means,
+   inside the central 50%, 80%, 90% and 95% ranges and at `prediction_interval`.
+   It shows whether intervals at the level you report held at your site.
+
+Every range in items 5 and 6 is reported at `uncertainty_options.prediction_interval`
+(default 90%), and coverage at 50%, 80%, 90% and 95% as well.
 
 Large variation of the parameters between folds means they are poorly determined
 by the data (equifinality). The spread between folds (`std`) is not a confidence
@@ -341,7 +348,10 @@ interval: the folds share most of their data, so it understates the uncertainty
 With θᵢ the parameters fitted without block i (m folds), θ̄ their mean, and n the
 number of blocks in the whole record (years, or groups of `n_years_per_fold`):
 
-  SE² = (n − 1)/m · Σᵢ (θᵢ − θ̄)²,  interval = θ̄ ± t₀.₉₅,ₘ₋₁ · SE.
+  SE² = (n − 1)/m · Σᵢ (θᵢ − θ̄)²,  interval = θ̄ ± t_(1+L)/2,m−1 · SE,
+
+with L the level `uncertainty_options.parameter_interval` (default 0.90; the
+rows are named `jackknife_90_lower` and so on).
 
 When every block is held out (m = n) this is the standard delete-one-block
 jackknife; the first years are never held out, so the sum over n blocks is
@@ -420,7 +430,8 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    For each, the model is run and random error is added to every day: normally
    distributed with standard deviation equal to that parameter set's daily
    root-mean-square residual (`iid`), or an AR(1) series with the same standard
-   deviation and ρ (`ar1`). The `prediction_interval` (default 90%) is the band
+   deviation and ρ (`ar1`). The `prediction_interval` (default 90%; any level
+   above 0 and below 100) is the band
    between the matching lower and upper percentiles of these simulations on each
    day. The program then reports the **coverage**: the share of observed days
    inside the band (it should be close to the nominal percentage). This band and
@@ -541,7 +552,9 @@ cooler band would understate the chance of exceedance.
 **Outputs:** `MCMC_chain_*.csv` (post-burn-in samples), `MCMC_chain_*_meta.json`
 (σ, ρ, diagnostics, coverage, excluded draws), `MCMC_envelopes_*.csv`, and the
 parameter summary `parameter_significance_*.csv` (posterior mean, standard
-deviation, 95% credible interval, and whether that interval excludes zero).
+deviation, central credible interval at `parameter_interval`, default 90%, and
+whether zero lies outside the central 95%: a test at the usual 5% level,
+whatever the interval's level).
 Excluding zero only means something for parameters where zero means "no
 effect" (`a2`, `a4`, `a5`, `a6`, `a8`). It says nothing about `a1`, `a3` or the
 seasonal timing `a7`.
