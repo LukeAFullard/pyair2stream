@@ -245,6 +245,14 @@ The [validation suite](validation/README.md) checks this, and its results are in
   on the Rhône, which does no better than the simple alternatives whichever
   years it is calibrated on. On rivers like the Rhône, use a version with
   discharge (7 or 8).
+- **A fair cross-validation.** It hides a year's water temperatures and
+  predicts the year from its own air temperature and discharge, the standard
+  design. Hiding those inputs from the calibration too, or leaving two months
+  unused around the year, changed no held-out year's error by more than
+  0.04 °C ([V12](validation/REPORT.md#v12)). Calibrating on earlier years only
+  was as accurate, but its 90% intervals held on 87% of days rather than 90%:
+  for predictions of future years, the later-years tests above are the
+  relevant ones.
 - **Scenario tools give exact answers** where the answer is known.
 
 To run the tests and the validation suite (needs `gfortran`):
@@ -253,7 +261,7 @@ To run the tests and the validation suite (needs `gfortran`):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # or without --quick: the full suite, about 95 minutes
+python validation/run_all.py --quick     # or without --quick: the full suite, about 110 minutes
 ```
 
 ## Examples

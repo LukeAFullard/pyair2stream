@@ -45,6 +45,20 @@
   rests on in the literature, and how to defend it), with figures drawn by
   `docs/figures/make_uncertainty_figures.py`. A test checks that every link in
   the documentation resolves.
+- Validation V12: does the cross-validation's design flatter the model? It
+  hides a held-out year's water temperatures and predicts the year from its own
+  air temperature and discharge, the standard design (docs/METHODS.md §11 now
+  explains why, with references). Over 96 held-out river-years, hiding the
+  inputs from the calibration too changed no year's RMSE by more than
+  0.034 °C (against gap-tolerant mode with the inputs kept), and a 60-day
+  buffer around the year by no more than 0.041 °C.
+  Calibrating on earlier years only was as accurate, but its 90% intervals held
+  on 87.1% of days against 89.6%: for predictions of future years, quote the
+  later-years tests (V5, V10) as well. ⚠ Jackknife parameter intervals depend
+  on the optimizer: another seed alone changed version 8's jackknife standard
+  errors by a factor of 0.35–1.55; check poorly determined parameters with a
+  second `random_seed`. `validation/run_all.py --only` now keeps the other
+  checks in `REPORT.md`.
 
 ### Changed
 - ⚠ A FORWARD run with prediction intervals refuses a DE-MCMC chain fitted with

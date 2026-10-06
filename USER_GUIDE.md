@@ -644,7 +644,15 @@ abstraction.
 
 Cross-validation calibrates the model repeatedly, each time hiding one year, and
 scores it on the hidden year. It shows how well the model predicts years it has
-not seen, and whether the parameters are stable from year to year.
+not seen, and whether the parameters are stable from year to year. Only the
+year's water temperatures are hidden: the year is predicted from its own air
+temperature and discharge, as any prediction is. This is the standard design;
+hiding those inputs from the calibration too changed no held-out year's RMSE by
+more than 0.04 °C (validation [V12](validation/REPORT.md#v12);
+[docs/METHODS.md §11](docs/METHODS.md#11-cross-validation) explains why). Each year is predicted from a calibration on later years as well
+as earlier ones; for predictions of future years, also calibrate on the
+earlier years and test on the later ones (`paths.validation_data`), which is
+slightly less favourable.
 
 ```yaml
 run_mode: "DE"              # DE, PSO or LATHYP
@@ -707,7 +715,11 @@ config so that every fold uses the same discharge scaling; otherwise the
 parameters also move with it. Each interval is for one parameter on its own:
 parameters that trade off move together from fold to fold, so combining the
 ends of several intervals gives parameter sets that do not fit the data
-(example [06](examples/06_cross_validation/README.md) shows this).
+(example [06](examples/06_cross_validation/README.md) shows this). The intervals
+also depend on the optimizer: where parameters trade off, one fold can end on a
+distant set with almost the same fit, and another `random_seed` alone changed
+version 8's jackknife standard errors by a factor of 0.35–1.55 (V12). For poorly
+determined parameters, repeat with a second seed.
 Cross-validation is ignored (with a warning) in other run modes.
 
 ## 14. Checklist for results that support a decision

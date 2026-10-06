@@ -327,8 +327,8 @@ def run(ctx) -> Result:
     moved = int(sum(r["A2 against A: folds with a parameter moved > 2 SE"] for r in par_rows))
     if moved:
         res.notes.append(
-            f"With another optimizer seed alone, {moved} folds ended on parameters more than 2 jackknife standard "
-            "errors away, with almost the same fit: parameters that trade off (equifinality) make single folds "
+            f"With another optimizer seed alone, {moved} fold{'s' if moved > 1 else ''} ended on parameters more "
+            "than 2 jackknife standard errors away, with almost the same fit: parameters that trade off (equifinality) make single folds "
             "unstable, and the jackknife standard errors inherit this (see the table). Read the jackknife "
             "intervals of poorly determined parameters as indicative, and check them with a second seed.")
     return res
@@ -339,7 +339,7 @@ def _fig(years):
     import matplotlib.pyplot as plt
     plot_style()
     key = ["river", "version", "year"]
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.6), gridspec_kw={"width_ratios": [1.1, 1]})
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 3.8), gridspec_kw={"width_ratios": [1, 1.15]})
     show = [("A2", "another seed"), ("B", "inputs hidden\n(against gap mode alone)"),
             ("D", f"{BUFFER_DAYS}-day buffer"), ("C", "forward only")]
     rng = np.random.default_rng(0)
@@ -368,11 +368,11 @@ def _fig(years):
     ax2.bar(x - 0.18, [g[1] * 100 for g in groups], 0.34, color=BLUE, label="default, same years")
     ax2.bar(x + 0.18, [g[2] * 100 for g in groups], 0.34, color=ORANGE, label="forward only")
     reference_line(ax2, 90, "90%")
-    ax2.set_xticks(x, [g[0] for g in groups], fontsize=7.5)
-    ax2.set_ylim(80, 95)
+    ax2.set_xticks(x, [g[0] for g in groups], fontsize=7)
+    ax2.set_ylim(80, 96)
     ax2.set_ylabel("Days inside the 90% interval (%)")
     ax2.grid(axis="x", visible=False)
-    ax2.legend(loc="lower left", fontsize=7.5)
+    ax2.legend(loc="upper left", ncol=2, fontsize=7.5)
     ax2.set_title("Calibrating on earlier years only", fontsize=9)
     fig.tight_layout()
     return (save_figure(fig, "V12_variants.png"),

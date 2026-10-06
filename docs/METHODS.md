@@ -311,7 +311,8 @@ LATHYP:
    NSE, KGE and RMSE are computed on the hidden days only (daily values; in
    gap-tolerant mode not on the unscored start of a segment, §10).
    In gap-tolerant mode the fold's air temperature and discharge are also hidden
-   during calibration, so the fold becomes a gap.
+   during calibration, so the fold becomes a gap. Why the inputs are otherwise
+   kept is explained below the list.
 4. `cv_results.csv` lists each fold's scores and parameters, plus the mean and
    standard deviation across folds and "pooled" scores over all held-out days;
    `cv_bias_by_month.*` gives the mean error by month and season over the
@@ -332,7 +333,10 @@ LATHYP:
    and 90% ranges, the shares expected by chance (95% binomial range), and the
    mean deviation with its 95% confidence interval. Parameter uncertainty is not
    included (each fold has one parameter set), so these ranges are slightly
-   narrower than a FORWARD run's (§13).
+   narrower than a FORWARD run's (§13). Set `threshold` and `season_months` to
+   the limit and season in question: the defaults are chosen from all measured
+   temperatures, held-out years included. That changes no prediction, but a
+   question fixed in advance is easier to defend.
 6. **Coverage at each level** (`cv_interval_coverage.csv`). From the same
    simulations, the share of measured held-out days, and of 7-day moving means,
    inside the central 50%, 80%, 90% and 95% ranges and at `prediction_interval`.
@@ -340,6 +344,46 @@ LATHYP:
 
 Every range in items 5 and 6 is reported at `uncertainty_options.prediction_interval`
 (default 90%), and coverage at 50%, 80%, 90% and 95% as well.
+
+**What is hidden, and why.** A fold hides the held-out year's measured water
+temperatures, the quantity predicted, and keeps its air temperature and
+discharge, from which the year is then predicted. This is the standard design.
+Cross-validation hides the responses of the held-out cases and predicts them
+from their own predictors (Stone, 1974; Hastie et al., 2009, §7.10), and a
+hydrological split-sample test simulates the test period from its measured
+inputs (Klemeš, 1986; Coron et al., 2012). Using the inputs is not leakage,
+which is information about the target that would not be available when
+predicting (Kaufman et al., 2012): a prediction always has its inputs. The
+model never uses measured water temperature, so hiding it removes all of the
+year's information about the answer, and every step of the prediction that
+uses it is repeated inside each fold (calibration, σ and ρ, and in gap-tolerant
+mode the day-of-year climatology). During calibration the model runs through the held-out year with
+its inputs, which shape only the first days to weeks of the next year.
+
+Validation V12 tested the alternatives on 96 held-out river-years. Hiding the
+inputs during calibration too (in gap-tolerant mode, where the year then becomes
+a gap) changed no year's RMSE by more than 0.034 °C against the same mode with
+the inputs kept (another optimizer seed alone: 0.017 °C), and a 60-day
+buffer of unused days on each side of the year (h-block cross-validation;
+Burman et al., 1994) by no more than 0.041 °C; neither changed the coverage of
+the 90% interval or the mean error of the yearly statistics measurably.
+
+**What it does not test.**
+
+- *Errors in the inputs.* Cross-validation uses measured air temperature and
+  discharge, so it measures the model's skill given correct inputs, as the
+  "perfect predictor" experiments of climate downscaling do (Gutiérrez et al.,
+  2019). Errors in projected, transferred or scenario inputs must be assessed
+  separately (§16).
+- *Forecasting a changing future.* Each fold is calibrated on later as well as
+  earlier years, as is usual in hydrology (Coron et al., 2012), but where a
+  record changes over time only a test that keeps time order is fully honest
+  (Arlot and Celisse, 2010, §8.3). In V12, calibrating on earlier years only
+  predicted as accurately (RMSE 0.787 against 0.786 °C on the same 78 years),
+  but its 90% intervals held on 87.1% of days against 89.6%, because the error
+  size estimated from earlier years only was smaller. V5 (the later years of
+  each record) and V10 (warmer years) are the forward tests: quote them, as
+  well as the cross-validation, for predictions of future years.
 
 Large variation of the parameters between folds means they are poorly determined
 by the data (equifinality). The spread between folds (`std`) is not a confidence
@@ -363,6 +407,14 @@ On the same data, the DE-MCMC parameter intervals (§12, default likelihood)
 contained them 97% of the time for version 5 and 91% for version 8. For
 versions 4, 7 and 8 set `Qmedia`
 explicitly, so that every fold uses the same discharge scaling.
+
+The jackknife intervals inherit the optimizer's randomness. Where parameters
+trade off (equifinality), a fold can end on a distant parameter set with almost
+the same fit, and that one fold widens the interval. In V12, another optimizer
+seed alone changed version 8's jackknife standard errors by a factor of 0.35 to
+1.55 (median over its parameters, by river). Read the jackknife intervals of
+poorly determined parameters as indicative, and check them with a second
+`random_seed`; predictions are not affected.
 
 A cross-validation run does not also produce a single final calibration.
 
@@ -727,6 +779,12 @@ change one-sided.
   missed: in the Mentue's 2003 heatwave, the model calibrated on the three
   coolest summers put August's highest daily temperature 1.9 °C above the
   measured one.
+- **Inputs are taken as exact.** The uncertainty covers the parameters and the
+  model's own error, not errors in the air temperature or discharge supplied.
+  Calibration, validation and cross-validation use measured inputs; a
+  prediction from projected, transferred (another station) or scenario inputs
+  carries their errors too. Assess those separately, for example by running
+  several input series.
 - **Choose a version that suits the river.** Where discharge drives the summer
   temperature (the Rhône here), versions without a discharge term (3–5) did
   hardly better than simple alternatives, and version 5's probabilities for
@@ -789,7 +847,8 @@ on synthetic data; out-of-sample performance on three real rivers; numerical
 accuracy; gaps; exact answers from the workflow and scenario tools;
 probabilities of exceeding a limit, on synthetic data and real rivers (V9);
 predictions for warmer and lower-flow years than those calibrated on (V10); and
-the cross-validated check and correction of yearly statistics (V11). V5, V9 and
+the cross-validated check and correction of yearly statistics (V11); and that
+the cross-validation's design does not flatter the model (V12). V5, V9 and
 V10 do not pass all their criteria; the report says where and why. The test
 suite (`pytest tests/`) also compares against the Fortran and checks each
 safeguard above.
@@ -878,3 +937,24 @@ These are deliberate; each is covered by tests.
 - Ribatet, M., Cooley, D. and Davison, A. C. (2012). Bayesian inference from
   composite likelihoods, with an application to spatial extremes. *Statistica
   Sinica*, 22, 813–845.
+- Stone, M. (1974). Cross-validatory choice and assessment of statistical
+  predictions. *Journal of the Royal Statistical Society B*, 36, 111–147.
+- Klemeš, V. (1986). Operational testing of hydrological simulation models.
+  *Hydrological Sciences Journal*, 31, 13–24.
+- Burman, P., Chow, E. and Nolan, D. (1994). A cross-validatory method for
+  dependent data. *Biometrika*, 81, 351–358.
+- Hastie, T., Tibshirani, R. and Friedman, J. (2009). *The Elements of
+  Statistical Learning*, 2nd edn. Springer.
+- Arlot, S. and Celisse, A. (2010). A survey of cross-validation procedures for
+  model selection. *Statistics Surveys*, 4, 40–79.
+- Coron, L., Andréassian, V., Perrin, C., Lerat, J., Vaze, J., Bourqui, M. and
+  Hendrickx, F. (2012). Crash testing hydrological models in contrasted climate
+  conditions: an experiment on 216 Australian catchments. *Water Resources
+  Research*, 48, W05552.
+- Kaufman, S., Rosset, S., Perlich, C. and Stitelman, O. (2012). Leakage in data
+  mining: formulation, detection, and avoidance. *ACM Transactions on Knowledge
+  Discovery from Data*, 6(4), 15.
+- Gutiérrez, J. M., Maraun, D., Widmann, M. and others (2019). An
+  intercomparison of a large ensemble of statistical downscaling methods over
+  Europe: results from the VALUE perfect predictor cross-validation experiment.
+  *International Journal of Climatology*, 39, 3750–3785.
