@@ -320,7 +320,7 @@ station, series label and time resolution.
 | `sensitivity_*` | §11 |
 | `MCMC_*`, `parameter_significance_*`, `parameter_correlation_*` | §11 |
 | `Forward_Prediction_*`, `forward_projection*.png` | §12 |
-| `cv_results.csv`, `cv_bias_by_month.*` | §13 |
+| `cv_results.csv`, `cv_bias_by_month.*`, `cv_yearly_statistics*.csv`, `cv_interval_coverage.csv` | §13 |
 
 **Reading the scores.** NSE: 1 is perfect, 0 is no better than the long-term mean;
 NSE above 0.9 is common for daily water temperature with this model.
@@ -363,6 +363,7 @@ scores.
 | `enable_prediction_intervals is True but residual_sigma is 0.0/unavailable` | Point `mcmc_chain_path` at a chain with its `_meta.json`, or set `residual_sigma`. |
 | `draws ... were excluded as numerically divergent` | Use `CRN`/`EXP`, or check the chain and bounds ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `paired_difference_from_files: ... differs` | The two scenario runs did not use the same parameter draws ([§12](#12-scenario-runs-and-prediction-intervals)). |
+| `The MCMC chain ... was fitted with ...` | The FORWARD run's model version, integrator or `Qmedia` differs from the chain's calibration: use `paths.calibration_metadata` from that calibration ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `Warning: warmup_drop_days=... is shorter than` | Gap-tolerant: increase `warmup_drop_days` as suggested ([§10](#10-gap-tolerant-mode)). |
 | (no message) Good overall scores, but `bias_by_month_*.png` shows the model too warm or too cool in some months | A whole-year score can hide a seasonal bias. Compare model versions ([§4](#4-choosing-a-model-version-and-integrator)); where discharge drives the summer temperature, use version 7 or 8. If a bias remains in the season of your limit, report it: a model that is too warm overstates the chance a warm-water limit was exceeded, one that is too cool understates it. |
 
@@ -443,6 +444,8 @@ Be aware:
 consistent with the data (Markov chain Monte Carlo, `emcee`) and gives a
 **prediction interval**: a band that should contain the stated share of observed
 daily temperatures. Method: [docs/METHODS.md §12](docs/METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc).
+**New to uncertainty?** [docs/UNCERTAINTY.md](docs/UNCERTAINTY.md) explains every
+interval, probability and check in plain language, with figures.
 
 ```yaml
 run_mode: "DE-MCMC"
@@ -453,7 +456,8 @@ uncertainty_options:
   noise_model: "ar1"            # the default; "iid" is also available (see below)
   likelihood: "least_squares"   # the default; "exact" is also available (see below)
   rho_timescale: "weekly"       # the default; "daily" is also available (see below)
-  prediction_interval: 90       # % width of the band
+  prediction_interval: 90       # % width of the band; any level, e.g. 95 (see below)
+  parameter_interval: 90        # % width of the parameter intervals (MCMC summary, cross-validation)
   save_ensemble: false          # true: also save every simulated series (.npz)
   strict_convergence: true      # default: stop with an error if not converged
   burnin_fraction: null         # override the automatic burn-in (0-1)
@@ -475,6 +479,13 @@ walks through this):
 - **Coverage.** The console and `MCMC_chain_*_meta.json` report
   `interval_coverage`: the share of observed days inside the band. It should be
   close to `prediction_interval`. Much lower means the band is too narrow.
+- **The level.** `prediction_interval` can be any level, for example 95. On the
+  Swiss rivers daily bands held from 50% to 95% in years not used for
+  calibration (95% bands: 94.4–94.5% of days), but 99% bands held only
+  98.0–98.2%, and in years unlike the calibration years 95% bands held 91–95%
+  ([V5](validation/REPORT.md#v5), [V11](validation/REPORT.md#v11)). Before
+  reporting a 95% or 99% band, check it at your site: cross-validation
+  (§13) writes `cv_interval_coverage.csv` for every level.
 - **`noise_model`.** Real model errors persist from day to day. For a single
   day, `"iid"` and `"ar1"` give bands of about the same width. For anything
   spanning several days they do not: on the Swiss rivers, 90% bands for 7-day
@@ -519,7 +530,8 @@ walks through this):
 Outputs: `MCMC_chain_*.csv` (parameter samples), `MCMC_chain_*_meta.json`
 (settings, diagnostics, residual σ, ρ and how it was estimated, coverage), `MCMC_envelopes_*.csv`
 (`Twat_mod_lower`, `Twat_mod_p50`, `Twat_mod_upper` per day),
-`parameter_significance_*.csv` (mean, SD and 95% interval of each parameter)
+`parameter_significance_*.csv` (mean, SD and `parameter_interval` interval of each
+parameter, and whether it differs from zero at the 5% level)
 and `parameter_correlation_*.png`.
 
 
@@ -561,6 +573,8 @@ With prediction intervals, parameter sets are drawn from the chain, each is run,
 and random error of the calibration's typical size and persistence (σ and ρ,
 from the chain's `_meta.json`) is added
 ([docs/METHODS.md §13](docs/METHODS.md#13-forward-runs-and-scenario-comparisons)).
+The run stops if the chain was fitted with another model version, integrator or
+`Qmedia`.
 If the scenario file has water temperature observations, the fit and the
 interval coverage are reported. Lower bounds can fall below `Tice_cover` because
 the error is added after the simulation.
@@ -571,13 +585,35 @@ set `uncertainty_options.save_ensemble: true` and use `pyair2stream.scenario`
 (`load_ensemble`, `aggregate`, `exceedance`). This is where `noise_model: "ar1"`
 (the default) matters: it keeps each simulated error series realistically
 persistent.
-Example [03](examples/03_compliance/README.md) computes the probability that a
-7-day mean limit was exceeded. Such probabilities are computed correctly (on
-synthetic data they come true as often as they say), but on real rivers the
-ranges for yearly peaks were too narrow: version 8's 90% ranges contained the
-measured value in 73–93% of years not used for calibration
-([validation V9](validation/REPORT.md#v9)). Treat them as approximate, and
-check them on your own validation years.
+`scenario.year_statistics` gives each year's highest daily mean, highest 7-day
+mean and days above a threshold in every simulation. Example
+[03](examples/03_compliance/README.md) computes the probability that a 7-day
+mean limit was exceeded.
+
+**Check and correct yearly statistics.** Such probabilities are computed
+correctly (on synthetic data they come true as often as they say), but the
+model can be biased on the hottest days: on the Mentue its yearly peaks came out
+0.6–0.8 °C too high in years it was not calibrated on, and over 48 such years
+per version on the Swiss rivers, uncorrected 90% ranges for yearly statistics
+held in only 73–92% of years ([V11](validation/REPORT.md#v11)). So, for a
+yearly statistic:
+
+1. run a cross-validation of the calibration years (§13) with your limit's
+   threshold and season (`cross_validation.threshold`, `season_months`);
+2. correct the simulated statistic with its deviations from
+   `cv_yearly_statistics.csv`:
+
+```python
+check = pd.read_csv("output/check/cv_yearly_statistics.csv")
+dev = check[check.statistic == "highest 7-day mean"].deviation
+peak = scenario.year_statistics(ens, dates, threshold=18)[2010]["highest 7-day mean"]
+p_exceeded = (scenario.correct_statistic(peak, dev) > 20).mean()
+```
+
+Corrected, the 90% ranges held in 85–94% of held-out years (V11). Report the
+corrected probability with the check's summary
+(`cv_yearly_statistics_summary.csv`). With fewer than about 5 held-out years the
+check says little, and the correction is wide.
 
 **Comparing two scenarios.** To get an uncertainty band for the *difference*
 (for example abstraction minus natural flow), both runs must use the same
@@ -632,8 +668,34 @@ and season over the held-out years, so a seasonal bias shows up out of sample.
 Large differences in parameters between years mean the data do not pin them
 down well.
 
+**Yearly statistics.** The run also writes `cv_yearly_statistics.csv`: for each
+held-out year, 1,000 simulations of its highest daily mean, highest 7-day mean
+and number of days above `threshold`, from the fold's calibration and its error
+model, and where the measured value fell among them. The deviation (measured
+minus predicted median) is what `scenario.correct_statistic` uses (§12).
+`cv_yearly_statistics_summary.csv` gives, for each statistic, how often the 50%
+and 90% ranges held (with the range expected by chance) and the mean deviation
+with a 95% interval: an interval that excludes zero means the model is biased in
+that statistic. Settings:
+
+```yaml
+cross_validation:
+  threshold: 18             # °C, for "days above threshold" (default: 90th percentile of the measurements)
+  season_months: [6, 7, 8, 9]   # a year counts if 80% of these months was measured (default: the 4 warmest)
+  min_train_years: 0        # hold out every year but the first: the check needs as many years as possible
+```
+
+It uses the error model of `uncertainty_options` (`noise_model`, `rho_timescale`),
+as a FORWARD run does, and reports ranges at `prediction_interval`. With fewer
+than about 5 held-out years it says little.
+
+**Coverage at each level.** `cv_interval_coverage.csv` gives, for the 50%, 80%,
+90% and 95% intervals and your `prediction_interval`, the share of held-out days
+and 7-day means that fell inside. Check the level you intend to report.
+
 **Parameter confidence intervals.** The rows `jackknife_90_lower` and
-`jackknife_90_upper` give approximate 90% intervals for each parameter, worked
+`jackknife_90_upper` give approximate 90% intervals for each parameter (the level
+is `uncertainty_options.parameter_interval`; the row names follow it), worked
 out from how much the parameters move between folds (the delete-one-year
 jackknife, [docs/METHODS.md §11](docs/METHODS.md#11-cross-validation)). In a
 test with known parameters they contained the true values 83–94% of the time,
@@ -664,12 +726,14 @@ decision, check:
    consistently too warm or too cool in that month.
 4. **Uncertainty**: if you report a band, the reported coverage is close to the
    nominal level, ideally on validation data and in the season your limit
-   applies to (errors can be larger in some seasons). Bands for new years are usually
-   slightly narrow (85–89.6% for 90% bands on the Swiss rivers,
+   applies to (errors can be larger in some seasons). Bands for new years are
+   usually slightly narrow (85–89.6% for 90% bands on the Swiss rivers,
    [validation V5](validation/REPORT.md#v5)). For 7-day means, runs of days or
    other multi-day quantities, keep `noise_model: "ar1"` and `rho_timescale:
-   "weekly"` (the defaults) and compute them from the saved simulations (§12). Report probabilities with their ranges, not as
-   a yes or no.
+   "weekly"` (the defaults) and compute them from the saved simulations (§12).
+   For a yearly statistic (a peak, a count of days), check it by
+   cross-validation and correct it (§12, §13). Report probabilities with their
+   ranges and the check, not as a yes or no.
 5. **Scope**: the model gives **daily means**. A limit on daily maxima or on
    sub-daily values needs a separate, justified step. Scenario inputs outside
    the calibrated range of air temperature or flow are extrapolation.
@@ -681,4 +745,6 @@ decision, check:
    results, and that its intervals are calibrated. Cite it with the commit.
 
 See [docs/METHODS.md §16](docs/METHODS.md#16-limitations-and-good-practice) for
-the full list of assumptions and limitations.
+the full list of assumptions and limitations, and
+[docs/UNCERTAINTY.md §15](docs/UNCERTAINTY.md#15-is-it-defensible) for how to
+present a result so that it can be defended.

@@ -116,6 +116,124 @@ def exceedance(ensemble: np.ndarray, threshold: float, consecutive_days: int = 1
     return counts
 
 
+YEARLY_STATISTICS = ("highest daily mean", "highest 7-day mean", "days above threshold")
+
+
+def year_statistics(ensemble: np.ndarray, dates, threshold: float, window: int = 7, years=None) -> dict:
+    """
+    Three statistics of each year, for each ensemble member (row): the highest daily
+    mean, the highest `window`-day moving mean (the day and the `window - 1` days
+    before it, all in the same year), and the number of days above `threshold`.
+
+    Days that are NaN are not used: a moving mean counts only if all its days are
+    present, and a NaN day is not counted as above the threshold. To compare with
+    measurements, set the simulations to NaN on the days that were not measured, so
+    both are computed over the same days.
+
+    Parameters
+    ----------
+    ensemble : ndarray, shape (n_samples, n_days), or (n_days,) for one series
+    dates : array-like of datetime-like, length n_days (consecutive days)
+    threshold : float
+    window : int
+    years : array-like of int, length n_days, optional
+        Year label of each day (for example water years); default: calendar year.
+
+    Returns
+    -------
+    dict
+        {year: {statistic name: ndarray of shape (n_samples,)}}, names as in
+        YEARLY_STATISTICS (the moving mean is named "highest 7-day mean" whatever
+        `window` is). A statistic with no usable day is NaN.
+    """
+    ens = np.atleast_2d(np.asarray(ensemble, dtype=np.float64))
+    labels = np.asarray(pd.DatetimeIndex(dates).year if years is None else years)
+    out = {}
+    for year in np.unique(labels):
+        x = ens[:, labels == year]
+        ok = np.isfinite(x)
+        with np.errstate(invalid="ignore"):
+            highest = np.where(ok.any(axis=1), np.max(np.where(ok, x, -np.inf), axis=1), np.nan)
+        # Moving means from running sums; a window counts only if all its days are present.
+        csum = np.concatenate([np.zeros((len(x), 1)), np.cumsum(np.where(ok, x, 0.0), axis=1)], axis=1)
+        cnt = np.concatenate([np.zeros((len(x), 1)), np.cumsum(ok, axis=1)], axis=1)
+        if x.shape[1] >= window:
+            full = (cnt[:, window:] - cnt[:, :-window]) == window
+            means = (csum[:, window:] - csum[:, :-window]) / window
+            week = np.where(full.any(axis=1), np.max(np.where(full, means, -np.inf), axis=1), np.nan)
+        else:
+            week = np.full(len(x), np.nan)
+        above = np.sum(ok & (np.where(ok, x, -np.inf) > threshold), axis=1).astype(np.float64)
+        out[int(year)] = {YEARLY_STATISTICS[0]: highest, YEARLY_STATISTICS[1]: week,
+                          YEARLY_STATISTICS[2]: np.where(ok.any(axis=1), above, np.nan)}
+    return out
+
+
+def pit(simulated: np.ndarray, value: float, rng: np.random.Generator) -> float:
+    """
+    Share of simulated values below `value` (the probability integral transform).
+    Ties, which occur for day counts, are split at random. If the predicted
+    distribution is right, this is uniform between 0 and 1, so for any level L the
+    measured value lies inside the central L% range (PIT between 0.5 - L/200 and
+    0.5 + L/200) L% of the time (`inside_range`).
+    """
+    s = np.asarray(simulated, dtype=np.float64)
+    s = s[np.isfinite(s)]
+    return float((np.sum(s < value) + rng.random() * np.sum(s == value)) / len(s))
+
+
+def central_range(values: np.ndarray, level: float, axis=None):
+    """
+    The central `level`% range of `values` (e.g. 90: the 5th and 95th percentiles),
+    along `axis`. NaN values are ignored. Returns (lower, upper).
+    """
+    if not (0.0 < level < 100.0):
+        raise ValueError(f"level must be strictly between 0 and 100 (per cent), got {level}")
+    lo, hi = np.nanpercentile(np.asarray(values, dtype=np.float64), [50.0 - level / 2, 50.0 + level / 2], axis=axis)
+    return lo, hi
+
+
+def inside_range(pit_value, level: float):
+    """Whether a PIT value (`pit`) lies inside the central `level`% range."""
+    return np.abs(np.asarray(pit_value, dtype=np.float64) - 0.5) <= level / 200.0
+
+
+def correct_statistic(values: np.ndarray, deviations, seed=None) -> np.ndarray:
+    """
+    Correct the simulated values of a yearly statistic for the model's typical error
+    in that statistic, measured by cross-validation (docs/METHODS.md §13).
+
+    `deviations` are, for each year held out in a cross-validation, the measured
+    value minus the median of the simulations (`deviation` in
+    `cv_yearly_statistics.csv`, for the same statistic, threshold and season). Each
+    simulated value is shifted by their mean, plus a random draw of the uncertainty
+    of that mean (standard error times a Student t variable with n - 1 degrees of
+    freedom, n the number of years). With few years the shift is uncertain, and the
+    corrected range is wider.
+
+    Parameters
+    ----------
+    values : ndarray
+        The statistic in each simulation (e.g. each simulation's highest 7-day mean).
+    deviations : array-like
+        At least 3 cross-validated deviations of the same statistic.
+    seed : int, optional
+
+    Returns
+    -------
+    ndarray, same shape as `values`
+    """
+    d = np.asarray(deviations, dtype=np.float64)
+    d = d[np.isfinite(d)]
+    n = len(d)
+    if n < 3:
+        raise ValueError(f"correct_statistic needs the deviations of at least 3 held-out years, got {n}.")
+    values = np.asarray(values, dtype=np.float64)
+    se = float(np.std(d, ddof=1) / np.sqrt(n))
+    rng = np.random.default_rng(seed)
+    return values + float(np.mean(d)) + se * rng.standard_t(n - 1, size=values.shape)
+
+
 def paired_difference(ens_a: np.ndarray, ens_b: np.ndarray) -> np.ndarray:
     """
     Row-aligned difference between two ensembles.

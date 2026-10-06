@@ -1,7 +1,7 @@
 """
 Run the validation suite and write validation/REPORT.md.
 
-    python validation/run_all.py            # full suite (about 105 minutes on 4 cores)
+    python validation/run_all.py            # full suite (about 95 minutes on 4 cores)
     python validation/run_all.py --quick    # reduced version of every check (about 2 minutes)
     python validation/run_all.py --only V2 V6
 
@@ -32,7 +32,8 @@ from common import FIGURES, REPO, RESULTS, Result   # noqa: E402
 
 CHECKS = [("V1", "v1_fortran"), ("V2", "v2_published"), ("V3", "v3_recovery"), ("V4", "v4_intervals"),
           ("V5", "v5_real_rivers"), ("V6", "v6_numerics"), ("V7", "v7_gaps"), ("V8", "v8_workflow"),
-          ("V9", "v9_exceedance"), ("V10", "v10_split_sample")]
+          ("V9", "v9_exceedance"), ("V10", "v10_split_sample"),
+          ("V11", "v11_yearly_check")]
 
 
 def git_state() -> str:

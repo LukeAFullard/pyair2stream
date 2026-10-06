@@ -178,7 +178,8 @@ class TestMain(unittest.TestCase):
     def test_main_cross_validation(self, mock_cross_validate, mock_statis, mock_agg, mock_read_ts, mock_read_cal):
         data = CommonData()
         data.runmode = "DE"
-        data.cross_validation = "loyo"
+        from pyair2stream.cross_validation import CVConfig
+        data.cross_validation = CVConfig()
         data.folder = tempfile.mkdtemp()
         data.mean_obs = 10.0
         data.TSS_obs = 100.0
@@ -193,7 +194,8 @@ class TestMain(unittest.TestCase):
         sim = obs + np.where(days.month == 7, 0.5, -0.2)
         fold = FoldResult(fold_id=0, label="2011", held_out_start=days[0], held_out_end=days[-1],
                           n_obs_held_out=len(days), par_best=np.zeros(8), nse=0.9, kge=0.9, rmse=0.3,
-                          obs_held_out=obs, sim_held_out=sim, dates_held_out=days)
+                          obs_held_out=obs, sim_held_out=sim, dates_held_out=days, sigma=0.3, rho=0.5,
+                          years_held_out=days.year.to_numpy())
         mock_cross_validate.return_value = (mock_df, [fold])
 
         main()
@@ -208,6 +210,13 @@ class TestMain(unittest.TestCase):
         self.assertAlmostEqual(bias.loc["Jul", "bias"], 0.5)
         self.assertAlmostEqual(bias.loc["Jan", "bias"], -0.2)
         self.assertTrue(os.path.exists(os.path.join(data.folder, "cv_bias_by_month.png")))
+        # The check of yearly statistics (docs/METHODS.md §11): the summer peak is 0.5 °C too warm.
+        summary = pd.read_csv(os.path.join(data.folder, "cv_yearly_statistics_summary.csv")).set_index("statistic")
+        self.assertEqual(summary.loc["highest 7-day mean", "n_years"], 1)
+        per_year = pd.read_csv(os.path.join(data.folder, "cv_yearly_statistics.csv")).set_index("statistic")
+        self.assertLess(per_year.loc["highest 7-day mean", "deviation"], -0.4)
+        coverage = pd.read_csv(os.path.join(data.folder, "cv_interval_coverage.csv"))
+        self.assertEqual(list(coverage.level), [50.0, 80.0, 90.0, 95.0])
 
 if __name__ == '__main__':
     unittest.main()

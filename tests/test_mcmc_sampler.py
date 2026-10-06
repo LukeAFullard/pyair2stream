@@ -111,6 +111,9 @@ def test_unconverged_run_can_opt_out_and_is_marked(tmp_path):
     meta = json.load(open(tmp_path / "out" / "MCMC_chain_S_series_1d_meta.json"))
     assert meta["converged"] is False
     assert (tmp_path / "out" / "MCMC_envelopes_S_series_1d.csv").exists()
+    # What the parameters were fitted with, checked by FORWARD runs (test_chain_provenance.py).
+    assert (meta["version"], meta["integrator"]) == (3, "CRN")
+    assert meta["qmedia"] == pytest.approx(float(data.Qmedia))
 
 
 def test_saved_chain_is_thinned(tmp_path):

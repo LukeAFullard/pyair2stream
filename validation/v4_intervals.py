@@ -19,7 +19,7 @@ import pandas as pd
 
 from common import (DE_SETTINGS, WORK, Result, Section, Timer, load, mean_discharge, published_params, quiet,
                     river_csv, AUTHORS_BOUNDS, plot_style, save_figure, reference_line, BLUE, ORANGE, AQUA, INK,
-                    INK2, LIGHT_GREY)
+                    INK2, LIGHT_GREY, LEVELS, coverage_by_level)
 from v3_recovery import SIGMA, RHO, noise, truth_series
 
 # (label, true version, noise in the data, error model of the likelihood, replicates full / quick).
@@ -48,6 +48,7 @@ REPORT_ONLY = ("J",)        # correctly specified but reported, not judged (see 
 # (water warms with the air and relaxes towards equilibrium) rule such parameter sets out.
 POSITIVE_BOUNDS = {"min": [-5, 0, 0, -1, 0, 0, 0, -1], "max": AUTHORS_BOUNDS["max"]}
 PI_RANGE = (0.87, 0.93)     # accepted mean coverage of the 90% prediction interval
+LEVEL_TOLERANCE = 0.03      # every tested level: accepted mean coverage within 3 points of nominal (as 87-93%)
 PAR_MIN = 0.78              # accepted pooled coverage of the 90% parameter intervals (not clearly below 0.9)
 PAR_REQUIRED = ("A", "B", "E", "F", "G", "K")   # cases whose parameter intervals must meet PAR_MIN (see notes)
 N_JACKKNIFE = 12            # replicates per version for the cross-validation parameter intervals
@@ -100,7 +101,7 @@ def replicate(args):
 
     fcfg = {"version": version, "integrator": "CRN", "run_mode": "FORWARD", "Qmedia": q_cal,
             "parameters_forward": [float(x) for x in data.par_best],
-            "uncertainty_options": {"noise_model": "iid" if model_noise == "iid" else "ar1"},
+            "uncertainty_options": {"noise_model": "iid" if model_noise == "iid" else "ar1", "save_ensemble": True},
             "forward_options": {"enable_prediction_intervals": True,
                                 "mcmc_chain_path": os.path.join(out, f"MCMC_chain_S_c_{time_res}.csv"),
                                 "n_samples": 1000, "random_seed": r + 1},
@@ -109,12 +110,25 @@ def replicate(args):
     with quiet():
         forward_mode(fdata)
     fmeta = json.load(open(os.path.join(folder, "fwd", "Forward_Prediction_Ensemble_S_c_1d_meta.json")))
+    # Coverage at every tested level, from the saved simulations; parameters likewise from the chain.
+    from pyair2stream import scenario
+    npz = os.path.join(folder, "fwd", "Forward_Prediction_Ensemble_S_c_1d.npz")
+    ens, _ = scenario.load_ensemble(npz)
+    by_level = coverage_by_level(ens, pd.read_csv(val_csv).T_water.to_numpy(float))
+    os.remove(npz)          # about 8 MB per replicate; only the coverage is needed
+    par_by_level = {}
+    for level in LEVELS:
+        hits = []
+        for col in chain.columns:
+            lo, hi = np.percentile(chain[col], [50 - level / 2, 50 + level / 2])
+            hits.append(bool(lo <= par_true[int(col.split("_")[1]) - 1] <= hi))
+        par_by_level[level] = hits
     return {"case": label, "replicate": r, "converged": True, "steps": meta["steps_run"], "rho": meta["rho"],
             "variance factor": meta.get("likelihood_variance_factor"), "implausible": implausible(data),
             "calibration coverage": meta["interval_coverage"],
             "held-out coverage": fmeta["interval_coverage"],
             "parameters inside 90% interval": float(np.mean(inside)), "n parameters": len(inside),
-            "per_param": per_param}
+            "per_param": per_param, "held-out coverage by level": by_level, "parameters inside by level": par_by_level}
 
 
 def implausible(data):
@@ -287,10 +301,15 @@ def run(ctx) -> Result:
                f"approximate: H with the weekly default, I with the daily option, on the same data. Cases J "
                f"and K repeat case E with weekly scoring (time_resolution 1w): the likelihood then compares "
                f"weekly means, whose errors are much less correlated from week to week than days are. J uses "
-               f"the authors' bounds, which allow a negative a2 and a3; K requires both to be at least 0.",
+               f"the authors' bounds, which allow a negative a2 and a3; K requires both to be at least 0. "
+               f"The same simulations give the coverage of the "
+               f"{', '.join(f'{x}%' for x in LEVELS)} intervals (central percentiles of the 1000 simulations "
+               f"on each day), and the chain that of the parameter intervals at those levels.",
         criterion=f"For the correctly specified cases (A, B, D, E, F, G, K): every run converges, and the mean "
                   f"held-out coverage of the 90% prediction interval is between {PI_RANGE[0]:.0%} and "
-                  f"{PI_RANGE[1]:.0%}. For cases A, B, E, F, G and K: pooled parameter-interval coverage at least "
+                  f"{PI_RANGE[1]:.0%}, and that of the {', '.join(f'{x}%' for x in LEVELS if x != 90)} intervals "
+                  f"within {LEVEL_TOLERANCE * 100:.0f} percentage points of their level (at most 100%). For cases "
+                  f"A, B, E, F, G and K: pooled parameter-interval coverage at least "
                   f"{PAR_MIN:.0%}. Results are reported, not judged, for case C (wrong noise model, expected to "
                   f"be too narrow), case D (see notes), cases H and I (noise that AR(1) can only approximate) and "
                   f"case J (see notes).")
@@ -305,7 +324,7 @@ def run(ctx) -> Result:
             jk_jobs = [] if ctx.quick else [(v, r) for v in JACKKNIFE_VERSIONS for r in range(N_JACKKNIFE)]
             jk = pd.DataFrame([x for rows_ in ex.map(leave_one_year_out, jk_jobs) for x in rows_])
     df = pd.DataFrame(rows)
-    summary_rows, per_param_rows = [], []
+    summary_rows, per_param_rows, level_rows = [], [], []
     ok = True
     for label, *_ in CASES:
         g = df[df.case == label]
@@ -321,9 +340,16 @@ def run(ctx) -> Result:
                                                           weights=conv["n parameters"])), 3) if len(conv) else None,
              "mean steps": int(conv["steps"].mean()) if len(conv) else None,
              "mean rho": round(float(conv["rho"].mean()), 3) if len(conv) else None}
+        levels_ok = True
+        for level in LEVELS:
+            m = float(np.mean([c[level] for c in conv["held-out coverage by level"]])) if len(conv) else np.nan
+            p_ = (float(np.mean([x for c in conv["parameters inside by level"] for x in c[level]]))
+                  if len(conv) else np.nan)
+            level_rows.append({"case": label, "level": level, "prediction": m, "parameters": p_})
+            levels_ok &= bool(np.isfinite(m) and abs(m - level / 100) <= LEVEL_TOLERANCE + 1e-12)
         if "mis-specified" not in label and label[0] not in REPORT_ONLY:
             s["pass"] = bool(s["converged"] == s["replicates"] and s["mean held-out coverage"] is not None
-                             and PI_RANGE[0] <= s["mean held-out coverage"] <= PI_RANGE[1]
+                             and PI_RANGE[0] <= s["mean held-out coverage"] <= PI_RANGE[1] and levels_ok
                              and (label[0] not in PAR_REQUIRED or s["parameter coverage"] >= PAR_MIN))
             ok &= s["pass"]
         summary_rows.append(s)
@@ -354,9 +380,29 @@ def run(ctx) -> Result:
         "2010-2012 is made from the calibration on 2002-2009, and the share of the 2010-2012 observations "
         "inside it is recorded.",
         figures=[_fig_prediction_coverage(df)], tables=[("Coverage of 90% intervals (means over replicates)", shown)])
+    lv = pd.DataFrame(level_rows)
+    if len(lv):
+        pred_tab = lv.pivot(index="case", columns="level", values="prediction").reindex([c[0] for c in CASES])
+        par_tab = lv.pivot(index="case", columns="level", values="parameters").reindex([c[0] for c in CASES])
+        fmt_tab = lambda t: t.dropna(how="all").map(lambda x: f"{x:.1%}" if pd.notna(x) else "").rename(
+            columns=lambda c: f"{c}% interval").reset_index().assign(case=lambda d: d.case.str.split(":").str[0])
+        sec_pred.text += (" The second table gives the coverage of intervals at other levels, from the same "
+                          "simulations: a user may ask for any level.")
+        sec_pred.tables.append(("Coverage at each level (means over replicates)", fmt_tab(pred_tab)))
+        sec_pred.figures.append(_fig_levels(lv))
+        judged = lv[~lv.case.str.contains("mis-specified") & ~lv.case.str[0].isin(REPORT_ONLY)].dropna()
+        if len(judged):
+            worst = judged.loc[(judged.prediction - judged.level / 100).abs().idxmax()]
+            res.summary += (f". At every level tested ({', '.join(f'{x}%' for x in LEVELS)}), the correctly "
+                            f"specified cases' mean prediction coverage was within "
+                            f"{abs(worst.prediction - worst.level / 100) * 100:.1f} points of the level (largest "
+                            f"difference: case {worst.case[0]}, {worst.level}% interval, {worst.prediction:.1%})")
     sec_par = Section(
         "Parameter intervals from MCMC",
         "For each replicate, whether each parameter's 90% credible interval contains the true value.")
+    if len(lv):
+        sec_par.tables.append(("Parameter intervals at each level: share containing the true value (pooled)",
+                               fmt_tab(par_tab)))
     res.sections += [sec_pred, sec_par]
     if len(pp):
         spread = pp.pivot(index="parameter", columns="case", values="replicate spread / posterior SD")
@@ -566,6 +612,34 @@ def _fig_prediction_coverage(df):
     return (save_figure(fig, "V4_interval_coverage.png"),
             "Each point is one synthetic data set. Mean coverage is at the nominal 90% in every case, including the "
             "deliberately wrong noise model (grey): for single days the noise model hardly matters.")
+
+
+def _fig_levels(lv):
+    """Stated level against achieved coverage of prediction intervals, for the correctly specified cases."""
+    import matplotlib.pyplot as plt
+    plot_style()
+    fig, ax = plt.subplots(figsize=(4.8, 4.2))
+    ax.plot([45, 100], [45, 100], color=INK2, lw=0.9, ls=(0, (4, 3)), zorder=1)
+    shown = [c for c in dict.fromkeys(lv.case) if "mis-specified" not in c]
+    for k, c in enumerate(shown):
+        g = lv[lv.case == c]
+        ax.plot(g.level, g.prediction * 100, marker="o", ms=3.5, lw=1.0, alpha=0.8,
+                color=(BLUE, ORANGE, AQUA)[k % 3], label=c.split(":")[0])
+    mis = lv[lv.case.str.contains("mis-specified")]
+    for c in dict.fromkeys(mis.case):
+        g = mis[mis.case == c]
+        ax.plot(g.level, g.prediction * 100, marker="s", ms=3, lw=0.8, color=LIGHT_GREY,
+                label=f"{c.split(':')[0]} (mis-specified)")
+    ax.set_xlim(45, 100)
+    ax.set_ylim(45, 100)
+    ax.set_aspect("equal")
+    ax.set_xlabel("Stated level of the prediction interval (%)")
+    ax.set_ylabel("Held-out observations inside it (%)")
+    ax.legend(fontsize=7, ncol=2, loc="upper left")
+    ax.set_title("Synthetic data: stated against achieved coverage", fontsize=9)
+    return (save_figure(fig, "V4_levels.png"),
+            "Mean share of held-out observations inside the prediction interval, for each stated level and case. "
+            "On the dashed diagonal the intervals hold at every level.")
 
 
 def _fig_rho_timescale(rt):

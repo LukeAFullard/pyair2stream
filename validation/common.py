@@ -205,6 +205,43 @@ def metrics(obs, sim) -> dict:
     return {"n": int(m.sum()), "RMSE": rmse, "NSE": nse, "KGE": kge, "bias": float(np.mean(s - o))}
 
 
+# --- Coverage at several levels ---------------------------------------------------------------
+# An interval is only useful if it holds at the level a user asks for, not only at 90%.
+
+LEVELS = (50, 80, 90, 95, 99)            # central ranges (%) whose coverage is tested
+
+
+def coverage_by_level(ens, obs, levels=LEVELS) -> dict:
+    """Share of the finite values of `obs` inside the central L% range of the ensemble `ens`
+    (members x days), for each level L."""
+    ens, obs = np.asarray(ens, float), np.asarray(obs, float)
+    ok = np.isfinite(obs) & np.isfinite(ens).any(axis=0)
+    out = {}
+    for level in levels:
+        lo, hi = np.nanpercentile(ens[:, ok], [50 - level / 2, 50 + level / 2], axis=0)
+        out[level] = float(np.mean((obs[ok] >= lo) & (obs[ok] <= hi))) if ok.any() else float("nan")
+    return out
+
+
+def pit_coverage(pits, level) -> float:
+    """Share of PIT values inside the central `level`% range."""
+    return float(np.mean(np.abs(np.asarray(pits, float) - 0.5) <= level / 200))
+
+
+def accepted_real(level) -> Tuple[float, float]:
+    """Accepted coverage of a `level`% interval on real rivers: a miss rate between half and 1.5 times
+    the stated one (85-95% for a 90% interval; 92.5-97.5% for 95%; 98.5-99.5% for 99%)."""
+    miss = 1 - level / 100
+    return 1 - 1.5 * miss, 1 - 0.5 * miss
+
+
+def binomial_range(n: int, level, confidence: float = 0.99) -> Tuple[float, float]:
+    """Central `confidence` range of the share of n independent cases inside a `level`% range."""
+    from scipy.stats import binom
+    lo, hi = binom.interval(confidence, n, level / 100)
+    return lo / n, hi / n
+
+
 def params_at_bounds(par, version: int) -> List[str]:
     from pyair2stream.config import ACTIVE_PARAMS
     out = []

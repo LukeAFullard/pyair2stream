@@ -24,11 +24,15 @@ dist/
 examples/*/output/
 !examples/*/figures/*.png
 
+# Figures of the documentation (docs/figures/make_uncertainty_figures.py)
+!docs/figures/*.png
+
 # Validation evidence: the report's figures and summary tables are committed
 validation/work/
 !validation/figures/*.png
 !validation/results/*.csv
 
-# Deep-research working files (the final report is delivered separately)
-research_notes/
-reports/
+# Deep-research working files (the final report is delivered separately); anchored to the
+# top folder so validation/reports/ is not ignored
+/research_notes/
+/reports/

@@ -16,7 +16,8 @@ import pandas as pd
 
 from common import (AUTHORS_BOUNDS, DE_SETTINGS, RIVERS, VERSIONS, WORK, Result, Section, Timer, calibrate, daily,
                     load, mean_discharge, metrics, params_at_bounds, quiet, river_csv, simulate, plot_style,
-                    save_figure, reference_line, SERIES, BLUE, ORANGE, AQUA, INK, INK2, LIGHT_GREY, GRID)
+                    save_figure, reference_line, SERIES, BLUE, ORANGE, AQUA, INK, INK2, LIGHT_GREY, GRID,
+                    LEVELS, coverage_by_level, accepted_real)
 
 PI_VERSIONS = (5, 8)
 # Error models: iid; AR(1) with the exact AR(1) likelihood; AR(1) noise with the least-squares likelihood
@@ -103,6 +104,9 @@ def _interval(args):
     obs_w = obs_w.mean().to_numpy()
     if (st, v, noise) == ("MAH_2369", 8, "ar1-ls"):
         row["_band"] = (pd.DatetimeIndex(dates), env.Twat_mod_lower.to_numpy(), env.Twat_mod_upper.to_numpy(), obs)
+    # Coverage at every tested level, from the same simulations.
+    row["_levels"] = {"daily": coverage_by_level(ens, obs), "summer": coverage_by_level(ens[:, summer], obs[summer]),
+                      "7-day": coverage_by_level(weekly[:, full], obs_w[full])}
     return {**row, "converged": True, "steps": meta["steps_run"], "rho": round(float(meta["rho"]), 3),
             "coverage": float(inside[ok].mean()),
             "summer coverage (Jun-Aug)": float(inside[summer].mean()),
@@ -132,10 +136,16 @@ def run(ctx) -> Result:
                "likelihood, with rho from week-to-week persistence (the default) or from consecutive days), and "
                "a FORWARD run gives 90% prediction intervals for the "
                "validation years. The share of real observations inside them is recorded, for the whole "
-               "year and for summer (June-August), when temperature limits are usually at stake.",
+               "year and for summer (June-August), when temperature limits are usually at stake. The same "
+               "simulations give the coverage of intervals at other levels (" + ", ".join(f"{x}%" for x in LEVELS)
+               + "), for days, summer days and 7-day means.",
         criterion=f"(A) In every river, every version predicts the validation years with a lower RMSE than "
                   f"both simple alternatives. (B) Every MCMC run converges, and the 90% interval contains "
-                  f"between {PI_RANGE[0]:.0%} and {PI_RANGE[1]:.0%} of the validation observations.")
+                  f"between {PI_RANGE[0]:.0%} and {PI_RANGE[1]:.0%} of the validation observations. With the "
+                  f"default error model, the same holds at every level tested "
+                  f"({', '.join(f'{x}%' for x in LEVELS)}): the share of days outside the interval is between "
+                  f"half and 1.5 times the stated share (for example 92.5-97.5% for a 95% interval, "
+                  f"98.5-99.5% for a 99% interval).")
     stations = ["MAH_2369"] if ctx.quick else list(RIVERS)
     versions = (3, 8) if ctx.quick else VERSIONS
     jobs_a = [(st, v) for st in stations for v in versions]
@@ -158,11 +168,24 @@ def run(ctx) -> Result:
         simple = g[~g.index.isin(model.index)]
         ok_a &= bool(model.RMSE.max() < simple.RMSE.min())
     band = next((r.pop("_band") for r in rows_b if "_band" in r), None)
+    level_rows = [{"river": r["river"], "version": r["version"], "noise model": r["noise model"], "level": level,
+                   **{what: r["_levels"][what][level] for what in ("daily", "summer", "7-day")}}
+                  for r in rows_b if "_levels" in r for level in LEVELS]
+    for r in rows_b:
+        r.pop("_levels", None)
+    lv = pd.DataFrame(level_rows)
     b = pd.DataFrame(rows_b)
     b_raw = b.copy()
     ok_b = True
     if len(b):
         ok_b = bool(b.converged.all() and b.coverage.between(*PI_RANGE).all())
+    outside_levels = pd.DataFrame()
+    if len(lv):
+        d = lv[lv["noise model"] == "ar1-ls"].copy()
+        d["accepted"] = d.level.map(lambda x: "{:.1%}-{:.1%}".format(*accepted_real(x)))
+        inside_ok = d.apply(lambda r: accepted_real(r.level)[0] <= r.daily <= accepted_real(r.level)[1], axis=1)
+        outside_levels = d[~inside_ok]
+        ok_b &= bool(inside_ok.all())
     res.passed = ok_a and ok_b
     res.seconds = t.seconds
     best = a[a.version.map(lambda x: isinstance(x, (int, np.integer)))].groupby("river").RMSE.min()
@@ -177,6 +200,15 @@ def run(ctx) -> Result:
                         f"{conv['summer coverage (Jun-Aug)'].max():.0%}).")
         LABELS = {"iid": "iid noise", "ar1": "AR(1), exact likelihood", "ar1-ls": "AR(1), least squares",
                   "ar1-ls-daily": "AR(1), least squares, daily rho"}
+        if len(lv):
+            d = lv[lv["noise model"] == "ar1-ls"]
+            res.summary += (" Default error model at each level, share of validation days inside the interval: "
+                            + "; ".join(f"{x}% interval {d[d.level == x].daily.min():.1%}-{d[d.level == x].daily.max():.1%}"
+                                        for x in LEVELS)
+                            + (" (all within the accepted ranges)." if outside_levels.empty else
+                               ". Outside the accepted range: " + "; ".join(
+                                   f"{r.river} version {r.version}, {r.level}% interval {r.daily:.1%}"
+                                   for r in outside_levels.itertuples()) + "."))
         outside = b[~b.coverage.between(*PI_RANGE)]
         if len(outside):
             res.summary += (f" Outside the accepted {PI_RANGE[0]:.0%}-{PI_RANGE[1]:.0%}: " + "; ".join(
@@ -229,6 +261,17 @@ def run(ctx) -> Result:
         for col in ("coverage", "summer coverage (Jun-Aug)", "7-day mean coverage", "calibration coverage"):
             b[col] = b[col].map(lambda x: f"{x:.1%}" if pd.notna(x) else "")
         b["mean width (°C)"] = b["mean width (°C)"].round(2)
+        if len(lv):
+            d = lv[lv["noise model"] == "ar1-ls"]
+            tabs = []
+            for what in ("daily", "summer", "7-day"):
+                t_ = d.pivot_table(index=["river", "version"], columns="level", values=what, sort=False)
+                t_ = t_.map(lambda x: f"{x:.1%}").rename(columns=lambda c: f"{c}% interval").reset_index()
+                tabs.append((f"B. Default error model, {what} values inside the interval at each level", t_))
+            acc = pd.DataFrame([{"level": f"{x}%", "accepted share of days inside": "{:.1%}-{:.1%}".format(*accepted_real(x))}
+                                for x in LEVELS])
+            tabs.append(("B. Accepted coverage at each level (miss rate between half and 1.5 times the stated one)", acc))
+            figs_b.append(_fig_levels(lv))
         res.sections.append(Section(
             "B. Do 90% prediction intervals contain 90% of real measurements?",
             "For versions 5 and 8, intervals were made for the validation years from a calibration on the "
@@ -238,7 +281,8 @@ def run(ctx) -> Result:
             "day, in summer, and for 7-day means (computed within each simulated series). The last two columns "
             "show where the band is centred: its median minus the measured temperature, and the same for the "
             "best fit.",
-            figures=figs_b, tables=[("B. 90% prediction intervals on the validation years", b)]))
+            figures=figs_b, tables=[("B. 90% prediction intervals on the validation years", b)]
+            + (tabs if len(lv) else [])))
     res.notes.append("On real data the model is never exactly right, so interval coverage on real rivers "
                      "tests the whole approach (model, noise model and data), not only the code. Coverage "
                      "can differ between seasons because the model's errors are larger in some seasons.")
@@ -295,6 +339,36 @@ def _fig_coverage(b):
     return (save_figure(fig, "V5_interval_coverage.png"),
             "Share of real validation-year measurements inside the 90% interval, by error model. Daily values "
             "depend little on the error model; 7-day means need AR(1) noise.")
+
+
+def _fig_levels(lv):
+    """Stated level against achieved coverage on the real validation years, default error model."""
+    import matplotlib.pyplot as plt
+    plot_style()
+    d = lv[lv["noise model"] == "ar1-ls"]
+    fig, axes = plt.subplots(1, 3, figsize=(11, 3.9), sharey=True)
+    grid = np.linspace(45, 100, 200)
+    for ax, what in zip(axes, ("daily", "summer", "7-day")):
+        lo = [100 * (1 - 1.5 * (1 - x / 100)) for x in grid]
+        hi = [100 * (1 - 0.5 * (1 - x / 100)) for x in grid]
+        ax.fill_between(grid, lo, hi, color=LIGHT_GREY, alpha=0.35, lw=0, zorder=0)
+        ax.plot([45, 100], [45, 100], color=INK2, lw=0.9, ls=(0, (4, 3)), zorder=1)
+        for k, ((river, version), g) in enumerate(d.groupby(["river", "version"], sort=False)):
+            ax.plot(g.level, g[what] * 100, marker="o" if version == 8 else "s", ms=3.5, lw=1.0,
+                    color=(BLUE, ORANGE, AQUA)[list(RIVERS.values()).index(river) % 3],
+                    ls="-" if version == 8 else (0, (2, 1)), label=f"{river}, version {version}")
+        ax.set_xlim(45, 100)
+        ax.set_ylim(45, 100)
+        ax.set_aspect("equal")
+        ax.set_title({"daily": "Days", "summer": "Summer days (Jun-Aug)", "7-day": "7-day means"}[what], fontsize=9)
+        ax.set_xlabel("Stated level (%)")
+    axes[0].set_ylabel("Validation measurements inside (%)")
+    axes[0].legend(fontsize=7, loc="upper left")
+    fig.tight_layout()
+    return (save_figure(fig, "V5_levels.png"),
+            "Real rivers, default error model: share of validation-year measurements inside the prediction interval "
+            "for each stated level. Dashed: stated = achieved; shaded: the accepted range (a miss rate between half "
+            "and 1.5 times the stated one).")
 
 
 def _fig_band(band):

@@ -6,7 +6,9 @@ result (for example in a report or a hearing), not only for modelling
 specialists. Where a step differs from the original Fortran `air2stream`, this is
 stated. Section numbers are cited by the program's own error messages.
 
-For how to *run* the software, see the [User Guide](../USER_GUIDE.md).
+For how to *run* the software, see the [User Guide](../USER_GUIDE.md). For a
+plain-language explanation of the uncertainty statistics and tests (§11–§13),
+with figures, see [UNCERTAINTY.md](UNCERTAINTY.md).
 
 **Contents**
 
@@ -50,7 +52,8 @@ A run has two stages, and optionally a third:
 3. **Quantify uncertainty** (optional): find every parameter set consistent
    with the data and the typical size and persistence of the model's errors
    (§12), and use them to give ranges, probabilities that a limit was exceeded,
-   and differences between scenarios (§13).
+   and differences between scenarios (§13). Cross-validation checks whether such
+   ranges hold in years the model was not calibrated on (§11).
 
 ## 2. Input data
 
@@ -313,6 +316,30 @@ LATHYP:
    standard deviation across folds and "pooled" scores over all held-out days;
    `cv_bias_by_month.*` gives the mean error by month and season over the
    held-out days (§7).
+5. **Check of yearly statistics** (`cv_yearly_statistics.csv` and
+   `cv_yearly_statistics_summary.csv`). For each held-out year, 1,000 series are
+   made from the fold's simulation plus random error from the fold's own error
+   model (σ and ρ estimated on its training years, as in §12). The highest daily
+   mean, the highest 7-day moving mean and the number of days above `threshold`
+   (default: the 90th percentile of the measured temperatures) are computed in
+   each series and in the measurements, over the days that were measured. A
+   year counts if at least 80% of `season_months` (default: the four warmest
+   months) was measured. For each year and statistic the output gives the
+   predicted percentiles, the share of series below the measured value (the
+   probability integral transform, PIT, which is uniform between 0 and 1 if the
+   predictions are right; Gneiting et al., 2007) and the **deviation**: measured
+   minus predicted median. The summary gives the share of years inside the 50%
+   and 90% ranges, the shares expected by chance (95% binomial range), and the
+   mean deviation with its 95% confidence interval. Parameter uncertainty is not
+   included (each fold has one parameter set), so these ranges are slightly
+   narrower than a FORWARD run's (§13).
+6. **Coverage at each level** (`cv_interval_coverage.csv`). From the same
+   simulations, the share of measured held-out days, and of 7-day moving means,
+   inside the central 50%, 80%, 90% and 95% ranges and at `prediction_interval`.
+   It shows whether intervals at the level you report held at your site.
+
+Every range in items 5 and 6 is reported at `uncertainty_options.prediction_interval`
+(default 90%), and coverage at 50%, 80%, 90% and 95% as well.
 
 Large variation of the parameters between folds means they are poorly determined
 by the data (equifinality). The spread between folds (`std`) is not a confidence
@@ -323,7 +350,10 @@ interval: the folds share most of their data, so it understates the uncertainty
 With θᵢ the parameters fitted without block i (m folds), θ̄ their mean, and n the
 number of blocks in the whole record (years, or groups of `n_years_per_fold`):
 
-  SE² = (n − 1)/m · Σᵢ (θᵢ − θ̄)²,  interval = θ̄ ± t₀.₉₅,ₘ₋₁ · SE.
+  SE² = (n − 1)/m · Σᵢ (θᵢ − θ̄)²,  interval = θ̄ ± t_(1+L)/2,m−1 · SE,
+
+with L the level `uncertainty_options.parameter_interval` (default 0.90; the
+rows are named `jackknife_90_lower` and so on).
 
 When every block is held out (m = n) this is the standard delete-one-block
 jackknife; the first years are never held out, so the sum over n blocks is
@@ -402,7 +432,8 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    For each, the model is run and random error is added to every day: normally
    distributed with standard deviation equal to that parameter set's daily
    root-mean-square residual (`iid`), or an AR(1) series with the same standard
-   deviation and ρ (`ar1`). The `prediction_interval` (default 90%) is the band
+   deviation and ρ (`ar1`). The `prediction_interval` (default 90%; any level
+   above 0 and below 100) is the band
    between the matching lower and upper percentiles of these simulations on each
    day. The program then reports the **coverage**: the share of observed days
    inside the band (it should be close to the nominal percentage). This band and
@@ -513,6 +544,17 @@ versions 7 and 8 on the Mentue and version 8 on the Rhône several lay outside:
 there many parameter combinations fit almost equally well, and the published
 set is not where a least-squares calibration on these data lands (V2).
 
+**At other levels.** On synthetic data the intervals held at every level tested
+(50%, 80%, 90%, 95% and 99%: mean coverage within 1.4 points of the level, V4).
+On the Swiss rivers, pooled over 48 years held out by cross-validation per
+version, daily intervals held from 50% to 95% (95% intervals: 94.4–94.5% of
+days), but 99% intervals held only 98.0–98.2%: the model's real errors have
+heavier tails than the normal distribution assumed (V11). In the later
+validation years of V5, whose errors were larger than in calibration, daily
+intervals were narrower than stated, more so at high levels (90%: 85–90%; 95%:
+91–95%; 99%: 95–99.6%). 7-day means held at every level (V11: 96–97% at 95%,
+98.6–99.2% at 99%).
+
 **Where the chain is centred.** With the default least-squares likelihood the
 chain is centred on the DE best fit: in V5 the centre of the band stayed within
 0.01 °C of the best fit's. With `likelihood: "exact"` it can be centred
@@ -523,7 +565,9 @@ cooler band would understate the chance of exceedance.
 **Outputs:** `MCMC_chain_*.csv` (post-burn-in samples), `MCMC_chain_*_meta.json`
 (σ, ρ, diagnostics, coverage, excluded draws), `MCMC_envelopes_*.csv`, and the
 parameter summary `parameter_significance_*.csv` (posterior mean, standard
-deviation, 95% credible interval, and whether that interval excludes zero).
+deviation, central credible interval at `parameter_interval`, default 90%, and
+whether zero lies outside the central 95%: a test at the usual 5% level,
+whatever the interval's level).
 Excluding zero only means something for parameters where zero means "no
 effect" (`a2`, `a4`, `a5`, `a6`, `a8`). It says nothing about `a1`, `a3` or the
 seasonal timing `a7`.
@@ -546,43 +590,84 @@ sets are drawn, each is run, and error is added with standard deviation σ =
 standard deviation stored in the chain's `_meta.json`. For `ar1`, ρ is taken from
 `ar1_rho`, else from the chain's `_meta.json`, else from this run's own residuals.
 With the `_meta.json` that DE-MCMC writes next to the chain, the interval
-therefore does not depend on the observations it is checked against. Coverage
-is reported if observations exist. The noise model, σ and ρ used are
-recorded in the run's `Forward_Prediction_Ensemble_*_meta.json`.
+therefore does not depend on the observations it is checked against. The run
+refuses a chain whose `_meta.json` records another model version, integrator or
+`Qmedia` (by more than 0.1%) than its own. Coverage is reported if observations exist. The noise
+model, σ and ρ used are recorded in the run's
+`Forward_Prediction_Ensemble_*_meta.json`. σ and ρ are used at their estimated
+values; their own uncertainty is not added.
 
 **Probability that a limit was exceeded.** With `save_ensemble: true` every
 simulated series is kept (`.npz`): one per parameter draw, each with its own
 error series. A probability is computed in three steps:
 
-1. In each series, compute the quantity the limit is defined on, for example
-   the highest 7-day moving mean in the year. In `pyair2stream.scenario`,
-   `aggregate` gives means (or sums, maxima) over consecutive fixed periods and
-   `exceedance` counts days above a threshold, optionally only in runs of at
-   least k consecutive days (days not simulated count as not above); moving
-   means are computed with pandas `rolling` (example 03).
+1. In each series, compute the quantity the limit is defined on.
+   `scenario.year_statistics` gives each year's highest daily mean, highest
+   7-day moving mean (the day and the six before it) and number of days above a
+   threshold, defined exactly as in the cross-validation check (§11).
+   `scenario.aggregate` gives means (or sums, maxima) over consecutive fixed
+   periods, and `scenario.exceedance` counts days above a threshold, optionally
+   only in runs of at least k consecutive days (days not simulated count as not
+   above).
 2. The probability of exceedance is the share of series in which that quantity
-   exceeds the limit.
+   exceeds the limit. With 1,000 series it carries a sampling error of at most
+   ±0.03 (95%).
 3. A range for the quantity (for example 90%) is given by the matching
    percentiles across the series.
 
 Never compute such a quantity from the daily band: the upper edge of the daily
-band is not the upper edge of a weekly mean or a yearly peak. The probability
-is only as good as the model and its error model: check the coverage on
-validation years first (§16; example 03).
+band is not the upper edge of a weekly mean or a yearly peak.
 
-**What the validation shows** (V9). On synthetic data, where the model and its
-error model are exactly right, the stated probabilities for yearly statistics
-(highest daily mean, highest 7-day mean, days above a threshold) came true as
-often as stated, and the 50% and 90% ranges contained the measured value 44–58%
-and 86–94% of the time. On the three Swiss rivers, for years not used for
-calibration, version 8's probabilities were closer to what happened than the
-share of past years in which the limit was exceeded (Brier skill score
-0.08–0.42), but its 90% ranges contained the measured value in only 73–93% of
-river-years (67–87% with `rho_timescale: "daily"`): the model can be off by a
-few tenths of a degree for a whole summer, which the error model (AR(1) errors
-of constant size) represents only in part. Version 5 did no better than past
-years for the yearly peaks (−0.03 and −0.04; −0.11 and −0.12 with the daily
-ρ): on the Rhône it predicted almost the same peak every year.
+**Checking and correcting yearly statistics.** The model's error on the hottest
+days is not always its typical error. In years not used for calibration, the
+simulated yearly peak was on average 0.6–0.8 °C too high on the Mentue with
+version 8, and with version 5 up to 0.9 °C too high on the Rhône and 0.5 °C too
+low on the Dischmabach (V11). Random error of the typical size cannot remove
+such a bias, so the ranges of yearly statistics then miss the measured value
+more often than they state. Ranges for daily values and 7-day means are much
+less affected (V5, V10). For a yearly statistic:
+
+1. Run a cross-validation of the calibration years (§11) with the `threshold`
+   and season of the question. `cv_yearly_statistics_summary.csv` shows how
+   often the ranges held, and the mean deviation (measured minus predicted
+   median) with its 95% interval; an interval that excludes zero is a bias.
+2. Correct the statistic of every simulated series with
+   `scenario.correct_statistic(values, deviations)`, using that statistic's
+   deviations from `cv_yearly_statistics.csv`. Each value is shifted by the
+   mean deviation plus a random draw of its uncertainty (its standard error
+   times a Student t variable with n − 1 degrees of freedom, for n held-out
+   years; at least 3). This is a bias correction estimated out of sample, as in
+   model output statistics (Glahn and Lowry, 1972). With few years the shift is
+   uncertain, and the corrected range is wider.
+3. Compute the probability and range from the corrected values, and report the
+   check with them.
+
+The correction assumes that the model's average bias in the statistic is the
+same in the years predicted as in the years held out. It is applied always, not
+only when the check finds a bias, so the procedure does not depend on the
+result.
+
+**What the validation shows** (V9, V11). On synthetic data, where the model and
+its error model are exactly right, the stated probabilities for yearly
+statistics came true as often as stated, and the 90% ranges contained the
+measured value 86–94% of the time (V9 A). On the three Swiss rivers, over 48
+held-out years per version (V11), the uncorrected 90% ranges held in 79–92% of
+years for version 8 and 73–81% for version 5. After the correction they held
+in 85–94% for both versions, within the range expected by chance, and the
+measured value sat on average at the middle of the simulations (mean PIT
+0.48–0.50, against 0.31–0.52 before). At other levels the corrected ranges held
+in 75–85% of years at 80%, 92–100% at 95% and 100% at 99%, all within the range
+expected by chance. The highest daily mean remained at the
+low end (85%): single-day peaks are the hardest statistic to predict. Applied
+as recommended to genuinely later years (cross-validation of the calibration
+years, then correction of the FORWARD simulations of the validation years; V9
+C, 15 river-years), the correction made the probabilities closer to what
+happened for 5 of 6 version and statistic pairs (version 8's Brier skill score
+against the share of past years rose from 0.08–0.42 to 0.33–0.50), but version
+8's 90% ranges for the highest daily mean still held in only 11 of 15
+river-years. Version 5 predicted almost the same peak every year on the Rhône,
+where discharge drives summer temperature; the correction removes its bias, but
+not its inability to follow the years.
 
 **Comparing two scenarios** (for example observed versus naturalised flow): run
 FORWARD once per scenario from the same chain with `save_ensemble: true`, and
@@ -624,6 +709,7 @@ change one-sided.
 | Discharge outside the calibrated range | FORWARD runs | warning |
 | Segment warm-up too short | gap-tolerant runs | warning |
 | MCMC convergence and diverging draws | DE-MCMC, FORWARD intervals | warning / error |
+| Chain fitted with another model version, integrator or `Qmedia` (§13) | FORWARD intervals | error |
 
 ## 16. Limitations and good practice
 
@@ -646,10 +732,14 @@ change one-sided.
   hardly better than simple alternatives, and version 5's probabilities for
   yearly peaks were no better than going by past years (V5, V9, V10). Compare
   versions on validation years or by cross-validation (§11).
-- **Probabilities for yearly statistics are approximate on real rivers.** Their
-  computation is right (V9, synthetic data), but on the Swiss rivers version
-  8's 90% ranges for yearly peaks contained the measured value in 73–93% of
-  years not used for calibration (V9). Report them with that caveat.
+- **Yearly statistics need the cross-validation check.** Their computation is
+  right (V9, synthetic data), but the model can be biased on the hottest days,
+  and uncorrected 90% ranges for yearly statistics held in only 73–92% of
+  held-out years on the Swiss rivers. Check them by cross-validation and correct
+  them (§13); corrected, they held in 85–94% (V11). Ranges for the highest
+  daily mean remained the least reliable (85% in V11, 11 of 15 later years in
+  V9 C). The check needs years: with fewer than about 5 held-out years it can
+  say little.
 - **Different parameter sets can fit equally well** (equifinality), especially
   for versions 7 and 8. Inspect the dotty plots; a parameter at a bound suggests
   the bounds are too narrow. Prefer the simplest version that validates well.
@@ -666,6 +756,13 @@ change one-sided.
   then their intervals were somewhat narrow on real rivers (§12).
 - **Intervals for new years are slightly optimistic**: σ is estimated on the
   calibration years, and errors are usually somewhat larger in other years.
+- **Choose the level knowing its record.** Any level can be set
+  (`prediction_interval`, `parameter_interval`). On the Swiss rivers daily
+  intervals held from 50% to 95%, but 99% daily intervals missed about twice
+  as many days as stated (98.0–98.2% held, V11), and in years unlike the
+  calibration years 95% intervals held 91–95% and 99% intervals 95–99.6% (V5).
+  Before reporting a 95% or 99% daily interval, check it at your site with
+  `cv_interval_coverage.csv` (§11) and on validation years.
 - **Scenario differences** assume the model's error on a given day would be the
   same under both scenarios, so their band shows parameter uncertainty only
   (§13).
@@ -690,9 +787,10 @@ predictions, and where the original program itself returns different
 parameters on every run); recovery of a known truth; calibrated intervals
 on synthetic data; out-of-sample performance on three real rivers; numerical
 accuracy; gaps; exact answers from the workflow and scenario tools;
-probabilities of exceeding a limit, on synthetic data and real rivers (V9); and
-predictions for warmer and lower-flow years than those calibrated on (V10). V5,
-V9 and V10 do not pass all their criteria; the report says where and why. The test
+probabilities of exceeding a limit, on synthetic data and real rivers (V9);
+predictions for warmer and lower-flow years than those calibrated on (V10); and
+the cross-validated check and correction of yearly statistics (V11). V5, V9 and
+V10 do not pass all their criteria; the report says where and why. The test
 suite (`pytest tests/`) also compares against the Fortran and checks each
 safeguard above.
 
@@ -757,6 +855,12 @@ These are deliberate; each is covered by tests.
   306–312.
 - Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A. and
   Rubin, D. B. (2013). *Bayesian Data Analysis*, 3rd edn. CRC Press (split-R̂).
+- Glahn, H. R. and Lowry, D. A. (1972). The use of model output statistics
+  (MOS) in objective weather forecasting. *Journal of Applied Meteorology*, 11,
+  1203–1211.
+- Gneiting, T., Balabdaoui, F. and Raftery, A. E. (2007). Probabilistic
+  forecasts, calibration and sharpness. *Journal of the Royal Statistical
+  Society B*, 69, 243–268.
 - Bayley, G. V. and Hammersley, J. M. (1946). The "effective" number of
   independent observations in an autocorrelated time series. *Supplement to the
   Journal of the Royal Statistical Society*, 8, 184–197.

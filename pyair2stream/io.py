@@ -54,6 +54,16 @@ def _read_8_values(values, name: str) -> np.ndarray:
         )
     return np.array([np.float64(x) for x in values], dtype=np.float64)
 
+def _season_months(values):
+    """`cross_validation.season_months`: None, or a list of calendar months (1-12)."""
+    if values is None:
+        return None
+    months = [int(m) for m in (values if isinstance(values, (list, tuple)) else [values])]
+    if not months or any(m < 1 or m > 12 for m in months):
+        raise ValueError(f"cross_validation.season_months must list calendar months 1-12, got {values!r}.")
+    return sorted(set(months))
+
+
 def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     """
     Reads the calibration configuration from a YAML file and initializes the CommonData.
@@ -218,9 +228,14 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
             raise ValueError(f"ar1_rho must be strictly between -1.0 and 1.0, got {ar1_rho}")
         ar1_rho = float(ar1_rho)
 
+    # Central level (%) of every range the package reports: predictions (daily bands, the
+    # cross-validation check of yearly statistics) and parameters (MCMC summary, jackknife).
     prediction_interval = float(uncertainty_options.get('prediction_interval', 90.0))
     if not (0.0 < prediction_interval < 100.0):
         raise ValueError(f"prediction_interval must be strictly between 0 and 100, got {prediction_interval}")
+    parameter_interval = float(uncertainty_options.get('parameter_interval', 90.0))
+    if not (0.0 < parameter_interval < 100.0):
+        raise ValueError(f"parameter_interval must be strictly between 0 and 100, got {parameter_interval}")
 
     save_ensemble = bool(uncertainty_options.get('save_ensemble', False))
     strict_convergence = bool(uncertainty_options.get('strict_convergence', True))
@@ -259,6 +274,7 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
         "rho_timescale": rho_timescale,
         "ar1_rho": ar1_rho,
         "prediction_interval": prediction_interval,
+        "parameter_interval": parameter_interval,
         "save_ensemble": save_ensemble,
         "strict_convergence": strict_convergence,
         "burnin_fraction": burnin_fraction,
@@ -276,7 +292,10 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
             min_train_years=int(cv_config_dict.get('min_train_years', 1)),
             skip_first_year=bool(cv_config_dict.get('skip_first_year', True)),
             min_valid_obs=int(cv_config_dict.get('min_valid_obs', 10)),
-            optimizer_overrides=cv_config_dict.get('optimizer_overrides', None)
+            optimizer_overrides=cv_config_dict.get('optimizer_overrides', None),
+            threshold=(float(cv_config_dict['threshold'])
+                       if cv_config_dict.get('threshold') is not None else None),
+            season_months=_season_months(cv_config_dict.get('season_months')),
         )
 
     opt_config = config.get('optimization') or {}

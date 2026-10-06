@@ -20,7 +20,8 @@ upper edge of the daily band is not the upper edge of the weekly peak.
 ```bash
 pyair2stream --config examples/03_compliance/calibrate.yaml    # as example 02, step 1
 pyair2stream --config examples/03_compliance/predict.yaml      # 1000 simulations of 2010-2012
-python examples/03_compliance/run.py                           # runs both, then the analysis
+pyair2stream --config examples/03_compliance/check.yaml        # cross-validation of 2002-2009
+python examples/03_compliance/run.py                           # runs all three, then the analysis
 ```
 
 [`predict.yaml`](predict.yaml) sets `save_ensemble: true`, which keeps all 1,000
@@ -30,63 +31,76 @@ Each series has its own parameters and its own day-to-day model error.
 do; with `"iid"` the 7-day means would be far too certain
 ([V5](../../validation/REPORT.md#v5)).
 
+[`check.yaml`](check.yaml) tests the same statistics on years the model was not
+calibrated on: it hides each of 2003–2009 in turn, calibrates on the others and
+records, for each hidden year, where the measured statistic fell among 1,000
+simulations (`output/check/cv_yearly_statistics.csv`). It uses the same 18 °C
+threshold as the question.
+
 The analysis in [`run.py`](run.py) is a few lines:
 
 ```python
 from pyair2stream import scenario
 ens, dates = scenario.load_ensemble("output/prediction/Forward_Prediction_Ensemble_Mentue_c_1d.npz")
-sims = pd.DataFrame(ens.T, index=dates)          # one column per simulation
-week = sims.rolling(7).mean()                    # 7-day means, within each simulation
-peak = week.loc["2010"].max()                    # each simulation's highest 7-day mean in 2010
-p_exceeded = (peak > 20).mean()                  # share of simulations above the limit
-warm_days = scenario.exceedance(sims.loc["2010"].T.to_numpy(), 18)   # days above 18 °C, per simulation
+stats = scenario.year_statistics(ens, dates, threshold=18)      # each year's statistics, per simulation
+peak = stats[2010]["highest 7-day mean"]                         # one value per simulation
+check = pd.read_csv("output/check/cv_yearly_statistics.csv")
+dev = check[check.statistic == "highest 7-day mean"].deviation   # measured minus predicted median
+peak_c = scenario.correct_statistic(peak, dev)                   # corrected for the model's bias
+p_exceeded = (peak_c > 20).mean()                                # share of simulations above the limit
 ```
 
 ## Results
 
-| Year | P(7-day mean > 20 °C) | Highest 7-day mean, 90% range | Measured | Days above 18 °C, median (90% range) | Measured |
-|---|---|---|---|---|---|
-| 2010 | 0.91 | 19.8 to 21.7 °C | 21.0 °C | 31 (24 to 36) | 30 |
-| 2011 | 0.75 | 19.4 to 21.4 °C | 19.8 °C | 19 (13 to 26) | 21 |
-| 2012 | 0.51 | 19.2 to 20.9 °C | 19.6 °C | 24 (17 to 33) | 22 |
+**The check.** In the seven hidden years of 2003–2009, the measured yearly peaks
+were lower than predicted: the highest 7-day mean by 0.65 °C on average (95%
+interval 0.20 to 1.10 °C), the highest daily mean by 0.78 °C. The uncorrected
+90% ranges held in only 5 (7-day mean) and 4 (daily mean) of the 7 years. The
+number of days above 18 °C was not biased (+0.3 days, −5.7 to +6.3). On this
+river the model, calibrated on the whole year, puts the summer peaks too high.
 
-![Highest 7-day mean in each simulation](figures/peak_7day_mean.png)
+**The answer.**
 
-**Reading it.** In 2010 the limit was very likely exceeded (probability 0.91),
-and it was. In 2011 and 2012 the measured peaks, 19.8 and 19.6 °C, were within a
-few tenths of a degree of the limit. That is closer than the model can resolve,
-and its probabilities (0.75 and 0.51) say so: they leave both outcomes open. All
-measured values lie inside the model's 90% ranges. Report such results as
-probabilities with ranges, not as a yes or no.
+| Year | P(7-day mean > 20 °C), corrected | uncorrected | Highest 7-day mean, 90% range, corrected | Measured | Days above 18 °C, corrected: median (90% range) | Measured |
+|---|---|---|---|---|---|---|
+| 2010 | 0.59 | 0.91 | 19.1 to 21.1 °C | 21.0 °C | 31 (23 to 39) | 30 |
+| 2011 | 0.33 | 0.75 | 18.7 to 20.8 °C | 19.8 °C | 19 (12 to 27) | 21 |
+| 2012 | 0.12 | 0.51 | 18.5 to 20.3 °C | 19.6 °C | 25 (16 to 34) | 22 |
+
+![Highest 7-day mean in each simulation, corrected and not](figures/peak_7day_mean.png)
+
+**Reading it.** The limit was exceeded in 2010 and not in 2011 or 2012. The
+corrected probabilities (0.59, 0.33, 0.12) say so better than the uncorrected
+ones (0.91, 0.75, 0.51), which would have called 2011 a likely exceedance: the
+Brier score, the mean squared difference between probability and outcome, is
+0.10 corrected against 0.28 uncorrected. All measured values lie inside the
+corrected 90% ranges. 2010's measured peak, 21.0 °C, is near the top of its
+range: the bias in 2010–2012 was smaller than in 2003–2009. Report such results
+as probabilities with ranges, together with the check, not as a yes or no.
 
 ## Limits of this approach
 
 - **Daily means only.** The model simulates daily mean temperature. It cannot
   assess limits on daily maximum temperature.
-- **The probabilities may be too confident.** On the three Swiss rivers, for
-  years not used for calibration, version 8's 90% ranges for the year's highest
-  7-day mean contained the measured value in 14 of 15 river-years, but for the
-  year's highest daily mean in only 11 of 15 ([V9](../../validation/REPORT.md#v9)).
-  The model can be off by a few tenths of a degree for a whole summer, which
-  these ranges include only in part. Treat probabilities near 0.9 or 0.1 as
-  less certain than they look.
+- **The correction rests on the check.** It assumes the model's average error
+  in the statistic is the same in the years predicted as in the years held out.
+  With 7 years its uncertainty is large, and the corrected ranges include it.
+  Over 48 held-out years on three Swiss rivers, corrected 90% ranges held in
+  85–94% of years, uncorrected ones in 73–92%
+  ([V11](../../validation/REPORT.md#v11)).
 - **The method matters.** With the alternative `likelihood: "exact"` the
-  simulations ran slightly cooler and the probabilities were 0.84, 0.64 and 0.41:
-  lower by up to 0.11. The default keeps the simulations centred on the best fit
-  ([METHODS §12](../../docs/METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc)).
+  simulations run slightly cooler. The default keeps them centred on the best
+  fit ([METHODS §12](../../docs/METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc)).
 - **So does the time scale of the error.** The model's errors have a part that
   changes from day to day and a part that lasts for weeks. The default
-  (`rho_timescale: "weekly"`) includes both (ρ = 0.86 here); `"daily"`, the
-  default before version 0.4.2, matches only the day-to-day part (ρ = 0.70).
-  The daily interval is about the same either way (2.13 against 2.10 °C wide
-  on average), but with `"daily"` the 90% ranges for the highest 7-day mean are
-  up to a fifth narrower (1.5–1.6 °C wide against 1.6–1.9 °C) and the
-  probabilities more confident: 0.95, 0.80 and 0.53. A 7-day mean or a yearly
-  peak depends on the error that lasts for weeks
+  (`rho_timescale: "weekly"`) includes both (ρ = 0.86 here); `"daily"` matches
+  only the day-to-day part (ρ = 0.70) and gives narrower, over-confident ranges
+  for 7-day means and yearly peaks
   ([METHODS §12](../../docs/METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc)).
 - **The answer depends on the definition.** Here a 7-day mean is a moving
-  average over the current and previous six days. Use your standard's own
-  definition (moving or fixed weeks, calendar year or season).
+  average over the current and previous six days, within the calendar year. Use
+  your standard's own definition (moving or fixed weeks, calendar year or
+  season), and the same one in the check.
 
 ## Next
 

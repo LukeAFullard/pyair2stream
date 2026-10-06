@@ -162,6 +162,28 @@ def write_bias_by_month(dates, obs, sim, folder: str, name: str, title: str) -> 
     return table
 
 
+def parameter_summary(chain_df: pd.DataFrame, level: float = 90.0) -> pd.DataFrame:
+    """
+    Posterior mean, SD and central `level`% credible interval of each parameter in a
+    DE-MCMC chain (`uncertainty_options.parameter_interval`). 'Significantly_Diff_From_Zero'
+    is a test at the conventional 5% level, whatever `level` is: zero lies outside the
+    central 95% of the chain.
+    """
+    rows = []
+    for col in chain_df.columns:
+        ci_lower, ci_upper = chain_df[col].quantile([0.5 - level / 200, 0.5 + level / 200])
+        lo95, hi95 = chain_df[col].quantile([0.025, 0.975])
+        rows.append({
+            'Parameter': col,
+            'Mean': chain_df[col].mean(),
+            'StdDev': chain_df[col].std(),
+            f'{level:g}%_CI_Lower': ci_lower,
+            f'{level:g}%_CI_Upper': ci_upper,
+            'Significantly_Diff_From_Zero': not (lo95 <= 0 <= hi95),
+        })
+    return pd.DataFrame(rows)
+
+
 def _envelope_on_dates(data: CommonData, dates) -> pd.DataFrame:
     """
     This run's prediction-interval envelope (MCMC for a calibration run, forward
@@ -338,25 +360,8 @@ def post_process(data: CommonData, toll: float = None):
     if data.runmode == 'DE-MCMC' and os.path.exists(chain_filename):
         chain_df = pd.read_csv(chain_filename)
 
-        # Calculate statistics
-        stats = []
-        for col in chain_df.columns:
-            mean_val = chain_df[col].mean()
-            std_val = chain_df[col].std()
-            ci_lower = chain_df[col].quantile(0.025)
-            ci_upper = chain_df[col].quantile(0.975)
-            # A simple significance check: if 0 is not in the 95% CI
-            significant = not (ci_lower <= 0 <= ci_upper)
-            stats.append({
-                'Parameter': col,
-                'Mean': mean_val,
-                'StdDev': std_val,
-                '95%_CI_Lower': ci_lower,
-                '95%_CI_Upper': ci_upper,
-                'Significantly_Diff_From_Zero': significant
-            })
-
-        stats_df = pd.DataFrame(stats)
+        level = float((data.uncertainty_options or {}).get('parameter_interval', 90.0))
+        stats_df = parameter_summary(chain_df, level)
         sig_file = os.path.join(data.folder, f"parameter_significance_{data.runmode}_{data.station}.csv")
         stats_df.to_csv(sig_file, index=False)
         print(f"Saved parameter significance report to {sig_file}")
