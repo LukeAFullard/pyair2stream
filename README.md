@@ -261,7 +261,10 @@ The [validation suite](validation/README.md) checks this, and its results are in
   0.00013 °C on every day. The 46th is a calibration record starting on
   1 November that their run read as if it started on 1 January, putting the
   seasonal cycle ten months out of phase; read that way, pyair2stream
-  reproduces it too ([V15](validation/REPORT.md#v15)). That error, and those
+  reproduces it too ([V15](validation/REPORT.md#v15)). Its own calibration
+  reaches other parameter values, fitting as well or better, but the published
+  ones lie inside its 90% uncertainty intervals wherever these could be
+  computed (99 of 104 values): many combinations fit these data. That error, and those
   found in the other two papers, are documented in
   [docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md).
 - **On the hottest days.** In held-out years, on the 10% of days predicted to

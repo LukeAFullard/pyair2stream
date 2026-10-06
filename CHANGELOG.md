@@ -76,7 +76,10 @@
   its calibration fits every station at least as well. The 46th, a
   calibration record starting on 1 November 2012, was run by its authors as if
   it started on 1 January (the original program reads records by row); read
-  that way, it is reproduced to 0.00001 °C.
+  that way, it is reproduced to 0.00001 °C. The published parameters are not
+  where pyair2stream's calibration lands (same values at 1 of 23 stations), but
+  where its DE-MCMC sampler converged (13 stations), 99 of 104 published values
+  lie inside its 90% intervals.
 - [docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md): the published
   air2stream results pyair2stream reproduces (Toffolon and Piccolroaz, 2015;
   Piccolroaz et al., 2016; Callahan and Moore, 2025), the errors found in each

@@ -10,9 +10,9 @@ repository.
 
 | Study | Rivers | Scheme | What pyair2stream reproduces | Errors found in the publication | Check |
 |---|---|---|---|---|---|
-| Toffolon and Piccolroaz (2015) | 3 Swiss | RK4 | all 30 published errors, within rounding; its own calibration returns the published parameters in all 15 cases | the Rhône's calibration and validation periods are misprinted | [V13](../validation/REPORT.md#v13) |
-| Piccolroaz et al. (2016) | 3 of 38 Swiss (the 3 distributed) | Crank–Nicolson | all 30 published errors, to 0.0005 °C | optimiser settings not stated; in 5 of 15 cases the published parameters are not the best fit; validation discharge scaling not stated | [V2](../validation/REPORT.md#v2) |
-| Callahan and Moore (2025) | 23 in British Columbia | Crank–Nicolson | 45 of the 46 published simulated series, day by day, to 0.00013 °C | one station's calibration record read with its seasonal cycle ten months out of phase | [V15](../validation/REPORT.md#v15) |
+| Toffolon and Piccolroaz (2015) | 3 Swiss | RK4 | errors: all 30, within rounding. Parameters: its own calibration returns the published values in all 15 cases | the Rhône's calibration and validation periods are misprinted | [V13](../validation/REPORT.md#v13) |
+| Piccolroaz et al. (2016) | 3 of 38 Swiss (the 3 distributed) | Crank–Nicolson | errors: all 30, to 0.0005 °C. Parameters: returned by calibration in 10 of 15 cases (the other 5 trade off along flat valleys); 76 of 81 published values inside pyair2stream's 90% intervals | optimiser settings not stated; in 5 of 15 cases the published parameters are not the best fit; validation discharge scaling not stated | [V2](../validation/REPORT.md#v2) |
+| Callahan and Moore (2025) | 23 in British Columbia | Crank–Nicolson | simulated series: 45 of 46, day by day, to 0.00013 °C. Parameters: returned by calibration at 1 of 23 stations; where the MCMC converged, 99 of 104 published values inside its 90% intervals | one station's calibration record read with its seasonal cycle ten months out of phase | [V15](../validation/REPORT.md#v15) |
 
 The errors listed do not affect what pyair2stream computes: in every case the
 published numbers are reproduced once the publication's actual procedure is
@@ -141,6 +141,34 @@ to 31 October) windows therefore follow; for example, the mean RMSE over the
 from pyair2stream's alike. pyair2stream's calibration fits each station's
 calibration years at least as well as the published parameters (by 0 to
 0.15 °C, apart from the station below).
+
+**Parameters.** pyair2stream's calibration returns the published parameter
+values (each within 1% of its range) at only 1 of the 23 stations, although it
+fits every station at least as well. Whether the published values are
+nevertheless consistent with the data was tested as for the 2016 paper: each
+station's calibration years give two 90% intervals for every parameter.
+
+- *DE-MCMC intervals*, the parameter values whose fit is close to the best: at
+  the 13 stations where the sampler converged, 99 of the 104 published values
+  lie inside. The 5 outside lie within 2% of the range of a bound of the
+  parameter ranges (`a4` near −1 at four stations, `a6` near 10 at one). There
+  the published parameters fit the data about as well as the best fit.
+- *Jackknife intervals*, how far the best fit itself moves when a year is left
+  out: they contain 58 of those 104 values. The published sets lie among the
+  good fits, but not where a least-squares calibration lands.
+- At the other 10 stations the sampler did not converge within 20,000 steps:
+  the parameters are too poorly determined for their distribution to be
+  sampled in that time. The jackknife intervals there contain 25 of 80
+  published values.
+- The published `a4` lies at or within 0.04 of its lower bound, −1, at 14 of
+  the 23 stations: many of the published calibrations stopped on that bound.
+
+This is not an error of the publication. Many parameter combinations fit these
+data almost equally well (equifinality), and the dataset does not record the
+calibration settings (objective, parameter ranges, optimiser), so a different
+calibration can reasonably end elsewhere. It means the published parameter
+values should not be interpreted individually; the predictions, which part A
+reproduces, are what the model provides.
 
 **Error found: one calibration record was read with its seasonal cycle ten
 months out of phase.** The calibration record of station 08GA077 (Seymour River
