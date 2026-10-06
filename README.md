@@ -220,8 +220,10 @@ The [validation suite](validation/README.md) checks this, and its results are in
   statistics (highest daily mean, highest 7-day mean, days above a threshold)
   held in only 73–92% of years. A cross-validation of the calibration years
   measures that bias, and correcting for it brought the 90% ranges to 85–94%
-  ([V11](validation/REPORT.md#v11)). Version 8's probabilities were closer to
-  what happened than going by how often the limit was exceeded in past years.
+  ([V11](validation/REPORT.md#v11)); ranges for the highest daily mean stay the
+  least reliable. Version 8's probabilities were closer to what happened than
+  going by how often the limit was exceeded in past years, more so after the
+  correction ([V9](validation/REPORT.md#v9)).
   Version 5, which has no discharge term, could not follow the year-to-year
   changes of the Rhône's summer peaks.
 - **Warmer and lower-flow years.** Calibrated only on the coolest (or

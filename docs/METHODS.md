@@ -630,11 +630,16 @@ years for version 8 and 73–81% for version 5. After the correction they held
 in 85–94% for both versions, within the range expected by chance, and the
 measured value sat on average at the middle of the simulations (mean PIT
 0.48–0.50, against 0.31–0.52 before). The highest daily mean remained at the
-low end (85%): single-day peaks are the hardest statistic to predict. Version
-8's probabilities were closer to what happened than the share of past years in
-which a limit was exceeded (V9 B). Version 5 predicted almost the same peak
-every year on the Rhône, where discharge drives summer temperature; the
-correction removes its bias, but not its inability to follow the years.
+low end (85%): single-day peaks are the hardest statistic to predict. Applied
+as recommended to genuinely later years (cross-validation of the calibration
+years, then correction of the FORWARD simulations of the validation years; V9
+C, 15 river-years), the correction made the probabilities closer to what
+happened for 5 of 6 version and statistic pairs (version 8's Brier skill score
+against the share of past years rose from 0.08–0.42 to 0.33–0.50), but version
+8's 90% ranges for the highest daily mean still held in only 11 of 15
+river-years. Version 5 predicted almost the same peak every year on the Rhône,
+where discharge drives summer temperature; the correction removes its bias, but
+not its inability to follow the years.
 
 **Comparing two scenarios** (for example observed versus naturalised flow): run
 FORWARD once per scenario from the same chain with `save_ensemble: true`, and
@@ -703,8 +708,10 @@ change one-sided.
   right (V9, synthetic data), but the model can be biased on the hottest days,
   and uncorrected 90% ranges for yearly statistics held in only 73–92% of
   held-out years on the Swiss rivers. Check them by cross-validation and correct
-  them (§13); corrected, they held in 85–94% (V11). The check needs years: with
-  fewer than about 5 held-out years it can say little.
+  them (§13); corrected, they held in 85–94% (V11). Ranges for the highest
+  daily mean remained the least reliable (85% in V11, 11 of 15 later years in
+  V9 C). The check needs years: with fewer than about 5 held-out years it can
+  say little.
 - **Different parameter sets can fit equally well** (equifinality), especially
   for versions 7 and 8. Inspect the dotty plots; a parameter at a bound suggests
   the bounds are too narrow. Prefer the simplest version that validates well.
