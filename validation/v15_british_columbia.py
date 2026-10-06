@@ -27,7 +27,8 @@ TOL_DE = 0.002              # °C: DE may fit worse than the published parameter
 HEAT_DOME = ("2021-06-25", "2021-07-02")       # the paper's windows, applied by day of year as in its scripts
 DROUGHT = ("2022-09-01", "2022-10-31")
 QUICK_STATIONS = ("07EA004", "08GA077")
-MCMC_WALKERS, MCMC_STEPS = 32, 20000        # part D, as V2 part F: run until converged, at most this many steps
+MCMC_WALKERS, MCMC_STEPS = 32, 100000       # part D: run until converged, at most this many steps (V2 part F:
+                                            # 20,000; poorly determined parameters need longer chains here)
 
 
 def _load():
@@ -162,7 +163,8 @@ def _mcmc(args):
     meta = json.load(open(os.path.join(out, "MCMC_chain_S_c_1d_meta.json")))
     chain = pd.read_csv(os.path.join(out, "MCMC_chain_S_c_1d.csv"))
     iv = {int(c.split("_")[1]) - 1: tuple(float(x) for x in np.percentile(chain[c], [5, 95])) for c in chain.columns}
-    return "mcmc", st, {"intervals": iv, "converged": bool(meta["converged"]), "steps": int(meta["steps_run"])}
+    return "mcmc", st, {"intervals": iv, "converged": bool(meta["converged"]), "steps": int(meta["steps_run"]),
+                        "tau": meta.get("max_autocorr_time"), "rhat": meta.get("max_split_rhat")}
 
 
 def _jackknife(args):
@@ -221,7 +223,8 @@ def run(ctx) -> Result:
     stations = list(QUICK_STATIONS) if ctx.quick else list(par_table.index)
     with Timer() as t:
         with ProcessPoolExecutor(max_workers=ctx.workers) as ex:
-            futures_d = [ex.submit(fn, (st, ctx.quick)) for st in stations for fn in (_mcmc, _jackknife)]
+            # The MCMC runs are the longest: start them all first.
+            futures_d = [ex.submit(fn, (st, ctx.quick)) for fn in (_mcmc, _jackknife) for st in stations]
             outs = list(ex.map(_station, [(st, ctx.quick) for st in stations]))
             found = {(kind, st): r for kind, st, r in (f.result() for f in futures_d)}
     res.seconds = t.seconds
@@ -287,6 +290,8 @@ def run(ctx) -> Result:
         tot["any"] += in_any
         tot["n"] += 8
         summ.append({"station": st, "MCMC converged (steps)": f"{'yes' if mc['converged'] else 'NO'} ({mc['steps']})",
+                     "longest autocorrelation time (steps)": "" if mc["tau"] is None else f"{mc['tau']:.0f}",
+                     "largest split-Rhat": "" if mc["rhat"] is None else f"{mc['rhat']:.3f}",
                      "published inside MCMC interval": f"{in_mc} of 8" if mc["converged"] else "not converged",
                      "cross-validation folds": jk["folds"], "published inside jackknife interval": f"{in_jk} of 8",
                      "inside at least one": f"{in_any} of 8"})
@@ -406,7 +411,7 @@ def run(ctx) -> Result:
                  "the published sets lie among the good fits but not where the least-squares estimator lands. ")
     n_nc = len(stations) - len(conv)
     if n_nc:
-        note += (f"At the other {n_nc} stations the MCMC did not converge within {MCMC_STEPS} steps: the parameters "
+        note += (f"At {'the other ' if conv else ''}{n_nc} stations the MCMC did not converge within {MCMC_STEPS} steps: the parameters "
                  "are too poorly determined by the data for their distribution to be sampled in that time, and only "
                  f"the jackknife is available ({int(jk_in[~in_conv].sum())} of {int((~in_conv).sum())} published "
                  "values inside). ")
