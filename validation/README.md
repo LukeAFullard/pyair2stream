@@ -25,13 +25,15 @@ before its result.
 | V10 | Calibrated only on the coolest (or highest-flow) years, does the model still predict the warmest (or lowest-flow) years, and do its intervals hold? | Limits are breached, and scenarios extrapolate, in exactly those years. |
 | V11 | Over many years not used for calibration, do the predicted ranges of yearly statistics hold? Why not, when they do not? Does the cross-validated correction make them hold? | The answer to a compliance question must carry the confidence it states. |
 | V12 | Cross-validation hides a year's water temperatures and keeps its air temperature and discharge. Would hiding those inputs too, leaving a buffer around the year, or calibrating on earlier years only change what it reports? | The cross-validation is the evidence for every check of predictions in new years; its design must not flatter the model. |
+| V13 | Given the parameters of the first air2stream paper (Toffolon and Piccolroaz, 2015), does it reproduce that paper's errors, and with which numerical scheme? Does its calibration with that scheme return those parameters? | A second published benchmark, from the model's authors, on the same data. |
+| V14 | In years not used for calibration, do the prediction intervals hold on the days predicted to be hottest and on the days with the hottest air? | Limits are breached on the hottest days. |
 
 ## Running it
 
 From the repository root, with the package installed (`pip install -e .`):
 
 ```bash
-python validation/run_all.py            # full suite, about 110 minutes on 4 cores
+python validation/run_all.py            # full suite, about 115 minutes on 4 cores
 python validation/run_all.py --quick    # reduced version of every check, about 2 minutes
 python validation/run_all.py --only V2 V6
 ```
@@ -67,7 +69,8 @@ uncorrected ranges for yearly statistics miss more often than stated because the
 model can be biased on the hottest days, which the cross-validated correction
 largely fixes (V9, V11), 99% daily intervals are too narrow because real errors
 have heavier tails than assumed (V5, V11), and a version without discharge does
-not suit a river like the Rhône (V5, V9, V10). Calibrating on weekly or
+not suit a river like the Rhône (V5, V9, V10), and its intervals do not hold on
+the hottest days (V14). Calibrating on weekly or
 monthly means needs bounds that keep `a2` and `a3` at least 0 (V4).
 
 It does not show that the model suits your river. Check that with your own data:

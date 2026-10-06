@@ -788,7 +788,9 @@ change one-sided.
 - **Choose a version that suits the river.** Where discharge drives the summer
   temperature (the Rhône here), versions without a discharge term (3–5) did
   hardly better than simple alternatives, and version 5's probabilities for
-  yearly peaks were no better than going by past years (V5, V9, V10). Compare
+  yearly peaks were no better than going by past years (V5, V9, V10); on the
+  hottest days its 90% intervals held on only 83–84% of days, against 91% for
+  version 8 (V14). Compare
   versions on validation years or by cross-validation (§11).
 - **Yearly statistics need the cross-validation check.** Their computation is
   right (V9, synthetic data), but the model can be biased on the hottest days,
@@ -848,8 +850,11 @@ accuracy; gaps; exact answers from the workflow and scenario tools;
 probabilities of exceeding a limit, on synthetic data and real rivers (V9);
 predictions for warmer and lower-flow years than those calibrated on (V10); and
 the cross-validated check and correction of yearly statistics (V11); and that
-the cross-validation's design does not flatter the model (V12). V5, V9 and
-V10 do not pass all their criteria; the report says where and why. The test
+the cross-validation's design does not flatter the model (V12); the 30
+published errors of Toffolon and Piccolroaz (2015), computed with RK4, also
+reproduced, and their parameters returned by calibration with RK4 (V13); and
+prediction intervals on the hottest days (V14). V5, V9, V10 and V14 do not pass
+all their criteria; the report says where and why. The test
 suite (`pytest tests/`) also compares against the Fortran and checks each
 safeguard above.
 

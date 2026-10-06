@@ -191,6 +191,11 @@ The [validation suite](validation/README.md) checks this, and its results are in
   the 15 sets are unstable and the rest give different errors. Calibrating with
   RK4 comes close to the published parameters (within 1% of their ranges) only
   where the water temperature responds slowly: the Mentue, versions 3–5.
+  The first air2stream paper (Toffolon and Piccolroaz, 2015) published other
+  parameters for the same rivers, computed with RK4: with RK4, pyair2stream
+  reproduces all 30 of its errors within their rounding, and its RK4
+  calibration returns those parameters in all 15 cases
+  ([V13](validation/REPORT.md#v13)).
 - **Finds a known truth.** On data made by the model from known parameters,
   calibration predicts other years to within 0.04 °C of the truth (0.06 °C
   with typical gaps in the data).
@@ -245,6 +250,12 @@ The [validation suite](validation/README.md) checks this, and its results are in
   on the Rhône, which does no better than the simple alternatives whichever
   years it is calibrated on. On rivers like the Rhône, use a version with
   discharge (7 or 8).
+- **On the hottest days.** In held-out years, on the 10% of days predicted to
+  be hottest, version 8's 90% intervals held on 91% of days. Version 5's held
+  on only 84%: without a discharge term it predicted its hottest days about
+  0.5 °C too warm ([V14](validation/REPORT.md#v14)). Check intervals on hot
+  days by choosing the days from the prediction or the air temperature, not
+  from the measurements.
 - **A fair cross-validation.** It hides a year's water temperatures and
   predicts the year from its own air temperature and discharge, the standard
   design. Hiding those inputs from the calibration too, or leaving two months
@@ -261,7 +272,7 @@ To run the tests and the validation suite (needs `gfortran`):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # or without --quick: the full suite, about 110 minutes
+python validation/run_all.py --quick     # or without --quick: the full suite, about 115 minutes
 ```
 
 ## Examples

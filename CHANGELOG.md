@@ -59,6 +59,20 @@
   errors by a factor of 0.35–1.55; check poorly determined parameters with a
   second `random_seed`. `validation/run_all.py --only` now keeps the other
   checks in `REPORT.md`.
+- Validation V13: the parameters and errors of the first air2stream paper
+  (Toffolon and Piccolroaz, 2015), transcribed to
+  `data/switzerland/published/Toffolon_Piccolroaz_ERL2015.csv`. With RK4 all
+  30 published errors are reproduced within their rounding (with
+  Crank-Nicolson they are missed by up to 0.32 °C: the 2015 results used RK4,
+  the 2016 results Crank-Nicolson), and DE calibration with RK4 returns the
+  published parameters in all 15 cases. The paper's stated Rhône periods
+  (1984–2003 / 2004–2013) are a misprint for the distributed split.
+- Validation V14: prediction intervals on the hottest days of held-out years.
+  On the 10% of days predicted to be hottest, version 8's 90% intervals held
+  on 91% of days; ⚠ version 5's on 84%, because it predicted those days about
+  0.5 °C too warm. Checking intervals only on the days with the highest
+  measurements is a biased test: there even a correct 90% interval is exceeded
+  on 14.5–21.4% of days.
 
 ### Changed
 - ⚠ A FORWARD run with prediction intervals refuses a DE-MCMC chain fitted with
