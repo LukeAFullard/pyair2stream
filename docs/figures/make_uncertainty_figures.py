@@ -1,11 +1,13 @@
 """
 Draw the figures of docs/UNCERTAINTY.md.
 
-    python docs/figures/make_uncertainty_figures.py
+    python docs/figures/make_uncertainty_figures.py          # every figure
+    python docs/figures/make_uncertainty_figures.py --rho    # only those of the weekly rho (U15-U19)
 
 Uses the outputs of examples 03 and 04 (running them first if they are missing,
-a few minutes) and the validation results in validation/results/. Writes
-docs/figures/U*.png.
+a few minutes), the validation results in validation/results/, and, for U16 and
+U19, calibrations of versions 5 and 8 on the three Swiss rivers (a few
+minutes). Writes docs/figures/U*.png and prints the numbers the documents quote.
 """
 
 import json
@@ -21,7 +23,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "validation"))
 os.environ.setdefault("MPLBACKEND", "Agg")
 
-from common import (plot_style, BLUE, ORANGE, AQUA, INK, INK2, MUTED, GRID, AXIS, SURFACE, LIGHT_GREY,  # noqa: E402
+from common import (plot_style, BLUE, ORANGE, AQUA, YELLOW, INK, INK2, MUTED, GRID, AXIS, SURFACE, LIGHT_GREY,  # noqa: E402
                     load, quiet)
 
 import matplotlib.pyplot as plt          # noqa: E402
@@ -502,7 +504,343 @@ def u14_effective_n(rho_day, rho_week, n_days):
     save(fig, "U14_effective_n.png")
 
 
+# --- U15-U19: the weekly rho, how it is made and what it changes -------------------------------------
+
+RIVERS = (("Mentue", "MAH_2369"), ("Rhône", "SIO_2011"), ("Dischmabach", "DAV_2327"))
+WINDOWS = np.array([1, 2, 3, 5, 7, 10, 14, 21, 30, 45, 60, 90])
+
+
+def rho_estimates(res):
+    """The package's two estimates of rho from a daily residual series with NaN gaps: from consecutive days,
+    and from consecutive weeks; and the default, the larger of the two."""
+    from pyair2stream.uncertainty import estimate_ar1_rho, estimate_ar1_rho_weekly
+    ok = res.notna().to_numpy()
+    e, obs, seg = np.nan_to_num(res.to_numpy()), np.where(ok, 0.0, -999.0), [(0, len(res) - 1)]
+    r_day = estimate_ar1_rho(e, obs, ok, seg)
+    r_week_only = estimate_ar1_rho_weekly(e, obs, ok, seg)
+    return r_day, r_week_only, max(r_day, r_week_only)
+
+
+def week_correlation(res, w=7):
+    """Measured correlation between the mean errors of a w-day window and of the next w-day window
+    (every starting day, complete windows only), as the weekly estimate measures it for w = 7."""
+    means = res.rolling(w).mean().to_numpy()
+    full = (res.notna().rolling(w).sum() == w).to_numpy()
+    ok = full[:-w] & full[w:]
+    return float(np.corrcoef(means[:-w][ok], means[w:][ok])[0, 1])
+
+
+def alternative_rhos(res, sigma):
+    """Two other single-rho choices, for comparison: the rho that reproduces the persistence of 30-day
+    windows (as the weekly estimate does for 7-day windows), and the rho that reproduces the size of the
+    7-day mean error."""
+    from scipy.optimize import brentq
+    from pyair2stream.uncertainty import weekly_mean_correlation
+    r30 = week_correlation(res, 30)
+    rho_month = brentq(lambda x: weekly_mean_correlation(x, 30) - r30, 1e-6, 0.999) if r30 > 0 else 0.0
+    real7 = real_mean_sd(res, 7)
+    rho_size = brentq(lambda x: ar1_mean_sd(sigma, x, 7) - real7, 0.0, 0.999)
+    return rho_month, rho_size
+
+
+def ar1_mean_sd(sigma, rho, m):
+    """Standard deviation of the mean of m consecutive days of AR(1) errors."""
+    k = np.arange(1, m)
+    return sigma * np.sqrt((1 + 2 * np.sum((1 - k / m) * rho ** k)) / m)
+
+
+def real_mean_sd(res, m):
+    """Root-mean-square of the real errors averaged over m consecutive measured days."""
+    r = res.rolling(m).mean()
+    full = res.notna().rolling(m).sum() == m
+    return float(np.sqrt(np.mean(r[full] ** 2)))
+
+
+def river_residuals():
+    """Daily calibration errors of versions 5 and 8 on the three Swiss rivers (DE, seed 42; a few minutes)."""
+    from common import calibrate, river_csv, daily
+    out = {}
+    for river, station in RIVERS:
+        for version in (5, 8):
+            data = calibrate(river_csv(station, "calibration"), version, seed=42, name=f"docs_rho_{station}_{version}")
+            obs, sim = daily(data)
+            out[(river, version)] = pd.Series(sim - obs)
+    return out
+
+
+def u15_rho_how(res, rho_day, rho_week_only, rho_week, r_week):
+    """Diagram: the same daily errors read day to day and week to week, the two estimates, and where rho is used."""
+    plot_style()
+    fig = plt.figure(figsize=(11, 6.6))
+    ax = fig.add_axes([0.07, 0.53, 0.9, 0.4])
+    span = res["2006-06-05":"2006-07-30"]                       # eight weeks, Monday to Sunday
+    days = span.index
+    half = pd.Timedelta(hours=12)
+    for k in range(0, 8, 2):
+        ax.axvspan(days[7 * k] - half, days[7 * k + 6] + half, color=GRID, alpha=0.7, lw=0, zorder=0)
+    ax.axhline(0, color=AXIS, lw=0.8)
+    ax.plot(days, span, color=INK, lw=0.9, marker="o", ms=2.6, label="daily error (simulated − measured)")
+    means = []
+    for k in range(8):
+        w = span.iloc[7 * k:7 * k + 7]
+        means.append((w.index[3], float(w.mean())))
+        ax.plot([w.index[0] - half, w.index[-1] + half], [w.mean()] * 2, color=BLUE, lw=3.2, solid_capstyle="butt",
+                label="mean error of each 7-day window" if k == 0 else None)
+    i = 16
+    ax.annotate("", (days[i + 1], span.iloc[i + 1]), (days[i], span.iloc[i]),
+                arrowprops=dict(arrowstyle="-|>", color=ORANGE, lw=1.6, connectionstyle="arc3,rad=-0.6"))
+    ax.text(days[i], max(span.iloc[i], span.iloc[i + 1]) + 0.25, "'daily':\nday → next day", color=ORANGE,
+            fontsize=8, ha="center", va="bottom")
+    (x0, y0), (x1, y1) = means[4], means[5]
+    ax.annotate("", (x1, y1), (x0, y0), arrowprops=dict(arrowstyle="-|>", color=BLUE, lw=1.6,
+                                                        connectionstyle="arc3,rad=-0.35"))
+    ax.text(x0 + pd.Timedelta(days=3.5), max(y0, y1) + 0.45, "'weekly':\nweek → next week", color=BLUE, fontsize=8,
+            ha="center", va="bottom")
+    ax.set_ylabel("Error (°C)")
+    lim = float(np.nanmax(np.abs(span))) + 0.9
+    ax.set_ylim(-lim, lim)
+    ax.legend(loc="lower left", fontsize=7.5, ncol=2)
+    import matplotlib.dates as mdates
+    ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=0))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
+    ax.set_title("The same errors, read two ways (Mentue, June-July 2006)", fontsize=10, loc="left")
+
+    ax = fig.add_axes([0.02, 0.02, 0.96, 0.43])
+    ax.set_xlim(0, 11)
+    ax.set_ylim(0, 3)
+    ax.axis("off")
+
+    def box(x, y, w, h, colour, title, text):
+        ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.02,rounding_size=0.12", fc=SURFACE, ec=colour,
+                                    lw=1.8))
+        ax.text(x + 0.18, y + h - 0.16, title, ha="left", va="top", fontsize=9.5, weight="bold", color=INK)
+        ax.text(x + 0.18, y + h - 0.52, text, ha="left", va="top", fontsize=8.3, color=INK2, linespacing=1.4)
+
+    box(0.15, 1.72, 5.9, 1.18, ORANGE, "'daily' estimate",
+        f"Correlate each day's error with the next day's: {rho_day:.2f}.\nSo ρ = {rho_day:.2f}.")
+    box(0.15, 0.1, 5.9, 1.45, BLUE, "'weekly' estimate",
+        f"Correlate each 7-day mean error with the mean of the next 7 days\n(windows starting on every day, "
+        f"not only Mondays): {r_week:.2f}.\n"
+        f"Find the AR(1) whose 7-day means correlate {r_week:.2f}:\nρ = {rho_week_only:.2f}.")
+    box(6.75, 0.1, 4.1, 2.8, AQUA, "Default: the larger of the two",
+        f"ρ = {rho_week:.2f} ('weekly', the default)\n\nρ then sets:\n• how wide the parameter ranges are\n"
+        "   (the effective number of days)\n• how long the random errors added to\n   every simulated series last\n"
+        "• the same, in the cross-validation check")
+    for y in (2.31, 0.83):
+        ax.add_patch(FancyArrowPatch((6.08, y), (6.72, 1.5), arrowstyle="-|>", mutation_scale=13, lw=1.3, color=INK2))
+    save(fig, "U15_rho_how.png")
+
+
+def u16_rho_conversion(rho_day, rho_week_only, r_week, cases):
+    """Left: the week-to-week correlation of an AR(1)'s 7-day means against rho, and how the measured value is
+    converted. Right: on every river and version, the measured week-to-week correlation against what the daily rho
+    implies."""
+    from pyair2stream.uncertainty import weekly_mean_correlation, MAX_RHO
+    plot_style()
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.1), gridspec_kw={"width_ratios": [1.15, 1]})
+    ax = axes[0]
+    rho = np.linspace(0, MAX_RHO, 400)
+    ax.plot(rho, [weekly_mean_correlation(x) for x in rho], color=INK, lw=1.8,
+            label="AR(1): correlation of consecutive 7-day means")
+    implied = weekly_mean_correlation(rho_day)
+    ax.plot([rho_day, rho_day, 0], [0, implied, implied], color=ORANGE, lw=1.2, ls=(0, (4, 2)))
+    ax.scatter(rho_day, implied, color=ORANGE, s=34, zorder=3)
+    ax.annotate(f"daily ρ = {rho_day:.2f} implies\nconsecutive weeks correlate {implied:.2f}", (rho_day, implied),
+                xytext=(0.05, 0.42), fontsize=8, color=ORANGE, arrowprops=dict(arrowstyle="-", color=ORANGE, lw=0.7))
+    ax.plot([0, rho_week_only, rho_week_only], [r_week, r_week, 0], color=BLUE, lw=1.2, ls=(0, (4, 2)))
+    ax.scatter(rho_week_only, r_week, color=BLUE, s=34, zorder=3)
+    ax.annotate(f"measured: {r_week:.2f}\n→ weekly ρ = {rho_week_only:.2f}", (rho_week_only, r_week),
+                xytext=(0.42, 0.78), fontsize=8, color=BLUE, arrowprops=dict(arrowstyle="-", color=BLUE, lw=0.7))
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_xlabel("ρ, persistence from one day to the next")
+    ax.set_ylabel("Correlation of consecutive 7-day mean errors")
+    ax.set_title("Converting the week-to-week correlation to ρ (Mentue, version 8)", fontsize=9.5, loc="left")
+    ax.legend(loc="upper left", fontsize=7.5)
+    ax = axes[1]
+    labels = []
+    for i, (name, c) in enumerate(cases.items()):
+        y = len(cases) - 1 - i
+        ax.plot([c["r_week_if_daily"], c["r_week"]], [y, y], color=GRID, lw=5, solid_capstyle="round", zorder=1)
+        ax.scatter(c["r_week_if_daily"], y, color=ORANGE, s=40, zorder=3, label="if the errors were AR(1) with the daily ρ" if i == 0 else None)
+        ax.scatter(c["r_week"], y, color=INK, s=40, zorder=3, label="measured" if i == 0 else None)
+        labels.append(name)
+    ax.set_yticks(range(len(cases)), labels[::-1])
+    ax.set_xlim(0, 1)
+    ax.set_ylim(-0.7, len(cases) - 0.3 + 0.9)
+    ax.set_xlabel("Correlation of consecutive 7-day mean errors")
+    ax.grid(axis="y", visible=False)
+    ax.legend(loc="upper left", fontsize=7.5, ncol=1)
+    ax.set_title("Every river: errors persist from week to week\nfar more than the daily ρ implies", fontsize=9.5,
+                 loc="left")
+    fig.tight_layout()
+    save(fig, "U16_rho_conversion.png")
+
+
+def u17_rho_series(res, sigma, rho_day, rho_week):
+    """Two years of real errors and of AR(1) errors with each rho (the same random numbers), with their 30-day
+    means: the same daily size, but over a month the daily rho averages the errors away."""
+    plot_style()
+    span = res["2006":"2007"]
+    n = len(span)
+    shocks = np.random.default_rng(17).standard_normal(n)
+
+    def ar1(rho):
+        x = np.empty(n)
+        x[0] = sigma * shocks[0]
+        for t in range(1, n):
+            x[t] = rho * x[t - 1] + sigma * np.sqrt(1 - rho ** 2) * shocks[t]
+        return x
+    m = 30
+    month_real = real_mean_sd(res, m)
+    rows = ((span.to_numpy(), INK, f"Real errors (Mentue). Typical size: {sigma:.2f} °C a day, "
+                                   f"{month_real:.2f} °C for a 30-day mean (2002-2009)"),
+            (ar1(rho_day), ORANGE, f"AR(1) with the daily ρ = {rho_day:.2f}: same daily size, but 30-day means only "
+                                   f"{ar1_mean_sd(sigma, rho_day, m):.2f} °C: a month averages the errors away"),
+            (ar1(rho_week), BLUE, f"AR(1) with the weekly ρ = {rho_week:.2f} (default): same daily size, 30-day means "
+                                  f"{ar1_mean_sd(sigma, rho_week, m):.2f} °C: drifts for weeks, like the real errors"))
+    fig, axes = plt.subplots(3, 1, figsize=(10, 6.4), sharex=True, sharey=True)
+    for ax, (series, colour, title) in zip(axes, rows):
+        s = pd.Series(series, index=span.index)
+        ax.axhline(0, color=AXIS, lw=0.8)
+        ax.plot(s.index, s, color=colour, lw=0.5, alpha=0.4, label="daily")
+        ax.plot(s.index, s.rolling(m, center=True).mean(), color=colour, lw=2.2, label="30-day mean")
+        ax.set_title(title, fontsize=8.8, loc="left")
+        ax.set_ylabel("°C")
+    axes[0].legend(loc="upper right", fontsize=7.5, ncol=2)
+    axes[0].set_ylim(-2.5, 2.5)
+    fig.suptitle("Same size of daily error, different persistence: over weeks and months the daily ρ is too calm",
+                 y=1.0, fontsize=10)
+    fig.tight_layout()
+    save(fig, "U17_rho_series.png")
+    return {"sd30_real": month_real, "sd30_daily": ar1_mean_sd(sigma, rho_day, m),
+            "sd30_weekly": ar1_mean_sd(sigma, rho_week, m)}
+
+
+def evidence_rows():
+    """Weekly against daily rho in the validation suite, read from validation/results/ (V4, V5, V9).
+    Each row: (label, check, weekly (low, high), daily (low, high)), coverage of nominal 90% ranges in %."""
+    res = os.path.join(REPO, "validation", "results")
+    pct = lambda s: pd.to_numeric(s.astype(str).str.rstrip("%"))
+    v4 = pd.read_csv(os.path.join(res, "V4_1.csv"))
+    v4["code"] = v4["case"].str[0]
+    par = v4.set_index("code")["parameter coverage"].pipe(pct)
+    a7 = pd.read_csv(os.path.join(res, "V4_4.csv")).set_index("parameter").loc["a7"].pipe(lambda s: pct(s))
+    v5 = pd.read_csv(os.path.join(res, "V5_2.csv"))
+    week5, day5 = v5[v5["noise model"] == "ar1-ls"], v5[v5["noise model"] == "ar1-ls-daily"]
+    v9a = pd.read_csv(os.path.join(res, "V9_1.csv"))
+    fs_week = pct(v9a[v9a.case == "version 5, fast + slow noise"]["inside 90% range"])
+    fs_day = pct(v9a[v9a.case == "version 5, fast + slow noise, rho from consecutive days"]["inside 90% range"])
+    v9b = pd.read_csv(os.path.join(res, "V9_3.csv"))
+    yr_week = pct(v9b[v9b["rho time scale"].str.startswith("weekly")]["inside 90% range"])
+    yr_day = pct(v9b[v9b["rho time scale"].str.startswith("daily")]["inside 90% range"])
+    span = lambda s: (float(s.min()), float(s.max()))
+    return [
+        ("Synthetic AR(1) errors:\nparameter ranges", "V4", span(par[["E"]]), span(par[["G"]])),
+        ("Synthetic fast + slow errors:\nparameter ranges, all", "V4", span(par[["H"]]), span(par[["I"]])),
+        ("Synthetic fast + slow errors:\nrange of a7 (seasonal timing)", "V4", span(a7[["H"]]), span(a7[["I"]])),
+        ("Synthetic fast + slow errors:\nyearly peaks and counts", "V9", span(fs_week), span(fs_day)),
+        ("Real rivers, new years:\ndaily values", "V5", span(pct(week5.coverage)), span(pct(day5.coverage))),
+        ("Real rivers, new years:\n7-day means", "V5", span(pct(week5["7-day mean coverage"])),
+         span(pct(day5["7-day mean coverage"]))),
+        ("Real rivers, new years:\nyearly peaks and counts", "V9", span(yr_week), span(yr_day)),
+    ]
+
+
+def u18_rho_evidence(rows):
+    plot_style()
+    fig, ax = plt.subplots(figsize=(9.5, 5.2))
+    ax.axvspan(85, 95, color=GRID, alpha=0.6, lw=0, zorder=0)
+    ax.axvline(90, color=INK2, lw=1, ls=(0, (4, 3)))
+    for i, (label, check, week, day) in enumerate(rows):
+        y = len(rows) - 1 - i
+        for (lo, hi), dy, colour, name in ((week, 0.14, BLUE, "weekly ρ (default)"), (day, -0.14, ORANGE, "daily ρ")):
+            if hi - lo < 0.6:
+                ax.scatter((lo + hi) / 2, y + dy, color=colour, s=40, zorder=3, label=name if i == 0 else None)
+            else:
+                ax.plot([lo, hi], [y + dy] * 2, color=colour, lw=6, solid_capstyle="round", zorder=3,
+                        label=name if i == 0 else None)
+        ax.text(101, y, check, fontsize=8, color=INK2, va="center")
+    ax.set_yticks(range(len(rows)), [r[0] for r in rows][::-1], fontsize=8)
+    ax.set_xlim(50, 103)
+    ax.set_xlabel("Share inside the 90% range (%): the dashed line is the target; the grey band is ±5 points")
+    ax.grid(axis="y", visible=False)
+    ax.legend(loc="upper left", fontsize=8)
+    ax.set_title("Where the two choices differ, the weekly ρ holds its 90% ranges; where they agree, it costs nothing",
+                 fontsize=9.5, loc="left")
+    save(fig, "U18_rho_evidence.png")
+
+
+def u19_rho_scales(cases):
+    """For every river and version: how well each single-rho choice reproduces the typical error of an
+    m-day mean (the band spans the six river and version cases; the line is their median)."""
+    plot_style()
+    fig, ax = plt.subplots(figsize=(8.6, 4.6))
+    ax.axhspan(0.9, 1.1, color=GRID, alpha=0.6, lw=0, zorder=0)
+    ax.axhline(1.0, color=INK2, lw=1, ls=(0, (4, 3)))
+    choices = (("ratio_month", AQUA, "ρ matched to month-to-month persistence"),
+               ("ratio_week", BLUE, "ρ matched to week-to-week persistence ('weekly', default)"),
+               ("ratio_size", YELLOW, "ρ matched to the size of a 7-day mean error"),
+               ("ratio_day", ORANGE, "ρ from consecutive days ('daily')"))
+    for key, colour, label in choices:
+        r = np.array([c[key] for c in cases.values()])
+        ax.fill_between(WINDOWS, r.min(axis=0), r.max(axis=0), color=colour, alpha=0.22, lw=0)
+        ax.plot(WINDOWS, np.median(r, axis=0), color=colour, lw=2, label=label)
+    ax.set_xscale("log")
+    ax.set_xticks([1, 3, 7, 14, 30, 60, 90], ["1", "3", "7", "14", "30", "60", "90"])
+    ax.set_xlabel("Averaging period (days)")
+    ax.set_ylabel("Typical error of the average:\nAR(1) ÷ real")
+    ax.set_ylim(0.5, 1.5)
+    ax.text(1.05, 1.43, "above 1: ranges wider than needed (cautious)", fontsize=8, color=INK2)
+    ax.text(1.05, 0.53, "below 1: ranges too narrow (over-confident)", fontsize=8, color=INK2)
+    ax.legend(loc="upper left", bbox_to_anchor=(0.0, 0.93), fontsize=7.5)
+    ax.set_title("Three rivers, versions 5 and 8: of the single-ρ choices, the weekly one stays closest to the real "
+                 "errors\nfrom a day to three months (bands: the six cases; lines: their median)", fontsize=9.5,
+                 loc="left")
+    save(fig, "U19_rho_scales.png")
+
+
+def rho_figures(res, sigma):
+    """Draw U15-U19; return the numbers the documents quote."""
+    from pyair2stream.uncertainty import weekly_mean_correlation
+    rho_day, rho_week_only, rho_week = rho_estimates(res)
+    r_week = week_correlation(res)
+    cases = {}
+    for (river, version), e in river_residuals().items():
+        d, wo, w = rho_estimates(e)
+        s = float(np.sqrt(np.nanmean(e ** 2)))
+        real = [real_mean_sd(e, m) for m in WINDOWS]
+        month, size = alternative_rhos(e, s)
+        cases[f"{river}, version {version}"] = {
+            "rho_day": d, "rho_week": w, "rho_month": month, "rho_size": size,
+            "r_week": week_correlation(e), "r_week_if_daily": weekly_mean_correlation(d),
+            **{f"ratio_{k}": [ar1_mean_sd(s, rho, m) / r for m, r in zip(WINDOWS, real)]
+               for k, rho in (("day", d), ("week", w), ("month", month), ("size", size))}}
+    u15_rho_how(res, rho_day, rho_week_only, rho_week, r_week)
+    u16_rho_conversion(rho_day, rho_week_only, r_week, cases)
+    sd30 = u17_rho_series(res, sigma, rho_day, rho_week)
+    rows = evidence_rows()
+    u18_rho_evidence(rows)
+    u19_rho_scales(cases)
+    pick = lambda key, m: [round(c[key][list(WINDOWS).index(m)], 2) for c in cases.values()]
+    return {"mentue_rho_day": rho_day, "mentue_rho_week_only": rho_week_only, "mentue_rho_week": rho_week,
+            "mentue_r_week": r_week, "mentue_r_week_if_daily": weekly_mean_correlation(rho_day),
+            "mentue_sd7": {"real": real_mean_sd(res, 7), "daily": ar1_mean_sd(sigma, rho_day, 7),
+                           "weekly": ar1_mean_sd(sigma, rho_week, 7)},
+            "mentue_sd30": sd30,
+            "cases": {k: {key: round(c[key], 3) for key in ("rho_day", "rho_week", "rho_month", "rho_size", "r_week",
+                                                             "r_week_if_daily")} for k, c in cases.items()},
+            **{key: {m: (min(pick(key, m)), max(pick(key, m))) for m in (1, 3, 7, 14, 30, 60, 90)}
+               for key in ("ratio_day", "ratio_week", "ratio_month", "ratio_size")},
+            "evidence": [(r[0].replace("\n", " "), r[1], r[2], r[3]) for r in rows]}
+
+
 def main():
+    if sys.argv[1:] == ["--rho"]:          # only the figures of the weekly rho (U15-U19)
+        ensure_examples()
+        m = meta()
+        print(json.dumps(rho_figures(calibration_residuals(), float(m["sigma"])), indent=1, ensure_ascii=False))
+        return
     ensure_examples()
     res = calibration_residuals()
     m = meta()
@@ -526,7 +864,8 @@ def main():
     numbers["paired"], numbers["unpaired"] = u12_paired()
     u13_parameters()
     u14_effective_n(rho_day, rho_week, numbers["n_days"])
-    print(json.dumps(numbers, indent=1))
+    numbers["rho"] = rho_figures(res, sigma)
+    print(json.dumps(numbers, indent=1, ensure_ascii=False))
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ You can use it to:
 
 ## Install
 
-You need Python 3.9 or newer.
+You need Python 3.9 or newer. It is tested on Python 3.9, 3.12 and 3.14.
 
 ```bash
 git clone https://github.com/LukeAFullard/pyair2stream.git

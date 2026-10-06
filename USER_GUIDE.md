@@ -63,7 +63,7 @@ You control a run with one settings file (YAML) and your data files (CSV).
 
 ## 2. Install
 
-You need Python 3.9 or newer.
+You need Python 3.9 or newer. It is tested on Python 3.9, 3.12 and 3.14.
 
 ```bash
 git clone https://github.com/LukeAFullard/pyair2stream.git
