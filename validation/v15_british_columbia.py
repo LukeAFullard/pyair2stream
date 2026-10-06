@@ -382,24 +382,38 @@ def run(ctx) -> Result:
                 f"{pub_val.get(r['station'], np.nan):.3f} °C for the published parameters. pyair2stream refuses a "
                 "calibration record that does not start on 1 January, and takes the seasonal timing from the dates "
                 "in other runs.")
-    share_mc = tot["mc"] / tot["mc_n"] if tot["mc_n"] else np.nan
-    share_any = tot["any"] / tot["n"]
     same = int((de["same parameters"] == "yes").sum())
+    conv = [st for st in stations if found[("mcmc", st)]["converged"]]
+    dd = pd.DataFrame(detail)
+    jk_in = dd["published inside (jackknife)"].astype(bool)
+    in_conv = dd.station.isin(conv)
+    outside = dd[in_conv & (dd["published inside (MCMC)"].astype(str) == "False")]
+    lo_b, hi_b = np.array(AUTHORS_BOUNDS["min"], float), np.array(AUTHORS_BOUNDS["max"], float)
+    near = [r for _, r in outside.iterrows()
+            if min(abs(float(r.published) - lo_b[int(r.parameter[1]) - 1]),
+                   abs(float(r.published) - hi_b[int(r.parameter[1]) - 1])) <= 0.02 * RANGE[int(r.parameter[1]) - 1]]
     note = (f"Parameters: pyair2stream's calibration returns the published parameter values at {same} of {len(de)} "
             f"stations, although it fits the same years at least as well at every station. ")
-    if share_any >= 0.9:
-        note += (f"The published values nevertheless lie inside pyair2stream's 90% intervals for {tot['any']} of "
-                 f"{tot['n']} values: they are consistent with the data, and the difference from the best fit is "
-                 "the trade-off between parameters that many combinations fit almost equally well (equifinality). "
-                 "Individual parameter values should not be interpreted on their own.")
-    else:
-        note += (f"Only {tot['any']} of {tot['n']} published values lie inside at least one of pyair2stream's 90% "
-                 f"intervals (MCMC: {share_mc:.0%} of the values of converged runs). Many published values are "
-                 "therefore not where a least-squares calibration on these data lands, even allowing for how "
-                 "poorly the data determine each parameter. The dataset does not record how the published "
-                 "calibration was made (objective function, parameter ranges, optimiser and its settings), so the "
-                 "reason cannot be determined from it; part A shows it is not the model. The published and "
-                 "pyair2stream's parameters predict the validation years with errors of the same size (part C).")
+    if conv:
+        note += (f"Where DE-MCMC converged ({len(conv)} stations), {tot['mc']} of {tot['mc_n']} published values lie "
+                 f"inside its 90% intervals: there the published parameters fit the data about as well as the best "
+                 f"fit does")
+        if len(outside):
+            note += (f", and of the {len(outside)} outside, {len(near)} lie within 2% of the range of a bound of the "
+                     "parameter ranges, where the published calibration stopped")
+        note += (f". The jackknife intervals at the same stations contain {int(jk_in[in_conv].sum())} of "
+                 f"{int(in_conv.sum())}: they measure how far the best fit itself moves when a year is left out, so "
+                 "the published sets lie among the good fits but not where the least-squares estimator lands. ")
+    n_nc = len(stations) - len(conv)
+    if n_nc:
+        note += (f"At the other {n_nc} stations the MCMC did not converge within {MCMC_STEPS} steps: the parameters "
+                 "are too poorly determined by the data for their distribution to be sampled in that time, and only "
+                 f"the jackknife is available ({int(jk_in[~in_conv].sum())} of {int((~in_conv).sum())} published "
+                 "values inside). ")
+    note += ("Many parameter combinations fit these data almost equally well (equifinality), so individual "
+             "parameter values should not be interpreted on their own; the predictions are what part A checks. The "
+             "dataset does not record how the published calibration was made (objective, parameter ranges, "
+             "optimiser and its settings).")
     res.notes.append(note)
     res.notes.append(
         "Unlike V2 and V13, these results come from another group, other rivers and another climate, and the whole "
