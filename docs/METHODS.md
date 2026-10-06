@@ -171,9 +171,10 @@ solution of the same equation, CRN differs by 0.04–0.10 °C RMS on the Swiss
 rivers, and EUL by up to about 1 °C even where stable (validation V6). This is
 not an error in the predictions, because the parameters are calibrated with
 the scheme and absorb its behaviour. It does mean that **parameters belong to
-the scheme they were calibrated with**: the published parameters are CRN
-parameters. Calibrating with EXP instead of CRN changed validation RMSE by less
-than 0.03 °C.
+the scheme they were calibrated with**. The parameters published by Piccolroaz
+et al. (2016) are CRN parameters; those of Toffolon and Piccolroaz (2015) are
+RK4 parameters (validation V2 and V13). Calibrating with EXP instead of CRN
+changed validation RMSE by less than 0.03 °C.
 
 ## 7. Measuring the fit
 

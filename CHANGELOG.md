@@ -99,10 +99,25 @@
   another model version, integrator or `Qmedia`. DE-MCMC now records them in the
   chain's `_meta.json`; chains from 0.4.2 or earlier cannot be checked, and a note
   says so.
+- The README, the User Guide and the example READMEs are rewritten in plain
+  language for new users, with shorter sentences and a clear path: prepare the
+  data, write the settings, run, read the results. New: what to check first in
+  the outputs (USER_GUIDE §8), how to choose calibration and validation years
+  and how to build a daily file from raw data (§5), and where to get help. The
+  README's summary of the validation is shorter; the evidence is unchanged in
+  `validation/REPORT.md`.
 
 ### Fixed
 - Monthly scoring (`time_resolution: "1m"`) of a 360-day-calendar record longer
   than about 60 years stopped with `IndexError`.
+- Documentation errors: example 02 gave the parameter ranges as 95% ranges
+  with old values (they are 90% ranges: `a5` 2.03 to 4.15); the code in
+  examples 03 and 04 and in USER_GUIDE §12 used paths and names that did not
+  run as written; `full_simulation_*` outputs were described as covering the
+  whole record (they cover the calibration file, on every day);
+  docs/METHODS.md §6 and USER_GUIDE §9.1 called all published parameters
+  Crank–Nicolson parameters (those of Toffolon and Piccolroaz, 2015, are RK4
+  parameters); example run times are updated.
 
 ## [0.4.2] - 2026-10-05
 
