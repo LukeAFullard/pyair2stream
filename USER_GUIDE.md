@@ -444,6 +444,8 @@ Be aware:
 consistent with the data (Markov chain Monte Carlo, `emcee`) and gives a
 **prediction interval**: a band that should contain the stated share of observed
 daily temperatures. Method: [docs/METHODS.md §12](docs/METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc).
+**New to uncertainty?** [docs/UNCERTAINTY.md](docs/UNCERTAINTY.md) explains every
+interval, probability and check in plain language, with figures.
 
 ```yaml
 run_mode: "DE-MCMC"
@@ -743,4 +745,6 @@ decision, check:
    results, and that its intervals are calibrated. Cite it with the commit.
 
 See [docs/METHODS.md §16](docs/METHODS.md#16-limitations-and-good-practice) for
-the full list of assumptions and limitations.
+the full list of assumptions and limitations, and
+[docs/UNCERTAINTY.md §15](docs/UNCERTAINTY.md#15-is-it-defensible) for how to
+present a result so that it can be defended.

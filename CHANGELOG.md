@@ -40,6 +40,11 @@
 - Validation V11 (the check and the correction over 48 held-out years per
   version), and part C of V9 (the correction from cross-validation of the
   calibration years, applied to the later years).
+- [docs/UNCERTAINTY.md](docs/UNCERTAINTY.md): every uncertainty statistic and
+  test explained for water quality scientists (what, when, why, how, what it
+  rests on in the literature, and how to defend it), with figures drawn by
+  `docs/figures/make_uncertainty_figures.py`. A test checks that every link in
+  the documentation resolves.
 
 ### Changed
 - ⚠ A FORWARD run with prediction intervals refuses a DE-MCMC chain fitted with

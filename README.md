@@ -158,6 +158,9 @@ Details: [User Guide §8](USER_GUIDE.md#8-understanding-the-output-files).
 - **[docs/METHODS.md](docs/METHODS.md)** — exactly what the software does, step
   by step, its assumptions and limitations, and how it differs from the Fortran.
   Read §16 there before using results to support a decision.
+- **[docs/UNCERTAINTY.md](docs/UNCERTAINTY.md)** — the uncertainty statistics
+  and tests explained for water quality scientists: what each means, when, why
+  and how to use it, what it rests on, and how to defend it.
 - **[validation/REPORT.md](validation/REPORT.md)** — the evidence that it works.
 - [CHANGELOG.md](CHANGELOG.md) — changes between versions.
 

@@ -24,6 +24,9 @@ dist/
 examples/*/output/
 !examples/*/figures/*.png
 
+# Figures of the documentation (docs/figures/make_uncertainty_figures.py)
+!docs/figures/*.png
+
 # Validation evidence: the report's figures and summary tables are committed
 validation/work/
 !validation/figures/*.png

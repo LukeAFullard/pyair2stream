@@ -6,7 +6,9 @@ result (for example in a report or a hearing), not only for modelling
 specialists. Where a step differs from the original Fortran `air2stream`, this is
 stated. Section numbers are cited by the program's own error messages.
 
-For how to *run* the software, see the [User Guide](../USER_GUIDE.md).
+For how to *run* the software, see the [User Guide](../USER_GUIDE.md). For a
+plain-language explanation of the uncertainty statistics and tests (§11–§13),
+with figures, see [UNCERTAINTY.md](UNCERTAINTY.md).
 
 **Contents**
 
