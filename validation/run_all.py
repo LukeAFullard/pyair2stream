@@ -34,7 +34,8 @@ from common import FIGURES, REPO, RESULTS, Result   # noqa: E402
 CHECKS = [("V1", "v1_fortran"), ("V2", "v2_published"), ("V3", "v3_recovery"), ("V4", "v4_intervals"),
           ("V5", "v5_real_rivers"), ("V6", "v6_numerics"), ("V7", "v7_gaps"), ("V8", "v8_workflow"),
           ("V9", "v9_exceedance"), ("V10", "v10_split_sample"),
-          ("V11", "v11_yearly_check"), ("V12", "v12_cv_design")]
+          ("V11", "v11_yearly_check"), ("V12", "v12_cv_design"), ("V13", "v13_published_2015"),
+          ("V14", "v14_hot_days")]
 
 
 def git_state() -> str:
