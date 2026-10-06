@@ -77,6 +77,10 @@ The rules:
   [example 05](examples/05_gaps/README.md).
 - The file must start on 1 January and cover at least a year. Several years
   are better.
+- A run checks your files before it calibrates anything. If something is
+  wrong, it stops and names the file, the column and the line. To check a file
+  yourself first, use `pyair2stream.analyze_timeseries`
+  ([User Guide §5](USER_GUIDE.md#5-preparing-your-own-data)).
 
 Make two files. The model is fitted to the first, the **calibration** file. The
 second, the **validation** file, holds a few other years. The model never sees

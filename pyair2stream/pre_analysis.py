@@ -12,35 +12,61 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import os
 
-def analyze_timeseries(df, output_plot_path=None, output_summary_path=None, gap_tolerant=True, min_segment_days=30, version=8):
+from .data_checks import check_table
+
+def analyze_timeseries(df, output_plot_path=None, output_summary_path=None, gap_tolerant=False, min_segment_days=30,
+                       version=8, period="calibration", calendar="standard", min_theta_floor=None,
+                       source="the data"):
     """
-    Analyzes a timeseries dataframe for modeling suitability.
-    Identifies missing data, contiguous segments, and generates a plot and summary report.
+    Check a data table before a run, and describe its missing data and usable segments.
+
+    The report starts with the checks a run would make on the same table with the same
+    settings (`data_checks.check_table`, which every run uses), so it cannot pass a
+    table that a run would reject. Dates that have no row count as missing days.
 
     Args:
         df (pd.DataFrame): Dataframe with columns Date, T_air, T_water, Discharge
         output_plot_path (str, optional): Path to save the output plot
         output_summary_path (str, optional): Path to save the summary text
-        gap_tolerant (bool): If true, looks for segments. If false, model needs one continuous block.
+        gap_tolerant (bool): as `gap_tolerant` in the configuration (default False, as in a run).
+            The segments are reported either way.
         min_segment_days (int): Minimum length of a valid contiguous segment.
         version (int): Model version (default: 8). Versions 3 and 5 do not use Discharge forcing.
+        period (str): 'calibration', 'validation' or 'scenario' (the input of a FORWARD run).
+        calendar (str): as `calendar` in the configuration.
+        min_theta_floor (float, optional): as in the configuration.
+        source (str): name of the file, used in the messages.
 
     Returns:
-        dict: A dictionary containing summary statistics.
+        (dict, str): summary statistics and the report text. summary['errors'] lists the
+        problems that would stop a run (summary['run_would_stop']), summary['warnings']
+        those a run would only warn about.
     """
+    checked = check_table(df, source, period=period, version=version, gap_tolerant=gap_tolerant,
+                          calendar=calendar, min_theta_floor=min_theta_floor)
     df = df.copy()
 
-    # Ensure Date is datetime
-    if not pd.api.types.is_datetime64_any_dtype(df['Date']):
-        df['Date'] = pd.to_datetime(df['Date'])
-
-    # Standardize missing values (-999.0 to NaN for analysis)
+    # Numbers, with -999 (and blank) as missing. Text that is not a number is reported
+    # by the checks above and counted as missing here.
     for col in ['T_air', 'T_water', 'Discharge']:
         if col in df.columns:
-            df.loc[df[col] == -999.0, col] = np.nan
+            df[col] = pd.to_numeric(df[col], errors='coerce').replace(-999.0, np.nan)
             if col == 'Discharge':
                 # Treat zero or negative discharge as missing data to prevent mathematical errors in the ODE
                 df.loc[df[col] <= 0.0, col] = np.nan
+
+    # Dates: rows whose date cannot be read are left out of the description (the checks
+    # report them). With the standard calendar, every date between the first and the
+    # last gets a row, so a date with no row counts as a missing day.
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce') if 'Date' in df.columns else pd.NaT
+    df = df[df['Date'].notna()].sort_values('Date').drop_duplicates('Date')
+    n_rows = len(df)
+    if calendar == 'standard' and n_rows:
+        df = df.set_index('Date').reindex(pd.date_range(df['Date'].iloc[0], df['Date'].iloc[-1], freq='D'))
+        df = df.rename_axis('Date').reset_index()
+    missing_dates = len(df) - n_rows
+    if 'T_air' not in df.columns:
+        df['T_air'] = np.nan
 
     # Calculate missing percentages
     total_days = len(df)
@@ -101,19 +127,37 @@ def analyze_timeseries(df, output_plot_path=None, output_summary_path=None, gap_
         'too_short_segments_count': len(too_short_segments),
         'gap_segments_count': len(gap_segments),
         'total_valid_days': sum(row['length'] for row in valid_segments),
-        'total_valid_T_water_obs': total_valid_obs
+        'total_valid_T_water_obs': total_valid_obs,
+        'missing_dates': missing_dates,
+        'errors': checked.errors,
+        'warnings': checked.warnings,
+        'run_would_stop': bool(checked.errors),
     }
 
     # Generate Report Text
+    span = (f"{summary['start_date'].strftime('%Y-%m-%d')} to {summary['end_date'].strftime('%Y-%m-%d')}"
+            if total_days else "no readable dates")
     report_lines = [
         "========================================",
         "      Timeseries Pre-Analysis Report      ",
         "========================================",
-        f"Total Range: {summary['start_date'].strftime('%Y-%m-%d')} to {summary['end_date'].strftime('%Y-%m-%d')} ({total_days} days)",
+        f"Total Range: {span} ({total_days} days)",
         f"Gap Tolerant Mode: {'Enabled' if gap_tolerant else 'Disabled'} (Min Segment: {min_segment_days} days)",
         "",
-        "--- Missing Data ---"
+        f"--- Checks a run would make ({period} file, version {version}, "
+        f"gap_tolerant {'true' if gap_tolerant else 'false'}) ---",
     ]
+    if checked.errors:
+        report_lines.append("A run would STOP on this data:")
+        report_lines += [f"  - {m}" for m in checked.errors]
+    else:
+        report_lines.append("A run would accept this data.")
+    if checked.warnings:
+        report_lines.append("A run would warn:")
+        report_lines += [f"  - {m}" for m in checked.warnings]
+    report_lines += ["", "--- Missing Data ---"]
+    if missing_dates:
+        report_lines.append(f"Dates with no row: {missing_dates} (counted as missing days below)")
 
     for col, stat in missing_stats.items():
         report_lines.append(f"{col}: {stat['missing_count']} days missing ({stat['missing_percentage']:.1f}%)")

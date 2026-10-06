@@ -188,6 +188,7 @@ class TestCliAndIoCorrectness(unittest.TestCase):
                 'Date': dates.strftime('%Y-%m-%d'),
                 'T_air': 10.0 + 5.0 * np.sin(np.linspace(0, 2 * np.pi, len(dates))),
                 'Discharge': np.full(len(dates), 10.0),
+                'T_water': np.full(len(dates), 8.0),
             }).to_csv(csv_path, index=False)
 
             data = CommonData()
@@ -209,6 +210,7 @@ class TestCliAndIoCorrectness(unittest.TestCase):
                 'Date': dates.strftime('%Y-%m-%d'),
                 'T_air': 10.0 + 5.0 * np.sin(np.linspace(0, 4 * np.pi, n)),
                 'Discharge': np.full(n, 10.0),
+                'T_water': np.full(n, 8.0),
             }).to_csv(csv_path, index=False)
 
             data = CommonData()

@@ -166,8 +166,10 @@ Date,T_air,T_water,Discharge
 2020-01-03,6.1,4.0,10.2
 ```
 
-**The rules.** The program checks these and stops with a message if one is
-broken.
+**The rules.** A run checks every file it reads (the calibration file, a
+scenario file and the validation file) before it calibrates anything. If a rule
+is broken, it stops with a message that names the file, the column and the
+first line with the problem.
 
 - **Give a row for every calendar day.** Never skip a date. Show a missing
   value as an empty cell or `-999`.
@@ -182,7 +184,14 @@ broken.
   365 days long.** If your water temperature record starts later in the year,
   start the file on 1 January anyway. Fill in air temperature and discharge
   from 1 January, and leave `T_water` empty until your measurements begin.
-- Scenario (`FORWARD`) files may start on any day.
+- **Calibration and validation files need a `T_water` column with some
+  measurements.** A scenario file does not.
+- **Scenario (`FORWARD`) files may start on any day, but must also be at least
+  365 days long**, because the model's warm-up repeats the first year. A
+  validation file shorter than a year is skipped, with a warning.
+- **Keep the validation years separate from the calibration years.** If the
+  same measured days are in both files, the run warns: the validation score
+  then does not test the model on new data.
 
 **Choosing the calibration and validation years.** Use most of your years for
 calibration: several years are better than one. Keep at least one full year
@@ -207,15 +216,28 @@ df = pyair2stream.merge_timeseries([
     {"file_path": "raw/flow.csv",  "date_col": "time", "value_col": "flow", "standard_col_name": "Discharge"},
 ], output_file="data/all_days.csv")
 
-# A report of missing data and usable stretches, before you calibrate
-summary, report = pyair2stream.analyze_timeseries(df, version=8)
+# The checks a run would make, and a report of missing data and usable stretches
+summary, report = pyair2stream.analyze_timeseries(df, version=8, source="data/all_days.csv")
 print(report)
 ```
 
-`merge_timeseries` averages whatever readings each day has, however few. It
-also drops rows whose date it cannot read. So check that each day has enough
-readings, spread over the whole day. A day with only daytime readings gives a
-daily mean that is too high.
+`analyze_timeseries` makes exactly the checks a run makes, with the same
+settings (`version`, `gap_tolerant`, `calendar`, and `period`: `"calibration"`,
+`"validation"` or `"scenario"`). Its report starts with "A run would accept this
+data" or "A run would STOP on this data", followed by the reasons. It also
+counts dates with no row as missing days.
+
+`merge_timeseries` reports what it cannot use:
+
+- rows whose time it cannot read are left out, with a warning;
+- values of `-999` are treated as missing;
+- text that is not a number (such as `ERR`) stops it. If the text is a code for
+  "missing", list it, for example `"na_values": ["ERR"]` in that file's
+  settings;
+- days with fewer than half the usual number of readings get a warning. Their
+  daily mean may be wrong: a day with only daytime readings gives a mean that is
+  too high. To leave such days blank, set `min_readings_per_day`, for example
+  `merge_timeseries([...], min_readings_per_day=20)` for hourly data.
 
 ## 6. Configuration reference
 
@@ -450,11 +472,18 @@ After a calibration, look at these, in this order:
 | `parameter_bounds.min must be a list of exactly 8 numbers` (or `parameters_forward`) | Give 8 values, one for each parameter, a1 to a8. |
 | `parameter_bounds: min > max` | Swap or correct the bounds of the parameter it names. |
 | `No parameter is free to calibrate` | Add `parameter_bounds`. |
-| `Missing required calibration data file` | Check `paths.input_data`. |
+| `Missing calibration data file` / `Missing validation data file` | Check `paths.input_data` or `paths.validation_data`. |
 | `must start on January 1st` | Start the file on 1 January ([§5](#5-preparing-your-own-data)), or use gap-tolerant mode. |
-| `must be continuous at a daily time scale` | Add a row for every missing date. The values may be empty. |
-| `The series of observed air temperature / discharge ... must be complete` | Fill the gaps, or use [gap-tolerant mode](#10-gap-tolerant-mode). |
+| `must be continuous at a daily time scale` | The message says which problem it is: a date with no row (add a row; its values may be empty), a date that appears twice (remove one of the rows), or dates out of order (sort the rows by date). |
+| `Date is blank on line ...` / `cannot be read as a date` | Write every date as `YYYY-MM-DD`, in the same format on every row. |
+| `value(s) that are not numbers` | Replace text such as `n.a.` with an empty cell, or write `-999`. Use a point, not a comma, as the decimal separator. |
+| `The series of observed air temperature / discharge ... must be complete` | Fill the gaps, or use [gap-tolerant mode](#10-gap-tolerant-mode). The message names the first missing day. |
+| `Missing 'T_air' column` (or another column) `(found 'T_air ' ...)` | Column names must match exactly: check for spaces and capital letters. |
 | `Missing 'Discharge' column` | Versions 4, 7 and 8 need discharge. |
+| `Missing 'T_water' column` / `has no water temperature measurements` | Calibration and validation files need measured water temperature. If a validation file has none, remove `paths.validation_data`. |
+| `has only ... day(s); at least 365 are required` | Calibration and scenario files need at least a year of data. |
+| `Warning: ... validation will be skipped` | The validation file is shorter than a year. Give it at least 365 days, or remove it. |
+| `Warning: ... are also measured days of the calibration file` | The validation file repeats calibration days. Use separate years ([§5](#5-preparing-your-own-data)). |
 | `Non-positive discharge (Q <= 0)` | See [§9.2](#92-zero-or-negative-discharge). |
 | `FORWARD mode requires an explicit Qmedia` | Set `paths.calibration_metadata` or `Qmedia:` ([§6](#qmedia-keep-it-fixed-when-discharge-changes)). |
 | `n_dat is 0 after aggregation` | No usable `T_water` values. Check the column, or lower `prc`. |
