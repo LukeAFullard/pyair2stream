@@ -10,14 +10,16 @@ the people and the code that produced the results are independent of the model's
 whole simulated series can be compared day by day, not only its error.
 """
 
+import json
 import os
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 import pandas as pd
 
-from common import (DE_SETTINGS, REPO, WORK, Result, Section, Timer, calibrate, plot_style, quiet, save_figure,
-                    simulate, BLUE, ORANGE, AQUA, INK2, LIGHT_GREY)
+from common import (AUTHORS_BOUNDS, DE_SETTINGS, REPO, WORK, Result, Section, Timer, calibrate, load, plot_style,
+                    quiet, save_figure, simulate, BLUE, ORANGE, AQUA, INK2, LIGHT_GREY)
+from v2_published import MATCH, RANGE, _at_bound, _inside
 
 BC = os.path.join(REPO, "data", "british_columbia", "original")
 TOL_SERIES = 0.001          # °C: largest difference allowed between pyair2stream's and the published series
@@ -25,6 +27,7 @@ TOL_DE = 0.002              # °C: DE may fit worse than the published parameter
 HEAT_DOME = ("2021-06-25", "2021-07-02")       # the paper's windows, applied by day of year as in its scripts
 DROUGHT = ("2022-09-01", "2022-10-31")
 QUICK_STATIONS = ("07EA004", "08GA077")
+MCMC_WALKERS, MCMC_STEPS = 32, 20000        # part D, as V2 part F: run until converged, at most this many steps
 
 
 def _load():
@@ -35,16 +38,16 @@ def _load():
     return ts, par, info
 
 
-def _write(st, period, rows, from_january=False, start=None):
+def _write(st, period, rows, from_january=False, start=None, tag=""):
     """The rows as a pyair2stream input file. `from_january`: dates relabelled to start on 1 January of
     the first year, as the original program reads a record (by row, assuming it starts on 1 January).
-    `start`: drop the rows before this date."""
+    `start`: drop the rows before this date. `tag` keeps the files of parallel jobs apart."""
     if start is not None:
         rows = rows[rows.date >= pd.Timestamp(start)]
     dates = (pd.date_range(f"{rows.date.iloc[0].year}-01-01", periods=len(rows), freq="D") if from_january
              else rows.date)
     os.makedirs(WORK, exist_ok=True)
-    path = os.path.join(WORK, f"v15_{st}_{period}{'_jan' if from_january else ''}{'_trim' if start else ''}.csv")
+    path = os.path.join(WORK, f"v15{tag}_{st}_{period}{'_jan' if from_january else ''}{'_trim' if start else ''}.csv")
     pd.DataFrame({"Date": pd.DatetimeIndex(dates).strftime("%Y-%m-%d"), "T_air": rows.ta.to_numpy(),
                   "T_water": rows.tw_obs.to_numpy(), "Discharge": rows.q.to_numpy()}).to_csv(path, index=False)
     return path, rows
@@ -117,11 +120,67 @@ def _station(args):
     val = g[g.period == "validation"].reset_index(drop=True)
     path_v, val = _write(st, "validation", val)
     rmse_de_val, _ = _stats(val.tw_obs.to_numpy(), _simulate(path_v, de_par, val, f"v15_{st}_dev"))
+    diff = 100 * float(np.max(np.abs(np.array(de_par) - np.array(par)) / RANGE))
     out["de"] = {"station": st, "calibration from": rows_c.date.iloc[0].strftime("%Y-%m-%d"),
                  "published parameters, calibration RMSE": rmse_pub, "DE, calibration RMSE": rmse_de,
                  "DE minus published": rmse_de - rmse_pub, "DE, validation RMSE": rmse_de_val,
+                 "largest parameter difference (% of range)": diff,
+                 "same parameters": "yes" if diff <= 100 * MATCH else "no",
                  **{f"a{j + 1}": de_par[j] for j in range(8)}}
     return out
+
+
+def _calibration_config(st, tag, quick, **extra):
+    """Part D: the station's calibration years from the first 1 January, as in part C, with the RMS
+    objective, Crank-Nicolson, the authors' parameter ranges and the calibration Qmedia (as V2 part F)."""
+    ts, _, _ = _load()
+    cal = ts[(ts.station_number == st) & (ts.period == "calibration")].sort_values("date").reset_index(drop=True)
+    first = cal.date.iloc[0]
+    start = None if (first.month == 1 and first.day == 1) else f"{first.year + 1}-01-01"
+    path, rows = _write(st, "calibration", cal, start=start, tag=tag)
+    settings = {"n_run": 40, "n_particles": 8} if quick else dict(DE_SETTINGS)
+    return {"version": 8, "integrator": "CRN", "objective_function": "RMS", "random_seed": 1,
+            "Qmedia": float(rows.q[rows.q > 0].mean()), "parameter_bounds": AUTHORS_BOUNDS,
+            "optimization": settings, "paths": {"input_data": path, "output_dir": os.path.join(WORK, tag, "out")},
+            **extra}
+
+
+def _mcmc(args):
+    """90% credible interval of every parameter from DE-MCMC with the least-squares likelihood, widened
+    for the autocorrelation of the errors (as V2 part F)."""
+    st, quick = args
+    from pyair2stream.optimization import DE_MCMC_mode
+    tag = f"v15_mcmc_{st}"
+    cfg = _calibration_config(st, tag, quick, run_mode="DE-MCMC",
+                              uncertainty_options={"noise_model": "ar1", "likelihood": "least_squares",
+                                                   "strict_convergence": False})
+    cfg["optimization"].update({"mcmc_walkers": 16 if quick else MCMC_WALKERS, "mcmc_steps": 600 if quick else MCMC_STEPS})
+    data = load(cfg, tag)
+    with quiet():
+        DE_MCMC_mode(data, seed=1)
+    out = os.path.join(WORK, tag, "out")
+    meta = json.load(open(os.path.join(out, "MCMC_chain_S_c_1d_meta.json")))
+    chain = pd.read_csv(os.path.join(out, "MCMC_chain_S_c_1d.csv"))
+    iv = {int(c.split("_")[1]) - 1: tuple(float(x) for x in np.percentile(chain[c], [5, 95])) for c in chain.columns}
+    return "mcmc", st, {"intervals": iv, "converged": bool(meta["converged"]), "steps": int(meta["steps_run"])}
+
+
+def _jackknife(args):
+    """90% jackknife interval of every parameter from leave-one-year-out cross-validation of the
+    calibration years (every year but the first held out once)."""
+    st, quick = args
+    from pyair2stream.cross_validation import cross_validate
+    tag = f"v15_cv_{st}"
+    cfg = _calibration_config(st, tag, quick, run_mode="DE",
+                              cross_validation={"enabled": True, "unit": "year", "min_train_years": 0,
+                                                "skip_first_year": True})
+    data = load(cfg, tag)
+    with quiet():
+        table = cross_validate(data, "DE").set_index("fold")
+    folds = [f for f in table.index if str(f).isdigit()]
+    iv = {j: (float(table.loc["jackknife_90_lower", f"p{j + 1}"]), float(table.loc["jackknife_90_upper", f"p{j + 1}"]))
+          for j in range(8)}
+    return "jackknife", st, {"intervals": iv, "folds": len(folds)}
 
 
 def run(ctx) -> Result:
@@ -146,17 +205,25 @@ def run(ctx) -> Result:
                "day of year, over the calibration years and 2021 (heat dome) or 2022 (drought). (C) Each station "
                "is calibrated by DE (RMS objective, Crank-Nicolson, the authors' parameter ranges of V2, which "
                "contain every published parameter) on its calibration years, from the first 1 January, and the "
-               "fit compared with that of the published parameters on the same days.",
+               "fit and the parameters compared with the published ones on the same days. (D) How far can the "
+               "parameters move and still fit these data? As in V2 part F, each station's calibration years give "
+               "two 90% intervals for every parameter around the same least-squares estimator: the jackknife "
+               "interval from leave-one-year-out cross-validation (every year but the first held out once), and "
+               f"the DE-MCMC credible interval with the least-squares likelihood widened for the autocorrelation "
+               f"of the errors ({MCMC_WALKERS} walkers, run until converged, at most {MCMC_STEPS} steps). Whether "
+               "each published value lies inside them is recorded.",
         criterion=f"(A) Every published series whose record starts on 1 January is reproduced to within "
                   f"{TOL_SERIES} °C on every day, and a record that does not is reproduced to within "
                   f"{TOL_SERIES} °C when read as the original program reads it. (C) DE fits every calibration "
-                  f"period no worse than the published parameters (their RMSE + {TOL_DE} °C). (B) and the effect "
-                  f"of a misread record are reported.")
+                  f"period no worse than the published parameters (their RMSE + {TOL_DE} °C). (B), (D), the "
+                  f"parameter values found in (C) and the effect of a misread record are reported.")
     _, par_table, info = _load()
     stations = list(QUICK_STATIONS) if ctx.quick else list(par_table.index)
     with Timer() as t:
         with ProcessPoolExecutor(max_workers=ctx.workers) as ex:
+            futures_d = [ex.submit(fn, (st, ctx.quick)) for st in stations for fn in (_mcmc, _jackknife)]
             outs = list(ex.map(_station, [(st, ctx.quick) for st in stations]))
+            found = {(kind, st): r for kind, st, r in (f.result() for f in futures_d)}
     res.seconds = t.seconds
     series = pd.DataFrame([r for o in outs for r in o["series"]])
     de = pd.DataFrame([o["de"] for o in outs])
@@ -185,7 +252,48 @@ def run(ctx) -> Result:
     res.summary += (
         f"(C) DE fits the calibration years at least as well as the published parameters at "
         f"{int((de['DE minus published'] <= TOL_DE).sum())} of {len(de)} stations (mean difference "
-        f"{de['DE minus published'].mean():+.3f} °C).")
+        f"{de['DE minus published'].mean():+.3f} °C), and returns the published parameters (each within "
+        f"{MATCH:.0%} of its range) at {int((de['same parameters'] == 'yes').sum())} of {len(de)}.")
+
+    # Part D: are the published parameters inside pyair2stream's 90% intervals?
+    names = [f"a{j}" for j in range(1, 9)]
+    best_all = de.set_index("station")[names].astype(float)
+    detail, summ, plot = [], [], []
+    tot = {"mc": 0, "mc_n": 0, "jk": 0, "any": 0, "n": 0}
+    for st in stations:
+        pub = np.array([float(par_table.loc[st, n]) for n in names])
+        best = best_all.loc[st].to_numpy()
+        mc, jk = found[("mcmc", st)], found[("jackknife", st)]
+        in_mc = in_jk = in_any = 0
+        for j in range(8):
+            m_lo, m_hi = mc["intervals"][j]
+            j_lo, j_hi = jk["intervals"][j]
+            a = _inside(pub[j], m_lo, m_hi, j) if mc["converged"] else None
+            b = _inside(pub[j], j_lo, j_hi, j)
+            in_mc += bool(a)
+            in_jk += bool(b)
+            in_any += bool(a) or bool(b)
+            detail.append({"station": st, "parameter": names[j], "published": f"{pub[j]:.3f}",
+                           "pyair2stream best fit": f"{best[j]:.3f}",
+                           "MCMC 90% interval": f"{m_lo:.3f} to {m_hi:.3f}",
+                           "published inside (MCMC)": "not converged" if a is None else a,
+                           "jackknife 90% interval": f"{j_lo:.3f} to {j_hi:.3f}", "published inside (jackknife)": b})
+            plot.append({"station": st, "j": j, "mcmc": (pub[j] - m_lo) / (m_hi - m_lo) if m_hi > m_lo else np.nan,
+                         "jk": (pub[j] - j_lo) / (j_hi - j_lo) if j_hi > j_lo else np.nan,
+                         "mcmc_ok": mc["converged"]})
+        tot["mc"] += in_mc if mc["converged"] else 0
+        tot["mc_n"] += 8 if mc["converged"] else 0
+        tot["jk"] += in_jk
+        tot["any"] += in_any
+        tot["n"] += 8
+        summ.append({"station": st, "MCMC converged (steps)": f"{'yes' if mc['converged'] else 'NO'} ({mc['steps']})",
+                     "published inside MCMC interval": f"{in_mc} of 8" if mc["converged"] else "not converged",
+                     "cross-validation folds": jk["folds"], "published inside jackknife interval": f"{in_jk} of 8",
+                     "inside at least one": f"{in_any} of 8"})
+    res.summary += (
+        f" (D) The published values lie inside pyair2stream's 90% parameter intervals for {tot['mc']} of "
+        f"{tot['mc_n']} (MCMC, converged runs) and {tot['jk']} of {tot['n']} (jackknife); {tot['any']} of "
+        f"{tot['n']} lie inside at least one.")
 
     # Tables
     a_cols = ["station", "regime", "regulation", "period", "first day", "days", "measured", "largest difference"]
@@ -221,6 +329,8 @@ def run(ctx) -> Result:
     for c in ("published parameters, calibration RMSE", "DE, calibration RMSE", "DE, validation RMSE"):
         shown_c[c] = shown_c[c].map(lambda x: f"{x:.4f}")
     shown_c["DE minus published"] = shown_c["DE minus published"].map(lambda x: f"{x:+.4f}")
+    shown_c["largest parameter difference (% of range)"] = shown_c["largest parameter difference (% of range)"].map(
+        lambda x: f"{x:.1f}")
     for j in range(1, 9):
         shown_c[f"a{j}"] = shown_c[f"a{j}"].map(lambda x: f"{x:.3f}")
     pub_val = series[series.period == "validation"].set_index("station")["RMSE published"]
@@ -242,8 +352,21 @@ def run(ctx) -> Result:
     res.sections.append(Section(
         "C. Calibration by pyair2stream",
         "DE with the RMS objective on each station's calibration years (from the first 1 January), compared with "
-        "the published parameters on the same days, with the validation RMSE of the DE parameters.",
+        "the published parameters on the same days, with the validation RMSE of the DE parameters. 'Same "
+        "parameters': every parameter within 1% of its range of the published value.",
         tables=[("C. DE calibration (RMSE in °C) and parameters", shown_c)]))
+    res.sections.append(Section(
+        "D. Do the published parameters lie inside pyair2stream's uncertainty intervals?",
+        "Two 90% intervals for every parameter, from the same calibration years and least-squares estimator: the "
+        "DE-MCMC credible interval (the range of values whose fit is close to the best, widened because the daily "
+        "errors are correlated) and the jackknife interval from leave-one-year-out cross-validation (how far the "
+        "best fit moves when each year is left out, scaled to a confidence interval). V4 tests both against a "
+        "known truth. Counting rules as in V2 part F: a value on a bound of the parameter range counts as inside "
+        "an interval reaching to within 1% of the range of that bound, and an MCMC run that did not converge "
+        "gives no interval.",
+        figures=[_fig_intervals(pd.DataFrame(plot))],
+        tables=[("D. Published parameters and 90% intervals: summary by station", pd.DataFrame(summ)),
+                ("D. Published parameters and 90% intervals, by parameter", pd.DataFrame(detail))]))
 
     if len(other):
         for _, r in other.iterrows():
@@ -259,11 +382,59 @@ def run(ctx) -> Result:
                 f"{pub_val.get(r['station'], np.nan):.3f} °C for the published parameters. pyair2stream refuses a "
                 "calibration record that does not start on 1 January, and takes the seasonal timing from the dates "
                 "in other runs.")
+    share_mc = tot["mc"] / tot["mc_n"] if tot["mc_n"] else np.nan
+    share_any = tot["any"] / tot["n"]
+    same = int((de["same parameters"] == "yes").sum())
+    note = (f"Parameters: pyair2stream's calibration returns the published parameter values at {same} of {len(de)} "
+            f"stations, although it fits the same years at least as well at every station. ")
+    if share_any >= 0.9:
+        note += (f"The published values nevertheless lie inside pyair2stream's 90% intervals for {tot['any']} of "
+                 f"{tot['n']} values: they are consistent with the data, and the difference from the best fit is "
+                 "the trade-off between parameters that many combinations fit almost equally well (equifinality). "
+                 "Individual parameter values should not be interpreted on their own.")
+    else:
+        note += (f"Only {tot['any']} of {tot['n']} published values lie inside at least one of pyair2stream's 90% "
+                 f"intervals (MCMC: {share_mc:.0%} of the values of converged runs). Many published values are "
+                 "therefore not where a least-squares calibration on these data lands, even allowing for how "
+                 "poorly the data determine each parameter. The dataset does not record how the published "
+                 "calibration was made (objective function, parameter ranges, optimiser and its settings), so the "
+                 "reason cannot be determined from it; part A shows it is not the model. The published and "
+                 "pyair2stream's parameters predict the validation years with errors of the same size (part C).")
+    res.notes.append(note)
     res.notes.append(
         "Unlike V2 and V13, these results come from another group, other rivers and another climate, and the whole "
         "simulated series is compared day by day, so any difference in the equations, the numerical scheme, the "
         "discharge scaling or the handling of the first year would show. None does, apart from the misread record.")
     return res
+
+
+def _fig_intervals(plot):
+    """Where each published value lies in pyair2stream's 90% intervals: 0 = lower end, 1 = upper end."""
+    import matplotlib.pyplot as plt
+    plot_style()
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8), sharey=True)
+    lo_clip, hi_clip = -2.0, 3.0
+    rng = np.random.default_rng(0)
+    for ax, key, title in ((axes[0], "mcmc", "DE-MCMC 90% interval"), (axes[1], "jk", "Jackknife 90% interval")):
+        ax.axhspan(0, 1, color=LIGHT_GREY, alpha=0.35, lw=0, zorder=0)
+        g = plot if key == "jk" else plot[plot.mcmc_ok]
+        for j in range(8):
+            y = g[g.j == j][key].to_numpy()
+            y = y[np.isfinite(y)]
+            x = j + rng.uniform(-0.2, 0.2, len(y))
+            inside = (y >= 0) & (y <= 1)
+            ax.scatter(x[inside], y[inside], s=12, color=BLUE, lw=0, zorder=3)
+            ax.scatter(x[~inside], np.clip(y[~inside], lo_clip, hi_clip), s=12, color=ORANGE, lw=0, zorder=3)
+        ax.set_xticks(range(8), [f"a{j + 1}" for j in range(8)])
+        ax.set_ylim(lo_clip - 0.2, hi_clip + 0.2)
+        ax.set_title(title, fontsize=9)
+        ax.grid(axis="x", visible=False)
+    axes[0].set_ylabel("Published value's position in the interval")
+    fig.tight_layout()
+    return (save_figure(fig, "V15_parameter_intervals.png"),
+            "Where each station's published parameter value lies in pyair2stream's 90% interval for that parameter "
+            "(0: lower end, 1: upper end; shaded: inside). Orange: outside; values beyond the plotted range are "
+            "drawn at its edge.")
 
 
 def _months_out(first_day):
