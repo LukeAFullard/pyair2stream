@@ -348,9 +348,14 @@ def run(ctx) -> Result:
             level_rows.append({"case": label, "level": level, "prediction": m, "parameters": p_})
             levels_ok &= bool(np.isfinite(m) and abs(m - level / 100) <= LEVEL_TOLERANCE + 1e-12)
         if "mis-specified" not in label and label[0] not in REPORT_ONLY:
-            s["pass"] = bool(s["converged"] == s["replicates"] and s["mean held-out coverage"] is not None
-                             and PI_RANGE[0] <= s["mean held-out coverage"] <= PI_RANGE[1] and levels_ok
-                             and (label[0] not in PAR_REQUIRED or s["parameter coverage"] >= PAR_MIN))
+            if ctx.quick:
+                # A few replicates cannot judge coverage (with 3, a 50% interval's mean coverage varies by more
+                # than the 3-point tolerance): the quick run only requires every replicate to converge.
+                s["pass"] = bool(s["converged"] == s["replicates"])
+            else:
+                s["pass"] = bool(s["converged"] == s["replicates"] and s["mean held-out coverage"] is not None
+                                 and PI_RANGE[0] <= s["mean held-out coverage"] <= PI_RANGE[1] and levels_ok
+                                 and (label[0] not in PAR_REQUIRED or s["parameter coverage"] >= PAR_MIN))
             ok &= s["pass"]
         summary_rows.append(s)
         # Per parameter: coverage, and the spread of the estimates between replicates relative to the
@@ -366,7 +371,8 @@ def run(ctx) -> Result:
     pp = pd.DataFrame(per_param_rows)
     res.passed = bool(ok)
     res.seconds = t.seconds
-    res.summary = "; ".join(f"{r['case'].split(':')[0]}: prediction {r['mean held-out coverage']:.0%}, "
+    res.summary = ("Quick mode (a few replicates): every replicate must converge; coverage reported, not judged. "
+                   if ctx.quick else "") + "; ".join(f"{r['case'].split(':')[0]}: prediction {r['mean held-out coverage']:.0%}, "
                             f"parameters {r['parameter coverage']:.0%}" for _, r in summ.iterrows()
                             if r["mean held-out coverage"] is not None)
     max_check = float(pd.DataFrame(checks).iloc[:, -1].max()) if checks else float("nan")

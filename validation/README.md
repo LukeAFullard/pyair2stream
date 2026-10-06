@@ -47,11 +47,18 @@ without them it is reported as not run. The run rewrites `REPORT.md`,
 `reports/` (one report per check), `results/` (every table as CSV) and
 `figures/`. Scratch files go to `work/`,
 which is not kept. All random steps are seeded, so a rerun on the same software
-versions gives the same numbers; the report records the versions used. The one
-exception is the original Fortran program's own calibration runs in V2 parts D
-and E: it seeds its random numbers from the clock, so those runs differ each
-time (which is what part D shows). A rerun of the full suite reproduced every
-other table byte for byte.
+versions and the same kind of processor gives the same numbers; the report
+records the versions used. The model is compiled for the processor it runs on,
+so on another processor the last digits of a calculation can differ, and the
+MCMC checks, which amplify such differences, then give results that differ by
+their Monte Carlo noise. The one other exception is the original Fortran
+program's own calibration runs in V2 parts D and E: it seeds its random numbers
+from the clock, so those runs differ each time (which is what part D shows). A
+rerun of the full suite reproduced every other table byte for byte.
+
+The quick run (`--quick`, also run by CI) checks that every check runs; with a
+few replicates or years it cannot judge coverage, so V4, V5 and V14 report
+their coverage there without judging it.
 
 ## Data
 
