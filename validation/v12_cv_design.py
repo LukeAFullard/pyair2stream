@@ -24,6 +24,10 @@ MIN_PAST_YEARS = 4          # variant C: years before the first year predicted
 TOLERANCE_RMSE = 0.05       # degC: change in a year's RMSE accepted as "no change"
 TOLERANCE_COVERAGE = 0.01   # change in the share of days inside the 90% interval
 TOLERANCE_DEVIATION = {"highest daily mean": 0.05, "highest 7-day mean": 0.05, "days above threshold": 0.5}
+# Each variant is compared with the run that differs from it only in what is tested: B (inputs hidden)
+# with B0 (gap-tolerant mode, inputs kept), since gap-tolerant mode itself scores the record differently
+# (it starts from an approximate temperature and leaves the first days unscored); the others with A.
+REFERENCE = {"A": "A", "A2": "A", "B0": "A", "B": "B0", "D": "A", "C": "A"}
 VARIANTS = {
     "A": "default: the year's water temperatures hidden",
     "A2": "default, another optimizer seed",
@@ -163,9 +167,11 @@ def run(ctx) -> Result:
                "with the settings of V11 (DE, authors' bounds, Qmedia fixed) in six variants. (A) The package "
                "default: the year's water temperatures are hidden; the model runs through the year with its "
                "inputs during calibration. (A2) As A with another optimizer seed: the change chance alone "
-               "makes. (B0) Gap-tolerant mode with nothing else hidden. (B) Gap-tolerant mode with the year's "
-               "air temperature and discharge also hidden during calibration: the record stops before the year "
-               "and restarts after it, as if the year did not exist. "
+               "makes. (B0) Gap-tolerant mode with nothing else hidden: it starts the record from an approximate "
+               "temperature and leaves its first days unscored, so it differs slightly from A. (B) Gap-tolerant "
+               "mode with the year's air temperature and discharge also hidden during calibration: the record "
+               "stops before the year and restarts after it, as if the year did not exist. B is compared with "
+               "B0, which differs from it only in that, and every other variant with A. "
                f"(D) As A, plus the water temperatures of the {BUFFER_DAYS} days on each side of the year "
                f"(h-block cross-validation). (C) Forward only: the year and every later year hidden, so the "
                f"model is calibrated on earlier years only (at least {MIN_PAST_YEARS}). In every variant the "
@@ -173,11 +179,12 @@ def run(ctx) -> Result:
                "days and 7-day means inside the 90% interval (from the fold's sigma and rho), and the three "
                "yearly statistics of V11 (threshold: 90th percentile of the river's measured temperatures; "
                "season: its four warmest months).",
-        criterion=f"Hiding the inputs (B) and the buffer (D) each change no held-out year's RMSE by more than "
+        criterion=f"Hiding the inputs (B, against B0) and the buffer (D, against A) each change no held-out "
+                  f"year's RMSE by more than "
                   f"{TOLERANCE_RMSE} °C (below the accuracy of most temperature loggers), the pooled share of "
                   f"days inside the 90% interval by no more than {TOLERANCE_COVERAGE:.0%} (one percentage "
                   f"point), and the mean error of each yearly statistic by no more than 0.05 °C (0.5 days for "
-                  f"days above the threshold). B0 gives the same results as A. Forward-only (C) answers a "
+                  f"days above the threshold). Forward-only (C) answers a "
                   f"different question (forecasting) and is reported, not judged.")
     stations = ["MAH_2369"] if ctx.quick else list(RIVERS)
     versions = (8,) if ctx.quick else VERSIONS
@@ -193,35 +200,36 @@ def run(ctx) -> Result:
     stats = pd.DataFrame([r for _, s in outs for r in s])
     key = ["river", "version", "year"]
     pcols = [c for c in years.columns if c.startswith("p") and c[1:].isdigit()]
-    a = years[years.variant == "A"].set_index(key)
-    sa = stats[stats.variant == "A"].set_index(key + ["statistic"])
 
-    # Each variant against A on the same years.
+    # Each variant against its reference on the same years.
     rows, ok = [], True
     for v, label in VARIANTS.items():
+        ref = REFERENCE[v]
+        a = years[years.variant == ref].set_index(key)
+        sa = stats[stats.variant == ref].set_index(key + ["statistic"])
         b = years[years.variant == v].set_index(key)
         common = a.index.intersection(b.index)
         d_rmse = (b.loc[common, "rmse"] - a.loc[common, "rmse"]).abs()
         pa, pb = _pooled(a.loc[common]), _pooled(b.loc[common])
         sb = stats[stats.variant == v].set_index(key + ["statistic"])
         sc = sa.index.intersection(sb.index)
-        row = {"variant": f"{v}: {label}", "years": len(common), "RMSE (°C)": round(pb.RMSE, 3),
-               "RMSE of A, same years": round(pa.RMSE, 3), "largest change in a year's RMSE": round(d_rmse.max(), 3),
-               "days inside 90%": f"{pb['days inside 90%']:.1%}", "A, same years": f"{pa['days inside 90%']:.1%}",
+        row = {"variant": f"{v}: {label}", "compared with": ref, "years": len(common),
+               "RMSE (°C)": round(pb.RMSE, 3), "RMSE of reference, same years": round(pa.RMSE, 3),
+               "largest change in a year's RMSE": round(d_rmse.max(), 3),
+               "days inside 90%": f"{pb['days inside 90%']:.1%}",
+               "reference, same years": f"{pa['days inside 90%']:.1%}",
                "7-day means inside 90%": f"{pb['7-day means inside 90%']:.1%}"}
         for name in STATS:
             g_b = sb.loc[sc].xs(name, level="statistic")
             g_a = sa.loc[sc].xs(name, level="statistic")
             unit = "days" if name == "days above threshold" else "°C"
-            row[f"{name}: inside 90% range"] = f"{g_b.inside.mean():.0%} (A {g_a.inside.mean():.0%})"
-            row[f"{name}: mean error"] = (f"{g_b.deviation.mean():+.2f} (A {g_a.deviation.mean():+.2f}) {unit}")
+            row[f"{name}: inside 90% range"] = f"{g_b.inside.mean():.0%} ({ref} {g_a.inside.mean():.0%})"
+            row[f"{name}: mean error"] = (f"{g_b.deviation.mean():+.2f} ({ref} {g_a.deviation.mean():+.2f}) {unit}")
             if v in ("B", "D") and abs(g_b.deviation.mean() - g_a.deviation.mean()) > TOLERANCE_DEVIATION[name]:
                 ok = False
         if v in ("B", "D"):
             ok &= bool(d_rmse.max() <= TOLERANCE_RMSE)
             ok &= bool(abs(pb["days inside 90%"] - pa["days inside 90%"]) <= TOLERANCE_COVERAGE)
-        if v == "B0":
-            ok &= bool(np.allclose(b.loc[common, "rmse"], a.loc[common, "rmse"]))
         rows.append(row)
     table = pd.DataFrame(rows)
     res.passed = bool(ok)
@@ -232,10 +240,12 @@ def run(ctx) -> Result:
         ga = g[g.variant == "A"].set_index("year")
         gc = g[g.variant == "C"].set_index("year")
         gb = g[g.variant == "B"].set_index("year")
-        pa, pb = _pooled(ga), _pooled(gb)
+        gb0 = g[g.variant == "B0"].set_index("year")
+        pa, pb, pb0 = _pooled(ga), _pooled(gb), _pooled(gb0)
         pac, pc = _pooled(ga.loc[gc.index]), _pooled(gc)
         by_river.append({"river": river, "version": version, "years": len(ga),
-                         "RMSE A": round(pa.RMSE, 3), "RMSE B (inputs hidden)": round(pb.RMSE, 3),
+                         "RMSE A": round(pa.RMSE, 3), "RMSE B0": round(pb0.RMSE, 3),
+                         "RMSE B (inputs hidden)": round(pb.RMSE, 3),
                          "years forward": len(gc), "RMSE A, same years": round(pac.RMSE, 3),
                          "RMSE C (forward)": round(pc.RMSE, 3),
                          "days inside 90%: A, same years": f"{pac['days inside 90%']:.1%}",
@@ -244,20 +254,21 @@ def run(ctx) -> Result:
                          "sigma: C": round(float(gc.sigma.mean()), 3)})
     by_river = pd.DataFrame(by_river)
 
-    # Parameters: change per fold in units of A's jackknife standard error, and the jackknife SE itself.
+    # Parameters: change per fold in units of the reference's jackknife standard error, and the
+    # jackknife SE relative to the reference's.
     par_rows = []
     for (river, version), g in years.groupby(["river", "version"], sort=True):
-        ga = g[g.variant == "A"].set_index("year")
-        se_a = _jackknife_se(ga, pcols)
-        se_a[se_a == 0] = np.nan
-        row = {"river": river, "version": version, "folds": len(ga)}
+        row = {"river": river, "version": version, "folds": int((g.variant == "A").sum())}
         for v in ("A2", "B"):
-            gv = g[g.variant == v].set_index("year").loc[ga.index]
-            z = np.nanmax(np.abs((gv[pcols].to_numpy() - ga[pcols].to_numpy()) / se_a), axis=1)
-            ratio = _jackknife_se(gv, pcols) / se_a
-            row[f"{v}: folds with a parameter moved > 2 SE"] = int(np.sum(z > 2))
-            row[f"{v}: jackknife SE / A's, median (range)"] = (f"{np.nanmedian(ratio):.2f} "
-                                                              f"({np.nanmin(ratio):.2f}-{np.nanmax(ratio):.2f})")
+            gr = g[g.variant == REFERENCE[v]].set_index("year")
+            se_r = _jackknife_se(gr, pcols)
+            se_r[se_r == 0] = np.nan
+            gv = g[g.variant == v].set_index("year").loc[gr.index]
+            z = np.nanmax(np.abs((gv[pcols].to_numpy() - gr[pcols].to_numpy()) / se_r), axis=1)
+            ratio = _jackknife_se(gv, pcols) / se_r
+            row[f"{v} against {REFERENCE[v]}: folds with a parameter moved > 2 SE"] = int(np.sum(z > 2))
+            row[f"{v} against {REFERENCE[v]}: jackknife SE ratio, median (range)"] = (
+                f"{np.nanmedian(ratio):.2f} ({np.nanmin(ratio):.2f}-{np.nanmax(ratio):.2f})")
         par_rows.append(row)
     par_table = pd.DataFrame(par_rows)
 
@@ -273,14 +284,16 @@ def run(ctx) -> Result:
     res.summary = (
         f"Over {int(b_row.years)} held-out river-years, hiding the inputs during calibration changed no year's "
         f"RMSE by more than {b_row[largest]:.3f} °C (another optimizer seed alone: {seed_change:.3f} °C), and "
-        f"the share of days inside the 90% interval from {b_row['A, same years']} to {b_row['days inside 90%']}; "
+        f"the share of days inside the 90% interval from {b_row['reference, same years']} to "
+        f"{b_row['days inside 90%']}; "
         f"a {BUFFER_DAYS}-day buffer changed no year's RMSE by more than {d_row[largest]:.3f} °C. Calibrating on "
         f"earlier years only gave, on its {int(c_row.years)} years, an RMSE of {c_row['RMSE (°C)']:.3f} °C "
-        f"against {c_row['RMSE of A, same years']:.3f} °C, 90% intervals that held on {cov_c:.1%} of days "
+        f"against {c_row['RMSE of reference, same years']:.3f} °C, 90% intervals that held on {cov_c:.1%} of days "
         f"against {cov_a:.1%}, and a training-year sigma of {sig_c:.2f} °C against {sig_a:.2f} °C.")
     res.sections.append(Section(
-        "Each variant against the default",
-        "Every variant is compared with A on the same held-out years. A2 shows how much the results move by "
+        "Each variant against its reference",
+        "Every variant is compared with its reference (B with B0, the others with A) on the same held-out "
+        "years. A2 shows how much the results move by "
         "chance (another optimizer seed). For the yearly statistics, 'mean error' is measured minus predicted "
         "median, averaged over years.",
         figures=[_fig(years)],
@@ -311,7 +324,7 @@ def run(ctx) -> Result:
                              f"smaller than that from all other years ({sig_a:.2f} °C)" if sig_c < sig_a else "")
             + ". V5 (the later years of each record) tests the same situation with DE-MCMC. For predictions of "
             "future years, quote V5 and V10 as well as the cross-validation.")
-    moved = int(sum(r["A2: folds with a parameter moved > 2 SE"] for r in par_rows))
+    moved = int(sum(r["A2 against A: folds with a parameter moved > 2 SE"] for r in par_rows))
     if moved:
         res.notes.append(
             f"With another optimizer seed alone, {moved} folds ended on parameters more than 2 jackknife standard "
@@ -326,12 +339,12 @@ def _fig(years):
     import matplotlib.pyplot as plt
     plot_style()
     key = ["river", "version", "year"]
-    a = years[years.variant == "A"].set_index(key)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.6), gridspec_kw={"width_ratios": [1.1, 1]})
-    show = [("A2", "another seed"), ("B", "inputs hidden"), ("D", f"{BUFFER_DAYS}-day buffer"),
-            ("C", "forward only")]
+    show = [("A2", "another seed"), ("B", "inputs hidden\n(against gap mode alone)"),
+            ("D", f"{BUFFER_DAYS}-day buffer"), ("C", "forward only")]
     rng = np.random.default_rng(0)
     for i, (v, label) in enumerate(show):
+        a = years[years.variant == REFERENCE[v]].set_index(key)
         b = years[years.variant == v].set_index(key)
         common = a.index.intersection(b.index)
         d = (b.loc[common, "rmse"] - a.loc[common, "rmse"]).to_numpy()
@@ -341,7 +354,7 @@ def _fig(years):
     ax1.set_yticks(range(len(show)), [s[1] for s in show])
     ax1.invert_yaxis()
     ax1.grid(axis="y", visible=False)
-    ax1.set_xlabel("Change in the held-out year's RMSE against the default (°C)")
+    ax1.set_xlabel("Change in the held-out year's RMSE (°C)")
     ax1.set_title("Each held-out year", fontsize=9)
 
     groups = []
@@ -364,6 +377,6 @@ def _fig(years):
     fig.tight_layout()
     return (save_figure(fig, "V12_variants.png"),
             "Left: change in each held-out year's RMSE when the optimizer seed changes, when the year's inputs "
-            f"are hidden during calibration, with a {BUFFER_DAYS}-day buffer, and when only earlier years are "
-            f"used (shaded: ±{TOLERANCE_RMSE} °C). Right: share of held-out days inside the 90% interval, default "
+            f"are hidden during calibration (against gap-tolerant mode with the inputs kept), with a "
+            f"{BUFFER_DAYS}-day buffer, and when only earlier years are used (shaded: ±{TOLERANCE_RMSE} °C). Right: share of held-out days inside the 90% interval, default "
             "against forward only, on the same years.")
