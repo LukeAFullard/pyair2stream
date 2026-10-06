@@ -24,16 +24,20 @@ before its result.
 | V9 | When the package gives a chance that a yearly statistic (highest daily mean, highest 7-day mean, days above a threshold) exceeded a limit, does that happen as often as it says? On real rivers, do these chances beat going by past years? | This is the answer to a compliance question. |
 | V10 | Calibrated only on the coolest (or highest-flow) years, does the model still predict the warmest (or lowest-flow) years, and do its intervals hold? | Limits are breached, and scenarios extrapolate, in exactly those years. |
 | V11 | Over many years not used for calibration, do the predicted ranges of yearly statistics hold? Why not, when they do not? Does the cross-validated correction make them hold? | The answer to a compliance question must carry the confidence it states. |
+| V12 | Cross-validation hides a year's water temperatures and keeps its air temperature and discharge. Would hiding those inputs too, leaving a buffer around the year, or calibrating on earlier years only change what it reports? | The cross-validation is the evidence for every check of predictions in new years; its design must not flatter the model. |
 
 ## Running it
 
 From the repository root, with the package installed (`pip install -e .`):
 
 ```bash
-python validation/run_all.py            # full suite, about 95 minutes on 4 cores
+python validation/run_all.py            # full suite, about 110 minutes on 4 cores
 python validation/run_all.py --quick    # reduced version of every check, about 2 minutes
 python validation/run_all.py --only V2 V6
 ```
+
+With `--only`, the other checks keep their reports from the earlier run, and
+`REPORT.md` names the run each comes from.
 
 V1 needs `gfortran` and the Fortran source (`git submodule update --init`);
 without them it is reported as not run. The run rewrites `REPORT.md`,
