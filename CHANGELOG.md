@@ -121,6 +121,46 @@
   against 0.25–0.51 implied by the daily ρ).
 - Continuous integration also tests Python 3.14, the newest stable release
   (3.9, 3.12 and 3.14).
+- ⚠ **Data checks: one checker for every file, and the validation file before
+  calibrating.** `pyair2stream.data_checks.check_table` now checks every file a
+  run reads (the calibration file, a FORWARD scenario file and the validation
+  file), and the pre-analysis report uses it too. The validation file is checked
+  right after the calibration file, before any calibration: a problem in it used
+  to stop the run only after the calibration and MCMC had finished (103 s in a
+  test with example 02; hours with long chains), with no plots written. Every
+  message names the file, the column and the first line concerned: a date with
+  no row, a repeated date, dates out of order, a blank or unreadable date, text
+  that is not a number (with a hint for decimal commas), a column name with a
+  space, and the first missing day of a gap. New errors: a calibration or
+  validation file without a `T_water` column or without any measurement (before:
+  "n_dat is 0 after aggregation", for validation only after the calibration). A
+  FORWARD file shorter than a year is now named as a scenario file (the 365-day
+  minimum is now documented). New warnings: measured validation days that are
+  also measured calibration days (the validation score is then not independent),
+  and a validation file in a cross-validation run, which does not use it.
+- `analyze_timeseries` makes exactly the checks a run makes, with the same
+  settings, and its report starts with "A run would accept this data" or "A run
+  would STOP on this data" and the reasons. It counts dates with no row as
+  missing days (it used to report "0 missing" for a file with 10 rows deleted).
+  Its default is now `gap_tolerant=False`, as in a run. New arguments: `period`,
+  `calendar`, `min_theta_floor`, `source`; new summary keys: `errors`,
+  `warnings`, `run_would_stop`, `missing_dates`.
+- `merge_timeseries` and `read_and_resample` report what they cannot use: rows
+  whose time cannot be read (they used to be dropped silently), values of `-999`
+  (now treated as missing; they used to be averaged in), and days with fewer than
+  half the usual number of readings. Text that is not a number stops them with a
+  message naming the file, column and line. New options: `na_values` (per file)
+  and `min_readings_per_day` (days with fewer readings are left blank).
+- **Examples.** Example 05 (gaps) is expanded, with five figures: checking the
+  data first; missing water temperature filled by the model (July-August 2006
+  hidden: RMSE 0.44 °C against the hidden measurements); interpolation across a
+  three-week air temperature gap; the stretches gap-tolerant mode scores; and
+  how fast scattered gaps reduce the data scored (5% of days missing at random
+  leaves 36% of the measured days). New example 07 prepares input files from
+  raw logger files (merge, check, fill, split, run). New example 08 projects a
+  warmer climate (+2 °C air, with and without 20% less summer flow), with paired
+  changes and checked and corrected yearly peaks. Example 06 adds a sensitivity
+  analysis. The examples index maps tasks to examples.
 
 ### Fixed
 - Monthly scoring (`time_resolution: "1m"`) of a 360-day-calendar record longer

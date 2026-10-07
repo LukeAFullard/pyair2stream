@@ -51,7 +51,7 @@ class TestQmediaScenarioInvariance(unittest.TestCase):
     def test_scenario_signal_not_cancelled_when_qmedia_pinned(self):
         with tempfile.TemporaryDirectory() as tmp:
             baseline_csv = os.path.join(tmp, 'baseline.csv')
-            _write_series_csv(baseline_csv, 400, q_scale=1.0)
+            _write_series_csv(baseline_csv, 400, with_twat=True, q_scale=1.0)
 
             # "Calibration": load the baseline data and capture the Qmedia the
             # (fixed, externally-supplied) parameters are implicitly fitted under.
@@ -133,8 +133,8 @@ class TestQmediaScenarioInvariance(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             cal_csv = os.path.join(tmp, 'cal.csv')
             val_csv = os.path.join(tmp, 'val.csv')
-            _write_series_csv(cal_csv, 400, q_scale=1.0)
-            _write_series_csv(val_csv, 400, q_scale=5.0)  # deliberately different discharge scale
+            _write_series_csv(cal_csv, 400, with_twat=True, q_scale=1.0)
+            _write_series_csv(val_csv, 400, with_twat=True, q_scale=5.0)  # deliberately different discharge scale
 
             data = CommonData()
             data.runmode = 'DE'

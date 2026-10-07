@@ -14,7 +14,7 @@ import argparse
 import numpy as np
 import pandas as pd
 
-from .io import read_calibration, read_Tseries
+from .io import read_calibration, read_Tseries, precheck_validation
 from .optimization import forward_mode, PSO_mode, LH_mode, DE_mode, DE_MCMC_mode
 from .config import CommonData
 from .post_processing import post_process
@@ -308,6 +308,9 @@ def main():
         sys.exit(1)
 
     read_Tseries(data, 'c')
+    # The validation file is used only after the calibration, which can take hours:
+    # check it now, so a problem in it stops the run before any calibration.
+    precheck_validation(data)
 
     # FORWARD mode does not calibrate, so it may legitimately have no T_water
     # observations at all (a pure projection). statis() raises when there are

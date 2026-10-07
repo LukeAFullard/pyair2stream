@@ -58,12 +58,31 @@ A run has two stages, and optionally a third:
 ## 2. Input data
 
 Each input file is a CSV with one row per calendar day and the columns `Date`,
-`T_air` (°C), `T_water` (°C) and `Discharge`. When a file is loaded:
+`T_air` (°C), `T_water` (°C) and `Discharge`.
 
-- **Every calendar day must have a row.** A missing day is an error. A missing
-  *value* is fine: leave the cell blank or write `-999`; both mean "missing".
+**One set of checks, for every file.** The same function
+(`pyair2stream.data_checks.check_table`) checks every file a run reads: the
+calibration file, the input of a FORWARD run, and the validation file. The
+pre-analysis report `analyze_timeseries` uses it too, with the same settings, so
+it cannot pass a table that a run would reject. A run stops at the first error.
+The message names the file, the column and the first line concerned (line 1 is
+the header). Warnings are printed and the run continues.
+
+**When.** The calibration (or FORWARD) file is checked when it is loaded, before
+anything else. The validation file is checked right after it, before any
+calibration, because validation only happens once the calibration (which can
+take hours) has finished. A cross-validation run does not use a validation file,
+and says so.
+
+The checks:
+
+- **Every calendar day must have a row, once, in date order.** A date with no
+  row, a repeated date, dates out of order, and a blank or unreadable date are
+  errors. A missing *value* is fine: leave the cell blank or write `-999`; both
+  mean "missing". Text that is not a number (such as `n.a.`) is an error.
 - **`T_water` may have gaps.** Days without an observation are simulated but not
-  scored.
+  scored. Calibration and validation files need the column and at least one
+  measurement; a FORWARD file does not.
 - **`T_air` and `Discharge` must be complete** in the default mode. If they have
   gaps, use gap-tolerant mode (§10). Versions 3 and 5 do not use discharge, so the
   column may be absent or incomplete for them.
@@ -71,10 +90,18 @@ Each input file is a CSV with one row per calendar day and the columns `Date`,
   divides by a power of discharge. A zero or negative value is an error unless you
   set `min_theta_floor` (§5) or use gap-tolerant mode.
 - **Calibration and validation files must start on 1 January** (as in the
-  Fortran; not required in gap-tolerant mode) and be at least 365 days long.
-  FORWARD runs (§13) may start on any day.
+  Fortran; not required in gap-tolerant mode). FORWARD runs (§13) may start on
+  any day.
+- **At least 365 days**, because the warm-up year (§3) repeats the first year.
+  A shorter calibration or FORWARD file is an error; a shorter validation file is
+  skipped, with a warning.
+- **Validation days should not be calibration days.** A warning gives the number
+  of days with a measured water temperature in both files: on those days the
+  validation score does not test the model on data it was not fitted to.
 - Dates must be real (Gregorian) dates, unless you declare `calendar: "noleap"`
   (365-day years) or `"360_day"` (twelve 30-day months) for climate-model output.
+  With those calendars the dates only label the rows (the time of year is taken
+  from the row position), so only their order is checked.
 - **Implausible values are reported**, not changed: a warning lists `T_air`
   outside −60 to 60 °C and `T_water` outside −2 to 50 °C. Such values usually
   mean a missing-value code other than blank or `-999` (for example `-99`), which
@@ -893,8 +920,8 @@ change one-sided.
 
 | Check | When | Effect |
 |---|---|---|
-| Missing dates, incomplete `T_air`/`Discharge`, non-positive discharge, short record | loading data | error |
-| `T_air` or `T_water` outside a plausible range (§2) | loading data | warning |
+| Missing, repeated, unordered or unreadable dates; text values; missing columns; incomplete `T_air`/`Discharge`; non-positive discharge; no `T_water` measurements; start date; short record (§2) | loading each file; the validation file before calibration | error |
+| `T_air` or `T_water` outside a plausible range; a validation file shorter than a year; validation days that are also calibration days (§2) | loading each file; the validation file before calibration | warning |
 | Invalid version, run mode, integrator, objective, time resolution, `prc`, bounds | loading config | error |
 | Stability of the chosen integrator (B vs. limit, §6) | before each user-facing simulation | warning; error if >10% of days exceed it |
 | Simulated temperature not finite or above `max_plausible_twat` (60 °C) | after each user-facing simulation | error |

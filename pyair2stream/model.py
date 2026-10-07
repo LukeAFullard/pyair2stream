@@ -374,6 +374,30 @@ def check_nonpositive_discharge(data: CommonData) -> None:
     )
 
 
+def find_segments(data: CommonData, min_segment_days: int):
+    """
+    Gap-tolerant mode: the stretches of consecutive days (from index 365 on) with valid air
+    temperature and, for versions 4/7/8, positive discharge. Returns (kept, dropped): lists of
+    (start, end) index pairs, inclusive, split by whether they are at least `min_segment_days` long.
+    """
+    valid = data.Tair[365:data.n_tot] != -999.0
+    if data.version not in [3, 5]:
+        valid &= (data.Q[365:data.n_tot] != -999.0) & (data.Q[365:data.n_tot] > 0.0)
+    edges = np.diff(np.concatenate(([0], valid.astype(np.int8), [0])))
+    starts = np.flatnonzero(edges == 1) + 365
+    ends = np.flatnonzero(edges == -1) + 364
+    kept, dropped = [], []
+    for start, end in zip(starts.tolist(), ends.tolist()):
+        (kept if end - start + 1 >= min_segment_days else dropped).append((start, end))
+    return kept, dropped
+
+
+def scored_days(data: CommonData, segments, warmup_drop_days: int) -> int:
+    """Number of measured water temperatures scored in `segments` after `warmup_drop_days`."""
+    measured = data.Twat_obs != -999.0
+    return int(sum(np.sum(measured[min(start + warmup_drop_days, end + 1):end + 1]) for start, end in segments))
+
+
 def detect_segments(data: CommonData) -> None:
     """
     Detect valid segments, handling gap-tolerant mode.
@@ -390,39 +414,10 @@ def detect_segments(data: CommonData) -> None:
 
     data.eval_mask = np.zeros(data.n_tot, dtype=np.bool_)
 
-    in_segment = False
-    seg_start = -1
-
-    # We only care about data from index 365 onwards (no warm-up)
-    for i in range(365, data.n_tot):
-        is_valid = True
-        if data.Tair[i] == -999.0:
-            is_valid = False
-        if data.version not in [3, 5] and (data.Q[i] == -999.0 or data.Q[i] <= 0.0):
-            is_valid = False
-
-        if is_valid:
-            if not in_segment:
-                in_segment = True
-                seg_start = i
-        else:
-            if in_segment:
-                in_segment = False
-                seg_end = i - 1
-                length = seg_end - seg_start + 1
-                if length >= data.min_segment_days:
-                    data.segments.append((seg_start, seg_end))
-                else:
-                    print(f"Warning: Dropped segment ({seg_start}, {seg_end}) of length {length} days (min_segment_days={data.min_segment_days})")
-
-    # Handle segment extending to end of array
-    if in_segment:
-        seg_end = data.n_tot - 1
-        length = seg_end - seg_start + 1
-        if length >= data.min_segment_days:
-            data.segments.append((seg_start, seg_end))
-        else:
-            print(f"Warning: Dropped segment ({seg_start}, {seg_end}) of length {length} days (min_segment_days={data.min_segment_days})")
+    data.segments, dropped = find_segments(data, data.min_segment_days)
+    for seg_start, seg_end in dropped:
+        print(f"Warning: Dropped segment ({seg_start}, {seg_end}) of length {seg_end - seg_start + 1} days "
+              f"(min_segment_days={data.min_segment_days})")
 
     if not data.segments:
         raise ValueError("No valid segments found after gap detection and filtering.")

@@ -1,0 +1,21 @@
+# Example 05: calibrate on a record whose water temperature was not measured in
+# July and August 2006 (the input file is made by run.py). Missing water
+# temperature needs no special setting. From the repository's top folder:
+#   pyair2stream --config examples/05_gaps/water_gaps.yaml
+project_name: "gaps"
+station_name: "Mentue"
+series: "c"
+time_resolution: "1d"
+version: 8
+integrator: "CRN"
+objective_function: "NSE"
+run_mode: "DE"
+random_seed: 42
+
+paths:
+  input_data: "examples/05_gaps/output/water_gaps_calibration.csv"
+  output_dir: "examples/05_gaps/output/water_gaps"
+
+parameter_bounds:
+  min: [-5, -5, -5, -1, 0,  0,  0, -1]
+  max: [15, 1.5, 5,  1, 20, 10, 1,  5]

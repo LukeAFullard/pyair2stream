@@ -18,6 +18,7 @@ from .config import (
     VALID_OBJECTIVES,
 )
 from .model import prepare_evaluation, check_nonpositive_discharge
+from .data_checks import check_table, PLAUSIBLE_RANGES as _PLAUSIBLE_RANGES
 
 
 def _check_choice(name: str, value, allowed) -> None:
@@ -25,23 +26,8 @@ def _check_choice(name: str, value, allowed) -> None:
         raise ValueError(f"Invalid {name} {value!r}. Must be one of: {', '.join(map(str, allowed))}.")
 
 
-# Daily means outside these ranges (degC) are almost certainly not real, e.g. a
-# missing-value code other than -999 (such as -99 or -9999) or a unit error.
-PLAUSIBLE_RANGES = {'T_air': (-60.0, 60.0), 'T_water': (-2.0, 50.0)}
-
-
-def _warn_implausible_values(df: pd.DataFrame, date_col: pd.Series, filename: str) -> None:
-    """Print a warning for input values outside PLAUSIBLE_RANGES. They are still used."""
-    for col, (lo, hi) in PLAUSIBLE_RANGES.items():
-        if col not in df.columns or not pd.api.types.is_numeric_dtype(df[col]):
-            continue        # non-numeric text is reported when the column is converted
-        bad = (df[col] < lo) | (df[col] > hi)
-        if bad.any():
-            first = int(np.argmax(bad.to_numpy()))
-            print(f"Warning: {int(bad.sum())} value(s) of {col} in {filename} are outside "
-                  f"{lo:g} to {hi:g} degC (first: {df[col].iloc[first]:g} on "
-                  f"{date_col.iloc[first].date()}). Check for missing-value codes other than "
-                  "-999 or a blank cell, and for unit errors; these values are used as given.")
+# Kept here for backward compatibility; the checks themselves are in data_checks.
+PLAUSIBLE_RANGES = _PLAUSIBLE_RANGES
 
 
 def _read_8_values(values, name: str) -> np.ndarray:
@@ -461,6 +447,52 @@ def compute_doy_climatology(data: CommonData) -> None:
         data.doy_climatology = df_clim_extended.iloc[366:2*366].values
 
 
+def precheck_validation(data: CommonData) -> None:
+    """
+    Check the validation file before any calibration, with exactly the checks its
+    later load makes (`data_checks.check_table`), so that a problem in it stops the
+    run at once instead of after a calibration that may take hours. Call it after the
+    calibration file is loaded. It also warns when measured days of the validation
+    file are measured days of the calibration file too, and keeps the checked table
+    for the later load, so the file is not read or reported twice.
+    """
+    filename = getattr(data, '_input_data_path_val', None)
+    if not filename:
+        return
+    if getattr(data, 'cross_validation', None) and data.runmode in ('PSO', 'DE', 'LATHYP'):
+        print("Note: paths.validation_data is not used by a cross-validation run; each held-out year is its test.")
+        return
+    if not os.path.exists(filename):
+        raise FileNotFoundError(f"Missing validation data file: {filename}")
+    checked = check_table(pd.read_csv(filename), filename, period='validation', version=data.version,
+                          gap_tolerant=data.gap_tolerant, calendar=data.calendar,
+                          min_theta_floor=data.min_theta_floor)
+    checked.raise_first_error()
+    checked.print_warnings()
+
+    if data.runmode != 'FORWARD' and checked.dates is not None and data.date is not None and data.n_tot > 365:
+        real = slice(365, data.n_tot)
+        measured = data.Twat_obs[real] != -999.0
+        cal_days = pd.to_datetime(pd.DataFrame({'year': data.date[real, 0], 'month': data.date[real, 1],
+                                                'day': data.date[real, 2]})[measured], errors='coerce')
+        shared = checked.dates[checked.df['T_water'].notna() & checked.dates.isin(cal_days)]
+        if len(shared):
+            print(f"Warning: {len(shared)} measured day(s) of the validation file {filename} (first: "
+                  f"{shared.iloc[0].date()}) are also measured days of the calibration file "
+                  f"{data._input_data_path_cal}. On those days the validation score does not test the model on "
+                  "data it was not fitted to. Use separate years for calibration and validation.")
+    data._prechecked_validation = (filename, checked)
+
+
+def take_prechecked(data: CommonData, filename) -> object:
+    """The table `precheck_validation` checked for `filename`, once; None otherwise."""
+    pre = getattr(data, '_prechecked_validation', None)
+    if pre is not None and pre[0] == filename:
+        data._prechecked_validation = None
+        return pre[1]
+    return None
+
+
 def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> None:
     """
     Reads the time series data from a CSV file and replicates the first year.
@@ -499,89 +531,29 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
         # path) must not silently skip validation.
         raise FileNotFoundError(f"Missing {period} data file: {filename}")
 
-    # Read the data using pandas. Expecting columns Date, T_air, T_water, Discharge
-    df = pd.read_csv(filename)
+    # Every check of the file's content (columns, dates, values, gaps, length) is in
+    # data_checks.check_table, shared with the pre-analysis report. A validation file
+    # that main() already checked before calibrating is not read or reported twice.
+    checked = take_prechecked(data, filename) if p == 'v' else None
+    if checked is None:
+        check_period = 'validation' if p == 'v' else ('scenario' if data.runmode == 'FORWARD' else 'calibration')
+        checked = check_table(pd.read_csv(filename), filename, period=check_period, version=data.version,
+                              gap_tolerant=data.gap_tolerant, calendar=data.calendar,
+                              min_theta_floor=data.min_theta_floor)
+        checked.raise_first_error()
+        checked.print_warnings()
+    df, date_col = checked.df, checked.dates
 
-    # Ensure Date is parsed
-    if 'Date' not in df.columns:
-        raise ValueError(f"Missing 'Date' column in {filename}")
-
-    date_col = pd.to_datetime(df['Date'])
-
-    # Calibration/validation records must start on 1 January (as in the Fortran).
-    # FORWARD runs may start on any date; the warm-up block's seasonal phase is then
-    # taken from the rows it copies (see the tt construction below).
-    if (
-        not data.gap_tolerant
-        and data.runmode != 'FORWARD'
-        and len(date_col) > 0
-        and (date_col.iloc[0].month != 1 or date_col.iloc[0].day != 1)
-    ):
-        raise ValueError(f"The time series in {filename} must start on January 1st.")
-
-    if data.calendar == 'standard':
-        # Validate Daily Scale (no gaps). Only meaningful for the real Gregorian
-        # calendar -- a genuine noleap/360_day series will never satisfy this by
-        # construction (see the `calendar` branch below).
-        expected_dates = pd.date_range(start=date_col.iloc[0], end=date_col.iloc[-1], freq='D')
-        if len(date_col) != len(expected_dates) or not date_col.equals(pd.Series(expected_dates)):
-            raise ValueError(f"The time series in {filename} must be continuous at a daily time scale with no missing dates. Fill missing rows with NaN or -999.")
-    else:
-        # Non-standard calendar: dates are informational only (used for the
-        # output Year/Month/Day columns), not for physics. Do not validate them
-        # against real Gregorian day-spacing -- only that they are in order, so
-        # a genuinely mis-ordered file is still caught. tt is computed from row
-        # position against the declared calendar below, not from these dates,
-        # so a "padded" Gregorian date column cannot silently misalign it.
-        if not date_col.is_monotonic_increasing:
-            raise ValueError(
-                f"The time series in {filename} must have non-decreasing dates."
-            )
-
-    # Validate completeness of T_air and Discharge
-    if 'T_air' not in df.columns:
-        raise ValueError(f"Missing 'T_air' column in {filename}")
-
-    if 'Discharge' not in df.columns:
-        if data.version in [3, 5]:
-            df['Discharge'] = -999.0
-        else:
-            raise ValueError(f"Missing 'Discharge' column in {filename}")
-
-    # A blank cell and the legacy -999 marker both mean "missing". Normalise to
-    # NaN first so the completeness checks below catch both; otherwise a -999 in
-    # T_air would be simulated as an air temperature of -999 degC.
-    for col in ('T_air', 'T_water', 'Discharge'):
-        if col in df.columns:
-            df[col] = df[col].replace(-999.0, np.nan)
-    _warn_implausible_values(df, date_col, filename)
-
-    if not data.gap_tolerant:
-        if df['T_air'].isnull().any():
-            raise ValueError(f"The series of observed air temperature in {filename} must be complete. It cannot have gaps or missing data.")
-        if data.version not in [3, 5] and df['Discharge'].isnull().any():
-            raise ValueError(f"The series of discharge in {filename} must be complete. It cannot have gaps or missing data.")
-
-    # Handle missing data via -999.0
-    Tair = df['T_air'].fillna(-999.0).astype(np.float64).values
-    Q = df['Discharge'].fillna(-999.0).astype(np.float64).values
-    Twat_obs = df.get('T_water', pd.Series(np.full(len(df), -999.0))).fillna(-999.0).astype(np.float64).values
+    # Missing values (a blank cell or -999 in the file) are -999.0 from here on.
+    Tair = df['T_air'].fillna(-999.0).to_numpy(dtype=np.float64)
+    Q = df['Discharge'].fillna(-999.0).to_numpy(dtype=np.float64)
+    Twat_obs = df['T_water'].fillna(-999.0).to_numpy(dtype=np.float64)
 
     n_tot_raw = len(df)
 
     if p == 'v' and n_tot_raw < 365:
         print('Validation period < 1 year --> validation is skipped')
         return
-
-    if p == 'c' and n_tot_raw < 365:
-        # The warm-up block replicates the first 365 rows of the real record; a
-        # shorter calibration series would otherwise fail later with an opaque
-        # numpy broadcast error instead of an actionable message.
-        raise ValueError(
-            f"The {period} time series in {filename} has only {n_tot_raw} day(s); "
-            "at least 365 are required (the warm-up block replicates the first "
-            "year of data)."
-        )
 
     n_year = int(np.ceil(n_tot_raw / 365.25))
     n_tot = n_tot_raw + 365
