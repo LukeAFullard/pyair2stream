@@ -182,7 +182,12 @@
   after about 30 of 100 generations. The rule is now
   `optimization.tol` (default 0.001), which found the best fit in all 125.
   Calibrations take about twice as long. DE-MCMC (its starting fit) and
-  cross-validation folds use the same rule.
+  cross-validation folds use the same rule. In the eight examples, which had
+  converged, best-fit parameters moved by at most 0.007 and simulated
+  temperatures by at most 0.008 °C. Results drawn from MCMC samples moved
+  slightly more, because the chain starts from the fit: example 03's
+  corrected probabilities went from 0.59/0.33/0.12 to 0.57/0.34/0.14. The
+  examples and their figures are rerun.
 - Monthly scoring (`time_resolution: "1m"`) of a 360-day-calendar record longer
   than about 60 years stopped with `IndexError`.
 - Documentation errors: example 02 gave the parameter ranges as 95% ranges

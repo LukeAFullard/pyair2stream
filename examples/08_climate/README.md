@@ -16,7 +16,7 @@ data](#climate-model-data) below).
 python examples/08_climate/run.py
 ```
 
-It takes about four minutes. It makes the two scenario files from the measured
+It takes about five minutes. It makes the two scenario files from the measured
 2010–2012 file, then runs:
 
 ```bash

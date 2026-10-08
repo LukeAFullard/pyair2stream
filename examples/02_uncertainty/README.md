@@ -20,7 +20,7 @@ temperature should fall inside it.
 pyair2stream --config examples/02_uncertainty/calibrate.yaml
 ```
 
-This takes one to two minutes. [`calibrate.yaml`](calibrate.yaml) is example
+This takes about two minutes. [`calibrate.yaml`](calibrate.yaml) is example
 01's settings file with `run_mode: "DE-MCMC"` and an `uncertainty_options`
 block. After the calibration, the sampler runs in blocks of 1,000 steps until
 its results are stable. Then it reports:

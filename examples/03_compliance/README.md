@@ -23,7 +23,7 @@ Run everything with one command, from the repository's top folder:
 python examples/03_compliance/run.py
 ```
 
-It takes about three minutes. It runs these three steps, then the analysis
+It takes about four minutes. It runs these three steps, then the analysis
 below:
 
 ```bash

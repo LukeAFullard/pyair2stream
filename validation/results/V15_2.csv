@@ -1,4 +1,0 @@
-period,records,stations,"mean RMSE, published series","mean RMSE, pyair2stream","heat dome, mean RMSE (published)","heat dome, mean RMSE (pyair2stream)","drought, mean RMSE (published)","drought, mean RMSE (pyair2stream)"
-calibration,all records,23,0.914,0.945,0.958,1.02,0.854,0.861
-calibration,records starting on 1 January,22,0.916,0.916,0.972,0.972,0.85,0.85
-validation,all records,23,1.052,1.052,1.42,1.42,1.069,1.069
