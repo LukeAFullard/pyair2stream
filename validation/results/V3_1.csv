@@ -1,0 +1,8 @@
+true version,fitted version,noise,calibration RMSE vs noisy data,"prediction RMSE vs truth, 2010-2012",largest parameter error (%),pass
+3,3,iid,0.496,0.024,1.8,True
+3,3,ar1,0.511,0.022,2.6,True
+5,5,iid,0.501,0.015,2.4,True
+5,5,ar1,0.47,0.035,5.8,True
+8,8,iid,0.509,0.029,12.9,True
+8,8,ar1,0.492,0.038,16.1,True
+8,3,iid,0.792,0.517,,

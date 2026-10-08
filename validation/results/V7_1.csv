@@ -1,0 +1,10 @@
+gap pattern (calibration years 2002-2009),mode,water temperatures available,days scored in calibration,"prediction RMSE vs truth, 2010-2012 (°C)"
+Water temperature: none missing,standard,2922,2922,0.032
+Water temperature: 20% of days at random,standard,2334,2334,0.033
+Water temperature: 50% of days at random,standard,1472,1472,0.037
+Water temperature: one day a week,standard,418,418,0.059
+Water temperature: every December-March,standard,1953,1953,0.052
+Water temperature: all of 2005,standard,2557,2557,0.05
+Air temperature: 5% of days at random,gap-tolerant,2922,927,0.038
+Air temperature: 60 days in summer 2005,gap-tolerant,2922,2832,0.049
+"Air temperature: 5% of days at random, filled by interpolation",standard,2922,2922,0.051

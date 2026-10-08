@@ -1,0 +1,13 @@
+test,scheme,max |error| (°C)
+version 5,CRN,6.7e-07
+version 5,EXP,2.3e-03
+version 5,RK4,8.1e-06
+version 5,RK2,2.4e-04
+version 5,EUL,2.8e-02
+version 5,reference (96 sub-steps/day),6.8e-14
+version 8,CRN,5.3e-07
+version 8,EXP,4.0e-03
+version 8,RK4,2.8e-05
+version 8,RK2,5.7e-04
+version 8,EUL,3.3e-02
+version 8,reference (96 sub-steps/day),1.6e-13
