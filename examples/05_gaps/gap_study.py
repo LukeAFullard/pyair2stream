@@ -12,6 +12,7 @@ each time with air temperature removed in a different way, and compares the pred
    gap-tolerant mode against filling the gap with a straight line or with the seasonal average.
 3. Scattered gaps (1-20% of days missing at random): gap-tolerant mode with warm-ups of 15, 7,
    4 and 0 days, against filling with a straight line.
+4. The warm-up a run would suggest for 26 rivers, from their published parameters.
 
 Water temperature is kept on every day: only the air temperature is missing.
 Writes the tables to output/study/ and the README's figures to figures/.
@@ -157,6 +158,70 @@ def restart_memory(par, qmedia, days=20):
     return {k: np.array(v) for k, v in out.items()}, B
 
 
+def reported_and_actual_error(scattered, qmedia, share=0.20, draw=0):
+    """With warm-up 0, the first days after each restart start from the measured water temperature,
+    which flatters the score. For one draw, compare the RMSE the run reports (with restarts) with
+    the RMSE of the same parameters on the same days, simulated without restarts."""
+    complete = load(CAL, "complete_forcing", Qmedia=qmedia)
+    rows = []
+    for warmup, min_segment in ((0, 1), (4, 8)):
+        label = warmup_name(warmup, min_segment)
+        row = scattered[(scattered.share == share) & (scattered.draw == draw) & (scattered.method == label)].iloc[0]
+        par = row[[f"a{i}" for i in range(1, 9)]].to_numpy(float)
+        name = f"scattered_{round(share * 100)}pc_draw{draw}_{label.replace(' ', '_').replace(',', '')}"
+        data = load(os.path.join(OUT, "inputs", f"{name}.csv"), f"{name}_check", Qmedia=qmedia, gap_tolerant=True,
+                    warmup_drop_days=warmup, min_segment_days=min_segment)
+        data.par[:] = par
+        call_model(data)
+        scored = data.eval_mask & (data.Twat_obs != -999.0)
+        complete.par[:] = par
+        call_model(complete)
+        rows.append({"warm-up (days)": warmup,
+                     "RMSE the run reports (°C)": np.sqrt(np.mean((data.Twat_mod - data.Twat_obs)[scored] ** 2)),
+                     "RMSE on the same days without restarts (°C)":
+                         np.sqrt(np.mean((complete.Twat_mod - complete.Twat_obs)[scored] ** 2))})
+    return pd.DataFrame(rows).round(3)
+
+
+def warmups_by_river():
+    """The warm-up a gap-tolerant run would suggest (three relaxation times, 3/B days, rounded up)
+    for the three Swiss rivers and the 23 British Columbia rivers, from their published version 8
+    parameters and their calibration-period discharge."""
+    import openpyxl
+    rows = []
+
+    def suggest(par, q):
+        q = np.asarray(q, float)
+        theta = q[q > 0] / q[q > 0].mean()
+        a3, a4, a8 = par[2], par[3], par[7]
+        b = float(np.median((a3 + a8 * theta) / theta ** a4))
+        return b, int(np.ceil(3.0 / b))
+
+    book = openpyxl.load_workbook(os.path.join(REPO, "data", "switzerland", "published",
+                                               "Piccolroaz_etal_HP2016-Parameter_values.xlsx"), data_only=True)
+    sheet = list(book["a2s_8"].iter_rows(values_only=True))
+    header = sheet[1]
+    for station, river, water_id in (("MAH_2369", "Mentue", 2369), ("SIO_2011", "Rhone", 2011),
+                                     ("DAV_2327", "Dischmabach", 2327)):
+        row = next(r for r in sheet[2:] if r[1] == water_id)
+        par = [0.0] * 8
+        c = 3
+        while c < len(header) and header[c] is not None:     # the first block: daily parameters
+            par[int(header[c][1]) - 1] = float(row[c])
+            c += 1
+        q = pd.read_csv(os.path.join(REPO, "data", "switzerland", f"{station}_calibration.csv")).Discharge
+        rows.append(("Switzerland", river, *suggest(par, q)))
+    bc = os.path.join(REPO, "data", "british_columbia", "original")
+    params = pd.read_csv(os.path.join(bc, "a2s_8_parameter_values.csv")).set_index("station")
+    series = pd.read_csv(os.path.join(bc, "ts_all_58.csv"), dtype={"station_number": str})
+    regime = pd.read_csv(os.path.join(bc, "stn_hyd_reg.csv"), dtype={"station_number": str}).set_index("station_number")
+    for station in params.index:
+        q = series[(series.station_number == station) & (series.period == "calibration")].q.dropna()
+        rows.append((f"British Columbia, {regime.loc[station, 'regime']}", station,
+                     *suggest(params.loc[station].to_numpy(float), q)))
+    return pd.DataFrame(rows, columns=["region", "river", "median decay rate B (1/day)", "suggested warm-up (days)"])
+
+
 def main():
     os.makedirs(os.path.join(OUT, "inputs"), exist_ok=True)
     os.makedirs(FIG, exist_ok=True)
@@ -240,6 +305,9 @@ def main():
                          [["share of measured days scored (%)"] + measures].mean().round(3))
     with pd.option_context("display.width", 200, "display.max_columns", 20):
         print("\nScattered gaps (mean of the draws):\n" + scattered_summary.to_string())
+    flatter = reported_and_actual_error(scattered, qmedia)
+    flatter.to_csv(os.path.join(OUT, "warmup_0_flatters.csv"), index=False)
+    print("\nWith 20% of days missing (one draw):\n" + flatter.to_string(index=False))
     failed = scattered[scattered.error != ""]
     if len(failed):
         print("\nRuns that stopped:\n" + failed[["share", "draw", "method", "error"]].to_string(index=False))
@@ -257,6 +325,13 @@ def main():
                   for stat, f in (("mean", np.mean), ("95th percentile",
                                                        lambda x, axis: np.percentile(x, 95, axis=axis)))}
                  ).rename_axis("days after restart").round(4).to_csv(os.path.join(OUT, "restart_memory.csv"))
+
+    # --- 4. The warm-up other rivers would need ------------------------------------------------------
+    rivers = warmups_by_river()
+    rivers.round(2).to_csv(os.path.join(OUT, "warmup_by_river.csv"), index=False)
+    print("\nSuggested warm-up from published parameters (days):")
+    print(rivers.groupby(rivers.region.str.split(",").str[0] + rivers.region.str.contains("snow").map(
+        {True: ", snowmelt", False: ""}))["suggested warm-up (days)"].agg(["count", "min", "max"]).to_string())
 
     # --- Figures -------------------------------------------------------------------------------------
     figure_memory(memory, needed)

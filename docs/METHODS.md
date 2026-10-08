@@ -312,15 +312,45 @@ With `gap_tolerant: true`, `T_air` and `Discharge` may have gaps:
    observed water temperature for that day of the year in the calibration record
    (missing days of the year are interpolated).
 3. The first `warmup_drop_days` (default 15) of every segment are simulated but
-   **not scored**, so the approximate start value can be forgotten. The program
-   warns if this is shorter than about three relaxation times (3/B days) of the
-   calibrated model.
+   **not scored**, so the approximate start value can be forgotten. A
+   difference in the start value decays as exp(−∫B dt), so after three
+   relaxation times (3/B days, using the median B over the segments) about 95%
+   of it has gone. The program warns if the warm-up is shorter than that. If
+   it is longer, and a warm-up of 3/B days (with segments of at least twice
+   that) would score at least 30 more observations and 5% more, it prints
+   those settings and the number they would score.
 4. There is no separate 365-day warm-up (§3); the record need not start on 1 January.
 5. Water-temperature observations inside a gap are not used.
 
 `gaps_summary.txt` lists the segments and how many observations were scored.
 Scattered gaps can exclude much more data than their share: on the Dischmabach
-record, removing 5% of days at random left 781 of 2,197 observations scorable.
+record, removing 5% of days at random left 781 of 2,197 observations scorable
+with the default settings.
+
+Example 05's `gap_study.py` tests the mode on the Mentue (version 8, about 130
+DE calibrations of 2002–2009, with air temperature removed). It compares each
+calibration's predictions for 2010–2012 with those of the calibration on the
+complete record (RMS difference). The optimizer's own scatter is 0.004 °C.
+
+- **Restart memory.** Restarted on every day of the record, the model was within
+  0.02 °C of a run without the restart after 3 days (restart from the measured
+  water temperature) or 4 days (from the day-of-year average). Here 3/B is
+  3.1 days. From published parameters, 3/B rounded up is 2–3 days on the three
+  Swiss rivers and 2–11 days on 23 rivers in British Columbia; it is largest
+  for snowmelt rivers.
+- **Long gaps** (30, 91, 182 and 365 days, at four places each). Mean change:
+  gap-tolerant mode 0.01–0.05 °C; filled with a straight line 0.02–1.14 °C;
+  filled with the smoothed day-of-year mean of the other years 0.01–0.12 °C.
+  Gap-tolerant mode changed the predictions least at every length.
+- **Scattered one-day gaps** (1–20% of days, three draws each). With the default
+  warm-up (15 days, segments of at least 30), 82–1% of observations were scored
+  and the change was 0.04–0.24 °C up to 10% missing; at 20% the calibration
+  failed. With a 4-day warm-up (segments of at least 8), 94–27% were scored and
+  the change was 0.02–0.15 °C. Filling the days with a straight line changed
+  the predictions by 0.005–0.03 °C. A 0-day warm-up scored 99–80% and changed
+  the predictions little. But it flattered the reported fit (RMSE 0.53 °C
+  against 0.64 °C on the same days without restarts, at 20% missing), because
+  each segment starts from an observation.
 Scores from gap-tolerant runs are not directly comparable to runs on complete
 records, because the removed days (often floods or freezes) are rarely typical
 (§16).

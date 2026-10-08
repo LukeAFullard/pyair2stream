@@ -89,9 +89,9 @@ It takes under a minute. After a banner, you should see:
 mean, TSS and standard deviation (calibration)
 9.73069 96513.81949 5.76298
 Pop. Size (particles) = 50, Max Generations (runs) = 100
-DE Finished. Best internal negated objective: -0.985672
+DE Finished. Best internal negated objective: -0.987657
 L-BFGS-B Finished. Best internal negated objective: -0.987927
-Efficiency Index in calibration 0.9879266378568211
+Efficiency Index in calibration 0.9879265649786034
 Consistency check passed.
 mean, TSS and standard deviation (validation)
 9.67611 37744.04425 5.87375
@@ -508,6 +508,7 @@ After a calibration, look at these, in this order:
 | `paired_difference_from_files: ... differs` | The two scenario runs did not use the same parameter sets ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `The MCMC chain ... was fitted with ...` | The FORWARD run's model version, integrator or `Qmedia` differs from the chain's calibration. Use `paths.calibration_metadata` from that calibration ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `Warning: warmup_drop_days=... is shorter than` | Gap-tolerant mode: increase `warmup_drop_days` as the message suggests ([§10](#10-gap-tolerant-mode)). |
+| `Note: the calibrated model forgets its restart within about ... days` | Gap-tolerant mode: a shorter warm-up would score more measured days. Set the values it gives and calibrate again ([§10](#10-gap-tolerant-mode)). |
 | (no message) Good overall scores, but `bias_by_month_*.png` shows the model too warm or too cool in some months | A score over the whole year can hide an error in one season. Compare model versions ([§4](#4-choosing-a-model-version-and-integrator)). Where discharge drives the summer temperature, use version 7 or 8. If an error remains in the season of your limit, report it. A model that is too warm overstates the chance that a warm-water limit was exceeded; one that is too cool understates it. |
 
 ### 9.1 Numerical stability and the choice of integrator
@@ -574,19 +575,39 @@ it works:
   temperature on its first day, or, if there is none, from the average for
   that day of the year.
 - The first `warmup_drop_days` (default 15) of each segment are not scored.
-  This gives the model time to forget its approximate starting value. The
-  program warns if 15 days is too short for your fitted model.
+  This gives the model time to forget its approximate starting value. After
+  the calibration, the program works out how long the fitted model needs:
+  about three relaxation times, 3/B days (B is defined in §9.1). It warns if
+  the warm-up is shorter. If it is much longer and that costs many measured
+  days, a note gives a shorter warm-up and how many more days it would score.
 - The record does not need to start on 1 January.
-- Water temperature measurements inside a gap are not used.
+- Water temperature measurements inside a gap are not used. The model gives no
+  water temperatures inside a gap.
+
+When to use it. [Example 05](examples/05_gaps/README.md) tests this on the
+Mentue:
+
+- **Long gaps (weeks to a year): use gap-tolerant mode.** It changed the
+  calibrated model least, for every gap from a month to a year. Even a whole
+  missing year changed the predictions for other years by at most 0.07 °C.
+  Filling a gap of a quarter to a year with a straight line changed them by
+  0.10 to 1.14 °C on average. Filling it with the seasonal average changed them
+  by 0.06 to 0.12 °C.
+- **Many short gaps: shorten the warm-up.** With the default 15 days,
+  scattered gaps throw away much more data than their share. With 5% of days
+  missing at random, only about a third of the measured days were scored. The
+  Mentue forgets its restart within 4 days. With a 4-day warm-up, three
+  quarters were scored, and the predictions changed by 0.03 °C. So run once
+  with the defaults, and if the run prints a note, use its values. On 26 rivers,
+  the suggested warm-up was 2–11 days.
+- **Do not set the warm-up to 0.** The first days after each restart start
+  from the measured water temperature, so the fit looks better than it is.
+- **Gaps on one day in five or more:** even a short warm-up scores only about
+  a quarter of the record. Fill single missing days instead, from a nearby
+  station or by interpolating over a day or two.
 
 Be aware:
 
-- **Scattered gaps throw away much more data than their share suggests.** With
-  5% of days missing at random, only about a third of the measurements could
-  be scored ([validation V7](validation/REPORT.md#v7)). Few stretches without a
-  gap reach 30 days. So fill short gaps instead, from a nearby station or by
-  interpolating over a day or two. Keep gap-tolerant mode for long gaps.
-  [Example 05](examples/05_gaps/README.md) compares the two.
 - **Check how much data was used** in `gaps_summary.txt` and in the console
   warnings.
 - **Scores are not directly comparable with scores on a complete record.** Gaps

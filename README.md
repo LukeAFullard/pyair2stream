@@ -73,8 +73,9 @@ Date,T_air,T_water,Discharge
 The rules:
 
 - Give a row for **every** day. Leave a missing value blank, or write `-999`.
-- `T_air` and `Discharge` must have no gaps. If yours have gaps, see
-  [example 05](examples/05_gaps/README.md).
+- `T_air` and `Discharge` must have no gaps, unless you use gap-tolerant mode.
+  [Example 05](examples/05_gaps/README.md) shows when to fill gaps and when to
+  use that mode.
 - The file must start on 1 January and cover at least a year. Several years
   are better.
 - A run checks your files before it calibrates anything. If something is

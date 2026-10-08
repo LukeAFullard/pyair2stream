@@ -154,12 +154,18 @@
 - Gap-tolerant runs now also say when `warmup_drop_days` is much longer than
   the fitted model needs. The note gives a warm-up of about three relaxation
   times, and how many more measured days it would score (USER_GUIDE §10).
-- **Examples.** Example 05 (gaps) is expanded, with five figures: checking the
+- **Examples.** Example 05 (gaps) is expanded, with six figures: checking the
   data first; missing water temperature filled by the model (July-August 2006
   hidden: RMSE 0.44 °C against the hidden measurements); interpolation across a
-  three-week air temperature gap; the stretches gap-tolerant mode scores; and
-  how fast scattered gaps reduce the data scored (5% of days missing at random
-  leaves 36% of the measured days). New example 07 prepares input files from
+  three-week air temperature gap; and the stretches gap-tolerant mode scores.
+  Its new `gap_study.py` tests when gap-tolerant mode works (about 130
+  calibrations). For gaps of a month to a year, gap-tolerant mode changed the
+  calibrated model least (at most 0.07 °C in the predictions for other years,
+  against up to 1.5 °C for a straight-line fill and 0.16 °C for the seasonal
+  average). For scattered one-day gaps, a warm-up of about three relaxation
+  times (4 days on the Mentue, 2–11 days on 26 rivers) doubles the days scored
+  with 5–10% of days missing; a 0-day warm-up flatters the reported fit. New
+  example 07 prepares input files from
   raw logger files (merge, check, fill, split, run). New example 08 projects a
   warmer climate (+2 °C air, with and without 20% less summer flow), with paired
   changes and checked and corrected yearly peaks. Example 06 adds a sensitivity
@@ -180,7 +186,7 @@
 - Monthly scoring (`time_resolution: "1m"`) of a 360-day-calendar record longer
   than about 60 years stopped with `IndexError`.
 - Documentation errors: example 02 gave the parameter ranges as 95% ranges
-  with old values (they are 90% ranges: `a5` 2.03 to 4.15); the code in
+  with old values (they are 90% ranges: `a5` 2.02 to 4.24); the code in
   examples 03 and 04 and in USER_GUIDE §12 used paths and names that did not
   run as written; `full_simulation_*` outputs were described as covering the
   whole record (they cover the calibration file, on every day);
