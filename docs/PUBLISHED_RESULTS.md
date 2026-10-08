@@ -80,8 +80,8 @@ intervals for 76 of 81 values.
    program distributed with the paper uses 500 particles and 500 iterations in
    its example, and seeds its random numbers from the clock, so each run
    differs. Run three times exactly as distributed, it returned the published
-   parameters every time in only about half of the 15 cases (8 in one
-   validation run, 9 in another). The published parameters of
+   parameters every time in only about half of the 15 cases (7, 8 and 9 in
+   three validation runs). The published parameters of
    the other cases cannot be reproduced exactly by anyone, including with the
    original program.
 2. *In five cases the published parameters are not the best fit.* For versions
