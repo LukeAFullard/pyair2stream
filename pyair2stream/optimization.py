@@ -1093,6 +1093,7 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
             bounds,
             maxiter=data.n_run,
             popsize=data.n_particles,
+            tol=data.de_tol,
             workers=1,
             polish=False,
             seed=seed

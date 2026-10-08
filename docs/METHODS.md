@@ -270,7 +270,11 @@ values). The search maximises the objective function (§7).
 - **`DE` (recommended)** — Differential Evolution (SciPy defaults: `best1bin`
   strategy, mutation 0.5–1.0, crossover 0.7, Latin-hypercube start) with a
   population of `n_particles` × 8 candidates for up to `n_run` generations,
-  stopping earlier once the population has converged. The best candidate is then
+  stopping earlier once the population has converged: when the spread of its
+  scores is below `tol` (default 0.001) times their mean. SciPy's own default,
+  0.01, is too loose for these objectives. An NSE spread of 0.01 is ten times the
+  difference between good and poor fits, and it stopped some calibrations a
+  third of the way through, on a worse fit. The best candidate is then
   refined by a local L-BFGS-B search within the same bounds; the refined result
   is kept only if it is better.
 - **`PSO`** — Particle Swarm Optimisation as in the Fortran: `n_particles`

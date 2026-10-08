@@ -278,6 +278,7 @@ parameter_bounds:           # needed for calibration: 8 values each, for a1..a8
 optimization:
   n_run: 100                # DE: the most generations; PSO: iterations; LATHYP: samples
   n_particles: 50           # DE: population = n_particles x 8; PSO: number of particles
+  tol: 0.001                # DE only: stop early once the population's scores agree this closely
   c1: 2.0                   # PSO only: pull towards each particle's own best
   c2: 2.0                   # PSO only: pull towards the swarm's best
   wmax: 0.9                 # PSO only: starting inertia

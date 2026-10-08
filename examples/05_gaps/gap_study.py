@@ -260,16 +260,18 @@ def main():
 
     # --- Figures -------------------------------------------------------------------------------------
     figure_memory(memory, needed)
-    figure_long(long, complete_rmse)
-    figure_scattered(scattered, complete_rmse)
+    figure_long(long)
+    figure_scattered(scattered)
 
 
 def figure_memory(memory, needed):
     fig, ax = plt.subplots(figsize=(8, 3.6))
     days = np.arange(next(iter(memory.values())).shape[1])
     for (kind, a), colour in zip(memory.items(), ("tab:blue", "tab:purple")):
-        ax.plot(days, a.mean(axis=0), "o-", color=colour, ms=4, label=f"restart from the {kind}: mean")
-        ax.plot(days, np.percentile(a, 95, axis=0), "--", color=colour, lw=1, label="... 95% of restarts below")
+        ax.plot(days, a.mean(axis=0), "o-", color=colour, ms=4, label=f"restart from the {kind}")
+        ax.plot(days, np.percentile(a, 95, axis=0), "--", color=colour, lw=1)
+    ax.plot([], [], "-", color="dimgray", label="solid: the average restart")
+    ax.plot([], [], "--", color="dimgray", lw=1, label="dashed: 19 restarts in 20 are below")
     ax.axvline(needed, color="black", lw=0.8)
     ax.text(needed + 0.2, 2.6, f"{needed} days: the warm-up\nthe run suggests", fontsize=8, va="top")
     ax.axvline(15, color="tab:gray", lw=0.8, ls=":")
@@ -286,50 +288,71 @@ def figure_memory(memory, needed):
     plt.close(fig)
 
 
-def figure_long(long, complete_rmse):
-    measure = "2010-2012 RMSE (°C)"
+CHANGE = "change in 2010-2012 predictions (°C)"
+
+
+def off_scale(ax, x, values, top, colour):
+    """Draw values above `top` as a triangle at the top of the axis, labelled with their range."""
+    values = np.asarray(values, float)
+    high = values[values > top]
+    if len(high):
+        ax.plot([x], [top * 0.97], "^", color=colour, ms=7)
+        text = f"{high.min():.1f}" if len(high) == 1 else f"{high.min():.1f}-{high.max():.1f}"
+        ax.annotate(f"{text} °C", (x, top * 0.97), xytext=(0, -13), textcoords="offset points", ha="center",
+                    fontsize=7.5)
+
+
+def figure_long(long, top=0.6):
     fig, ax = plt.subplots(figsize=(8, 4))
     labels = [label for label, _ in LENGTHS]
     for k, method in enumerate(LONG_METHODS):
         x0 = np.arange(len(labels)) + (k - 1) * 0.25
         sub = long[long.method == method]
-        means = [sub[sub.gap == label][measure].mean() for label in labels]
         for x, label in zip(x0, labels):
-            vals = sub[sub.gap == label][measure].to_numpy()
-            ax.plot(np.full(len(vals), x), vals, "o", color=COLOURS[method], ms=4, alpha=0.6, mfc="none")
-        ax.plot(x0, means, "_", color=COLOURS[method], ms=16, mew=2.5, label=method)
-    ax.axhline(complete_rmse, color="black", lw=0.8, ls="--")
-    ax.text(len(labels) - 0.55, complete_rmse, "  complete record", fontsize=8, va="bottom", ha="right")
+            vals = sub[sub.gap == label][CHANGE].to_numpy()
+            shown = vals[vals <= top]
+            ax.plot(np.full(len(shown), x), shown, "o", color=COLOURS[method], ms=4, alpha=0.7, mfc="none")
+            mean = vals.mean()
+            if mean <= top:
+                ax.plot([x], [mean], "_", color=COLOURS[method], ms=16, mew=2.5)
+            off_scale(ax, x, vals, top, COLOURS[method])
+        ax.plot([], [], "_", color=COLOURS[method], ms=16, mew=2.5, label=method)
     ax.set_xticks(np.arange(len(labels)), [f"{label} missing" for label in labels])
-    ax.set_ylabel("Error in 2010-2012 (RMSE, °C)")
-    ax.set_title("A long gap in air temperature: gap-tolerant mode against filling it", fontsize=10)
+    ax.set_ylim(0, top)
+    ax.set_ylabel("Change in the predictions\nfor 2010-2012 (°C)")
+    ax.set_title("A long gap in air temperature: how much it changes the calibrated model", fontsize=10)
     ax.legend(fontsize=8, loc="upper left", title="the gap was", title_fontsize=8)
-    ax.set_ylim(bottom=0.7)
     fig.tight_layout()
     fig.savefig(os.path.join(FIG, "long_gaps.png"), dpi=130)
     plt.close(fig)
 
 
-def figure_scattered(scattered, complete_rmse):
+def figure_scattered(scattered, top=0.4):
     methods = [warmup_name(*w) for w in WARMUPS] + ["straight line"]
     colours = dict(zip(methods, WARMUP_COLOURS + ("tab:orange",)))
-    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8))
+    labels = {m: m.replace("gap-tolerant, ", "gap-tolerant mode, ").replace(" d", " days")
+              for m in methods}
+    labels["straight line"] = "filled with a straight line"
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.9))
+    x = 100 * np.array(SHARES)
     for method in methods:
         sub = scattered[scattered.method == method].groupby("share")
-        x = 100 * np.array(sorted(sub.groups))
-        style = dict(color=colours[method], ms=4, label=method)
+        style = dict(color=colours[method], ms=4, label=labels[method])
         axes[0].plot(x, sub["share of measured days scored (%)"].mean().to_numpy(), "o-", **style)
-        axes[1].plot(x, sub["2010-2012 RMSE (°C)"].mean().to_numpy(), "o-", **style)
+        change = sub[CHANGE].mean().to_numpy()
+        ok = change <= top
+        axes[1].plot(x[ok], change[ok], "o-", **style)
+        for xi, c in zip(x[~ok], change[~ok]):
+            off_scale(axes[1], xi, [c], top, colours[method])
     axes[0].set_ylabel("Measured days scored (%)")
     axes[0].set_ylim(0, 105)
     axes[0].set_title("How much of the record is used", fontsize=10)
-    axes[1].axhline(complete_rmse, color="black", lw=0.8, ls="--")
-    axes[1].text(20, complete_rmse, "complete record ", fontsize=8, va="bottom", ha="right")
-    axes[1].set_ylabel("Error in 2010-2012 (RMSE, °C)")
-    axes[1].set_title("How well the calibrated model predicts other years", fontsize=10)
+    axes[1].set_ylim(0, top)
+    axes[1].set_ylabel("Change in the predictions\nfor 2010-2012 (°C)")
+    axes[1].set_title("How much the gaps change the calibrated model", fontsize=10)
     for ax in axes:
         ax.set_xlabel("Days missing at random (%)")
-        ax.set_xticks(100 * np.array(SHARES))
+        ax.set_xticks(x)
     axes[0].legend(fontsize=7.5, loc="lower left")
     fig.tight_layout()
     fig.savefig(os.path.join(FIG, "scattered_warmup.png"), dpi=130)

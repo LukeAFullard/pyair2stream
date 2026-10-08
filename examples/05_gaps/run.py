@@ -8,11 +8,9 @@ Run example 05: what to do with missing data.
 3. Missing air temperature: removes three weeks and ten scattered single days from the
    Mentue's 2002-2009 record, then calibrates (a) after filling the gaps by interpolation
    and (b) in gap-tolerant mode, and compares both on 2010-2012.
-4. How much gap-tolerant mode scores when days are missing at random.
-Writes the tables to output/ and the README's figures to figures/.
+Writes the tables to output/ and the README's figures to figures/. gap_study.py tests longer
+gaps, scattered gaps and shorter warm-ups.
 """
-import contextlib
-import io
 import os
 import subprocess
 import sys
@@ -26,7 +24,6 @@ import pandas as pd
 import yaml
 
 import pyair2stream
-from pyair2stream.io import read_calibration, read_Tseries
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -164,44 +161,3 @@ b = daily_output("gap_tolerant", "3_DE_NSE_Mentue_cv_1d.csv")
 diff = (b.Twat_mod - a.Twat_mod)[b.Twat_obs_agg.notna()]
 print(f"\nValidation years, scored days, gap-tolerant minus filled: mean {diff.mean():+.3f} °C, "
       f"largest {diff.abs().max():.3f} °C")
-
-# --- 4. Scattered gaps: how much does gap-tolerant mode score? --------------------------------
-def scored_share(fraction, seed):
-    """Share of measured days that gap-tolerant mode scores when `fraction` of the days lack
-    air temperature at random (default min_segment_days 30 and warmup_drop_days 15)."""
-    rng = np.random.default_rng(seed)
-    drop = rng.random(len(cal)) < fraction
-    path = os.path.join(OUT, "random_gaps.csv")
-    cal.assign(T_air=cal.T_air.mask(drop)).to_csv(path, index=False, date_format="%Y-%m-%d")
-    cfg = yaml.safe_load(open(os.path.join(HERE, "gap_tolerant.yaml")))
-    cfg["paths"] = {"input_data": path, "output_dir": os.path.join(OUT, "random_gaps")}
-    cfg_path = os.path.join(OUT, "random_gaps.yaml")
-    yaml.safe_dump(cfg, open(cfg_path, "w"))
-    with contextlib.redirect_stdout(io.StringIO()):
-        data = read_calibration(cfg_path)
-        try:
-            read_Tseries(data, "c")
-        except ValueError:                     # no stretch long enough: nothing is scored
-            return 0.0
-    obs = data.Twat_obs[365:] != -999.0
-    return float((data.eval_mask[365:] & obs).sum() / obs.sum())
-
-
-fractions = np.array([0.0, 0.005, 0.01, 0.02, 0.03, 0.05, 0.075, 0.10, 0.15, 0.20])
-shares = np.array([[scored_share(f, s) for s in range(5)] for f in fractions])
-pd.DataFrame({"days missing at random (%)": 100 * fractions, "share of measured days scored (%), mean of 5":
-              (100 * shares.mean(axis=1)).round(1)}).to_csv(os.path.join(OUT, "random_gaps_scored.csv"), index=False)
-print("\n" + pd.read_csv(os.path.join(OUT, "random_gaps_scored.csv")).to_string(index=False))
-
-fig, ax = plt.subplots(figsize=(6.5, 3.6))
-ax.plot(100 * fractions, 100 * shares.mean(axis=1), "o-", color="tab:blue", label="gap-tolerant mode (mean of 5 draws)")
-ax.fill_between(100 * fractions, 100 * shares.min(axis=1), 100 * shares.max(axis=1), color="tab:blue", alpha=0.15, lw=0)
-ax.plot(100 * fractions, 100 * (1 - fractions), color="tab:gray", ls="--", label="if only the missing days were lost")
-ax.set_xlabel("Days without air temperature, at random (%)")
-ax.set_ylabel("Measured days scored (%)")
-ax.set_ylim(0, 102)
-ax.set_title("Scattered gaps throw away far more than their share", fontsize=10)
-ax.legend(fontsize=8)
-fig.tight_layout()
-fig.savefig(os.path.join(FIG, "scattered_gaps.png"), dpi=130)
-plt.close(fig)

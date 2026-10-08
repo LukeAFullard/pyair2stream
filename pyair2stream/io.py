@@ -286,6 +286,11 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
 
     opt_config = config.get('optimization') or {}
     data.n_run = int(opt_config.get('n_run', opt_config.get('n_runs', 100)))
+    # DE stops once its population's scores agree to within `tol` (relative). SciPy's default
+    # (0.01) stopped some calibrations a third of the way through, on a worse fit.
+    data.de_tol = float(opt_config.get('tol', 1e-3))
+    if not data.de_tol >= 0:
+        raise ValueError(f"optimization.tol must be zero or positive, got {data.de_tol}")
     # Accepted for compatibility with Fortran-style configs but not used: the
     # 0_*.csv history always records every evaluated parameter set.
     data.mineff_index = np.float64(config.get('mineff_index', 0.0))
