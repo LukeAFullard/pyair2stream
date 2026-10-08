@@ -34,13 +34,15 @@ before its result.
 From the repository root, with the package installed (`pip install -e .`):
 
 ```bash
-python validation/run_all.py            # full suite, about 116 minutes on 4 cores
+python validation/run_all.py            # full suite, several hours on 4 cores
 python validation/run_all.py --quick    # reduced version of every check, about 2 minutes
 python validation/run_all.py --only V2 V6
 ```
 
 With `--only`, the other checks keep their reports from the earlier run.
-`REPORT.md` then names the run each report comes from.
+`REPORT.md` then names the run each report comes from. Since the DE stopping
+rule was tightened (0.5.0), V2 and V4 take about an hour each. Where jobs are
+limited in length, run the suite in parts with `--only`.
 
 V1 needs `gfortran` and the Fortran source (`git submodule update --init`).
 Without them, V1 is reported as not run.

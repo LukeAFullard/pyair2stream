@@ -187,7 +187,12 @@
   temperatures by at most 0.008 °C. Results drawn from MCMC samples moved
   slightly more, because the chain starts from the fit: example 03's
   corrected probabilities went from 0.59/0.33/0.12 to 0.57/0.34/0.14. The
-  examples and their figures are rerun.
+  examples and their figures are rerun. ⚠ The validation report
+  (validation/REPORT.md) was made before this fix. A rerun with the fix
+  reached V1-V4 before the 2-hour limit for background jobs: V1-V3 gave the same
+  results, and V4's coverages moved by at most 2 percentage points (all still
+  passing). The full suite now takes over 2 hours, so it has to be run in
+  parts (`python validation/run_all.py --only V5 V6 ...`).
 - Monthly scoring (`time_resolution: "1m"`) of a 360-day-calendar record longer
   than about 60 years stopped with `IndexError`.
 - Documentation errors: example 02 gave the parameter ranges as 95% ranges
