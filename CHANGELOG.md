@@ -77,12 +77,13 @@
   calibration record starting on 1 November 2012, was run by its authors as if
   it started on 1 January (the original program reads records by row); read
   that way, it is reproduced to 0.00001 °C. The published parameters are not
-  where pyair2stream's calibration lands (same values at 1 of 23 stations), but
-  where its DE-MCMC sampler converged (19 stations, with chains of up to
-  100,000 steps), 137 of 152 published values lie inside its 90% intervals.
-  The exception is station 08HA002, whose published calibration is far from
-  the best fit: recalibrated, it predicts 2021–2022 with RMSE 0.76 °C instead
-  of 1.09 °C.
+  where pyair2stream's calibration lands (same values at none of 23 stations),
+  but where its DE-MCMC sampler converged (16 stations, with chains of up to
+  100,000 steps), 115 of 128 published values lie inside its 90% intervals.
+  The exceptions are stations 08HA002 and 08KH006, whose published
+  calibrations are far from the best fit: recalibrated, they predict
+  2021–2022 with RMSE 0.75 °C instead of 1.09 °C, and 1.10 °C instead of
+  1.18 °C.
 - [docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md): the published
   air2stream results pyair2stream reproduces (Toffolon and Piccolroaz, 2015;
   Piccolroaz et al., 2016; Callahan and Moore, 2025), the errors found in each
@@ -179,8 +180,12 @@
   then ended at the best member's nearest optimum, which could be a worse fit
   with very different parameters. In 125 calibrations of the Mentue with gaps,
   4 ended worse by 0.0009–0.0029 in NSE, with `a5` = 5–11 instead of 2.5,
-  after about 30 of 100 generations. The rule is now
-  `optimization.tol` (default 0.001), which found the best fit in all 125.
+  after about 30 of 100 generations. On the 23 British Columbia rivers of
+  validation V15 it cost more: 12 calibrations had ended on a worse fit, by up
+  to 0.09 °C in RMSE. Fold calibrations that stopped early at scattered points
+  had also made the cross-validation (jackknife) parameter intervals about
+  twice as wide as they are. The rule is now `optimization.tol` (default
+  0.001), which found the best fit in all 125 Mentue calibrations.
   Calibrations take about twice as long. DE-MCMC (its starting fit) and
   cross-validation folds use the same rule. In the eight examples, which had
   converged, best-fit parameters moved by at most 0.007 and simulated
