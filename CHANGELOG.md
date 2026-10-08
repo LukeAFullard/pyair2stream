@@ -151,6 +151,9 @@
   half the usual number of readings. Text that is not a number stops them with a
   message naming the file, column and line. New options: `na_values` (per file)
   and `min_readings_per_day` (days with fewer readings are left blank).
+- Gap-tolerant runs now also say when `warmup_drop_days` is much longer than
+  the fitted model needs. The note gives a warm-up of about three relaxation
+  times, and how many more measured days it would score (USER_GUIDE §10).
 - **Examples.** Example 05 (gaps) is expanded, with five figures: checking the
   data first; missing water temperature filled by the model (July-August 2006
   hidden: RMSE 0.44 °C against the hidden measurements); interpolation across a
@@ -163,6 +166,17 @@
   analysis. The examples index maps tasks to examples.
 
 ### Fixed
+- ⚠ **DE calibration could stop a third of the way through, on a worse fit.**
+  It used SciPy's default stopping rule: stop once the population's scores
+  agree to within 1% of their mean. For NSE (about 0.98) that allows a spread of
+  0.01, ten times the difference between a good and a poor fit. The local polish
+  then ended at the best member's nearest optimum, which could be a worse fit
+  with very different parameters. In 125 calibrations of the Mentue with gaps,
+  4 ended worse by 0.0009–0.0029 in NSE, with `a5` = 5–11 instead of 2.5,
+  after about 30 of 100 generations. The rule is now
+  `optimization.tol` (default 0.001), which found the best fit in all 125.
+  Calibrations take about twice as long. DE-MCMC (its starting fit) and
+  cross-validation folds use the same rule.
 - Monthly scoring (`time_resolution: "1m"`) of a 360-day-calendar record longer
   than about 60 years stopped with `IndexError`.
 - Documentation errors: example 02 gave the parameter ranges as 95% ranges
