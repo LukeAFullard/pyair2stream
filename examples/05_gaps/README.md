@@ -127,11 +127,12 @@ temperature were placed at random in the Mentue's record:
 |---|---|---|---|---|---|
 | Measured days still scored | 83% | 68% | 36% | 10% | 0% |
 
-![Share of measured days scored against the share of days missing at random](figures/scattered_gaps.png)
+![Share of measured days scored, and change in the calibrated model, against the share of days missing at random](figures/scattered_warmup.png)
 
-*Blue: the share of measured days that gap-tolerant mode scores (mean of five
-random draws; the band shows their range). Grey: what would be left if only
-the missing days were lost.*
+*Left: the share of measured days scored. Right: how much the gaps change the
+calibrated model's predictions for 2010–2012. Blues: gap-tolerant mode with
+warm-ups from 15 days (dark) to 0 days (light). Orange: gaps filled with a
+straight line. This figure comes from `gap_study.py` (being written up).*
 
 ## Which to choose
 
