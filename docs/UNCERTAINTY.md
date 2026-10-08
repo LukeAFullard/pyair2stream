@@ -897,11 +897,11 @@ one scenario warm makes the other warm too. Pairing the two runs, so that series
 number k uses the same parameter set and the same daily error in both, cancels
 everything they share. What remains is the uncertainty of the difference.
 
-![Left: the June-August mean under both scenarios, two overlapping wide histograms. Right: the paired difference is +0.00 to +0.05 °C; an unpaired difference would be -0.57 to +0.63 °C.](figures/U12_paired.png)
+![Left: the June-August mean under both scenarios, two overlapping wide histograms. Right: the paired difference is +0.00 to +0.05 °C; an unpaired difference would be -0.56 to +0.58 °C.](figures/U12_paired.png)
 
 *Figure 16. Example 04. Left: each scenario's June–August 2011 mean, with a
 90% range 0.8 °C wide. Right: the change, paired, is 0.00 to +0.05 °C (90% range);
-subtracting unpaired series would give −0.57 to +0.63 °C and suggest that the
+subtracting unpaired series would give −0.56 to +0.58 °C and suggest that the
 change could go either way.*
 
 ### How to run it
