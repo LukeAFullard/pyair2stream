@@ -815,12 +815,12 @@ and the Dischmabach's too low.*
    Student t variable, the standard allowance for a mean estimated from few
    values). With few years the corrected range is therefore wider.
 
-![Left: deviations of seven held-out years, mean -0.65 °C with its 95% interval. Right: the 2011 highest 7-day mean before and after correction; the probability of exceeding 20 °C falls from 0.75 to 0.33; the measured value was 19.8 °C.](figures/U11_correction.png)
+![Left: deviations of seven held-out years, mean -0.65 °C with its 95% interval. Right: the 2011 highest 7-day mean before and after correction; the probability of exceeding 20 °C falls from 0.77 to 0.34; the measured value was 19.8 °C.](figures/U11_correction.png)
 
 *Figure 15. Example 03. Left: in the seven held-out years of 2003–2009 the
 measured highest 7-day mean was on average 0.65 °C below the prediction (95%
 interval 0.20–1.10 °C). Right: corrected, the probability that 2011 exceeded a
-20 °C limit falls from 0.75 to 0.33; the measured value was 19.8 °C, below the
+20 °C limit falls from 0.77 to 0.34; the measured value was 19.8 °C, below the
 limit.*
 
 ### When to use it
@@ -1200,11 +1200,11 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 ### How to word a result
 
 > The model, calibrated on 2002–2009 and checked by leave-one-year-out
-> cross-validation (7 held-out years), gives a probability of 0.33 that the
+> cross-validation (7 held-out years), gives a probability of 0.34 that the
 > highest 7-day mean water temperature in 2011 exceeded 20 °C (90% range for
-> that statistic 18.7–20.8 °C), after correcting for the model's average error
+> that statistic 18.8–20.8 °C), after correcting for the model's average error
 > in that statistic in the held-out years (−0.65 °C, 95% interval −1.10 to
-> −0.20 °C). Uncorrected, the probability would be 0.75. pyair2stream 0.5.0,
+> −0.20 °C). Uncorrected, the probability would be 0.77. pyair2stream 0.5.0,
 > commit `<sha>`, random seed 42.
 
 ### Checklist before you report
@@ -1235,14 +1235,14 @@ pyair2stream --config examples/03_compliance/check.yaml       # cross-validation
 
 | Year | P(7-day mean > 20 °C), corrected | uncorrected | Measured highest 7-day mean |
 |---|---|---|---|
-| 2010 | 0.59 | 0.91 | 21.0 °C (exceeded) |
-| 2011 | 0.33 | 0.75 | 19.8 °C (not exceeded) |
-| 2012 | 0.12 | 0.51 | 19.6 °C (not exceeded) |
+| 2010 | 0.57 | 0.92 | 21.0 °C (exceeded) |
+| 2011 | 0.34 | 0.77 | 19.8 °C (not exceeded) |
+| 2012 | 0.14 | 0.51 | 19.6 °C (not exceeded) |
 
 The check found that the model put the yearly peak 0.65 °C too high in the
 held-out years. Corrected, the probabilities matched what happened better (Brier
 score, the mean squared difference between probability and outcome; Brier,
-1950: 0.10 against 0.28), and all three measured values lay inside the corrected 90%
+1950: 0.11 against 0.29), and all three measured values lay inside the corrected 90%
 ranges.
 
 ---
