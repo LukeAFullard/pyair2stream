@@ -174,6 +174,29 @@
   so its ranges were too narrow. Both now use the actual spacing (METHODS §12).
   For complete daily data the effective number of values changes only by an
   end-of-record term of about 0.3%.
+- ⚠ **`scenario.aggregate` gives no value for a partial period.** A week or
+  month that the dates covered only in part (at either end of the file), or
+  that included days without a simulated value (gaps), was computed from the
+  days it had, without a message: a 10-day file gave a 7-day and a 3-day
+  "week", and a monthly sum over 12 days of July. Such a period is now NaN,
+  with a warning. `min_days=N` accepts periods with at least N days with a
+  value, and `return_periods=True` also returns each period's label (METHODS
+  §13).
+- ⚠ **Qmedia includes zero-flow days when the model simulates them.** It
+  averaged only the days with discharge above zero; the original Fortran
+  averages every day with a value. With zero-flow days (version 7, or
+  `min_theta_floor`), Qmedia was larger than the mean discharge (25% for a
+  river dry a fifth of the time). It now matches the Fortran. Each earlier
+  calibration was self-consistent, and FORWARD runs keep the Qmedia recorded
+  in `calibration_metadata.json`; calibrating such a record again gives a
+  different Qmedia and different parameters (METHODS §4).
+- **The day-of-year water temperature is averaged by calendar date.** In
+  gap-tolerant mode a segment that starts without a measurement starts from
+  the average for that date. After 29 February a leap year's day numbers are
+  one ahead, so it averaged, for example, 1 March of leap years with 2 March
+  of other years (up to about 0.15 °C off in spring and autumn, within the
+  unscored warm-up days). 1 March is now averaged with 1 March, and
+  29 February has its own value (METHODS §10).
 - ⚠ **DE-MCMC refuses `objective_function: KGE`.** It found the best fit by
   KGE but sampled the uncertainty with a least-squares likelihood, so the
   reported best parameters and their ranges described two different fits,

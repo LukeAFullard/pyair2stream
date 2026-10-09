@@ -624,7 +624,7 @@ low, high = scenario.central_range(peak, 90)      # its 90% range
 p_exceeded = (peak > 20.0).mean()                 # probability that a 20 °C limit was exceeded
 
 # other quantities
-weekly = scenario.aggregate(ens, dates, how="mean", freq="7D")      # fixed 7-day blocks
+weekly = scenario.aggregate(ens, dates, how="mean", freq="7D")      # fixed 7-day blocks; a partial one gets NaN
 runs = scenario.exceedance(ens, 18.0, consecutive_days=3)           # days in runs of 3+ days above 18 °C
 ```
 

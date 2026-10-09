@@ -152,8 +152,11 @@ The model never sees discharge directly. It only uses the ratio
 
     θ = Discharge / Qmedia
 
-where `Qmedia` is the mean of all valid (non-missing, positive) discharge values
-in the **calibration** record, unless you set `Qmedia:` yourself. The fitted
+where `Qmedia` is the mean of the discharge values in the **calibration** record,
+unless you set `Qmedia:` yourself. Missing days are left out. Zero-flow days are
+included when the model simulates them (version 7, or `min_theta_floor` set,
+§5), as in the original Fortran, so `Qmedia` is the river's mean
+discharge; otherwise they are not simulated and are left out of the mean too. The fitted
 parameters are only meaningful together with the `Qmedia` they were fitted with,
 so:
 
@@ -357,8 +360,10 @@ With `gap_tolerant: true`, `T_air` and `Discharge` may have gaps:
    error, because the scenario's results would silently leave them out.
 2. Each segment is simulated **separately**. In a calibration or validation it
    starts from the observed water temperature on its first day if there is one,
-   otherwise from the average observed water temperature for that day of the
-   year in the calibration record (missing days of the year are interpolated).
+   otherwise from the average observed water temperature for that calendar date
+   in the calibration record (1 March is averaged with 1 March of every year,
+   leap years included; 29 February has its own average, and dates without
+   observations are interpolated).
    A FORWARD run starts it from the temperature at which the equation is at rest
    under the first day's conditions, A/B in dTw/dt = A − B·Tw (§6), not below
    `Tice_cover`: a scenario's start then follows its own forcing, needs no
@@ -960,9 +965,15 @@ error series. A probability is computed in three steps:
    or ends part-way through a year) is left out, with a warning, unless
    `partial_years="keep"`.
    `scenario.aggregate` gives means (or sums, maxima) over consecutive fixed
-   periods, and `scenario.exceedance` counts days above a threshold, optionally
+   periods (blocks of N days from the first date, or calendar weeks or months).
+   A period counts only if every one of its days has a simulated value: a period
+   the dates cover only in part (at either end of the file) or that includes a
+   gap gets no value, with a warning, since a 3-day mean is not a 7-day mean
+   (`min_days=N` accepts periods with at least N simulated days;
+   `return_periods=True` also returns each period's label).
+   `scenario.exceedance` counts days above a threshold, optionally
    only in runs of at least k consecutive days. Days not simulated (gaps) are
-   not counted as above, and both functions warn when there are any.
+   not counted as above, and it warns when there are any.
    `scenario.paired_difference` refuses two runs that simulated different days.
 2. The probability of exceedance is the share of series in which that quantity
    exceeds the limit. With 1,000 series it carries a sampling error of at most

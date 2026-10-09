@@ -901,7 +901,10 @@ not the upper edge of a weekly mean. Set
   and number of days above a threshold, in every series. A year the dates
   cover only in part (at the start or end of the file) is left out, with a
   warning: its values would describe only those days;
-- `aggregate` gives means, sums or maxima over fixed periods;
+- `aggregate` gives means, sums or maxima over fixed periods. A period the
+  dates cover only in part, or with days not simulated, gets no value (NaN),
+  with a warning (`min_days=` accepts partial periods; `return_periods=True`
+  also returns the period dates);
 - `exceedance` counts days above a threshold.
 
 [Example 03](examples/03_compliance/README.md) computes the probability that a

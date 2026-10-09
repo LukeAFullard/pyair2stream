@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 from pyair2stream.config import CommonData
 from pyair2stream.model import detect_segments, call_model
@@ -148,3 +149,28 @@ def test_call_model_segmented_reseed_obs():
     call_model(data)
 
     assert np.all(data.Twat_mod[415:465] != -999.0)
+
+
+def test_climatology_averages_by_calendar_date_across_leap_years():
+    """Leap and other years are averaged by calendar date, not shifted a day after 29 February."""
+    from pyair2stream.io import climatology_day, compute_doy_climatology
+
+    dates = pd.date_range("2003-01-01", "2004-12-31")           # 2004 is a leap year
+    n = 365 + len(dates)
+    data = get_base_data()
+    data.calendar = 'standard'
+    data.n_tot = n
+    data.date = np.zeros((n, 3), dtype=np.int32)
+    data.date[365:] = np.column_stack([dates.year, dates.month, dates.day])
+    # The water temperature depends on the calendar date only: 0.1 °C a day of a leap year.
+    slot = np.array([(pd.Timestamp(2000, m, d) - pd.Timestamp(2000, 1, 1)).days
+                     for m, d in zip(dates.month, dates.day)])
+    data.Twat_obs = np.full(n, -999.0)
+    data.Twat_obs[365:] = 0.1 * slot
+    compute_doy_climatology(data)
+
+    i_march = 365 + int(np.flatnonzero((dates.month == 3) & (dates.day == 1))[0])
+    assert climatology_day(data, i_march) == 60
+    assert data.doy_climatology[60] == pytest.approx(6.0)      # 1 March in both years
+    assert data.doy_climatology[59] == pytest.approx(5.9)      # 29 February, from 2004 only
+    assert np.allclose(data.doy_climatology, 0.1 * np.arange(366))

@@ -54,35 +54,91 @@ def _warn_days_without_value(ensemble: np.ndarray, consequence: str) -> None:
               f"mode); {consequence}.")
 
 
-def aggregate(ensemble: np.ndarray, dates, how: str = 'mean', freq: str = '7D') -> np.ndarray:
+def aggregate(ensemble: np.ndarray, dates, how: str = 'mean', freq: str = '7D',
+              min_days=None, return_periods: bool = False):
     """
     Resample each ensemble member (row) over `freq`, independently.
 
-    This is the correct way to build, e.g., a 7-day rolling/blocked mean prediction
+    This is the correct way to build, e.g., a 7-day blocked mean prediction
     interval: aggregate first, per draw, then take percentiles across draws --
     never the reverse.
+
+    A period counts only if enough of its days have a simulated value: by default
+    all of them (`min_days=None`), so a week or month that the dates cover only in
+    part (at either end of the file) or that includes days without a value (gaps
+    in gap-tolerant mode) gets no value (NaN), with a warning. A 3-day mean is not
+    a 7-day mean, and a sum over part of a month understates it. With
+    `min_days=N`, a period with at least N days with a value is computed from
+    those days.
 
     Parameters
     ----------
     ensemble : ndarray, shape (n_samples, n_days)
-    dates : array-like of datetime-like, length n_days
+    dates : array-like of datetime-like, length n_days (consecutive or not, one per day)
     how : str
         Any reduction name supported by `pandas.Resampler` (e.g. 'mean', 'sum', 'max').
     freq : str
-        Any pandas offset alias (e.g. '7D', 'MS').
+        Any pandas offset alias of a day or longer (e.g. '7D', 'MS'). '7D' blocks start
+        on the first date.
+    min_days : int, optional
+        The fewest days with a value a period needs. Default: every day of the period.
+    return_periods : bool
+        Also return the label of each period (pandas' resample label: the first day of
+        a '7D' block or an 'MS' month).
 
     Returns
     -------
-    ndarray, shape (n_samples, n_periods)
+    ndarray, shape (n_samples, n_periods); with `return_periods`, also a
+    pandas.DatetimeIndex of length n_periods.
     """
     ensemble = np.asarray(ensemble, dtype=np.float64)
     dates = pd.DatetimeIndex(dates)
-    _warn_days_without_value(ensemble, f"each period's {how} uses only the days that have one")
-    aggregated_rows = [
-        getattr(pd.Series(row, index=dates).resample(freq), how)().to_numpy()
-        for row in ensemble
-    ]
-    return np.array(aggregated_rows)
+    if min_days is not None and (int(min_days) != min_days or min_days < 1):
+        raise ValueError(f"min_days must be a whole number of days, at least 1, got {min_days!r}.")
+    offset = pd.tseries.frequencies.to_offset(freq)
+    if isinstance(offset, (pd.offsets.Day, pd.offsets.Tick)):     # Day is not a Tick from pandas 3
+        # Fixed-length blocks ('7D'), starting on the first date: every block has freq's days.
+        days_per_block = (offset.n if isinstance(offset, pd.offsets.Day)
+                          else pd.Timedelta(offset) / pd.Timedelta(days=1))
+        if days_per_block < 1 or days_per_block != int(days_per_block):
+            raise ValueError(f"freq must be a whole number of days or a calendar period, got {freq!r}.")
+        length = None
+    else:
+        # Calendar periods (weeks, months, years): their lengths from a daily calendar that
+        # covers whole periods beyond both ends of the file.
+        margin = pd.Timedelta(days=1100)
+        calendar = pd.date_range(dates[0].normalize() - margin, dates[-1].normalize() + margin, freq='D')
+        length = pd.Series(1.0, index=calendar).resample(freq).count()
+
+    def resample(series):
+        return series.resample(freq)
+
+    aggregated_rows, enough = [], None
+    for row in ensemble:
+        series = pd.Series(row, index=dates)
+        values = getattr(resample(series), how)()
+        days = resample(series).count()
+        if min_days is not None:
+            need = float(min_days)
+        elif length is None:
+            need = days_per_block
+        else:
+            need = length.reindex(values.index).to_numpy()
+        ok = days.to_numpy() >= need
+        aggregated_rows.append(np.where(ok, values.to_numpy(dtype=np.float64), np.nan))
+        enough = ok if enough is None else enough & ok
+    result = np.array(aggregated_rows)
+    periods = values.index if len(ensemble) else pd.DatetimeIndex([])
+
+    if enough is not None and not enough.all():
+        rule = ("fewer than all their days" if min_days is None
+                else f"fewer than min_days={int(min_days)} days")
+        print(f"Warning: {int((~enough).sum())} of {len(enough)} period(s) ({freq}) have {rule} with a "
+              "simulated value (the dates cover them only in part, or some days have no value); "
+              f"they have no {how} (NaN)." + (" Set min_days to accept partial periods." if min_days is None else ""))
+    if min_days is not None:
+        _warn_days_without_value(ensemble, f"each period's {how} uses only the days that have one")
+    return (result, periods) if return_periods else result
 
 
 def exceedance(ensemble: np.ndarray, threshold: float, consecutive_days: int = 1) -> np.ndarray:

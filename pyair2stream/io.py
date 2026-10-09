@@ -6,6 +6,7 @@ and reading/validating the input CSV time series data (forcing and observations)
 """
 
 import copy
+import datetime as _dt
 import os
 import json
 import re
@@ -15,7 +16,7 @@ import pandas as pd
 from typing import Tuple
 
 from .config import (
-    CommonData, theta_floor_of, DEFAULT_NOISE_MODEL, DEFAULT_LIKELIHOOD, VALID_LIKELIHOODS, DEFAULT_RHO_TIMESCALE, VALID_RHO_TIMESCALES, ACTIVE_PARAMS, VALID_VERSIONS, VALID_RUN_MODES, VALID_INTEGRATORS,
+    CommonData, theta_floor_of, zero_flow_ok, DEFAULT_NOISE_MODEL, DEFAULT_LIKELIHOOD, VALID_LIKELIHOODS, DEFAULT_RHO_TIMESCALE, VALID_RHO_TIMESCALES, ACTIVE_PARAMS, VALID_VERSIONS, VALID_RUN_MODES, VALID_INTEGRATORS,
     VALID_OBJECTIVES,
 )
 from .model import prepare_evaluation, check_nonpositive_discharge, STABILITY_MAX_GROWTH
@@ -82,6 +83,16 @@ def calendar_day_index(data: CommonData, i: int) -> int:
     """0-based day of the year of row `i` for the noleap calendar, from the seasonal phase
     `data.tt` that `read_Tseries` set (tt = day of the year / 365)."""
     return int(round(data.tt[i] * 365)) - 1
+
+
+def climatology_day(data: CommonData, i: int) -> int:
+    """Slot of row `i` in the day-of-year climatology (0..365). Standard dates use their
+    position in a leap year, so a calendar date has the same slot in every year (1 March is
+    always 60, and 29 February has its own slot 59); noleap dates use `calendar_day_index`."""
+    if data.calendar == 'standard':
+        month, day = int(data.date[i, 1]), int(data.date[i, 2])
+        return (_dt.date(2000, month, day) - _dt.date(2000, 1, 1)).days
+    return calendar_day_index(data, i)
 
 
 def _check_choice(name: str, value, allowed) -> None:
@@ -481,7 +492,13 @@ def compute_qmedia(data: CommonData, verbose: bool = False) -> None:
     Recalculating this per fold ensures held-out data doesn't leak into ODE physics.
     """
     Q = data.Q[365:data.n_tot]
-    valid_Q_mask = (Q != -999.0) & (Q > 0.0)
+    # The mean of every day with discharge, as the original Fortran computes it. Zero-flow
+    # days count when the model can simulate them (version 7 or min_theta_floor), so Qmedia
+    # is the river's mean discharge; otherwise they are not simulated and are left out.
+    if zero_flow_ok(data.version, data.min_theta_floor):
+        valid_Q_mask = (Q != -999.0) & (Q >= 0.0)
+    else:
+        valid_Q_mask = (Q != -999.0) & (Q > 0.0)
     computed_qmedia = np.float64(0.0)
     if np.any(valid_Q_mask):
         computed_qmedia = np.float64(np.mean(Q[valid_Q_mask]))
@@ -507,7 +524,7 @@ def compute_qmedia(data: CommonData, verbose: bool = False) -> None:
                 "(or the qmedia in paths.calibration_metadata)."
             )
         raise ValueError(
-            "Qmedia, the average of the positive discharge values, cannot be computed: the "
+            "Qmedia, the average discharge, cannot be computed: the "
             "record has no positive discharge. Supply Qmedia in the configuration."
         )
 
@@ -525,6 +542,8 @@ def compute_doy_climatology(data: CommonData) -> None:
     """
     Calculate DOY climatology from the currently valid (unmasked) Twat_obs.
     Recalculating this per fold ensures held-out data doesn't leak into segment initial conditions.
+    Values are averaged by calendar date (`climatology_day`), so leap and other years are
+    not shifted by a day after 29 February; slots without observations are interpolated.
     """
     data.doy_climatology = np.zeros(366, dtype=np.float64)
     doy_sums = np.zeros(366, dtype=np.float64)
@@ -532,13 +551,7 @@ def compute_doy_climatology(data: CommonData) -> None:
 
     for i in range(365, data.n_tot):
         if data.Twat_obs[i] != -999.0:
-            if data.calendar == 'standard':
-                year = data.date[i, 0]
-                month = data.date[i, 1]
-                day = data.date[i, 2]
-                doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
-            else:
-                doy = calendar_day_index(data, i)
+            doy = climatology_day(data, i)
             doy_sums[doy] += data.Twat_obs[i]
             doy_counts[doy] += 1
 

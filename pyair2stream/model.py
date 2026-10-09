@@ -739,16 +739,8 @@ def call_model_segmented(data: CommonData) -> None:
         elif data.Twat_obs[start] != -999.0:
             data.Twat_mod[start] = data.Twat_obs[start]
         else:
-            # DOY is 0-indexed in array but 1-366 in reality
-            if data.calendar == 'standard':
-                year = data.date[start, 0]
-                month = data.date[start, 1]
-                day = data.date[start, 2]
-                doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
-            else:
-                from .io import calendar_day_index
-                doy = calendar_day_index(data, start)
-            data.Twat_mod[start] = data.doy_climatology[doy]
+            from .io import climatology_day
+            data.Twat_mod[start] = data.doy_climatology[climatology_day(data, start)]
 
     _run_integration(data, data.segments, p)
 

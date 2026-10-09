@@ -98,7 +98,9 @@ def test_counting_functions_warn_about_days_without_a_value(capsys):
     ens[:, 4:6] = np.nan
     assert list(scenario.exceedance(ens, 18.0)) == [8, 8, 8]
     assert "2 day(s) have no simulated value" in capsys.readouterr().out
-    scenario.aggregate(ens, pd.date_range("2001-01-01", periods=10), freq="5D")
+    assert np.isnan(scenario.aggregate(ens, pd.date_range("2001-01-01", periods=10), freq="5D")).all()
+    assert "2 of 2 period(s) (5D) have fewer than all their days" in capsys.readouterr().out
+    scenario.aggregate(ens, pd.date_range("2001-01-01", periods=10), freq="5D", min_days=3)
     assert "uses only the days that have one" in capsys.readouterr().out
     scenario.exceedance(np.full((3, 10), 20.0), 18.0)
     assert capsys.readouterr().out == ""
@@ -205,3 +207,15 @@ def test_version_7_forward_run_reports_zero_flow_days_at_theta_0(tmp_path, capsy
                                            "calibration_metadata": str(meta)}))
     read_Tseries(data, "c")
     assert "(lowest 0, highest 1.5), 25 of them zero-flow days run at theta = 0" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("version, floor, includes_zeros", [
+    (8, None, False), (8, 1e-6, True), (7, None, True), (4, 1e-6, True)])
+def test_qmedia_is_the_mean_discharge_when_zero_flow_is_simulated(tmp_path, version, floor, includes_zeros):
+    # As the original Fortran: the mean of every day with discharge, zeros included, when
+    # the model simulates zero-flow days; otherwise they are left out with the days themselves.
+    data = read_calibration(_config(tmp_path, version=version, min_theta_floor=floor))
+    read_Tseries(data, "c")
+    q = _table().Discharge.to_numpy()
+    expected = q.mean() if includes_zeros else q[q > 0].mean()
+    assert data.Qmedia == pytest.approx(expected)

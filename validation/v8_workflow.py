@@ -123,6 +123,9 @@ def _part_c(ensemble_path):
     weekly = scenario.aggregate(ens, dates, how="mean", freq="7D")
     frame = pd.DataFrame(ens.T, index=dates)
     ref_weekly = frame.groupby((np.arange(len(dates)) // 7)).mean().to_numpy().T
+    # A last block of fewer than 7 days has no value (a partial week is not a 7-day mean).
+    if len(dates) % 7:
+        ref_weekly[:, -1] = np.nan
     rows.append({"tool": "aggregate (7-day means)", "cases": weekly.size,
                  "disagreements": int(np.sum(~np.isclose(weekly, ref_weekly, atol=1e-12, equal_nan=True)))})
     for k in (1, 3, 7):
