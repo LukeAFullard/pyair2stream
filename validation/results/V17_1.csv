@@ -1,0 +1,27 @@
+data set,river,air averaged and discharge,"air averaged, S-curve","air, averaged","air, same day",day-of-year average,version 5,version 8,best regression,which,version 8 better by (°C)
+British Columbia,07EA004,2.479,1.565,2.491,2.842,1.251,1.288,0.933,1.565,"air averaged, S-curve",0.631
+British Columbia,07EB002,1.046,1.161,1.013,2.223,1.037,0.929,0.652,1.013,"air, averaged",0.361
+British Columbia,08CG001,1.319,1.215,1.141,1.389,1.069,1.109,1.117,1.141,"air, averaged",0.024
+British Columbia,08FF001,1.356,1.66,1.421,2.074,1.383,1.629,1.088,1.356,air averaged and discharge,0.268
+British Columbia,08FF003,1.459,1.616,1.552,2.259,1.336,1.502,0.823,1.459,air averaged and discharge,0.636
+British Columbia,08GA077,1.178,1.115,1.252,1.898,1.361,1.106,0.922,1.115,"air averaged, S-curve",0.193
+British Columbia,08HA002,1.097,0.889,1.107,3.037,1.558,1.124,1.102,0.889,"air averaged, S-curve",-0.213
+British Columbia,08HA011,1.462,1.403,1.429,2.177,2.142,1.577,1.386,1.403,"air averaged, S-curve",0.017
+British Columbia,08HA069,0.821,0.818,0.83,1.784,1.26,0.747,0.619,0.818,"air averaged, S-curve",0.199
+British Columbia,08HA070,0.967,0.995,0.989,1.396,0.997,0.764,0.744,0.967,air averaged and discharge,0.223
+British Columbia,08HB023,1.302,1.272,1.301,1.969,1.863,1.109,0.966,1.272,"air averaged, S-curve",0.305
+British Columbia,08JA017,1.616,0.801,1.622,3.529,1.35,0.964,0.871,0.801,"air averaged, S-curve",-0.07
+British Columbia,08JB008,2.773,1.509,2.655,3.635,1.636,1.406,1.249,1.509,"air averaged, S-curve",0.26
+British Columbia,08KB001,2.357,1.399,2.231,3.189,1.294,1.351,0.929,1.399,"air averaged, S-curve",0.471
+British Columbia,08KH006,1.603,1.162,1.579,3.53,1.322,1.094,1.144,1.162,"air averaged, S-curve",0.018
+British Columbia,08LB078,1.754,1.171,1.747,2.274,1.276,0.991,0.964,1.171,"air averaged, S-curve",0.208
+British Columbia,08LE031,1.359,1.142,1.09,3.56,1.218,0.989,1.005,1.09,"air, averaged",0.085
+British Columbia,08LF051,1.286,1.1,1.216,3.563,1.27,1.285,1.343,1.1,"air averaged, S-curve",-0.243
+British Columbia,08MF040,1.553,1.07,1.502,3.051,1.192,0.95,0.931,1.07,"air averaged, S-curve",0.139
+British Columbia,08NE074,1.275,1.319,1.582,2.171,1.464,1.297,0.856,1.275,air averaged and discharge,0.419
+British Columbia,08NG065,1.638,1.546,1.699,2.222,1.297,1.358,0.976,1.546,"air averaged, S-curve",0.57
+British Columbia,08NH118,1.192,1.17,1.191,2.042,1.15,1.048,1.12,1.17,"air averaged, S-curve",0.05
+British Columbia,08NK002,1.443,1.231,1.437,1.911,1.229,1.003,0.795,1.231,"air averaged, S-curve",0.436
+Switzerland,Dischmabach,1.093,0.892,1.102,1.105,0.994,0.759,0.651,0.892,"air averaged, S-curve",0.241
+Switzerland,Mentue,1.16,1.003,1.172,1.483,1.895,0.8,0.779,1.003,"air averaged, S-curve",0.224
+Switzerland,Rhône,0.948,0.855,1.05,1.056,1.101,1.046,0.739,0.855,"air averaged, S-curve",0.115
