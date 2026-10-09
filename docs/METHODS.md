@@ -863,8 +863,11 @@ without calibrating. It requires the calibration `Qmedia` (§4). Given
 `paths.calibration_metadata` (the calibration's `calibration_metadata.json`), it
 takes `Qmedia` and the calibrated parameters from it (unless
 `parameters_forward` is given), refuses a different model version or integrator,
-and warns if more than 1% of days have θ outside the range seen in calibration
-(extrapolation). If the file contains water-temperature observations, the fit is
+and warns if any day has θ outside the range seen in calibration
+(extrapolation), giving the number of days, the first one, the lowest and
+highest θ, and how many are zero-flow days run at `min_theta_floor`. θ is taken
+as the model uses it, so zero-flow days count at the floor, both in the
+calibration's range and in the run. If the file contains water-temperature observations, the fit is
 reported as in §7.
 
 **Prediction intervals** (`forward_options.enable_prediction_intervals: true`)
@@ -1001,7 +1004,9 @@ change one-sided.
 | Negative relaxation rate B, or a daily simulation that zigzags (§7) | after calibration, before DE-MCMC sampling, FORWARD runs | warning |
 | ρ at its limit of 0.99; exact likelihood with weekly or monthly scoring (§12) | DE-MCMC | warning |
 | Recomputed objective matches the calibration result | after calibration | error |
-| Discharge outside the calibrated range | FORWARD runs | warning |
+| Discharge outside the calibrated range (any day, zero-flow days at `min_theta_floor` included) | FORWARD runs | warning |
+| Negative discharge (a missing-value code other than −999) | loading each file (versions 4, 7, 8) | error |
+| Zero discharge with `min_theta_floor` set | loading each file | warning |
 | Segment warm-up too short | gap-tolerant runs | warning |
 | MCMC convergence; draws that diverge or, with RK4/RK2/EUL, are unstable (§12) | DE-MCMC, FORWARD intervals | warning / error |
 | Chain fitted with another model version, integrator or `Qmedia` (§13) | FORWARD intervals | error |

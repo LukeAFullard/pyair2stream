@@ -58,9 +58,11 @@ def test_the_data_check_explains_what_happens_to_zero_flow_days():
     assert "treated as gaps: they are not simulated or scored" in cal.warnings[0]
     fwd = check_table(df, "f.csv", period="scenario", gap_tolerant=True)
     assert "would have no water temperature on exactly these days" in fwd.errors[0]
-    for kw in ({"min_theta_floor": 1e-6}, {"version": 5}):
-        assert check_table(df, "f.csv", gap_tolerant=True, **kw).problems == []
-        assert check_table(df, "f.csv", period="scenario", gap_tolerant=True, **kw).errors == []
+    for period in ("calibration", "scenario"):
+        floored = check_table(df, "f.csv", period=period, gap_tolerant=True, min_theta_floor=1e-6)
+        assert floored.errors == []
+        assert "Zero discharge in f.csv: 25 day(s)" in floored.warnings[0] and "min_theta_floor" in floored.warnings[0]
+        assert check_table(df, "f.csv", period=period, gap_tolerant=True, version=5).problems == []
 
 
 def test_with_min_theta_floor_the_days_are_simulated_not_gaps():
@@ -109,3 +111,41 @@ def test_a_paired_difference_refuses_runs_that_simulated_different_days():
     with pytest.raises(ValueError, match="2 day\\(s\\) are simulated in one and not the other"):
         scenario.paired_difference(dry, base)
     assert np.isnan(scenario.paired_difference(dry, dry)[:, 4:6]).all()
+
+
+def test_negative_discharge_is_an_error_whatever_the_settings():
+    df = _table()
+    df.loc[300:309, "Discharge"] = -9999.0                    # a missing-value code other than -999
+    for kw in ({}, {"gap_tolerant": True}, {"min_theta_floor": 1e-6}, {"gap_tolerant": True, "min_theta_floor": 1e-6}):
+        msg = check_table(df, "f.csv", **kw).errors[0]
+        assert "Negative discharge in f.csv: 10 day(s) (first: -9999 on 2001-10-28, line 302)" in msg
+        assert "write a missing value as -999 or leave the cell blank" in msg
+    assert check_table(df, "f.csv", version=5).errors == []    # versions 3 and 5 do not use discharge
+
+
+def test_a_forward_run_reports_every_day_outside_the_calibrated_flows(tmp_path, capsys):
+    # The calibration saw theta from 0.5 to 1.5; the scenario has 25 zero-flow days run at the
+    # floor (0.6% of 800 days would once have been under the 1% threshold, and floored days
+    # were not counted at all) and one day of high flow.
+    df = _table()
+    df.loc[400, "Discharge"] = 3.4
+    df.to_csv(tmp_path / "scenario.csv", index=False)
+    meta = tmp_path / "calibration_metadata.json"
+    meta.write_text('{"qmedia": 2.0, "theta_min": 0.5, "theta_max": 1.5, "version": 8, "integrator": "CRN", '
+                    '"par_best": [1, 0.5, 0.5, 0.2, 1, 1, 0.5, 0.5]}')
+    data = read_calibration(_config(tmp_path, run_mode="FORWARD", gap_tolerant=False, min_theta_floor=1e-6,
+                                    paths={"input_data": str(tmp_path / "scenario.csv"), "output_dir": str(tmp_path / "o"),
+                                           "calibration_metadata": str(meta)}))
+    read_Tseries(data, "c")
+    out = capsys.readouterr().out
+    assert "26 day(s) (" in out and "of the days with discharge; first: 2001-07-20) have theta = Q/Qmedia outside" in out
+    assert "(lowest 1e-06, highest 1.7), 25 of them zero-flow days run at min_theta_floor" in out
+
+
+def test_theta_of_days_is_what_the_model_runs_with():
+    from pyair2stream.io import theta_of_days
+    q = np.array([2.0, 0.0, -999.0, 4.0])
+    theta, rows = theta_of_days(q, 2.0, None)            # zero flow is not simulated: left out
+    assert list(rows) == [0, 3] and list(theta) == [1.0, 2.0]
+    theta, rows = theta_of_days(q, 2.0, 1e-6)            # simulated at the floor: included
+    assert list(rows) == [0, 1, 3] and list(theta) == [1.0, 1e-6, 2.0]

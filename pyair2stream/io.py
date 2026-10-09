@@ -26,6 +26,17 @@ from .data_checks import CALENDARS, NO_360_DAY, check_table, PLAUSIBLE_RANGES as
 NOLEAP_MONTH_START = np.array([0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334])
 
 
+def theta_of_days(Q: np.ndarray, qmedia: float, floor=None):
+    """theta = Q / Qmedia as the model uses it, on the days with discharge, and their row
+    positions in Q. Zero-flow days are included at `min_theta_floor` when it is set (the
+    model then runs them at that floor); otherwise they are not simulated and are left out."""
+    rows = np.flatnonzero(Q != -999.0) if floor is not None else np.flatnonzero((Q != -999.0) & (Q > 0.0))
+    theta = Q[rows] / qmedia
+    if floor is not None:
+        theta = np.maximum(theta, floor)
+    return theta, rows
+
+
 def calendar_day_index(data: CommonData, i: int) -> int:
     """0-based day of the year of row `i` for the noleap calendar, from the seasonal phase
     `data.tt` that `read_Tseries` set (tt = day of the year / 365)."""
@@ -686,18 +697,22 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
             and data.calib_theta_max is not None
             and data.Qmedia > 0
         ):
-            Q_period = data.Q[365:data.n_tot]
-            valid_Q = (Q_period != -999.0) & (Q_period > 0.0)
-            if np.any(valid_Q):
-                theta = Q_period[valid_Q] / data.Qmedia
-                frac_outside = float(np.mean((theta < data.calib_theta_min) | (theta > data.calib_theta_max)))
-                if frac_outside > 0.01:
-                    print(
-                        f"Warning: {frac_outside:.1%} of days in this run have theta = Q/Qmedia "
-                        f"outside the calibrated range [{data.calib_theta_min:.5f}, "
-                        f"{data.calib_theta_max:.5f}]. The model is being extrapolated beyond the "
-                        f"calibrated regime for these days."
-                    )
+            # Every day outside the calibrated range is reported, zero-flow days run at
+            # min_theta_floor included: results on those days are an extrapolation.
+            theta, rows = theta_of_days(data.Q[365:data.n_tot], data.Qmedia, data.min_theta_floor)
+            outside = (theta < data.calib_theta_min) | (theta > data.calib_theta_max)
+            if outside.any():
+                first = data.date[365 + rows[np.argmax(outside)]]
+                at_floor = int(np.sum(outside & (data.Q[365 + rows] <= 0.0)))
+                print(
+                    f"Warning: {int(outside.sum()):,} day(s) ({outside.mean():.1%} of the days with discharge; "
+                    f"first: {first[0]:04d}-{first[1]:02d}-{first[2]:02d}) have theta = Q/Qmedia outside the "
+                    f"calibrated range [{data.calib_theta_min:.5g}, {data.calib_theta_max:.5g}] "
+                    f"(lowest {theta.min():.5g}, highest {theta.max():.5g})"
+                    + (f", {at_floor:,} of them zero-flow days run at min_theta_floor" if at_floor else "")
+                    + ". The model is extrapolated beyond the flows it was calibrated on on these days, so "
+                    "treat their results with care."
+                )
 
     # Guard against non-positive discharge for theta-using versions (4/7/8) in the
     # non-gap-tolerant path -- applies identically to the calibration record and to

@@ -219,6 +219,22 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                                                "Check for missing-value codes other than -999 or a blank cell, and "
                                                "for unit errors; these values are used as given."))
 
+    if uses_q:
+        negative = df['Discharge'] < 0.0
+        if negative.any():
+            problems.append(Problem('error', f"Negative discharge in {source}: {int(negative.sum())} day(s) (first: "
+                                             f"{df['Discharge'][negative].iloc[0]:g} on {where(negative)}). Flow "
+                                             "cannot be negative, so this is probably a code for a missing value: "
+                                             "write a missing value as -999 or leave the cell blank."))
+        if min_theta_floor is not None:
+            zero = df['Discharge'] == 0.0
+            if zero.any():
+                problems.append(Problem('warning', f"Zero discharge in {source}: {int(zero.sum())} day(s) (first: "
+                                                   f"{where(zero)}). They are simulated at theta = min_theta_floor "
+                                                   f"({min_theta_floor:g}), where theta^a4 is extreme: expect "
+                                                   "large simulated responses on those days (USER_GUIDE.md "
+                                                   "§9.2)."))
+
     if not gap_tolerant:
         gaps = df['T_air'].isna()
         if gaps.any():

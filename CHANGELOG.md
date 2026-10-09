@@ -53,6 +53,17 @@
   `scenario.paired_difference_from_files` now refuses two runs with a different
   error model, σ or ρ: the error added to each draw then does not cancel, and
   the difference's spread would include it.
+- **Extrapolation to zero flow is reported.** A FORWARD run warned about flows
+  outside the calibrated range only when more than 1% of days were outside, and
+  left out zero-flow days run at `min_theta_floor` (the furthest extrapolation
+  possible): a scenario with 11% dry days gave no warning. It now reports every
+  day outside the range, with the count, the first date, the lowest and highest
+  θ and the number of zero-flow days. The calibrated range also includes days
+  run at the floor, so they warn only when the calibration had none.
+- ⚠ **Negative discharge is an error.** With `min_theta_floor` set, a negative
+  value (for example a missing-value code such as -9999) was silently run as
+  zero flow. Negative discharge now always stops the run, and zero discharge
+  with `min_theta_floor` gives a warning with the number of days.
 - **Partial years and months are no longer counted as whole ones.** A record
   that starts or ends part-way through a year has a partial first or last year
   and month, which five places treated as whole. One rule now applies

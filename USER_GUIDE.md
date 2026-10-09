@@ -401,7 +401,9 @@ calibration wrote. This also:
 
 - supplies the fitted parameters;
 - checks that `version` and `integrator` match the calibration;
-- warns if the scenario's flows go outside the calibrated range.
+- warns if any of the scenario's flows go outside the calibrated range, with
+  the number of days and the first one (days of zero flow run at
+  `min_theta_floor` count too).
 
 You can also set `Qmedia:` yourself.
 
@@ -655,7 +657,13 @@ message names the first bad date. You can:
    large, so the days are simulated (also in gap-tolerant mode). Use this only
    for days that genuinely had no flow. Expect large simulated responses on
    those days, because θ^a4 becomes very large or very small as the flow
-   approaches zero.
+   approaches zero. The data check warns with the number of zero-flow days, and
+   a FORWARD run counts them as outside the calibrated flows unless the
+   calibration had such days too.
+
+Negative discharge always stops the run: flow cannot be negative, so it is
+almost certainly a code for a missing value. Write missing values as `-999` or
+leave the cell blank.
 
 ## 10. Gap-tolerant mode
 

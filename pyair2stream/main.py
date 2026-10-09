@@ -14,7 +14,7 @@ import argparse
 import numpy as np
 import pandas as pd
 
-from .io import read_calibration, read_Tseries, precheck_validation, SettingsFileNotFoundError
+from .io import read_calibration, read_Tseries, precheck_validation, SettingsFileNotFoundError, theta_of_days
 from .optimization import forward_mode, PSO_mode, LH_mode, DE_mode, DE_MCMC_mode
 from .config import CommonData
 from .post_processing import post_process
@@ -89,13 +89,14 @@ def run_optimizer(data: CommonData) -> None:
 
 def _write_calibration_metadata(data: CommonData) -> None:
     """Write calibration_metadata.json (Qmedia, theta range, version, integrator, parameters)."""
-    Q_cal = data.Q[365:data.n_tot]
-    valid_Q_cal = (Q_cal != -999.0) & (Q_cal > 0.0)
+    # The flows the parameters were fitted on, as the model used them (zero-flow days at
+    # min_theta_floor when it is set): a FORWARD run reports days outside this range.
     theta_min = theta_max = None
-    if np.any(valid_Q_cal) and data.Qmedia > 0:
-        theta_cal = Q_cal[valid_Q_cal] / data.Qmedia
-        theta_min = float(np.min(theta_cal))
-        theta_max = float(np.max(theta_cal))
+    if data.Qmedia > 0:
+        theta_cal, _ = theta_of_days(data.Q[365:data.n_tot], data.Qmedia, data.min_theta_floor)
+        if theta_cal.size:
+            theta_min = float(np.min(theta_cal))
+            theta_max = float(np.max(theta_cal))
 
     calibration_metadata = {
         "qmedia": float(data.Qmedia),
