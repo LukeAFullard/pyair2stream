@@ -28,19 +28,27 @@ before its result.
 | V13 | Given the parameters of the first air2stream paper (Toffolon and Piccolroaz, 2015), does it reproduce that paper's errors, and with which numerical scheme? Does its calibration with that scheme return those parameters? | A second published benchmark, from the model's authors, on the same data. |
 | V14 | In years not used for calibration, do the prediction intervals hold on the days predicted to be hottest and on the days with the hottest air? | Limits are breached on the hottest days. |
 | V15 | Given the parameters and inputs an independent group published for 23 rivers in British Columbia (Callahan and Moore, 2025), does it compute their simulated water temperatures, day by day? Does its own calibration fit at least as well? | Results from other people, rivers and climates, including the 2021 heat dome, compared in full rather than by a summary error. |
+| V16 | Calibrated on 1, 2, 3, 5 or 10 years of data, how much worse does the model predict other years than when calibrated on the whole record? | Users plan how long to measure, or hold only a short record. |
+| V17 | Does air2stream predict years it was not calibrated on better than regressions of water temperature on air temperature (same day, averaged, S-curve, with discharge), fitted on the same years? On the 3 Swiss and 23 British Columbia rivers, by daily error, 7-day means, yearly peaks, hot days and the 2021 heat dome. | A regression is quicker and needs no special software; the model must earn its extra effort. |
 
 ## Running it
 
 From the repository root, with the package installed (`pip install -e .`):
 
 ```bash
-python validation/run_all.py            # full suite, about 116 minutes on 4 cores
+python validation/run_all.py            # full suite, several hours on 4 cores
 python validation/run_all.py --quick    # reduced version of every check, about 2 minutes
 python validation/run_all.py --only V2 V6
 ```
 
 With `--only`, the other checks keep their reports from the earlier run.
-`REPORT.md` then names the run each report comes from.
+`REPORT.md` then names the run each report comes from. Since the DE stopping
+rule was tightened (0.5.0), V2 and V4 take about an hour each. Where jobs are
+limited in length, run the suite in parts with `--only`. V15, the longest
+check, saves each station's results in `work/v15_cache/` as it goes. If it is
+stopped, running it again reuses them, but only if the code of the package
+and of the suite is exactly the same; its report then says how many were
+reused.
 
 V1 needs `gfortran` and the Fortran source (`git submodule update --init`).
 Without them, V1 is reported as not run.
@@ -70,7 +78,7 @@ the quick run, V4, V5 and V14 report their coverage without judging it.
 
 Most checks use the three Swiss rivers in [`data/switzerland/`](../data/switzerland/README.md),
 with the published parameters and model errors of Piccolroaz et al. (2016) and
-of Toffolon and Piccolroaz (2015). V15 uses the 23 British Columbia streams of
+of Toffolon and Piccolroaz (2015). V15 and V17 use the 23 British Columbia streams of
 Callahan and Moore (2025) in [`data/british_columbia/`](../data/british_columbia/README.md),
 from their published dataset (https://doi.org/10.5281/zenodo.14502248, CC BY
 4.0). Each README gives the sources, periods and licence. The errors found in

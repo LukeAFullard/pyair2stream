@@ -117,9 +117,11 @@ def run(ctx) -> Result:
                          "does not score the first warmup_drop_days (15) of each piece, so scattered one-day "
                          "gaps in air temperature discard most of the record. Here the prediction stayed "
                          "accurate because the synthetic data follow the model exactly; with real data, fewer "
-                         "scored days make the calibration less certain. Filling short air-temperature gaps by "
-                         "interpolation (or from a nearby station) keeps every day, at the cost of small errors "
-                         "in the filled values; use gap-tolerant mode for long gaps.")
+                         "scored days make the calibration less certain. A shorter warm-up, about three "
+                         "relaxation times of the fitted model (a gap-tolerant run suggests it), keeps most of "
+                         "the record; example 05's gap study (examples/05_gaps/gap_study.py) tests this on the "
+                         "Mentue, and also shows that for gaps of a month to a year gap-tolerant mode changed "
+                         "the calibration less than filling the gap.")
     fig = _figure(df, err)
     df[err] = df[err].round(3)
     res.sections.append(Section(

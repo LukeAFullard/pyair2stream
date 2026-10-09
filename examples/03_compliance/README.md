@@ -23,7 +23,7 @@ Run everything with one command, from the repository's top folder:
 python examples/03_compliance/run.py
 ```
 
-It takes about three minutes. It runs these three steps, then the analysis
+It takes about four minutes. It runs these three steps, then the analysis
 below:
 
 ```bash
@@ -60,7 +60,7 @@ peak = stats[2010]["highest 7-day mean"]                        # one value per 
 check = pd.read_csv(f"{out}/check/cv_yearly_statistics.csv")
 dev = check[check.statistic == "highest 7-day mean"].deviation  # measured minus predicted median, per hidden year
 peak_c = scenario.correct_statistic(peak, dev, seed=2010)       # corrected for the model's bias
-p_exceeded = (peak_c > 20).mean()                               # share of simulations above the limit: 0.59
+p_exceeded = (peak_c > 20).mean()                               # share of simulations above the limit: 0.57
 ```
 
 The correction includes a random draw. `seed` makes it repeatable.
@@ -82,20 +82,20 @@ year) puts the summer peaks too high.
 
 | Year | P(7-day mean > 20 °C), corrected | uncorrected | Highest 7-day mean, 90% range, corrected | Measured | Days above 18 °C, corrected: median (90% range) | Measured |
 |---|---|---|---|---|---|---|
-| 2010 | 0.59 | 0.91 | 19.1 to 21.1 °C | 21.0 °C | 31 (23 to 39) | 30 |
-| 2011 | 0.33 | 0.75 | 18.7 to 20.8 °C | 19.8 °C | 19 (12 to 27) | 21 |
-| 2012 | 0.12 | 0.51 | 18.5 to 20.3 °C | 19.6 °C | 25 (16 to 34) | 22 |
+| 2010 | 0.57 | 0.92 | 19.2 to 21.1 °C | 21.0 °C | 31 (22 to 39) | 30 |
+| 2011 | 0.34 | 0.77 | 18.8 to 20.8 °C | 19.8 °C | 19 (11 to 28) | 21 |
+| 2012 | 0.14 | 0.51 | 18.4 to 20.4 °C | 19.6 °C | 25 (16 to 34) | 22 |
 
 ![Highest 7-day mean in each simulation, corrected and not](figures/peak_7day_mean.png)
 
 **Reading it.**
 
 - The limit was in fact exceeded in 2010, and not in 2011 or 2012.
-- The corrected probabilities (0.59, 0.33, 0.12) match this better than the
-  uncorrected ones (0.91, 0.75, 0.51). The uncorrected ones would have called
+- The corrected probabilities (0.57, 0.34, 0.14) match this better than the
+  uncorrected ones (0.92, 0.77, 0.51). The uncorrected ones would have called
   2011 a likely exceedance.
 - The Brier score (the mean squared difference between probability and
-  outcome; lower is better) is 0.10 corrected, against 0.28 uncorrected.
+  outcome; lower is better) is 0.11 corrected, against 0.29 uncorrected.
 - All measured values lie inside the corrected 90% ranges.
 - 2010's measured peak, 21.0 °C, is near the top of its range: the bias in
   2010–2012 was smaller than in 2003–2009.

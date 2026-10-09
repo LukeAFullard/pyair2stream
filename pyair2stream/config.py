@@ -65,6 +65,7 @@ class CommonData:
     qty: int = 0
     n_run: int = 0
     n_particles: int = 0
+    de_tol: float = 1e-3
 
     # Gap-tolerant mode fields
     gap_tolerant: bool = False

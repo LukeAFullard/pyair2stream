@@ -73,8 +73,9 @@ Date,T_air,T_water,Discharge
 The rules:
 
 - Give a row for **every** day. Leave a missing value blank, or write `-999`.
-- `T_air` and `Discharge` must have no gaps. If yours have gaps, see
-  [example 05](examples/05_gaps/README.md).
+- `T_air` and `Discharge` must have no gaps, unless you use gap-tolerant mode.
+  [Example 05](examples/05_gaps/README.md) shows when to fill gaps and when to
+  use that mode.
 - The file must start on 1 January and cover at least a year. Several years
   are better.
 - A run checks your files before it calibrates anything. If something is
@@ -118,10 +119,13 @@ pyair2stream --config config.yaml
 ```
 
 The paths in the settings file are relative to the folder you run this from.
+From Python, `pyair2stream.run("config.yaml")` does the same and returns the
+scores, parameters and warnings ([User Guide §7.2](USER_GUIDE.md#72-from-python)).
 
 ### 4. Read the results
 
-Start with these files in the output folder:
+Start with `summary.md` in the output folder: one page with the settings,
+the data used, the scores, the parameters and every warning. Then these files:
 
 | File | What it tells you |
 |---|---|
@@ -130,6 +134,7 @@ Start with these files in the output folder:
 | `bias_by_month_validation_*.png` | the average error in each month. Is the model off in one season? |
 | `1_*.out` | the fitted parameters (line 1), then the calibration and validation scores |
 | `calibration_metadata.json` | what later runs need: the parameters, the mean discharge and the settings |
+| `filled_water_temperature_*.csv` | your water temperature record with its gaps filled by the model, and which days are filled |
 
 How to judge the scores:
 
@@ -224,7 +229,7 @@ A [validation suite](validation/README.md) tests this. Its results are in
   ([V3](validation/REPORT.md#v3)).
 - **Honest uncertainty ranges.** On such data, 90% ranges contain the truth
   about 90% of the time ([V4](validation/REPORT.md#v4)). On real rivers, in
-  years not used for fitting, they held on 85–89.6% of days. So they are
+  years not used for fitting, they held on 85–89% of days. So they are
   slightly too narrow for new years ([V5](validation/REPORT.md#v5)).
 - **Probabilities need the check.** The model can be too warm on the hottest
   days. So uncorrected ranges for yearly peaks held in only 73–92% of years.
@@ -234,6 +239,19 @@ A [validation suite](validation/README.md) tests this. Its results are in
   predicted the warmest years almost as well: at most 0.07 °C worse. The same
   held when it was fitted on the highest-flow years and tested on the
   lowest-flow years ([V10](validation/REPORT.md#v10)).
+- **How many years of data.** Fitted on any 3 consecutive years, the model
+  predicted later years almost as well as when fitted on the whole record (7
+  to 21 years): the median error was at most 0.03 °C larger. One year was often
+  enough, but an unusual year made the predictions up to 0.17 °C worse
+  ([V16](validation/REPORT.md#v16)).
+- **Better than a regression.** In years not used for fitting, version 8
+  predicted daily temperatures better than every regression on air temperature
+  on 23 of 26 rivers. The median error was 0.74 °C against 0.89 °C for the
+  best regression in Switzerland, and 0.96 °C against 1.17 °C in British
+  Columbia. On yearly peaks and the hottest days its lead was smaller. It did
+  better than every regression on 14 of 23 British Columbia rivers. On the
+  Swiss yearly peaks, a straight line on air temperature did about as well
+  ([V17](validation/REPORT.md#v17)).
 - **Where it falls short.** Four checks do not meet all their criteria: V5,
   V9, V10 and V14. The main reasons are:
   - 95% and 99% ranges were too narrow in some years not used for fitting;
@@ -250,7 +268,7 @@ To run the tests and the validation suite (V1 needs `gfortran`):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # about 2 minutes; the full suite takes about 2 hours
+python validation/run_all.py --quick     # about 2 minutes; the full suite takes about 4 hours on 4 cores
 ```
 
 ## Differences from the original Fortran

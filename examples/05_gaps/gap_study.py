@@ -12,6 +12,7 @@ each time with air temperature removed in a different way, and compares the pred
    gap-tolerant mode against filling the gap with a straight line or with the seasonal average.
 3. Scattered gaps (1-20% of days missing at random): gap-tolerant mode with warm-ups of 15, 7,
    4 and 0 days, against filling with a straight line.
+4. The warm-up a run would suggest for 26 rivers, from their published parameters.
 
 Water temperature is kept on every day: only the air temperature is missing.
 Writes the tables to output/study/ and the README's figures to figures/.
@@ -157,6 +158,70 @@ def restart_memory(par, qmedia, days=20):
     return {k: np.array(v) for k, v in out.items()}, B
 
 
+def reported_and_actual_error(scattered, qmedia, share=0.20, draw=0):
+    """With warm-up 0, the first days after each restart start from the measured water temperature,
+    which flatters the score. For one draw, compare the RMSE the run reports (with restarts) with
+    the RMSE of the same parameters on the same days, simulated without restarts."""
+    complete = load(CAL, "complete_forcing", Qmedia=qmedia)
+    rows = []
+    for warmup, min_segment in ((0, 1), (4, 8)):
+        label = warmup_name(warmup, min_segment)
+        row = scattered[(scattered.share == share) & (scattered.draw == draw) & (scattered.method == label)].iloc[0]
+        par = row[[f"a{i}" for i in range(1, 9)]].to_numpy(float)
+        name = f"scattered_{round(share * 100)}pc_draw{draw}_{label.replace(' ', '_').replace(',', '')}"
+        data = load(os.path.join(OUT, "inputs", f"{name}.csv"), f"{name}_check", Qmedia=qmedia, gap_tolerant=True,
+                    warmup_drop_days=warmup, min_segment_days=min_segment)
+        data.par[:] = par
+        call_model(data)
+        scored = data.eval_mask & (data.Twat_obs != -999.0)
+        complete.par[:] = par
+        call_model(complete)
+        rows.append({"warm-up (days)": warmup,
+                     "RMSE the run reports (°C)": np.sqrt(np.mean((data.Twat_mod - data.Twat_obs)[scored] ** 2)),
+                     "RMSE on the same days without restarts (°C)":
+                         np.sqrt(np.mean((complete.Twat_mod - complete.Twat_obs)[scored] ** 2))})
+    return pd.DataFrame(rows).round(3)
+
+
+def warmups_by_river():
+    """The warm-up a gap-tolerant run would suggest (three relaxation times, 3/B days, rounded up)
+    for the three Swiss rivers and the 23 British Columbia rivers, from their published version 8
+    parameters and their calibration-period discharge."""
+    import openpyxl
+    rows = []
+
+    def suggest(par, q):
+        q = np.asarray(q, float)
+        theta = q[q > 0] / q[q > 0].mean()
+        a3, a4, a8 = par[2], par[3], par[7]
+        b = float(np.median((a3 + a8 * theta) / theta ** a4))
+        return b, int(np.ceil(3.0 / b))
+
+    book = openpyxl.load_workbook(os.path.join(REPO, "data", "switzerland", "published",
+                                               "Piccolroaz_etal_HP2016-Parameter_values.xlsx"), data_only=True)
+    sheet = list(book["a2s_8"].iter_rows(values_only=True))
+    header = sheet[1]
+    for station, river, water_id in (("MAH_2369", "Mentue", 2369), ("SIO_2011", "Rhone", 2011),
+                                     ("DAV_2327", "Dischmabach", 2327)):
+        row = next(r for r in sheet[2:] if r[1] == water_id)
+        par = [0.0] * 8
+        c = 3
+        while c < len(header) and header[c] is not None:     # the first block: daily parameters
+            par[int(header[c][1]) - 1] = float(row[c])
+            c += 1
+        q = pd.read_csv(os.path.join(REPO, "data", "switzerland", f"{station}_calibration.csv")).Discharge
+        rows.append(("Switzerland", river, *suggest(par, q)))
+    bc = os.path.join(REPO, "data", "british_columbia", "original")
+    params = pd.read_csv(os.path.join(bc, "a2s_8_parameter_values.csv")).set_index("station")
+    series = pd.read_csv(os.path.join(bc, "ts_all_58.csv"), dtype={"station_number": str})
+    regime = pd.read_csv(os.path.join(bc, "stn_hyd_reg.csv"), dtype={"station_number": str}).set_index("station_number")
+    for station in params.index:
+        q = series[(series.station_number == station) & (series.period == "calibration")].q.dropna()
+        rows.append((f"British Columbia, {regime.loc[station, 'regime']}", station,
+                     *suggest(params.loc[station].to_numpy(float), q)))
+    return pd.DataFrame(rows, columns=["region", "river", "median decay rate B (1/day)", "suggested warm-up (days)"])
+
+
 def main():
     os.makedirs(os.path.join(OUT, "inputs"), exist_ok=True)
     os.makedirs(FIG, exist_ok=True)
@@ -240,6 +305,9 @@ def main():
                          [["share of measured days scored (%)"] + measures].mean().round(3))
     with pd.option_context("display.width", 200, "display.max_columns", 20):
         print("\nScattered gaps (mean of the draws):\n" + scattered_summary.to_string())
+    flatter = reported_and_actual_error(scattered, qmedia)
+    flatter.to_csv(os.path.join(OUT, "warmup_0_flatters.csv"), index=False)
+    print("\nWith 20% of days missing (one draw):\n" + flatter.to_string(index=False))
     failed = scattered[scattered.error != ""]
     if len(failed):
         print("\nRuns that stopped:\n" + failed[["share", "draw", "method", "error"]].to_string(index=False))
@@ -258,18 +326,27 @@ def main():
                                                        lambda x, axis: np.percentile(x, 95, axis=axis)))}
                  ).rename_axis("days after restart").round(4).to_csv(os.path.join(OUT, "restart_memory.csv"))
 
+    # --- 4. The warm-up other rivers would need ------------------------------------------------------
+    rivers = warmups_by_river()
+    rivers.round(2).to_csv(os.path.join(OUT, "warmup_by_river.csv"), index=False)
+    print("\nSuggested warm-up from published parameters (days):")
+    print(rivers.groupby(rivers.region.str.split(",").str[0] + rivers.region.str.contains("snow").map(
+        {True: ", snowmelt", False: ""}))["suggested warm-up (days)"].agg(["count", "min", "max"]).to_string())
+
     # --- Figures -------------------------------------------------------------------------------------
     figure_memory(memory, needed)
-    figure_long(long, complete_rmse)
-    figure_scattered(scattered, complete_rmse)
+    figure_long(long)
+    figure_scattered(scattered)
 
 
 def figure_memory(memory, needed):
     fig, ax = plt.subplots(figsize=(8, 3.6))
     days = np.arange(next(iter(memory.values())).shape[1])
     for (kind, a), colour in zip(memory.items(), ("tab:blue", "tab:purple")):
-        ax.plot(days, a.mean(axis=0), "o-", color=colour, ms=4, label=f"restart from the {kind}: mean")
-        ax.plot(days, np.percentile(a, 95, axis=0), "--", color=colour, lw=1, label="... 95% of restarts below")
+        ax.plot(days, a.mean(axis=0), "o-", color=colour, ms=4, label=f"restart from the {kind}")
+        ax.plot(days, np.percentile(a, 95, axis=0), "--", color=colour, lw=1)
+    ax.plot([], [], "-", color="dimgray", label="solid: the average restart")
+    ax.plot([], [], "--", color="dimgray", lw=1, label="dashed: 19 restarts in 20 are below")
     ax.axvline(needed, color="black", lw=0.8)
     ax.text(needed + 0.2, 2.6, f"{needed} days: the warm-up\nthe run suggests", fontsize=8, va="top")
     ax.axvline(15, color="tab:gray", lw=0.8, ls=":")
@@ -286,50 +363,71 @@ def figure_memory(memory, needed):
     plt.close(fig)
 
 
-def figure_long(long, complete_rmse):
-    measure = "2010-2012 RMSE (°C)"
+CHANGE = "change in 2010-2012 predictions (°C)"
+
+
+def off_scale(ax, x, values, top, colour):
+    """Draw values above `top` as a triangle at the top of the axis, labelled with their range."""
+    values = np.asarray(values, float)
+    high = values[values > top]
+    if len(high):
+        ax.plot([x], [top * 0.97], "^", color=colour, ms=7)
+        text = f"{high.min():.1f}" if len(high) == 1 else f"{high.min():.1f}-{high.max():.1f}"
+        ax.annotate(f"{text} °C", (x, top * 0.97), xytext=(0, -13), textcoords="offset points", ha="center",
+                    fontsize=7.5)
+
+
+def figure_long(long, top=0.6):
     fig, ax = plt.subplots(figsize=(8, 4))
     labels = [label for label, _ in LENGTHS]
     for k, method in enumerate(LONG_METHODS):
         x0 = np.arange(len(labels)) + (k - 1) * 0.25
         sub = long[long.method == method]
-        means = [sub[sub.gap == label][measure].mean() for label in labels]
         for x, label in zip(x0, labels):
-            vals = sub[sub.gap == label][measure].to_numpy()
-            ax.plot(np.full(len(vals), x), vals, "o", color=COLOURS[method], ms=4, alpha=0.6, mfc="none")
-        ax.plot(x0, means, "_", color=COLOURS[method], ms=16, mew=2.5, label=method)
-    ax.axhline(complete_rmse, color="black", lw=0.8, ls="--")
-    ax.text(len(labels) - 0.55, complete_rmse, "  complete record", fontsize=8, va="bottom", ha="right")
+            vals = sub[sub.gap == label][CHANGE].to_numpy()
+            shown = vals[vals <= top]
+            ax.plot(np.full(len(shown), x), shown, "o", color=COLOURS[method], ms=4, alpha=0.7, mfc="none")
+            mean = vals.mean()
+            if mean <= top:
+                ax.plot([x], [mean], "_", color=COLOURS[method], ms=16, mew=2.5)
+            off_scale(ax, x, vals, top, COLOURS[method])
+        ax.plot([], [], "_", color=COLOURS[method], ms=16, mew=2.5, label=method)
     ax.set_xticks(np.arange(len(labels)), [f"{label} missing" for label in labels])
-    ax.set_ylabel("Error in 2010-2012 (RMSE, °C)")
-    ax.set_title("A long gap in air temperature: gap-tolerant mode against filling it", fontsize=10)
+    ax.set_ylim(0, top)
+    ax.set_ylabel("Change in the predictions\nfor 2010-2012 (°C)")
+    ax.set_title("A long gap in air temperature: how much it changes the calibrated model", fontsize=10)
     ax.legend(fontsize=8, loc="upper left", title="the gap was", title_fontsize=8)
-    ax.set_ylim(bottom=0.7)
     fig.tight_layout()
     fig.savefig(os.path.join(FIG, "long_gaps.png"), dpi=130)
     plt.close(fig)
 
 
-def figure_scattered(scattered, complete_rmse):
+def figure_scattered(scattered, top=0.4):
     methods = [warmup_name(*w) for w in WARMUPS] + ["straight line"]
     colours = dict(zip(methods, WARMUP_COLOURS + ("tab:orange",)))
-    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8))
+    labels = {m: m.replace("gap-tolerant, ", "gap-tolerant mode, ").replace(" d", " days")
+              for m in methods}
+    labels["straight line"] = "filled with a straight line"
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.9))
+    x = 100 * np.array(SHARES)
     for method in methods:
         sub = scattered[scattered.method == method].groupby("share")
-        x = 100 * np.array(sorted(sub.groups))
-        style = dict(color=colours[method], ms=4, label=method)
+        style = dict(color=colours[method], ms=4, label=labels[method])
         axes[0].plot(x, sub["share of measured days scored (%)"].mean().to_numpy(), "o-", **style)
-        axes[1].plot(x, sub["2010-2012 RMSE (°C)"].mean().to_numpy(), "o-", **style)
+        change = sub[CHANGE].mean().to_numpy()
+        ok = change <= top
+        axes[1].plot(x[ok], change[ok], "o-", **style)
+        for xi, c in zip(x[~ok], change[~ok]):
+            off_scale(axes[1], xi, [c], top, colours[method])
     axes[0].set_ylabel("Measured days scored (%)")
     axes[0].set_ylim(0, 105)
     axes[0].set_title("How much of the record is used", fontsize=10)
-    axes[1].axhline(complete_rmse, color="black", lw=0.8, ls="--")
-    axes[1].text(20, complete_rmse, "complete record ", fontsize=8, va="bottom", ha="right")
-    axes[1].set_ylabel("Error in 2010-2012 (RMSE, °C)")
-    axes[1].set_title("How well the calibrated model predicts other years", fontsize=10)
+    axes[1].set_ylim(0, top)
+    axes[1].set_ylabel("Change in the predictions\nfor 2010-2012 (°C)")
+    axes[1].set_title("How much the gaps change the calibrated model", fontsize=10)
     for ax in axes:
         ax.set_xlabel("Days missing at random (%)")
-        ax.set_xticks(100 * np.array(SHARES))
+        ax.set_xticks(x)
     axes[0].legend(fontsize=7.5, loc="lower left")
     fig.tight_layout()
     fig.savefig(os.path.join(FIG, "scattered_warmup.png"), dpi=130)

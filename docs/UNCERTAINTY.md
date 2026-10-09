@@ -270,8 +270,8 @@ weeks' errors correlate 0.52–0.81, about twice what the daily ρ implies
 
 **A single day: almost nothing.** σ is the same, so the range for one day is
 almost the same. On the Swiss rivers, the test was years not used for
-calibration. There, 90% daily ranges held on 85.2–89.6% of days with the weekly
-ρ, and on 84.5–89.1% with the daily ρ ([V5](../validation/REPORT.md#v5)).
+calibration. There, 90% daily ranges held on 85.4–89.3% of days with the weekly
+ρ, and on 84.7–89.6% with the daily ρ ([V5](../validation/REPORT.md#v5)).
 
 **Averages over a week or more: a lot.** Figure 8 shows simulated errors with
 each ρ, made from the same random numbers. Day by day they look alike. Over a
@@ -350,12 +350,12 @@ and below is over-confident.*
   data, V4 and [V9](../validation/REPORT.md#v9)). How often the 90% ranges
   contained the truth:
   - all parameter ranges: 98% with the weekly ρ, 89% with the daily ρ;
-  - the range of the seasonal timing `a7`: 90% against 70%;
-  - the ranges of yearly peaks and counts: 91–96% against 78–90%.
+  - the range of the seasonal timing `a7`: 90% against 67%;
+  - the ranges of yearly peaks and counts: 90–94% against 80–88%.
 - **Real rivers, years not used for calibration** (V5, V9). Daily values: the
   same with both. 90% ranges for 7-day means held 89.1–93.6% of the time with
-  the weekly ρ, against 82.7–87.8% with the daily ρ. Ranges for yearly peaks
-  and counts held in 73–93% of river-years, against 53–87%.
+  the weekly ρ, against 82.7–88.5% with the daily ρ. Ranges for yearly peaks
+  and counts held in 80–93% of river-years, against 53–87%.
 
 ### When to use which
 
@@ -437,7 +437,7 @@ One ρ sets the width of every parameter's range.
 - Parameters whose effect changes slowly over the year (the constant `a1`, the
   seasonal size `a6` and timing `a7`) need the full allowance for slow errors.
   With the daily ρ, the range of `a7` was too narrow: in the test, it contained
-  the truth 70% of the time instead of 90% (V4). With the weekly ρ it held
+  the truth 67% of the time instead of 90% (V4). With the weekly ρ it held
   (90%).
 - Parameters whose effect changes from day to day (`a2`, `a3`) then get ranges
   two to three times wider than they need.
@@ -568,9 +568,9 @@ was **not** calibrated on: a separate validation file, or cross-validation
 
 | Share of days inside the band | 50% | 80% | 90% | 95% | 99% |
 |---|---|---|---|---|---|
-| Synthetic data, model exactly right (V4) | within 1.4 points of the level at every level | | | | |
+| Synthetic data, model exactly right (V4) | within 1.3 points of the level at every level | | | | |
 | Swiss rivers, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.5% | 98.0–98.2% |
-| Swiss rivers, later validation years (V5) | 43–53% | 75–79% | 85–90% | 91–95% | 95–99.6% |
+| Swiss rivers, later validation years (V5) | 43–53% | 75–79% | 85–89% | 91–95% | 95–99.5% |
 | Swiss rivers, the hottest 10% of days by prediction, version 8 (V14) | | 80% | 91% | 95% | |
 | The same, version 5 (no discharge term) (V14) | | 68% | 84% | 92% | |
 
@@ -684,7 +684,7 @@ everything the year could tell the model about the answer.
 Validation [V12](../validation/REPORT.md#v12) checked this on 96 held-out years
 of three Swiss rivers. Hiding the year's air temperature and discharge from the
 calibration as well, or leaving two months unused on each side of the year,
-changed no year's error by more than 0.04 °C, and did not change how often the
+changed no year's error by more than 0.01 °C, and did not change how often the
 ranges held.
 
 ### How to run it
@@ -815,12 +815,12 @@ and the Dischmabach's too low.*
    Student t variable, the standard allowance for a mean estimated from few
    values). With few years the corrected range is therefore wider.
 
-![Left: deviations of seven held-out years, mean -0.65 °C with its 95% interval. Right: the 2011 highest 7-day mean before and after correction; the probability of exceeding 20 °C falls from 0.75 to 0.33; the measured value was 19.8 °C.](figures/U11_correction.png)
+![Left: deviations of seven held-out years, mean -0.65 °C with its 95% interval. Right: the 2011 highest 7-day mean before and after correction; the probability of exceeding 20 °C falls from 0.77 to 0.34; the measured value was 19.8 °C.](figures/U11_correction.png)
 
 *Figure 15. Example 03. Left: in the seven held-out years of 2003–2009 the
 measured highest 7-day mean was on average 0.65 °C below the prediction (95%
 interval 0.20–1.10 °C). Right: corrected, the probability that 2011 exceeded a
-20 °C limit falls from 0.75 to 0.33; the measured value was 19.8 °C, below the
+20 °C limit falls from 0.77 to 0.34; the measured value was 19.8 °C, below the
 limit.*
 
 ### When to use it
@@ -897,11 +897,11 @@ one scenario warm makes the other warm too. Pairing the two runs, so that series
 number k uses the same parameter set and the same daily error in both, cancels
 everything they share. What remains is the uncertainty of the difference.
 
-![Left: the June-August mean under both scenarios, two overlapping wide histograms. Right: the paired difference is +0.00 to +0.05 °C; an unpaired difference would be -0.57 to +0.63 °C.](figures/U12_paired.png)
+![Left: the June-August mean under both scenarios, two overlapping wide histograms. Right: the paired difference is +0.00 to +0.05 °C; an unpaired difference would be -0.56 to +0.58 °C.](figures/U12_paired.png)
 
 *Figure 16. Example 04. Left: each scenario's June–August 2011 mean, with a
 90% range 0.8 °C wide. Right: the change, paired, is 0.00 to +0.05 °C (90% range);
-subtracting unpaired series would give −0.57 to +0.63 °C and suggest that the
+subtracting unpaired series would give −0.56 to +0.58 °C and suggest that the
 change could go either way.*
 
 ### How to run it
@@ -1022,7 +1022,7 @@ cross-validation with a second `random_seed`.
 ### What the validation shows
 
 On synthetic data with known parameters, the default MCMC intervals (90%)
-contained the true values 91–97% of the time, and the jackknife intervals 83–94%
+contained the true values 93–97% of the time, and the jackknife intervals 83–95%
 ([V4](../validation/REPORT.md#v4)). The parameters published for the Swiss
 rivers (Piccolroaz et al., 2016) lay inside pyair2stream's MCMC intervals for 76
 of 81 values ([V2](../validation/REPORT.md#v2)).
@@ -1104,10 +1104,10 @@ range you quote beside it.
 
 | Share inside the range | 50% | 80% | 90% | 95% | 99% |
 |---|---|---|---|---|---|
-| days, synthetic data (V4) | within 1.4 points of the level at every level | | | | |
+| days, synthetic data (V4) | within 1.3 points of the level at every level | | | | |
 | days, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.5% | 98.0–98.2% |
 | 7-day means, held-out years (V11) | 53–59% | 84–88% | 93–94% | 96–97% | 98.6–99.2% |
-| days, later validation years (V5) | 43–53% | 75–79% | 85–90% | 91–95% | 95–99.6% |
+| days, later validation years (V5) | 43–53% | 75–79% | 85–89% | 91–95% | 95–99.5% |
 | yearly statistics, corrected (V11) | 50–69% | 75–85% | 85–94% | 92–100% | 100% |
 
 ![Stated against achieved coverage on the real rivers: days, summer days and 7-day means.](../validation/figures/V5_levels.png)
@@ -1200,11 +1200,11 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 ### How to word a result
 
 > The model, calibrated on 2002–2009 and checked by leave-one-year-out
-> cross-validation (7 held-out years), gives a probability of 0.33 that the
+> cross-validation (7 held-out years), gives a probability of 0.34 that the
 > highest 7-day mean water temperature in 2011 exceeded 20 °C (90% range for
-> that statistic 18.7–20.8 °C), after correcting for the model's average error
+> that statistic 18.8–20.8 °C), after correcting for the model's average error
 > in that statistic in the held-out years (−0.65 °C, 95% interval −1.10 to
-> −0.20 °C). Uncorrected, the probability would be 0.75. pyair2stream 0.5.0,
+> −0.20 °C). Uncorrected, the probability would be 0.77. pyair2stream 0.5.0,
 > commit `<sha>`, random seed 42.
 
 ### Checklist before you report
@@ -1235,14 +1235,14 @@ pyair2stream --config examples/03_compliance/check.yaml       # cross-validation
 
 | Year | P(7-day mean > 20 °C), corrected | uncorrected | Measured highest 7-day mean |
 |---|---|---|---|
-| 2010 | 0.59 | 0.91 | 21.0 °C (exceeded) |
-| 2011 | 0.33 | 0.75 | 19.8 °C (not exceeded) |
-| 2012 | 0.12 | 0.51 | 19.6 °C (not exceeded) |
+| 2010 | 0.57 | 0.92 | 21.0 °C (exceeded) |
+| 2011 | 0.34 | 0.77 | 19.8 °C (not exceeded) |
+| 2012 | 0.14 | 0.51 | 19.6 °C (not exceeded) |
 
 The check found that the model put the yearly peak 0.65 °C too high in the
 held-out years. Corrected, the probabilities matched what happened better (Brier
 score, the mean squared difference between probability and outcome; Brier,
-1950: 0.10 against 0.28), and all three measured values lay inside the corrected 90%
+1950: 0.11 against 0.29), and all three measured values lay inside the corrected 90%
 ranges.
 
 ---

@@ -3,6 +3,19 @@
 ## [0.5.0] - 2026-10-05
 
 ### Added
+- **`pyair2stream.run(config)`: run from Python** exactly as the command line
+  does, with a settings file or a dict, and get the results back: the best
+  parameters, the scores, the warnings and notes, the output folder and its
+  files (USER_GUIDE §7.2). `verbose=False` runs silently; errors raise
+  exceptions. The command line now calls it.
+- **`summary.md` in every output folder**: one page with the settings, the
+  data used, the scores, the parameters (flagging any on a bound), the
+  uncertainty, every warning and note the run printed, and what each output
+  file is.
+- **`filled_water_temperature_<period>.csv`**: the measured water temperature
+  with the model's values on the days without a measurement, a `source` column
+  saying which, and the prediction range after DE-MCMC or a FORWARD run with
+  intervals.
 - ⚠ **A cross-validated check of yearly statistics**, written by every
   cross-validation run (`cv_yearly_statistics.csv`,
   `cv_yearly_statistics_summary.csv`; docs/METHODS.md §11). For each held-out
@@ -50,14 +63,14 @@
   air temperature and discharge, the standard design (docs/METHODS.md §11 now
   explains why, with references). Over 96 held-out river-years, hiding the
   inputs from the calibration too changed no year's RMSE by more than
-  0.034 °C (against gap-tolerant mode with the inputs kept), and a 60-day
-  buffer around the year by no more than 0.041 °C.
+  0.007 °C (against gap-tolerant mode with the inputs kept), and a 60-day
+  buffer around the year by no more than 0.008 °C.
   Calibrating on earlier years only was as accurate, but its 90% intervals held
   on 87.1% of days against 89.6%: for predictions of future years, quote the
-  later-years tests (V5, V10) as well. ⚠ Jackknife parameter intervals depend
-  on the optimizer: another seed alone changed version 8's jackknife standard
-  errors by a factor of 0.35–1.55; check poorly determined parameters with a
-  second `random_seed`. `validation/run_all.py --only` now keeps the other
+  later-years tests (V5, V10) as well. Jackknife parameter intervals depend a
+  little on the optimizer: another seed alone changed their typical width by a
+  factor of 0.65–1.06 (0.35–1.55 before the DE stopping rule was fixed); check
+  poorly determined parameters with a second `random_seed`. `validation/run_all.py --only` now keeps the other
   checks in `REPORT.md`.
 - Validation V13: the parameters and errors of the first air2stream paper
   (Toffolon and Piccolroaz, 2015), transcribed to
@@ -77,12 +90,26 @@
   calibration record starting on 1 November 2012, was run by its authors as if
   it started on 1 January (the original program reads records by row); read
   that way, it is reproduced to 0.00001 °C. The published parameters are not
-  where pyair2stream's calibration lands (same values at 1 of 23 stations), but
-  where its DE-MCMC sampler converged (19 stations, with chains of up to
-  100,000 steps), 137 of 152 published values lie inside its 90% intervals.
-  The exception is station 08HA002, whose published calibration is far from
-  the best fit: recalibrated, it predicts 2021–2022 with RMSE 0.76 °C instead
-  of 1.09 °C.
+  where pyair2stream's calibration lands (same values at none of 23 stations),
+  but where its DE-MCMC sampler converged (16 stations, with chains of up to
+  100,000 steps), 115 of 128 published values lie inside its 90% intervals.
+  The exceptions are stations 08HA002 and 08KH006, whose published
+  calibrations are far from the best fit: recalibrated, they predict
+  2021–2022 with RMSE 0.75 °C instead of 1.09 °C, and 1.10 °C instead of
+  1.18 °C.
+- Validation V16: how many years of data a calibration needs. Each Swiss
+  river was calibrated on 1, 2, 3, 5 and 10 consecutive years (up to six
+  placements of each) and on its whole record, and every calibration predicted
+  the same later years. With 3 or more years, version 8's median RMSE was
+  within 0.034 °C of the whole record's; a single unusual year cost up to
+  0.17 °C.
+- Validation V17: air2stream against four regressions of water temperature on
+  air temperature (the day's, averaged, an S-curve, and averaged with
+  discharge), all fitted on the same years, on the 3 Swiss and 23 British
+  Columbia rivers. In held-out years, version 8's daily RMSE was below the
+  best regression's on 23 of 26 rivers (medians 0.74 against 0.89 °C, and 0.96
+  against 1.17 °C). On yearly peaks, the hottest days and the 2021 heat dome
+  its lead was smaller (better on 14 of 23 British Columbia rivers).
 - [docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md): the published
   air2stream results pyair2stream reproduces (Toffolon and Piccolroaz, 2015;
   Piccolroaz et al., 2016; Callahan and Moore, 2025), the errors found in each
@@ -151,22 +178,59 @@
   half the usual number of readings. Text that is not a number stops them with a
   message naming the file, column and line. New options: `na_values` (per file)
   and `min_readings_per_day` (days with fewer readings are left blank).
-- **Examples.** Example 05 (gaps) is expanded, with five figures: checking the
+- Gap-tolerant runs now also say when `warmup_drop_days` is much longer than
+  the fitted model needs. The note gives a warm-up of about three relaxation
+  times, and how many more measured days it would score (USER_GUIDE §10).
+- **Examples.** Example 05 (gaps) is expanded, with six figures: checking the
   data first; missing water temperature filled by the model (July-August 2006
   hidden: RMSE 0.44 °C against the hidden measurements); interpolation across a
-  three-week air temperature gap; the stretches gap-tolerant mode scores; and
-  how fast scattered gaps reduce the data scored (5% of days missing at random
-  leaves 36% of the measured days). New example 07 prepares input files from
+  three-week air temperature gap; and the stretches gap-tolerant mode scores.
+  Its new `gap_study.py` tests when gap-tolerant mode works (about 130
+  calibrations). For gaps of a month to a year, gap-tolerant mode changed the
+  calibrated model least (at most 0.07 °C in the predictions for other years,
+  against up to 1.5 °C for a straight-line fill and 0.16 °C for the seasonal
+  average). For scattered one-day gaps, a warm-up of about three relaxation
+  times (4 days on the Mentue, 2–11 days on 26 rivers) doubles the days scored
+  with 5–10% of days missing; a 0-day warm-up flatters the reported fit. New
+  example 07 prepares input files from
   raw logger files (merge, check, fill, split, run). New example 08 projects a
   warmer climate (+2 °C air, with and without 20% less summer flow), with paired
   changes and checked and corrected yearly peaks. Example 06 adds a sensitivity
   analysis. The examples index maps tasks to examples.
 
 ### Fixed
+- ⚠ **DE calibration could stop a third of the way through, on a worse fit.**
+  It used SciPy's default stopping rule: stop once the population's scores
+  agree to within 1% of their mean. For NSE (about 0.98) that allows a spread of
+  0.01, ten times the difference between a good and a poor fit. The local polish
+  then ended at the best member's nearest optimum, which could be a worse fit
+  with very different parameters. In 125 calibrations of the Mentue with gaps,
+  4 ended worse by 0.0009–0.0029 in NSE, with `a5` = 5–11 instead of 2.5,
+  after about 30 of 100 generations. On the 23 British Columbia rivers of
+  validation V15 it cost more: 12 calibrations had ended on a worse fit, by up
+  to 0.09 °C in RMSE. Fold calibrations that stopped early at scattered points
+  had also made the cross-validation (jackknife) parameter intervals about
+  twice as wide as they are. The rule is now `optimization.tol` (default
+  0.001), which found the best fit in all 125 Mentue calibrations.
+  Calibrations take about twice as long. DE-MCMC (its starting fit) and
+  cross-validation folds use the same rule. In the eight examples, which had
+  converged, best-fit parameters moved by at most 0.007 and simulated
+  temperatures by at most 0.008 °C. Results drawn from MCMC samples moved
+  slightly more, because the chain starts from the fit: example 03's
+  corrected probabilities went from 0.59/0.33/0.12 to 0.57/0.34/0.14. The
+  examples and their figures are rerun. The whole validation suite is rerun
+  with the fix: the same 11 checks pass and the same 4 (V5, V9, V10, V14)
+  miss some criteria, for the same reasons. Most numbers moved by a few
+  tenths of a percentage point. The exceptions show how much the early stop
+  had cost: in V12, the design differences it had seemed to show were mostly
+  optimizer scatter (hiding a held-out year's inputs changed no year's RMSE by
+  more than 0.007 °C, against 0.034 °C before), and in V15 the jackknife
+  intervals are half as wide. The full suite now takes several hours; run it
+  in parts with `--only` where jobs are limited in length.
 - Monthly scoring (`time_resolution: "1m"`) of a 360-day-calendar record longer
   than about 60 years stopped with `IndexError`.
 - Documentation errors: example 02 gave the parameter ranges as 95% ranges
-  with old values (they are 90% ranges: `a5` 2.03 to 4.15); the code in
+  with old values (they are 90% ranges: `a5` 2.02 to 4.24); the code in
   examples 03 and 04 and in USER_GUIDE §12 used paths and names that did not
   run as written; `full_simulation_*` outputs were described as covering the
   whole record (they cover the calibration file, on every day);
