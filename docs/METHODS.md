@@ -316,8 +316,11 @@ not fitted to, which is the better guide to its reliability.
 With `gap_tolerant: true`, `T_air` and `Discharge` may have gaps:
 
 1. The record is split into **segments**: runs of consecutive days with valid
-   `T_air` (and, for versions 4/7/8, positive discharge). Segments shorter than
-   `min_segment_days` (default 30) are dropped.
+   `T_air` (and, for versions 4/7/8, discharge, which must be positive unless
+   `min_theta_floor` is set). Segments shorter than `min_segment_days`
+   (default 30) are dropped. Zero-flow days left out this way are reported (a
+   warning, `Q_gap` and `gaps_summary.txt`); in a FORWARD run they are an
+   error, because the scenario's results would silently leave them out.
 2. Each segment is simulated **separately**. It starts from the observed water
    temperature on its first day if there is one, otherwise from the average
    observed water temperature for that day of the year in the calibration record
@@ -880,8 +883,9 @@ error series. A probability is computed in three steps:
    `partial_years="keep"`.
    `scenario.aggregate` gives means (or sums, maxima) over consecutive fixed
    periods, and `scenario.exceedance` counts days above a threshold, optionally
-   only in runs of at least k consecutive days (days not simulated count as not
-   above).
+   only in runs of at least k consecutive days. Days not simulated (gaps) are
+   not counted as above, and both functions warn when there are any.
+   `scenario.paired_difference` refuses two runs that simulated different days.
 2. The probability of exceedance is the share of series in which that quantity
    exceeds the limit. With 1,000 series it carries a sampling error of at most
    ±0.03 (95%).

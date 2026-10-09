@@ -622,11 +622,17 @@ So a zero or negative discharge stops the run when the data are loaded. The
 message names the first bad date. You can:
 
 1. correct the data;
-2. use `gap_tolerant: true`, which treats those days as gaps; or
+2. use `gap_tolerant: true`, which treats those days as gaps: they are not
+   simulated or scored, and the model starts again after them. The run warns,
+   with the number of days and the first one, marks them in `Q_gap` and counts
+   them in `gaps_summary.txt`. A FORWARD (scenario) run stops instead: its
+   results are about those days, so leaving them out would hide the answer
+   (for example, a river that dries up would show fewer warm days); or
 3. set `min_theta_floor` (for example `1.0e-6`), which keeps θ at least that
-   large. Use this only for days that genuinely had no flow. Expect large
-   simulated responses on those days, because θ^a4 becomes very large or very
-   small as the flow approaches zero.
+   large, so the days are simulated (also in gap-tolerant mode). Use this only
+   for days that genuinely had no flow. Expect large simulated responses on
+   those days, because θ^a4 becomes very large or very small as the flow
+   approaches zero.
 
 ## 10. Gap-tolerant mode
 
@@ -634,6 +640,8 @@ With `gap_tolerant: true`, `T_air` and `Discharge` may have gaps. This is how
 it works:
 
 - The record is split at each gap into **segments**: stretches with no gaps.
+  For versions 4, 7 and 8, a day with zero or negative discharge is also a gap
+  unless `min_theta_floor` is set (§9.2).
 - Segments shorter than `min_segment_days` (default 30) are dropped.
 - Each segment is simulated on its own. It starts from the measured water
   temperature on its first day, or, if there is none, from the average for

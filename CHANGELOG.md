@@ -9,6 +9,20 @@
   output file.
 
 ### Fixed
+- ⚠ **Zero-flow days in gap-tolerant mode are no longer skipped silently.**
+  Versions 4, 7 and 8 cannot simulate a day without flow, and gap-tolerant mode
+  treated such days as gaps without a message: the output marked them as not
+  missing, and `scenario.exceedance` counted them as not above the threshold.
+  A scenario in which the river dries up could therefore show fewer warm days
+  than the baseline. Now:
+  - a calibration or validation run warns, with the number of days and the
+    first one, marks them in `Q_gap` and counts them in `gaps_summary.txt`;
+  - a FORWARD run stops with an error that explains the choices;
+  - with `min_theta_floor` set, the days are simulated (they were gaps even
+    then);
+  - `scenario.exceedance` and `scenario.aggregate` warn about days without a
+    simulated value, and `scenario.paired_difference` refuses two runs that
+    simulated different days.
 - **Yearly statistics leave out partial years.** `scenario.year_statistics`
   gave a "highest 7-day mean" and a count of warm days for the first and last
   year of a file even when the file covered only part of them (for example a

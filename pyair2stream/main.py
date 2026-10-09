@@ -160,7 +160,12 @@ def forward(data: CommonData) -> None:
 
     # Construct gap columns
     tair_gap = np.where(data.Tair == -999.0, 1, 0)
-    q_gap = np.where(data.Q == -999.0, 1, 0)
+    # Discharge that cannot be used: missing, or (versions 4/7/8 without min_theta_floor, which
+    # cannot simulate a day without flow) zero or negative; gap-tolerant mode treats both as gaps.
+    q_zero = np.zeros(data.n_tot, dtype=bool)
+    if data.version in (4, 7, 8) and data.min_theta_floor is None:
+        q_zero = (data.Q != -999.0) & (data.Q <= 0.0)
+    q_gap = np.where((data.Q == -999.0) | q_zero, 1, 0)
     segment_id = np.full(data.n_tot, -999)
     if data.gap_tolerant and data.segments:
         for idx, (start, end) in enumerate(data.segments):
@@ -205,6 +210,10 @@ def forward(data: CommonData) -> None:
             q_gap_count = np.sum(q_gap[365:])
             f.write(f"T_air missing fraction: {tair_gap_count}/{n_data_points} ({tair_gap_count/n_data_points:.2%})\n")
             f.write(f"Q missing fraction: {q_gap_count}/{n_data_points} ({q_gap_count/n_data_points:.2%})\n")
+            q_zero_count = int(np.sum(q_zero[365:]))
+            if q_zero_count:
+                f.write(f"  of which zero or negative discharge (treated as gaps; set min_theta_floor to "
+                        f"simulate them): {q_zero_count}\n")
 
             total_valid_days = 0
             if data.segments:

@@ -46,6 +46,14 @@ def load_ensemble(path: str):
     return ensemble, dates
 
 
+def _warn_days_without_value(ensemble: np.ndarray, consequence: str) -> None:
+    """Print a warning when some days of an ensemble have no simulated value (NaN)."""
+    missing = np.isnan(np.atleast_2d(ensemble)).any(axis=0)
+    if missing.any():
+        print(f"Warning: {int(missing.sum())} day(s) have no simulated value (for example gaps in gap-tolerant "
+              f"mode); {consequence}.")
+
+
 def aggregate(ensemble: np.ndarray, dates, how: str = 'mean', freq: str = '7D') -> np.ndarray:
     """
     Resample each ensemble member (row) over `freq`, independently.
@@ -67,8 +75,9 @@ def aggregate(ensemble: np.ndarray, dates, how: str = 'mean', freq: str = '7D') 
     -------
     ndarray, shape (n_samples, n_periods)
     """
-    ensemble = np.asarray(ensemble)
+    ensemble = np.asarray(ensemble, dtype=np.float64)
     dates = pd.DatetimeIndex(dates)
+    _warn_days_without_value(ensemble, f"each period's {how} uses only the days that have one")
     aggregated_rows = [
         getattr(pd.Series(row, index=dates).resample(freq), how)().to_numpy()
         for row in ensemble
@@ -94,7 +103,8 @@ def exceedance(ensemble: np.ndarray, threshold: float, consecutive_days: int = 1
     -------
     ndarray, shape (n_samples,)
     """
-    ensemble = np.asarray(ensemble)
+    ensemble = np.asarray(ensemble, dtype=np.float64)
+    _warn_days_without_value(ensemble, "they are not counted as above the threshold")
     above = ensemble > threshold
     if consecutive_days <= 1:
         return above.sum(axis=1)
@@ -307,14 +317,24 @@ def paired_difference(ens_a: np.ndarray, ens_b: np.ndarray) -> np.ndarray:
     Raises
     ------
     ValueError
-        If the two ensembles do not have identical shape.
+        If the two ensembles do not have identical shape, or do not have values on the
+        same days (for example zero-flow days left out as gaps in only one of the runs).
     """
-    ens_a = np.asarray(ens_a)
-    ens_b = np.asarray(ens_b)
+    ens_a = np.asarray(ens_a, dtype=np.float64)
+    ens_b = np.asarray(ens_b, dtype=np.float64)
     if ens_a.shape != ens_b.shape:
         raise ValueError(
             f"paired_difference requires both ensembles to have identical shape "
             f"(same parameter draws in the same order); got {ens_a.shape} and {ens_b.shape}."
+        )
+    differ = (np.isnan(ens_a) != np.isnan(ens_b)).any(axis=0)
+    if differ.any():
+        first = int(np.argmax(differ))
+        raise ValueError(
+            f"The two runs do not have values on the same days: {int(differ.sum())} day(s) are simulated in one "
+            f"and not the other (first: day {first} of the series). A difference there would compare a value with "
+            "nothing. This happens, for example, when zero-flow days are left out as gaps in gap-tolerant mode in "
+            "only one run; make both runs simulate the same days (USER_GUIDE.md §9.2)."
         )
     return ens_a - ens_b
 

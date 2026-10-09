@@ -550,12 +550,16 @@ def check_nonpositive_discharge(data: CommonData) -> None:
 def find_segments(data: CommonData, min_segment_days: int):
     """
     Gap-tolerant mode: the stretches of consecutive days (from index 365 on) with valid air
-    temperature and, for versions 4/7/8, positive discharge. Returns (kept, dropped): lists of
-    (start, end) index pairs, inclusive, split by whether they are at least `min_segment_days` long.
+    temperature and, for versions 4/7/8, discharge: present, and positive unless
+    `min_theta_floor` is set (then a zero-flow day is simulated at the floor). Returns
+    (kept, dropped): lists of (start, end) index pairs, inclusive, split by whether they are at
+    least `min_segment_days` long.
     """
     valid = data.Tair[365:data.n_tot] != -999.0
     if data.version not in [3, 5]:
-        valid &= (data.Q[365:data.n_tot] != -999.0) & (data.Q[365:data.n_tot] > 0.0)
+        valid &= data.Q[365:data.n_tot] != -999.0
+        if getattr(data, 'min_theta_floor', None) is None:
+            valid &= data.Q[365:data.n_tot] > 0.0
     edges = np.diff(np.concatenate(([0], valid.astype(np.int8), [0])))
     starts = np.flatnonzero(edges == 1) + 365
     ends = np.flatnonzero(edges == -1) + 364

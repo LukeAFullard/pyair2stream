@@ -244,6 +244,25 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                                                  "Correct the data, set gap_tolerant: true to treat such days as "
                                                  "gaps, or set min_theta_floor (USER_GUIDE.md §9.2)."))
 
+    elif uses_q and min_theta_floor is None:
+        nonpositive = df['Discharge'] <= 0.0
+        if nonpositive.any():
+            n = int(nonpositive.sum())
+            what = (f"Zero or negative discharge in {source}: {n} day(s) (first: {where(nonpositive)}). Model "
+                    f"version {version} cannot simulate a day without flow (theta = Q / Qmedia is zero, and the "
+                    "equation divides by a power of theta). ")
+            if period == 'scenario':
+                problems.append(Problem('error', what + "In gap-tolerant mode these days would be left out as "
+                                        "gaps, so the scenario would have no water temperature on exactly these "
+                                        "days and they would not count in its results (for example in the number "
+                                        "of warm days). Set min_theta_floor to simulate them at a very low flow "
+                                        "(beyond the calibrated flows, so treat them with care), or correct the "
+                                        "data (USER_GUIDE.md §9.2)."))
+            else:
+                problems.append(Problem('warning', what + "In gap-tolerant mode these days are treated as gaps: "
+                                        "they are not simulated or scored, and the model starts again after them. "
+                                        "Set min_theta_floor to simulate them instead (USER_GUIDE.md §9.2)."))
+
     if period != 'scenario' and 'T_water' in columns and not df['T_water'].notna().any():
         what = "so it cannot test the model. Fill it, or remove paths.validation_data" if period == 'validation' \
             else "so the model cannot be calibrated on it"
