@@ -195,15 +195,11 @@ first line with the problem.
   or use [gap-tolerant mode](#10-gap-tolerant-mode).
 - **Discharge must be above zero** for versions 4, 7 and 8
   ([§9.2](#92-zero-or-negative-discharge)).
-- **Calibration and validation files must start on 1 January and be at least
-  365 days long.** If your water temperature record starts later in the year,
-  start the file on 1 January anyway. Fill in air temperature and discharge
-  from 1 January, and leave `T_water` empty until your measurements begin.
+- **Every file must be at least 365 days long**, because the model's warm-up
+  repeats the first year. It may start on any day. A validation file shorter
+  than a year is skipped, with a warning.
 - **Calibration and validation files need a `T_water` column with some
   measurements.** A scenario file does not.
-- **Scenario (`FORWARD`) files may start on any day, but must also be at least
-  365 days long**, because the model's warm-up repeats the first year. A
-  validation file shorter than a year is skipped, with a warning.
 - **Keep the validation years separate from the calibration years.** If the
   same measured days are in both files, the run warns: the validation score
   then does not test the model on new data.
@@ -224,9 +220,10 @@ expect larger errors in other years, and check the model on validation years.
 **Climate-model data** often uses a 365-day calendar with no leap days, or a
 360-day calendar. Declare it with `calendar: "noleap"` or
 `calendar: "360_day"`. Do not pad such data with invented dates, or the
-seasonal term will drift out of step. With these calendars the time of year is
-counted from the first row, so the file must start on the first day of a year
-(a row dated 1 January).
+seasonal term will drift out of step. A `noleap` file has real dates without
+29 February. A `360_day` file has 30 February, which ordinary dates do not, so
+only its first date is read as a date: it sets the day of the year the file
+starts on (day 1 to 30 of its month), and the rows are counted on from there.
 
 **Building the file from raw data.** pyair2stream has two helpers:
 
@@ -524,7 +521,6 @@ After a calibration, look at these, in this order:
 | `parameter_bounds: min > max` | Swap or correct the bounds of the parameter it names. |
 | `No parameter is free to calibrate` | Add `parameter_bounds`. |
 | `Missing calibration data file` / `Missing validation data file` | Check `paths.input_data` or `paths.validation_data`. |
-| `must start on January 1st` | Start the file on 1 January ([§5](#5-preparing-your-own-data)), or use gap-tolerant mode. |
 | `must be continuous at a daily time scale` | The message says which problem it is: a date with no row (add a row; its values may be empty), a date that appears twice (remove one of the rows), or dates out of order (sort the rows by date). |
 | `Date is blank on line ...` / `cannot be read as a date` | Write every date as `YYYY-MM-DD`, in the same format on every row. |
 | `value(s) that are not numbers` | Replace text such as `n.a.` with an empty cell, or write `-999`. Use a point, not a comma, as the decimal separator. |
@@ -645,7 +641,6 @@ it works:
   about three relaxation times, 3/B days (B is defined in §9.1). It warns if
   the warm-up is shorter. If it is much longer and that costs many measured
   days, a note gives a shorter warm-up and how many more days it would score.
-- The record does not need to start on 1 January.
 - Water temperature measurements inside a gap are not used. The model gives no
   water temperatures inside a gap.
 

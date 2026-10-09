@@ -22,6 +22,17 @@ from .model import prepare_evaluation, check_nonpositive_discharge, STABILITY_MA
 from .data_checks import check_table, PLAUSIBLE_RANGES as _PLAUSIBLE_RANGES
 
 
+# Day of the year on which each month starts, minus one, in a year without 29 February.
+NOLEAP_MONTH_START = np.array([0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334])
+
+
+def calendar_day_index(data: CommonData, i: int) -> int:
+    """0-based day of the year of row `i` for the noleap and 360_day calendars, from the
+    seasonal phase `data.tt` that `read_Tseries` set (tt = day of the year / days in it)."""
+    days_in_year = 365 if data.calendar == 'noleap' else 360
+    return int(round(data.tt[i] * days_in_year)) - 1
+
+
 def _check_choice(name: str, value, allowed) -> None:
     if value not in allowed:
         raise ValueError(f"Invalid {name} {value!r}. Must be one of: {', '.join(map(str, allowed))}.")
@@ -439,8 +450,7 @@ def compute_doy_climatology(data: CommonData) -> None:
                 day = data.date[i, 2]
                 doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
             else:
-                days_in_year = 365 if data.calendar == 'noleap' else 360
-                doy = (i - 365) % days_in_year
+                doy = calendar_day_index(data, i)
             doy_sums[doy] += data.Twat_obs[i]
             doy_counts[doy] += 1
 
@@ -628,16 +638,19 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
             # Calculate day of year
             doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days + 1
             data.tt[i] = np.float64(doy / float(days_in_year))
+    elif data.calendar == 'noleap':
+        # Real dates without 29 February: the day of the year follows from each row's
+        # month and day, with the month lengths of a year that is never a leap year.
+        doy = NOLEAP_MONTH_START[data.date[365:n_tot, 1] - 1] + data.date[365:n_tot, 2]
+        data.tt[365:n_tot] = doy / 365.0
     else:
-        # noleap / 360_day: compute tt from ROW POSITION against the declared
-        # calendar's fixed day-count, not from the (possibly padded/fake)
-        # Gregorian dates in `Date` -- those would silently misalign the
-        # seasonal cosine term against the true day of year. Row 365 (the first real day) restarts the annual cycle at day 1,
-        # matching the warm-up block's own convention above.
-        days_in_year = 365 if data.calendar == 'noleap' else 360
-        for i in range(365, n_tot):
-            doy = ((i - 365) % days_in_year) + 1
-            data.tt[i] = np.float64(doy / float(days_in_year))
+        # 360_day (twelve 30-day months): the first row's date sets the day of the year
+        # the file starts on, and the rows are counted on from there. Its other dates
+        # cannot be ordinary dates (a 360-day year has 30 February), so they only label
+        # the rows.
+        first = (int(data.date[365, 1]) - 1) * 30 + int(data.date[365, 2])
+        doy = (first - 1 + np.arange(n_tot - 365)) % 360 + 1
+        data.tt[365:n_tot] = doy / 360.0
 
     # The warm-up block copies the first 365 rows of forcing, so it must also copy
     # their seasonal phase. The Fortran's (j+1)/365 is only correct for a record

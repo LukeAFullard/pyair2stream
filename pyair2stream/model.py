@@ -700,8 +700,8 @@ def call_model_segmented(data: CommonData) -> None:
                 day = data.date[start, 2]
                 doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
             else:
-                days_in_year = 365 if data.calendar == 'noleap' else 360
-                doy = (start - 365) % days_in_year
+                from .io import calendar_day_index
+                doy = calendar_day_index(data, start)
             data.Twat_mod[start] = data.doy_climatology[doy]
 
     _run_integration(data, data.segments, p)

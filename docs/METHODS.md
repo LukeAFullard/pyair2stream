@@ -89,21 +89,21 @@ The checks:
 - **Discharge must be positive** for versions 4, 7 and 8, because the equation
   divides by a power of discharge. A zero or negative value is an error unless you
   set `min_theta_floor` (§5) or use gap-tolerant mode.
-- **Calibration and validation files must start on 1 January** (as in the
-  Fortran; not required in gap-tolerant mode). FORWARD runs (§13) may start on
-  any day, except with a `noleap` or `360_day` calendar (next item).
+- **Any start date.** The time of year is taken from each row's date, so a
+  file may start on any day (the Fortran assumed 1 January; §17).
 - **At least 365 days**, because the warm-up year (§3) repeats the first year.
   A shorter calibration or FORWARD file is an error; a shorter validation file is
   skipped, with a warning.
 - **Validation days should not be calibration days.** A warning gives the number
   of days with a measured water temperature in both files: on those days the
   validation score does not test the model on data it was not fitted to.
-- Dates must be real (Gregorian) dates, unless you declare `calendar: "noleap"`
-  (365-day years) or `"360_day"` (twelve 30-day months) for climate-model output.
-  With those calendars the dates only label the rows: the time of year is
-  counted from the row position, with the first row as day 1 of a year. So only
-  the order of the dates is checked, and the file must start on a row dated
-  1 January, in every mode.
+- Dates must be real (Gregorian) dates, unless you declare a climate-model
+  calendar. With `calendar: "noleap"` (365-day years) the dates are real dates
+  without 29 February, checked like standard dates. With `"360_day"` (twelve
+  30-day months) the first date sets the day of the year the file starts on (day
+  1 to 30 of its month), and the rows are counted on from there. Later dates
+  only label the rows, because ordinary dates have no 30 February, so only
+  their order is checked.
 - **Implausible values are reported**, not changed: a warning lists `T_air`
   outside −60 to 60 °C and `T_water` outside −2 to 50 °C. Such values usually
   mean a missing-value code other than blank or `-999` (for example `-99`), which
@@ -113,8 +113,10 @@ The checks:
 
 The simulated temperature on any day depends on the day before, so the simulation
 needs a starting value. To make that starting value irrelevant, the first 365
-rows of the record are copied and run **once before** the real record (a
-"warm-up" or "spin-up" year). The simulation starts from the observed water
+rows of the record, whatever day it starts on, are copied with their time of
+year and run **once before** the real record (a "warm-up" or "spin-up" year).
+The copy ends the day before the record starts, so the simulation enters the
+record in the right season. The simulation starts from the observed water
 temperature on the first day (or 4 °C if that day has no observation), runs
 through the copied year, and then continues into the real record.
 
@@ -221,9 +223,9 @@ a segment, §10).
 directly. With `"Nw"` (N weeks) the record is cut into consecutive blocks of N×7
 days starting on the first day; with `"1m"` into calendar months. A block is used
 only if the fraction of its days with a scored observation is at least `prc`
-(above 0 and at most 1; default 1.0, i.e. every day). As in the Fortran, a last,
-incomplete month counts only its days in the record, while a last, incomplete
-block of weeks is compared with the full N×7 days. The block's observed value is
+(above 0 and at most 1; default 1.0, i.e. every day). As in the Fortran, an
+incomplete month at either end of the record counts only its days in the record,
+while a last, incomplete block of weeks is compared with the full N×7 days. The block's observed value is
 the mean of those observations, and the simulated value is the mean of the
 simulation **on the same days**.
 
@@ -330,7 +332,7 @@ With `gap_tolerant: true`, `T_air` and `Discharge` may have gaps:
    it is longer, and a warm-up of 3/B days (with segments of at least twice
    that) would score at least 30 more observations and 5% more, it prints
    those settings and the number they would score.
-4. There is no separate 365-day warm-up (§3); the record need not start on 1 January.
+4. There is no separate 365-day warm-up (§3).
 5. Water-temperature observations inside a gap are not used.
 
 `gaps_summary.txt` lists the segments and how many observations were scored.
@@ -968,7 +970,7 @@ change one-sided.
 
 | Check | When | Effect |
 |---|---|---|
-| Missing, repeated, unordered or unreadable dates; text values; missing columns; incomplete `T_air`/`Discharge`; non-positive discharge; no `T_water` measurements; start date; short record (§2) | loading each file; the validation file before calibration | error |
+| Missing, repeated, unordered or unreadable dates; text values; missing columns; incomplete `T_air`/`Discharge`; non-positive discharge; no `T_water` measurements; 29 February in a `noleap` file; short record (§2) | loading each file; the validation file before calibration | error |
 | `T_air` or `T_water` outside a plausible range; a validation file shorter than a year; validation days that are also calibration days (§2) | loading each file; the validation file before calibration | warning |
 | Invalid version, run mode, integrator, objective, time resolution, `prc`, bounds | loading config | error |
 | Stability of the chosen integrator (B vs. limit, §6) | before each user-facing simulation | warning; error if >10% of days exceed it (`stability_error_fraction`), or if a difference can grow more than 100 times over a stretch of days (`stability_max_growth`) |
@@ -1109,7 +1111,7 @@ These are deliberate; each is covered by tests.
 - **`Qmedia`** also excludes discharge ≤ 0, and is fixed at the calibration value
   for validation and FORWARD runs instead of being recomputed.
 - **Seasonal phase** is computed from each row's real date (equivalent for
-  records starting on 1 January); FORWARD runs may start on any date, with the
+  records starting on 1 January), so a record may start on any date, with the
   warm-up year taking the phase of the rows it copies. The Fortran takes it
   from the row number and does not check that a record starts on 1 January: a
   published calibration whose record started on 1 November was run with its

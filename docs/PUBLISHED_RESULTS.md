@@ -223,7 +223,7 @@ listed on the right ([METHODS §17](METHODS.md#17-differences-from-the-fortran-o
 
 | Original program | Consequence | pyair2stream |
 |---|---|---|
-| assumes every record starts on 1 January; the seasonal timing comes from the row number | a record starting on another date is silently simulated with its seasonal cycle shifted (Callahan and Moore, station 08GA077) | timing from the dates; a calibration or validation record must start on 1 January (except in gap-tolerant mode, which also uses the dates) |
+| assumes every record starts on 1 January; the seasonal timing comes from the row number | a record starting on another date is silently simulated with its seasonal cycle shifted (Callahan and Moore, station 08GA077) | timing from the dates, so a record may start on any date |
 | recomputes `Qmedia` from the validation period's data | parameters are validated with another discharge scaling than they were fitted with, using information from the period predicted | keeps the calibration `Qmedia` |
 | PSO with a fixed number of iterations, seeded from the clock | runs cannot be repeated; where parameters trade off, each run returns different parameters | seeded DE with a local search; `random_seed` makes runs identical |
 | parameters are specific to the numerical scheme | parameters published for one scheme give other results, or diverge, with another | the scheme is recorded with every calibration (`calibration_metadata.json`), and a FORWARD run with intervals refuses an MCMC chain fitted with another scheme |

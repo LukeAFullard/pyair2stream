@@ -3,11 +3,21 @@
 ## [0.5.1] - 2026-10-09
 
 ### Fixed
-- **`calendar: "noleap"` or `"360_day"` files must start on the first day of a
-  year.** The time of year is counted from the first row, which is taken as
-  day 1. A FORWARD or gap-tolerant file that started later (for example on
+- ⚠ **Any file may start on any date.** The 1 January start, which the
+  Fortran assumed (it counted the time of year from the row number), is no
+  longer required for calibration and validation files: the time of year comes
+  from each row's date, and the warm-up year copies the phase of the rows it
+  repeats. Before, a record starting on 2 January had to wait for the next
+  1 January, losing almost a year of measurements. Records starting on
+  1 January give exactly the same results as before.
+- **`calendar: "noleap"` and `"360_day"` take the time of year from the dates.**
+  They counted it from the row position with the first row as 1 January, so a
+  FORWARD or gap-tolerant file starting on another date (for example
   1 October, a water year) ran with its seasonal term out of phase, without a
-  message. It is now an error, in every mode (METHODS §2).
+  message. A `noleap` file now has real dates without 29 February, checked for
+  missing and repeated days like standard dates. In a `360_day` file the first
+  date sets the day of the year the file starts on, and the rows are counted on
+  from there (METHODS §2).
 - **Ensemble draws that are unstable with RK4, RK2 or EUL are excluded.** In
   the DE-MCMC band and FORWARD intervals a draw now also counts as divergent
   when a difference can grow more than `stability_max_growth` times

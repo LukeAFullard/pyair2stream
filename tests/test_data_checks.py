@@ -131,11 +131,10 @@ def test_nonpositive_discharge_as_a_run_treats_it():
         assert _errors(df, **kw) == []
 
 
-def test_start_date_and_length():
+def test_any_start_date_and_the_length():
     late = _table(start="2001-01-02")
-    assert "must start on January 1st (it starts on 2001-01-02)" in _errors(late)[0]
-    assert _errors(late, period="scenario") == []
-    assert _errors(late, gap_tolerant=True) == []
+    for kw in ({}, {"period": "scenario"}, {"gap_tolerant": True}):
+        assert _errors(late, **kw) == []
     short = _table(n=300)
     assert "The calibration time series in f.csv has only 300 day(s)" in _errors(short)[0]
     assert "The scenario (FORWARD) time series in f.csv has only 300 day(s)" in _errors(short, period="scenario")[0]
@@ -152,22 +151,38 @@ def test_implausible_values_warn_with_date_and_line():
         in checked.warnings[0]
 
 
-def test_nonstandard_calendar_checks_only_the_order():
-    df = _table().drop(index=[99]).reset_index(drop=True)
+def _noleap_table(n=400, start="2001-03-15"):
+    dates = pd.date_range(start, periods=n + n // 365 + 1, freq="D")
+    dates = dates[~((dates.month == 2) & (dates.day == 29))][:n]
+    return _table(n).assign(Date=dates.strftime("%Y-%m-%d"))
+
+
+@pytest.mark.parametrize("calendar", ["standard", "noleap", "360_day"])
+@pytest.mark.parametrize("period, gap_tolerant", [("calibration", False), ("scenario", False), ("calibration", True)])
+def test_every_calendar_accepts_any_start_date(calendar, period, gap_tolerant):
+    df = _noleap_table(start="2003-07-19") if calendar == "noleap" else _table(start="2001-01-02")
+    assert _errors(df, calendar=calendar, period=period, gap_tolerant=gap_tolerant) == []
+
+
+def test_noleap_checks_the_dates_without_29_february():
+    df = _noleap_table(n=800, start="2003-06-01")        # spans 2004, which has no 29 February row
     assert _errors(df, calendar="noleap") == []
+    assert "missing dates" in _errors(df)[0]          # a standard calendar needs 29 February
+    msg = _errors(df.drop(index=[99]).reset_index(drop=True), calendar="noleap")[0]
+    assert "1 date(s) have no row (first: 2003-09-08" in msg
+    leap = _table(n=400, start="2004-01-01")
+    assert "2004-02-29 on line 61 of f.csv is 29 February, which the noleap calendar does not have" \
+        in _errors(leap, calendar="noleap")[0]
+
+
+def test_360_day_checks_the_order_and_the_first_day():
+    # The rows are counted on from the first date, so later dates only label the rows.
+    df = _table().drop(index=[99]).reset_index(drop=True)
+    assert _errors(df, calendar="360_day") == []
     df.iloc[[20, 21]] = df.iloc[[21, 20]].to_numpy()
-    assert "must have non-decreasing dates" in _errors(df, calendar="noleap")[0]
-
-
-@pytest.mark.parametrize("calendar", ["noleap", "360_day"])
-@pytest.mark.parametrize("period, gap_tolerant", [("scenario", False), ("calibration", True)])
-def test_nonstandard_calendar_must_start_on_the_first_day_of_a_year(calendar, period, gap_tolerant):
-    # The time of year is counted from the first row, so a later start would put the
-    # seasonal term out of phase, even where a standard-calendar file may start on any day.
-    df = _table(start="2001-03-01")
-    assert "must start on the first day of a year" in _errors(df, calendar=calendar, period=period,
-                                                                gap_tolerant=gap_tolerant)[0]
-    assert _errors(df, period=period, gap_tolerant=gap_tolerant) == []
+    assert "must have non-decreasing dates" in _errors(df, calendar="360_day")[0]
+    assert "is the 31st of a month, which the 360_day calendar does not have" \
+        in _errors(_table(start="2001-01-31"), calendar="360_day")[0]
 
 
 # --- A run uses the same checks for every file --------------------------------------------
