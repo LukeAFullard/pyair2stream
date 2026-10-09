@@ -73,6 +73,9 @@ class CommonData:
     calib_theta_min: Optional[float] = None
     calib_theta_max: Optional[float] = None
     warmup_drop_days: int = 15
+    # A file shorter than a year, outside gap-tolerant mode: the warm-up holds its first
+    # day's conditions and its first warmup_drop_days are not scored (io.read_Tseries).
+    warmup_from_first_day: bool = False
     min_segment_days: int = 30
     segments: Optional[list] = None
     sensitivity_analysis: bool = False

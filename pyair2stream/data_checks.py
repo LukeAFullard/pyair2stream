@@ -28,7 +28,8 @@ NO_360_DAY = ("calendar '360_day' is not supported. A 360-day year has dates suc
               "would put months and years out of step with the model's seasons. Convert the file to the "
               "standard calendar first (for example with xarray's convert_calendar), and record how the added "
               "days were filled: USER_GUIDE.md §5.")
-MIN_DAYS = 365
+MIN_DAYS = 365          # calibration: a whole year, so the seasonal parameters can be fitted
+MIN_SHORT_DAYS = 30     # validation and scenario files shorter than a year
 PERIOD_NAMES = {'calibration': 'calibration', 'validation': 'validation', 'scenario': 'scenario (FORWARD)'}
 
 
@@ -193,14 +194,23 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                                                  "missing date and leave its values blank."))
 
     n_days = len(df)
-    if n_days < MIN_DAYS:
+    if period == 'calibration' and n_days < MIN_DAYS:
+        problems.append(Problem('error', f"The calibration time series in {source} has only {n_days} day(s); at "
+                                         f"least {MIN_DAYS} are required. A calibration needs at least a whole year "
+                                         "so the parameters that describe the yearly cycle can be fitted: from part "
+                                         "of a year they would mean nothing for the other seasons."))
+    elif n_days < MIN_SHORT_DAYS:
         if period == 'validation':
-            problems.append(Problem('warning', f"The validation file {source} has only {n_days} day(s), less than a "
-                                               "year, so validation will be skipped."))
+            problems.append(Problem('warning', f"The validation file {source} has only {n_days} day(s), fewer than "
+                                               f"{MIN_SHORT_DAYS}, so validation will be skipped."))
         else:
             problems.append(Problem('error', f"The {PERIOD_NAMES[period]} time series in {source} has only {n_days} "
-                                             f"day(s); at least {MIN_DAYS} are required (the model's warm-up year "
-                                             "repeats the first year of data)."))
+                                             f"day(s); at least {MIN_SHORT_DAYS} are required."))
+    elif n_days < MIN_DAYS:
+        problems.append(Problem('warning', f"The {PERIOD_NAMES[period]} file {source} has {n_days} days, less than a "
+                                           "year. It is used, but its first days are not scored while the model "
+                                           "settles (warmup_drop_days, default 15), and a short period says little "
+                                           "about the other seasons: a year or more is recommended (USER_GUIDE.md §5)."))
 
     # --- Values ------------------------------------------------------------------------
     for col in ('T_air', 'T_water', 'Discharge'):

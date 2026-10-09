@@ -20,7 +20,7 @@ from .config import CommonData
 from .post_processing import post_process
 from .sensitivity import sensitivity_analysis
 from .results import (RunResult, capture_output, collect_parameters, collect_scores, files_of_this_run,
-                      messages_from, snapshot_folder, write_filled_series, write_summary)
+                      messages_from, write_filled_series, write_summary)
 from . import __version__
 
 from .model import (call_model, aggregation, statis, funcobj, detect_segments, warn_on_stability,
@@ -116,6 +116,14 @@ def _write_calibration_metadata(data: CommonData) -> None:
         json.dump(calibration_metadata, f, indent=2)
 
 
+def _warm_up_column(data: CommonData) -> np.ndarray:
+    """1 on the first warmup_drop_days of a file shorter than a year, which start from the
+    first day's conditions and are not scored (io.read_Tseries), else 0."""
+    warm_up = np.zeros(data.n_tot, dtype=int)
+    warm_up[365:365 + data.warmup_drop_days] = 1
+    return warm_up
+
+
 def forward(data: CommonData) -> None:
     """
     Replicates SUBROUTINE forward in AIR2STREAM_SUBROUTINES.f90
@@ -192,6 +200,8 @@ def forward(data: CommonData) -> None:
         cal_df['Tair_gap'] = tair_gap
         cal_df['Q_gap'] = q_gap
         cal_df['segment_id'] = segment_id
+    if data.warmup_from_first_day:
+        cal_df['warm_up'] = _warm_up_column(data)
 
     # Drop the warm-up block: it is a verbatim copy of year one with sentinel
     # dates (Year=-999), an implementation detail that broke pd.to_datetime and
@@ -255,6 +265,7 @@ def forward(data: CommonData) -> None:
     print(f"{data.mean_obs:.5f} {data.TSS_obs:.5f} {data.std_obs:.5f}")
 
     warn_on_stability(data, error_fraction=data.stability_error_fraction)
+    check_segment_warmup(data, suggest_shorter=False)
     call_model(data)
     check_numerical_divergence(data, max_plausible_twat=data.max_plausible_twat)
     ei = funcobj(data)
@@ -287,6 +298,8 @@ def forward(data: CommonData) -> None:
         val_df['Tair_gap'] = val_tair_gap
         val_df['Q_gap'] = val_q_gap
         val_df['segment_id'] = val_segment_id
+    if data.warmup_from_first_day:
+        val_df['warm_up'] = _warm_up_column(data)
 
     val_df.iloc[365:].to_csv(out_val_path, index=False)  # drop the warm-up block
 
@@ -328,9 +341,7 @@ def run(config, verbose: bool = True) -> RunResult:
 
 def _run(config, t1: float) -> CommonData:
     """The run itself: load and check the data, calibrate or simulate, write the outputs."""
-    data = read_calibration(config_file=config)
-    # Record what the output folder already holds, so the summary describes only this run's files.
-    data.folder_before = snapshot_folder(data.folder)
+    data = read_calibration(config_file=config)   # records what the output folder already holds
     if data.folder_before:
         print(f"Warning: the output folder {data.folder} already holds {len(data.folder_before):,} file(s) from "
               "earlier runs. This run replaces those with the same names as its own outputs (for example "

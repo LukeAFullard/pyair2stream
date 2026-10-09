@@ -126,6 +126,7 @@ def test_a_run_into_a_shared_folder_describes_only_its_own_files(tmp_path):
     _csv(tmp_path / 'cal.csv')
     _csv(tmp_path / 'future.csv', start='2018-01-01', seed=1)
     calibration = pyair2stream.run(_config(tmp_path), verbose=False)
+    assert not [m for m in calibration.messages if 'already holds' in m]     # a new folder
     with open(os.path.join(calibration.output_dir, 'MCMC_chain_S_c_1d_meta.json'), 'w') as f:
         f.write('{"converged": true, "sigma": 0.9, "interval_coverage": 0.555, "interval_coverage_n_days": 999}')
     earlier = set(os.listdir(calibration.output_dir))
@@ -141,7 +142,7 @@ def test_a_run_into_a_shared_folder_describes_only_its_own_files(tmp_path):
     assert '55.5%' not in summary and '## Uncertainty' not in summary      # not this run's record
     assert 'calibration_DE_NSE_S.png' not in summary                        # the calibration's figure
     assert all(not f.startswith(('0_DE', '1_DE', 'calibration_DE')) for f in forward.files)
-    replaced = {'summary.md', 'summary.html'}
+    replaced = {'summary.md', 'summary.html', 'parameters.txt'}
     assert f"also holds {len(earlier) - len(replaced):,} file(s) from earlier runs" in summary
-    assert "This run replaced these files of an earlier run: `summary.html`, `summary.md`." in summary
+    assert "This run replaced these files of an earlier run: `parameters.txt`, `summary.html`, `summary.md`." in summary
     assert set(forward.files) >= replaced

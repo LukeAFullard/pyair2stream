@@ -19,7 +19,8 @@ from .config import (
     VALID_OBJECTIVES,
 )
 from .model import prepare_evaluation, check_nonpositive_discharge, STABILITY_MAX_GROWTH
-from .data_checks import CALENDARS, NO_360_DAY, check_table, PLAUSIBLE_RANGES as _PLAUSIBLE_RANGES
+from .results import snapshot_folder
+from .data_checks import CALENDARS, NO_360_DAY, MIN_SHORT_DAYS, check_table, PLAUSIBLE_RANGES as _PLAUSIBLE_RANGES
 
 
 # Day of the year on which each month starts, minus one, in a year without 29 February.
@@ -387,6 +388,9 @@ def read_calibration(config_file='config.yaml') -> CommonData:
 
     data.folder = paths.get('output_dir', os.path.join(data.name, f"output_{data.version}"))
     os.makedirs(data.folder, exist_ok=True)
+    # What the folder holds before this run writes anything (parameters.txt below), so the
+    # summary describes only this run's files and an empty folder is not reported as used.
+    data.folder_before = snapshot_folder(data.folder)
 
     # Fortran module hardcodes n_par = 8
     n_par = 8
@@ -653,8 +657,8 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
 
     n_tot_raw = len(df)
 
-    if p == 'v' and n_tot_raw < 365:
-        print('Validation period < 1 year --> validation is skipped')
+    if p == 'v' and n_tot_raw < MIN_SHORT_DAYS:
+        print(f'Validation period shorter than {MIN_SHORT_DAYS} days --> validation is skipped')
         return
 
     n_year = int(np.ceil(n_tot_raw / 365.25))
@@ -688,9 +692,17 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
     data.Q[365:n_tot] = Q
 
     data.date[0:365, :] = -999
-    data.Tair[0:365] = Tair[:365]
-    data.Twat_obs[0:365] = Twat_obs[:365]
-    data.Q[0:365] = Q[:365]
+    # A file shorter than a year (validation or scenario; a calibration needs a year) has
+    # no first year to copy: the warm-up holds the first day's conditions instead, so the
+    # model settles at the water temperature that matches them, and the first
+    # warmup_drop_days are not scored (detect_segments). Gap-tolerant mode does not
+    # simulate the warm-up block (each segment starts from the climatology).
+    short = n_tot_raw < 365
+    data.warmup_from_first_day = short and not data.gap_tolerant
+    first_year = slice(0, 1) if short else slice(0, 365)
+    data.Tair[0:365] = Tair[first_year]
+    data.Twat_obs[0:365] = Twat_obs[first_year]
+    data.Q[0:365] = Q[first_year]
 
     # Seasonal phase tt = day-of-year / days-in-year. Warm-up block: (j+1)/365,
     # as in the Fortran (re-aligned below if the record does not start on 1 Jan).
@@ -723,7 +735,9 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
     # exact equivalence); otherwise the seasonal term would be out of phase with
     # the copied forcing and bias the first weeks of the simulation.
     starts_jan1 = date_col.iloc[0].month == 1 and date_col.iloc[0].day == 1
-    if data.calendar != 'standard' or not starts_jan1:
+    if short:
+        data.tt[0:365] = data.tt[365]
+    elif data.calendar != 'standard' or not starts_jan1:
         data.tt[0:365] = data.tt[365:730]
 
     # Initial Qmedia and DOY climatology calculations

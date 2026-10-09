@@ -72,6 +72,16 @@
   (with `calendar`, `gap_tolerant` and `time_resolution`, which describe the
   fit), and a FORWARD run that loads either file stops if they differ. Files
   written by earlier versions give a note asking you to check them.
+- **Validation and scenario files may be shorter than a year.** Every file had
+  to be at least 365 days long, only because the model's warm-up copies the
+  first year: a validation file covering one summer was skipped, and a short
+  scenario was refused. Validation and FORWARD files now need at least 30 days
+  (a warning recommends a year or more). A file shorter than a year starts from
+  its first day's conditions; its first `warmup_drop_days` are not scored and
+  are marked `warm_up = 1` in the output, and a warning says if the model needs
+  longer to forget its start. A calibration still needs a year, and the error
+  now gives the reason: the parameters of the yearly cycle cannot be fitted from
+  part of a year. Files of a year or more are unchanged.
 - **`Qmedia` must be positive.** A `Qmedia` of zero or below was refused only in
   gap-tolerant mode; otherwise every simulated temperature was NaN and the run
   stopped with an error that blamed the integrator. It is now refused for

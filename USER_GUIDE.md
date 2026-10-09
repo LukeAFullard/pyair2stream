@@ -195,9 +195,16 @@ first line with the problem.
   or use [gap-tolerant mode](#10-gap-tolerant-mode).
 - **Discharge must be above zero** for versions 4, 7 and 8
   ([§9.2](#92-zero-or-negative-discharge)).
-- **Every file must be at least 365 days long**, because the model's warm-up
-  repeats the first year. It may start on any day. A validation file shorter
-  than a year is skipped, with a warning.
+- **A calibration file must be at least 365 days long.** The model has
+  parameters for the yearly cycle, which cannot be fitted from part of a year.
+  A file may start on any day.
+- **Validation and scenario files need at least 30 days**, but a year or more
+  is recommended. A shorter file is used with a warning: a few weeks say little
+  about how the model does in other seasons. The model starts from the
+  conditions of the file's first day, so its first `warmup_drop_days` (default
+  15) are not scored and are marked `warm_up = 1` in the output file. If you
+  care about a particular period, start the file at least that many days
+  before it. A validation file shorter than 30 days is skipped, with a warning.
 - **Calibration and validation files need a `T_water` column with some
   measurements.** A scenario file does not.
 - **Keep the validation years separate from the calibration years.** If the
@@ -558,8 +565,11 @@ After a calibration, look at these, in this order:
 | `Missing 'T_air' column` (or another column) `(found 'T_air ' ...)` | Column names must match exactly: check for spaces and capital letters. |
 | `Missing 'Discharge' column` | Versions 4, 7 and 8 need discharge. |
 | `Missing 'T_water' column` / `has no water temperature measurements` | Calibration and validation files need measured water temperature. If a validation file has none, remove `paths.validation_data`. |
-| `has only ... day(s); at least 365 are required` | Calibration and scenario files need at least a year of data. |
-| `Warning: ... validation will be skipped` | The validation file is shorter than a year. Give it at least 365 days, or remove it. |
+| `has only ... day(s); at least 365 are required` | A calibration file needs at least a year of data, for the parameters of the yearly cycle. |
+| `has only ... day(s); at least 30 are required` | A scenario file needs at least 30 days. |
+| `Warning: ... validation will be skipped` | The validation file is shorter than 30 days. Give it more days, or remove it. |
+| `Warning: ... has ... days, less than a year` | The file is used, but its first days are not scored ([§5](#5-preparing-your-own-data)). A year or more is recommended. |
+| `Warning: warmup_drop_days=... is shorter than` | Gap-tolerant mode or a file shorter than a year: increase `warmup_drop_days` as the message suggests ([§10](#10-gap-tolerant-mode)). |
 | `Warning: ... are also measured days of the calibration file` | The validation file repeats calibration days. Use separate years ([§5](#5-preparing-your-own-data)). |
 | `Non-positive discharge (Q <= 0)` | See [§9.2](#92-zero-or-negative-discharge). |
 | `FORWARD mode requires an explicit Qmedia` | Set `paths.calibration_metadata` or `Qmedia:` ([§6](#qmedia-keep-it-fixed-when-discharge-changes)). |
@@ -581,7 +591,6 @@ After a calibration, look at these, in this order:
 | `draws ... were excluded as numerically divergent` | Use `CRN` or `EXP`, or check the chain and the bounds ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `paired_difference_from_files: ... differs` | The two scenario runs did not use the same parameter sets ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `The MCMC chain ... was fitted with ...` | The FORWARD run's model version, integrator, `Qmedia`, `Tice_cover` or `min_theta_floor` differs from the chain's calibration. Use `paths.calibration_metadata` from that calibration ([§12](#12-scenario-runs-and-prediction-intervals)). |
-| `Warning: warmup_drop_days=... is shorter than` | Gap-tolerant mode: increase `warmup_drop_days` as the message suggests ([§10](#10-gap-tolerant-mode)). |
 | `Note: the calibrated model forgets its restart within about ... days` | Gap-tolerant mode: a shorter warm-up would score more measured days. Set the values it gives and calibrate again ([§10](#10-gap-tolerant-mode)). |
 | (no message) Good overall scores, but `bias_by_month_*.png` shows the model too warm or too cool in some months | A score over the whole year can hide an error in one season. Compare model versions ([§4](#4-choosing-a-model-version-and-integrator)). Where discharge drives the summer temperature, use version 7 or 8. If an error remains in the season of your limit, report it. A model that is too warm overstates the chance that a warm-water limit was exceeded; one that is too cool understates it. |
 

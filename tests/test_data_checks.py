@@ -135,10 +135,19 @@ def test_any_start_date_and_the_length():
     late = _table(start="2001-01-02")
     for kw in ({}, {"period": "scenario"}, {"gap_tolerant": True}):
         assert _errors(late, **kw) == []
+    # A calibration needs a whole year, for the parameters of the yearly cycle.
     short = _table(n=300)
     assert "The calibration time series in f.csv has only 300 day(s)" in _errors(short)[0]
-    assert "The scenario (FORWARD) time series in f.csv has only 300 day(s)" in _errors(short, period="scenario")[0]
-    checked = check_table(short, "f.csv", period="validation")
+    assert "yearly cycle" in _errors(short)[0]
+    # Validation and scenario files may be shorter, down to 30 days, with a warning.
+    for period, name in (("scenario", "scenario (FORWARD)"), ("validation", "validation")):
+        checked = check_table(short, "f.csv", period=period)
+        assert checked.errors == [] and f"The {name} file f.csv has 300 days, less than a year" in checked.warnings[0]
+        assert "a year or more is recommended" in checked.warnings[0]
+        assert check_table(_table(n=30), "f.csv", period=period).errors == []
+    too_short = _table(n=29)
+    assert "has only 29 day(s); at least 30 are required" in _errors(too_short, period="scenario")[0]
+    checked = check_table(too_short, "f.csv", period="validation")
     assert checked.errors == [] and "validation will be skipped" in checked.warnings[0]
 
 

@@ -90,13 +90,13 @@ class TestCliAndIoCorrectness(unittest.TestCase):
             self.assertTrue((df['Twat_mod'] != -999.0).any())
 
     def test_short_validation_period_skips_cleanly(self):
-        # Defect B: a <1-year validation file must not silently re-run
+        # Defect B: a too-short (< 30 days) validation file must not silently re-run
         # "validation" on the calibration arrays.
         with tempfile.TemporaryDirectory() as tmp:
             cal_csv = os.path.join(tmp, 'cal.csv')
             val_csv = os.path.join(tmp, 'val.csv')
             _write_series_csv(cal_csv, 400)
-            _write_series_csv(val_csv, 200)  # < 365 days
+            _write_series_csv(val_csv, 20)  # < 30 days
 
             out_dir = os.path.join(tmp, 'out')
             config_path = os.path.join(tmp, 'config.yaml')

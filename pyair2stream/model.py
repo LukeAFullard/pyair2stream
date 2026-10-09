@@ -373,20 +373,32 @@ def check_daily_plausibility(data: CommonData) -> dict:
     return {"min_B": min_B, "n_negative_B": n_negative, "change_corr": change_corr}
 
 
-def check_segment_warmup(data: CommonData) -> None:
+def check_segment_warmup(data: CommonData, suggest_shorter: bool = True) -> None:
     """
-    Gap-tolerant mode only: warn if `warmup_drop_days` is too short for the
-    approximate restart temperature of each segment to be forgotten.
+    Warn if `warmup_drop_days` is too short for the model's start value to be
+    forgotten: the approximate restart temperature of each segment in gap-tolerant
+    mode, or the first day's conditions a file shorter than a year starts from
+    (`warmup_from_first_day`).
 
     A difference between the restart value and the "true" state decays roughly
     as exp(-B*t), where B (1/day) is the ODE's decay rate for the current
     parameters. After 3/B days about 95% of it has gone, so the unscored start
-    of each segment should be at least that long.
+    of each segment should be at least that long. With `suggest_shorter` (a
+    calibration in gap-tolerant mode), a note also says when a shorter warm-up
+    would score many more measured days.
     """
-    if not data.gap_tolerant or not data.segments:
+    if data.gap_tolerant and data.segments:
+        segments = data.segments
+        start_of = "the start of each segment may still reflect its approximate restart temperature"
+        guide = "§10"
+    elif not data.gap_tolerant and data.warmup_from_first_day:
+        segments = [(365, data.n_tot - 1)]
+        start_of = "the first days of the file may still reflect the conditions the model started from"
+        guide = "§5"
+    else:
         return
     in_seg = np.zeros(data.n_tot, dtype=bool)
-    for start, end in data.segments:
+    for start, end in segments:
         in_seg[start:end + 1] = True
     B = compute_B_series(data)
     ok = in_seg & np.isfinite(B) & (B > 0)
@@ -396,10 +408,11 @@ def check_segment_warmup(data: CommonData) -> None:
     if data.warmup_drop_days < needed:
         print(
             f"Warning: warmup_drop_days={data.warmup_drop_days} is shorter than about three "
-            f"relaxation times of the calibrated model ({needed} days). The start of each "
-            f"segment may still reflect its approximate restart temperature; consider "
-            f"warmup_drop_days: {needed}. See USER_GUIDE.md §10."
+            f"relaxation times of the calibrated model ({needed} days): {start_of}; consider "
+            f"warmup_drop_days: {needed}. See USER_GUIDE.md {guide}."
         )
+        return
+    if not data.gap_tolerant or not suggest_shorter:
         return
     # The opposite case: with many gaps, a warm-up much longer than the model needs throws
     # away measurements. Say how many a warm-up of `needed` days (and pieces of at least
@@ -595,6 +608,8 @@ def detect_segments(data: CommonData) -> None:
         data.eval_mask = np.zeros(data.n_tot, dtype=np.bool_)
         if data.n_tot > 365:
             data.eval_mask[365:] = True
+        if data.warmup_from_first_day:      # a file shorter than a year (io.read_Tseries)
+            data.eval_mask[365:365 + data.warmup_drop_days] = False
         return
 
     data.eval_mask = np.zeros(data.n_tot, dtype=np.bool_)

@@ -91,9 +91,14 @@ The checks:
   set `min_theta_floor` (§5) or use gap-tolerant mode.
 - **Any start date.** The time of year is taken from each row's date, so a
   file may start on any day (the Fortran assumed 1 January; §17).
-- **At least 365 days**, because the warm-up year (§3) repeats the first year.
-  A shorter calibration or FORWARD file is an error; a shorter validation file is
-  skipped, with a warning.
+- **Calibration: at least 365 days**, so that the parameters of the yearly
+  cycle (a5–a8 and the seasonal behaviour of the others) can be fitted: from part
+  of a year they would mean nothing for the other seasons. A shorter calibration
+  file is an error.
+- **Validation and FORWARD files: at least 30 days.** A file shorter than a year
+  is used with a warning that a year or more is recommended (a short period says
+  little about the other seasons) and the warm-up described in §3. A validation
+  file shorter than 30 days is skipped with a warning; a FORWARD file is an error.
 - **Validation days should not be calibration days.** A warning gives the number
   of days with a measured water temperature in both files: on those days the
   validation score does not test the model on data it was not fitted to.
@@ -122,6 +127,21 @@ through the copied year, and then continues into the real record.
 
 The warm-up year is never scored and never written to output files. (Gap-tolerant
 mode handles start values differently; see §10.)
+
+**Files shorter than a year** (validation and FORWARD only, §2) have no year to
+copy. Their warm-up holds the conditions of the first day (air temperature,
+discharge and time of year) for 365 days, so the simulation enters the record at
+the water temperature that matches them. Water temperature on the first day
+lags the air, so this start is approximate; its error fades as exp(−B·t), as
+after a gap in gap-tolerant mode (§10). The first `warmup_drop_days` (default
+15) are therefore not scored and are marked `warm_up = 1` in the output file,
+and a warning says if the calibrated model needs longer than that (3/B days) to
+forget its start. In a test on a 60-day summer piece of a 4-year synthetic
+record, the short-file simulation differed from the full one by less than
+0.05 °C after the first 15 days. Values on the marked days are left in the
+outputs; for statistics of a short scenario, leave them out, or start the file
+at least `warmup_drop_days` before the period of interest. Files of a year or
+more are unchanged.
 
 ## 4. Discharge scaling (Qmedia)
 
@@ -316,8 +336,9 @@ prediction intervals: it uses `forward_options.random_seed`, else `random_seed`
 
 If `paths.validation_data` is given, the calibrated parameters are run on that
 record, with its own warm-up year (§3) and the calibration `Qmedia` (§4), and
-scored exactly as in §7. Validation needs at least 365 days; otherwise it is
-skipped with a message. Validation shows how well the model predicts data it was
+scored exactly as in §7. Validation needs at least 30 days; otherwise it is
+skipped with a message. A file shorter than a year starts from its first day's
+conditions and its first `warmup_drop_days` are not scored (§3). Validation shows how well the model predicts data it was
 not fitted to, which is the better guide to its reliability.
 
 ## 10. Gap-tolerant mode
@@ -1001,7 +1022,7 @@ change one-sided.
 | Check | When | Effect |
 |---|---|---|
 | Missing, repeated, unordered or unreadable dates; text values; missing columns; incomplete `T_air`/`Discharge`; non-positive discharge; no `T_water` measurements; 29 February in a `noleap` file; short record (§2) | loading each file; the validation file before calibration | error |
-| `T_air` or `T_water` outside a plausible range; a validation file shorter than a year; validation days that are also calibration days (§2) | loading each file; the validation file before calibration | warning |
+| `T_air` or `T_water` outside a plausible range; a validation file shorter than 30 days; validation days that are also calibration days (§2) | loading each file; the validation file before calibration | warning |
 | Invalid version, run mode, integrator, objective, time resolution, `prc`, bounds | loading config | error |
 | Stability of the chosen integrator (B vs. limit, §6) | before each user-facing simulation | warning; error if >10% of days exceed it (`stability_error_fraction`), or if a difference can grow more than 100 times over a stretch of days (`stability_max_growth`) |
 | Simulated temperature not finite or above `max_plausible_twat` (60 °C) | after each user-facing simulation | error |
@@ -1011,7 +1032,9 @@ change one-sided.
 | Discharge outside the calibrated range (any day, zero-flow days at `min_theta_floor` included) | FORWARD runs | warning |
 | Negative discharge (a missing-value code other than −999) | loading each file (versions 4, 7, 8) | error |
 | Zero discharge with `min_theta_floor` set | loading each file | warning |
-| Segment warm-up too short | gap-tolerant runs | warning |
+| Calibration file shorter than 365 days; FORWARD file shorter than 30 days (§2) | loading each file | error |
+| Validation or FORWARD file shorter than a year (§2, §3) | loading each file | warning |
+| Segment warm-up, or the unscored start of a file shorter than a year, too short (§3, §10) | gap-tolerant runs; files shorter than a year | warning |
 | MCMC convergence; draws that diverge or, with RK4/RK2/EUL, are unstable (§12) | DE-MCMC, FORWARD intervals | warning / error |
 | Chain or calibration fitted with another model version, integrator, `Qmedia`, `Tice_cover` or `min_theta_floor` (§13) | FORWARD runs | error |
 | `Qmedia` zero or negative (§4) | loading data (versions 4, 7, 8) | error |
