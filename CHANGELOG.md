@@ -161,6 +161,17 @@
   warmer climate (+2 °C air, with and without 20% less summer flow), with paired
   changes and checked and corrected yearly peaks. Example 06 adds a sensitivity
   analysis. The examples index maps tasks to examples.
+- **Example 09: integrator stability.** The B series (`compute_B_series`) of
+  every model version with the 30 published parameter sets of the three Swiss
+  rivers; each integrator's amplification factor, measured through the package;
+  the B-series (Butcher trees) behind the limits 2 and 2.785; every integrator
+  with every parameter set against a fine-step solution, with the package's
+  checks; scenario flows from 0.1 to 3 times the record. It shows that a run
+  can be unstable without blowing up (the 0 °C floor holds it, and only the B
+  check stops it), that some wrong runs are only warned about, that the RK4
+  calibration of the Dischmabach's version 5 (2015) relies on RK4's behaviour
+  just under its limit, and how to compute, from the B series, how much a
+  difference can grow over a stretch of days.
 
 ### Fixed
 - Monthly scoring (`time_resolution: "1m"`) of a 360-day-calendar record longer

@@ -107,9 +107,10 @@ What they mean:
   temperatures.
 
 [§8](#8-understanding-the-output-files) explains every output file.
-[examples/](examples/README.md) has seven more worked examples: uncertainty,
+[examples/](examples/README.md) has eight more worked examples: uncertainty,
 temperature limits, flow scenarios, gaps, cross-validation and sensitivity,
-preparing data from raw files, and a warmer climate.
+preparing data from raw files, a warmer climate, and the stability of the
+integrators.
 
 ## 4. Choosing a model version and integrator
 
@@ -146,7 +147,8 @@ always stable.
 `RK4`, `RK2` and `EUL` are there to reproduce the original Fortran exactly.
 They can become unstable when the flow differs from the calibration flows.
 Then they give wrong numbers. Never use them for scenario runs
-([§9.1](#91-numerical-stability-and-the-choice-of-integrator)).
+([§9.1](#91-numerical-stability-and-the-choice-of-integrator),
+[example 09](examples/09_integrator_stability/README.md)).
 
 ## 5. Preparing your own data
 
@@ -548,6 +550,11 @@ errors differ from the published ones by up to 0.32 °C
 ([V13](validation/REPORT.md#v13)). A
 `FORWARD` run given `paths.calibration_metadata` refuses a different method or
 model version.
+
+[Example 09](examples/09_integrator_stability/README.md) shows all of this on
+the three Swiss rivers: the B series of every model version, what each method
+does with B, where the limits come from, how unstable runs can look plausible
+at the 0 °C floor, and how to check a scenario's B series before you run it.
 
 ### 9.2 Zero or negative discharge
 

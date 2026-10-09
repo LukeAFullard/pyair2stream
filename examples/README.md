@@ -2,8 +2,9 @@
 
 These worked examples use real data: daily air temperature, water temperature
 and discharge of the Mentue, a small Swiss river
-([`data/switzerland/`](../data/switzerland/README.md)). Examples 01 to 03 build
-on each other, so start with them. The others can be read in any order.
+([`data/switzerland/`](../data/switzerland/README.md)); example 09 also uses the
+Rhône and the Dischmabach. Examples 01 to 03 build on each other, so start with
+them. The others can be read in any order.
 
 Run them from the repository's top folder. Each example's `run.py` runs all of
 its steps and redraws the figures its README shows.
@@ -18,6 +19,7 @@ its steps and redraws the figures its README shows.
 | [06 Cross-validation](06_cross_validation/README.md) | Does the model predict every year well? How firmly do the data fix the parameters? Which version should I use? Which parameters matter most? | about 2 min |
 | [07 Preparing data](07_preparing_data/README.md) | How do I turn raw logger files into checked daily input files? | under 1 min |
 | [08 Climate](08_climate/README.md) | How much warmer would the river be in a warmer climate, and how often would a limit be exceeded? | about 4 min |
+| [09 Integrator stability](09_integrator_stability/README.md) | Why is `CRN` the default? When do `RK4`, `RK2` and `EUL` fail, for which model versions and flows? What does the B series tell me? | under 1 min |
 
 **Which example for which task:**
 
@@ -31,6 +33,7 @@ its steps and redraws the figures its README shows.
 | Compare a change in flow with the present | 04 |
 | Project a warmer climate | 08 |
 | Choose a model version; see which parameters matter | 06 |
+| Choose an integrator; check that a scenario run is numerically stable | 09 |
 
 The times are for a 4-core computer. Outputs go to each example's `output/`
 folder, which is not kept in the repository. Every run is seeded, so you should
