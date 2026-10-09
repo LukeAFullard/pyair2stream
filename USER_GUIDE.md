@@ -381,36 +381,54 @@ relative to, or use full paths.
 
 ### 7.2 From Python
 
-The command line is the simplest way to run pyair2stream. To run it from a
-Python script, call the same command:
+`pyair2stream.run` does exactly what the command line does, and returns the
+results:
 
 ```python
-import subprocess
-subprocess.run(["pyair2stream", "--config", "config.yaml"], check=True)
+import pyair2stream
+
+result = pyair2stream.run("config.yaml")          # or a dict with the same keys
+result.scores["validation"]["RMSE"]               # the validation RMSE, °C
+result.parameters                                 # {"a1": ..., "a8": ...}: the best fit
+result.messages                                   # the warnings and notes the run printed
+result.output_dir, result.summary                 # the output folder and its summary.md
 ```
 
-For more control, you can call the calibration steps directly:
+- `config` can be the path of a settings file, or a dict with the same keys.
+  A dict is handy for loops: change one setting, run again.
+- `verbose=False` runs without printing. The warnings and notes are still in
+  `result.messages` and in `summary.md`.
+- Errors raise exceptions: for example a `ValueError` naming the file, column
+  and line of a problem in the data.
+- `result.scores` has the scores of `goodness_of_fit_*.csv`, under
+  `"calibration"` and `"validation"`. A `FORWARD` run's are under `"forward"`,
+  a cross-validation run's (all held-out days together) under
+  `"cross-validation"`.
+- `result.data` holds the run's internal state, for advanced use.
+
+For example, to compare model versions:
 
 ```python
-from pyair2stream.io import read_calibration, read_Tseries
-from pyair2stream.model import aggregation, statis
-from pyair2stream.optimization import DE_mode
+import yaml, pyair2stream
 
-data = read_calibration(config_file="config.yaml")
-read_Tseries(data, "c")        # load the calibration data
-aggregation(data)
-statis(data)
-DE_mode(data, seed=42)         # sets data.par_best and data.finalfit
-print(data.par_best, data.finalfit)
+base = yaml.safe_load(open("config.yaml"))
+for version in (5, 8):
+    cfg = {**base, "version": version,
+           "paths": {**base["paths"], "output_dir": f"output/version{version}"}}
+    r = pyair2stream.run(cfg, verbose=False)
+    print(version, round(r.scores["validation"]["RMSE"], 3))
 ```
-
-This calibrates only. It does not validate or write the output files.
 
 ## 8. Understanding the output files
 
 All files go to `output_dir`. Their names include the run mode, the score
 (objective), the station, the series label and the time resolution. Every plot
 is saved as a PNG and as a PDF.
+
+**Start with `summary.md`.** Every run writes this one-page summary: the
+settings, the data used, the scores, the parameters (and whether any sits on a
+bound), the uncertainty (after `DE-MCMC` or a `FORWARD` run with intervals),
+every warning and note the run printed, and what each output file is.
 
 ### What to check first
 
@@ -437,6 +455,8 @@ After a calibration, look at these, in this order:
 
 | File | Contents |
 |---|---|
+| `summary.md` | a one-page summary of the run: settings, data, scores, parameters, uncertainty, warnings and notes, and what each file is |
+| `filled_water_temperature_<period>.csv` | one row per day of the calibration, validation or `FORWARD` file: `T_water_measured`, `T_water_model`, `T_water_filled` (the measurement where there is one, the model's value otherwise) and `source` (`measured`, `model` or `none`). After `DE-MCMC`, or a `FORWARD` run with intervals, also the model's prediction range (`model_lower_90`, `model_upper_90` for a 90% range). |
 | `1_*.out` | line 1: the 8 fitted parameters; line 2: the calibration score; line 3: the validation score (if run) |
 | `2_*.csv` / `3_*.csv` | one row per day of the calibration / validation file: `Year, Month, Day, Tair, Twat_obs, Twat_mod, Twat_obs_agg, Twat_mod_agg, Q`. `_agg` are the values actually scored; `-999` means none. Gap-tolerant runs add `Tair_gap, Q_gap, segment_id`. |
 | `goodness_of_fit_<period>_*.csv` | N, NSE, R² (squared correlation), RMSE, MAE, AIC and BIC, for `calibration` and `validation`. The `full_simulation` file repeats the calibration scores, because only measured days are scored. |

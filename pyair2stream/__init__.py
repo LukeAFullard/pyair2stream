@@ -15,3 +15,12 @@ except PackageNotFoundError:
 
 from .preprocessing import merge_timeseries, read_and_resample
 from .pre_analysis import analyze_timeseries
+
+
+def __getattr__(name):
+    # `run` and `RunResult` load the model and the optimizers, so they are imported on first
+    # use: `import pyair2stream` stays quick for the data-preparation tools above.
+    if name in ("run", "RunResult"):
+        from . import main, results
+        return main.run if name == "run" else results.RunResult
+    raise AttributeError(f"module 'pyair2stream' has no attribute '{name}'")

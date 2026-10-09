@@ -14,11 +14,13 @@ import argparse
 import numpy as np
 import pandas as pd
 
-from .io import read_calibration, read_Tseries, precheck_validation
+from .io import read_calibration, read_Tseries, precheck_validation, SettingsFileNotFoundError
 from .optimization import forward_mode, PSO_mode, LH_mode, DE_mode, DE_MCMC_mode
 from .config import CommonData
 from .post_processing import post_process
 from .sensitivity import sensitivity_analysis
+from .results import (RunResult, capture_output, collect_parameters, collect_scores, messages_from,
+                      output_files, write_filled_series, write_summary)
 from . import __version__
 
 from .model import (call_model, aggregation, statis, funcobj, detect_segments, warn_on_stability,
@@ -278,34 +280,44 @@ def forward(data: CommonData) -> None:
     val_df.iloc[365:].to_csv(out_val_path, index=False)  # drop the warm-up block
 
 
-def main():
+def run(config, verbose: bool = True) -> RunResult:
     """
-    Command-line interface entry point.
+    Run pyair2stream from Python, exactly as the command line does.
 
-    Parses the `--config` argument to locate the YAML configuration file, reads the
-    settings, loads the input datasets, executes cross-validation or calibration
-    (PSO, DE, MCMC, etc.), and triggers post-processing to generate outputs.
+    `config` is the path of a settings file (YAML) or a dict with the same keys. With
+    `verbose=False` nothing is printed; the warnings and notes are still returned. Errors
+    raise exceptions (for example FileNotFoundError, or ValueError naming the file, column
+    and line of a problem in the data).
+
+    Returns a RunResult: the output folder, the best parameters, the scores, the warnings
+    and notes, and the output files. Every run also writes summary.md and, when it
+    simulates a period, filled_water_temperature_<period>.csv into its output folder.
+
+        result = pyair2stream.run("config.yaml")
+        result.scores["validation"]["RMSE"]
     """
-    parser = argparse.ArgumentParser(description="pyair2stream - Python Port of air2stream")
-    parser.add_argument("--config", type=str, default="config.yaml", help="Path to the configuration YAML file.")
-    args = parser.parse_args()
-
-    print(r'       .__       ________            __                                  ')
-    print(r'_____  |__|______\_____  \   _______/  |________   ____ _____    _____   ')
-    print(r'\__  \ |  \_  __ \/  ____/  /  ___/\   __\_  __ \_/ __ \__  \  /     \  ')
-    print(r' / __ \|  ||  | \/       \  \___ \  |  |  |  | \/\  ___/ / __ \|  Y Y  \ ')
-    print(r'(____  /__||__|  \_______ \/____  > |__|  |__|    \___  >____  /__|_|  / ')
-    print(r'     \/                  \/     \/                    \/     \/      \/  ')
-    print(f'pyair2stream Version {__version__} (Python Port)')
-    print('')
-
+    settings = config if isinstance(config, str) else "(a dict passed to pyair2stream.run)"
     t1 = time.time()
+    with capture_output(verbose) as printed:
+        data = _run(config, t1)
+    messages = messages_from(printed.lines)
+    scores = collect_scores(data)
+    parameters = collect_parameters(data)
+    summary = None
+    try:   # the summary and the filled series are extras: a problem with them must not lose the run
+        write_filled_series(data)
+        summary = write_summary(data, scores, parameters, messages, settings=settings, seconds=time.time() - t1)
+    except Exception as err:  # noqa: BLE001
+        print(f"Warning: the run finished, but summary.md or the filled series could not be written: {err!r}")
+    if verbose and summary:
+        print(f"Summary of this run: {summary}")
+    return RunResult(output_dir=data.folder, run_mode=data.runmode, version=data.version, parameters=parameters,
+                     scores=scores, messages=messages, summary=summary, files=output_files(data.folder), data=data)
 
-    try:
-        data = read_calibration(config_file=args.config)
-    except FileNotFoundError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+
+def _run(config, t1: float) -> CommonData:
+    """The run itself: load and check the data, calibrate or simulate, write the outputs."""
+    data = read_calibration(config_file=config)
 
     read_Tseries(data, 'c')
     # The validation file is used only after the calibration, which can take hours:
@@ -345,7 +357,7 @@ def main():
 
             t2 = time.time()
             print(f"Computation time was {t2 - t1:.4f} seconds.")
-            return  # skip the normal single calibration + forward() + post_process()
+            return data  # skip the normal single calibration + forward() + post_process()
         else:
             print(f"Warning: cross_validation is enabled in config, but run mode '{data.runmode}' does not support it. Ignoring cross_validation block.")
 
@@ -363,6 +375,33 @@ def main():
 
     if data.sensitivity_analysis:
         sensitivity_analysis(data)
+    return data
+
+
+def main():
+    """
+    Command-line interface entry point: `pyair2stream --config settings.yaml`.
+
+    Prints the banner and runs `run()` on the settings file.
+    """
+    parser = argparse.ArgumentParser(description="pyair2stream - Python Port of air2stream")
+    parser.add_argument("--config", type=str, default="config.yaml", help="Path to the configuration YAML file.")
+    args = parser.parse_args()
+
+    print(r'       .__       ________            __                                  ')
+    print(r'_____  |__|______\_____  \   _______/  |________   ____ _____    _____   ')
+    print(r'\__  \ |  \_  __ \/  ____/  /  ___/\   __\_  __ \_/ __ \__  \  /     \  ')
+    print(r' / __ \|  ||  | \/       \  \___ \  |  |  |  | \/\  ___/ / __ \|  Y Y  \ ')
+    print(r'(____  /__||__|  \_______ \/____  > |__|  |__|    \___  >____  /__|_|  / ')
+    print(r'     \/                  \/     \/                    \/     \/      \/  ')
+    print(f'pyair2stream Version {__version__} (Python Port)')
+    print('')
+
+    try:
+        run(args.config)
+    except SettingsFileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()

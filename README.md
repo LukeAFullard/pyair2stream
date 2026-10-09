@@ -119,10 +119,13 @@ pyair2stream --config config.yaml
 ```
 
 The paths in the settings file are relative to the folder you run this from.
+From Python, `pyair2stream.run("config.yaml")` does the same and returns the
+scores, parameters and warnings ([User Guide §7.2](USER_GUIDE.md#72-from-python)).
 
 ### 4. Read the results
 
-Start with these files in the output folder:
+Start with `summary.md` in the output folder: one page with the settings,
+the data used, the scores, the parameters and every warning. Then these files:
 
 | File | What it tells you |
 |---|---|
@@ -131,6 +134,7 @@ Start with these files in the output folder:
 | `bias_by_month_validation_*.png` | the average error in each month. Is the model off in one season? |
 | `1_*.out` | the fitted parameters (line 1), then the calibration and validation scores |
 | `calibration_metadata.json` | what later runs need: the parameters, the mean discharge and the settings |
+| `filled_water_temperature_*.csv` | your water temperature record with its gaps filled by the model, and which days are filled |
 
 How to judge the scores:
 

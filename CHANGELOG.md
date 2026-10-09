@@ -3,6 +3,19 @@
 ## [0.5.0] - 2026-10-05
 
 ### Added
+- **`pyair2stream.run(config)`: run from Python** exactly as the command line
+  does, with a settings file or a dict, and get the results back: the best
+  parameters, the scores, the warnings and notes, the output folder and its
+  files (USER_GUIDE §7.2). `verbose=False` runs silently; errors raise
+  exceptions. The command line now calls it.
+- **`summary.md` in every output folder**: one page with the settings, the
+  data used, the scores, the parameters (flagging any on a bound), the
+  uncertainty, every warning and note the run printed, and what each output
+  file is.
+- **`filled_water_temperature_<period>.csv`**: the measured water temperature
+  with the model's values on the days without a measurement, a `source` column
+  saying which, and the prediction range after DE-MCMC or a FORWARD run with
+  intervals.
 - ⚠ **A cross-validated check of yearly statistics**, written by every
   cross-validation run (`cv_yearly_statistics.csv`,
   `cv_yearly_statistics_summary.csv`; docs/METHODS.md §11). For each held-out

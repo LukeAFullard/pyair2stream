@@ -68,9 +68,15 @@ model. The fit in the hidden months is as good as in the measured ones.*
 The validation suite tested this harder. It removed up to half the days at
 random, whole winters, a whole year, and all but one day a week. The model
 still predicted other years to within 0.06 °C of the truth
-([V7](../../validation/REPORT.md#v7)). To give the filled values an
-uncertainty range, run `DE-MCMC` and a `FORWARD` run with intervals, as in
-example [02](../02_uncertainty/README.md).
+([V7](../../validation/REPORT.md#v7)).
+
+Every run writes the filled record for you:
+`filled_water_temperature_calibration.csv` in the output folder. It has the
+measured value where there is one and the model's value elsewhere, and a
+`source` column says which (`measured` or `model`). After a `DE-MCMC` run, or
+a `FORWARD` run with intervals (as in example
+[02](../02_uncertainty/README.md)), it also has the 90% range of each day's
+value.
 
 ## Missing air temperature or discharge: fill or split
 
