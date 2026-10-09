@@ -123,8 +123,8 @@ change:
 
 - run `FORWARD` directly on the climate model's daily series, with
   `calibration_metadata` from your calibration, as here;
-- if the model uses a 365-day or 360-day calendar, declare it with
-  `calendar: "noleap"` or `calendar: "360_day"` (USER_GUIDE
+- if the model uses a 365-day calendar, declare it with `calendar: "noleap"`;
+  convert a 360-day calendar to the standard one first (USER_GUIDE
   [§5](../../USER_GUIDE.md#5-preparing-your-own-data));
 - climate models are biased. Adjust their air temperature and discharge to the
   measured ones first (bias correction). Or use them as a change applied to the

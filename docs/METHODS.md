@@ -97,13 +97,13 @@ The checks:
 - **Validation days should not be calibration days.** A warning gives the number
   of days with a measured water temperature in both files: on those days the
   validation score does not test the model on data it was not fitted to.
-- Dates must be real (Gregorian) dates, unless you declare a climate-model
-  calendar. With `calendar: "noleap"` (365-day years) the dates are real dates
-  without 29 February, checked like standard dates. With `"360_day"` (twelve
-  30-day months) the first date sets the day of the year the file starts on (day
-  1 to 30 of its month), and the rows are counted on from there. Later dates
-  only label the rows, because ordinary dates have no 30 February, so only
-  their order is checked.
+- Dates must be real (Gregorian) dates. With `calendar: "noleap"` (365-day
+  climate-model years) the dates are real dates without 29 February, checked
+  like standard dates. A 360-day calendar is refused: its 30 February cannot be
+  held by the dates used in the outputs, plots and cross-validation, and
+  relabelling its rows would shift the months against the seasons by about 5
+  days a year. Such files are converted to the standard calendar first
+  (USER_GUIDE §5).
 - **Implausible values are reported**, not changed: a warning lists `T_air`
   outside −60 to 60 °C and `T_water` outside −2 to 50 °C. Such values usually
   mean a missing-value code other than blank or `-999` (for example `-99`), which

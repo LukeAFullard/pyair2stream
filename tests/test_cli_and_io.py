@@ -16,7 +16,7 @@ Regression tests for docs/audit/05_cli_and_io_correctness.md.
 4. Defect D: a non-standard-calendar (e.g. 360-day GCM) series either failed
    validation outright or, if padded to fake Gregorian dates, silently
    misaligned the seasonal term. `calendar: noleap` computes tt from the dates
-   without 29 February; `360_day` from the first date, counting rows on from it.
+   without 29 February; `360_day` is refused with how to convert the file.
 """
 
 import os
@@ -201,27 +201,14 @@ class TestCliAndIoCorrectness(unittest.TestCase):
             self.assertAlmostEqual(data.tt[365], 1.0 / 365.0)
             self.assertAlmostEqual(data.tt[365 + 364], 1.0)
 
-    def test_360_day_calendar_computes_tt_from_row_position(self):
+    def test_360_day_calendar_is_refused_with_how_to_convert(self):
         with tempfile.TemporaryDirectory() as tmp:
-            n = 720  # two 360-day years, padded as consecutive real Gregorian days
-            dates = pd.date_range('2000-01-01', periods=n, freq='D')
-            csv_path = os.path.join(tmp, 'threesixty.csv')
-            pd.DataFrame({
-                'Date': dates.strftime('%Y-%m-%d'),
-                'T_air': 10.0 + 5.0 * np.sin(np.linspace(0, 4 * np.pi, n)),
-                'Discharge': np.full(n, 10.0),
-                'T_water': np.full(n, 8.0),
-            }).to_csv(csv_path, index=False)
-
-            data = CommonData()
-            data.runmode = 'DE'
-            data.calendar = '360_day'
-            data._input_data_path_cal = csv_path
-            read_Tseries(data, 'c')  # must not raise
-
-            self.assertAlmostEqual(data.tt[365], 1.0 / 360.0)          # day 1 of year 1
-            self.assertAlmostEqual(data.tt[365 + 359], 1.0)            # day 360, end of year 1
-            self.assertAlmostEqual(data.tt[365 + 360], 1.0 / 360.0)    # day 1 of year 2, restarts
+            config_path = os.path.join(tmp, 'config.yaml')
+            _write_config(config_path, project_name=os.path.join(tmp, 'proj'), version=8, run_mode='DE',
+                          calendar='360_day', paths={'output_dir': os.path.join(tmp, 'out')})
+            from pyair2stream.io import read_calibration
+            with self.assertRaisesRegex(ValueError, "360_day' is not supported.*USER_GUIDE.md §5"):
+                read_calibration(config_path)
 
     def _read_tt(self, calendar, dates):
         with tempfile.TemporaryDirectory() as tmp:
@@ -249,13 +236,6 @@ class TestCliAndIoCorrectness(unittest.TestCase):
         self.assertAlmostEqual(tt[i - 1], 59.0 / 365.0)                 # 28 February 2004
         self.assertAlmostEqual(tt[i], 60.0 / 365.0)                     # 1 March 2004, no 29 February
         np.testing.assert_allclose(tt[:365], tt[365:730])              # warm-up keeps the time of year
-
-    def test_360_day_calendar_starts_on_the_day_of_its_first_date(self):
-        tt = self._read_tt('360_day', pd.date_range('2001-03-15', periods=720, freq='D').strftime('%Y-%m-%d'))
-        self.assertAlmostEqual(tt[365], 75.0 / 360.0)                   # 15 March: 2 x 30 + 15
-        self.assertAlmostEqual(tt[365 + 285], 1.0)                      # day 360 of that year
-        self.assertAlmostEqual(tt[365 + 286], 1.0 / 360.0)              # then the next year starts
-        np.testing.assert_allclose(tt[:365], tt[365:730])
 
     def test_standard_calendar_may_start_on_any_date(self):
         tt = self._read_tt('standard', pd.date_range('2001-01-02', periods=400, freq='D').strftime('%Y-%m-%d'))

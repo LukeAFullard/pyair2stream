@@ -22,6 +22,12 @@ import pandas as pd
 PLAUSIBLE_RANGES = {'T_air': (-60.0, 60.0), 'T_water': (-2.0, 50.0)}
 
 MISSING_CODE = -999.0
+CALENDARS = ('standard', 'noleap')
+NO_360_DAY = ("calendar '360_day' is not supported. A 360-day year has dates such as 30 February, which the "
+              "package's dates, outputs and plots cannot hold, and relabelling the rows with ordinary dates "
+              "would put months and years out of step with the model's seasons. Convert the file to the "
+              "standard calendar first (for example with xarray's convert_calendar), and record how the added "
+              "days were filled: USER_GUIDE.md §5.")
 MIN_DAYS = 365
 PERIOD_NAMES = {'calibration': 'calibration', 'validation': 'validation', 'scenario': 'scenario (FORWARD)'}
 
@@ -110,6 +116,10 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
     """
     if period not in PERIOD_NAMES:
         raise ValueError(f"period must be one of {', '.join(PERIOD_NAMES)}, got {period!r}")
+    if calendar == '360_day':
+        raise ValueError(NO_360_DAY)
+    if calendar not in CALENDARS:
+        raise ValueError(f"calendar must be one of {', '.join(CALENDARS)}, got {calendar!r}")
     problems: List[Problem] = []
     df = df.copy()
     columns = list(df.columns)
@@ -149,7 +159,7 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                                          "Write dates as YYYY-MM-DD, in the same format on every row."))
     if blank.any() or unreadable.any():
         dates = None
-    elif calendar in ('standard', 'noleap'):
+    else:
         leap_days = (dates.dt.month == 2) & (dates.dt.day == 29)
         duplicated = dates.duplicated(keep=False)
         backwards = dates.diff() < pd.Timedelta(0)
@@ -181,20 +191,6 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                                                  f"with no missing dates: {len(missing)} date(s) have no row (first: "
                                                  f"{missing[0].date()}, after line {_line(after)}). Add a row for each "
                                                  "missing date and leave its values blank."))
-    else:
-        # 360_day: the first date sets the day of the year the file starts on, and the
-        # rows are counted on from there; the later dates only label the rows, so only
-        # their order can be checked.
-        backwards = dates.diff() < pd.Timedelta(0)
-        if backwards.any():
-            i = int(np.argmax(backwards.to_numpy()))
-            problems.append(Problem('error', f"The time series in {source} must have non-decreasing dates: "
-                                             f"{dates.iloc[i].date()} on line {_line(i)} comes after "
-                                             f"{dates.iloc[i - 1].date()} on line {_line(i - 1)}."))
-        if len(dates) and dates.iloc[0].day > 30:
-            problems.append(Problem('error', f"The first date of {source}, {dates.iloc[0].date()}, is the 31st of a "
-                                             "month, which the 360_day calendar does not have. It sets the day of the "
-                                             "year the file starts on: use a day from 1 to 30."))
 
     n_days = len(df)
     if n_days < MIN_DAYS:

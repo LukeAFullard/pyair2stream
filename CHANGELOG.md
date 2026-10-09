@@ -37,14 +37,13 @@
   repeats. Before, a record starting on 2 January had to wait for the next
   1 January, losing almost a year of measurements. Records starting on
   1 January give exactly the same results as before.
-- **`calendar: "noleap"` and `"360_day"` take the time of year from the dates.**
-  They counted it from the row position with the first row as 1 January, so a
-  FORWARD or gap-tolerant file starting on another date (for example
-  1 October, a water year) ran with its seasonal term out of phase, without a
-  message. A `noleap` file now has real dates without 29 February, checked for
-  missing and repeated days like standard dates. In a `360_day` file the first
-  date sets the day of the year the file starts on, and the rows are counted on
-  from there (METHODS §2).
+- **`calendar: "noleap"` takes the time of year from the dates.** It counted
+  it from the row position with the first row as 1 January, so a FORWARD or
+  gap-tolerant file starting on another date (for example 1 October, a water
+  year) ran with its seasonal term out of phase, without a message. A `noleap`
+  file now has real dates without 29 February, checked for missing and
+  repeated days like standard dates (METHODS §2).
+
 - **Ensemble draws that are unstable with RK4, RK2 or EUL are excluded.** In
   the DE-MCMC band and FORWARD intervals a draw now also counts as divergent
   when a difference can grow more than `stability_max_growth` times
@@ -62,6 +61,15 @@
 - The warnings about ρ (too few pairs, ρ at its limit of 0.99) are printed like
   every other warning, so they now appear in `summary.md` and
   `RunResult.messages`.
+
+### Removed
+- ⚠ **`calendar: "360_day"`.** It never worked: a file with genuine 360-day
+  dates (30 February) was refused when its dates were read, and relabelling
+  the rows with ordinary dates put months and years out of step with the
+  model's seasons by about 5 days a year, so monthly scoring, cross-validation
+  years and monthly or yearly results described the wrong part of the year,
+  without a message. It is now refused with an explanation. Convert such files
+  to the standard calendar first; USER_GUIDE §5 shows how with xarray.
 
 ### Documentation
 - METHODS §7 and USER_GUIDE §8: the scores in `goodness_of_fit_*.csv` are

@@ -217,13 +217,30 @@ often enough too. But an unusual year, such as a heatwave summer, made the
 predictions of other years up to 0.17 °C worse. So with only one or two years,
 expect larger errors in other years, and check the model on validation years.
 
-**Climate-model data** often uses a 365-day calendar with no leap days, or a
-360-day calendar. Declare it with `calendar: "noleap"` or
-`calendar: "360_day"`. Do not pad such data with invented dates, or the
-seasonal term will drift out of step. A `noleap` file has real dates without
-29 February. A `360_day` file has 30 February, which ordinary dates do not, so
-only its first date is read as a date: it sets the day of the year the file
-starts on (day 1 to 30 of its month), and the rows are counted on from there.
+**Climate-model data** often uses a 365-day calendar with no leap days.
+Declare it with `calendar: "noleap"`: the file then has real dates without
+29 February. Do not pad such data with invented dates, or the seasonal term
+will drift out of step.
+
+Some climate models use a **360-day calendar** (twelve months of 30 days, with
+30 February). pyair2stream does not accept it: its dates, outputs and plots
+cannot hold 30 February, and relabelling the rows with ordinary dates would
+put the months out of step with the model's seasons by about 5 days a year.
+Convert such a file to the standard calendar first. With xarray:
+
+```python
+import numpy as np
+import xarray as xr
+
+ds = xr.open_dataset("gcm_360day.nc")         # daily air temperature and discharge
+ds = ds.convert_calendar("standard", align_on="year", missing=np.nan, use_cftime=False)
+ds = ds.interpolate_na("time")                # fill the 5 or 6 days added to each year
+ds.to_dataframe().reset_index().rename(columns={"time": "Date"})   # then rename the columns as in this section
+```
+
+`align_on="year"` spreads the added days evenly through each year, and
+`interpolate_na` fills each one from the days either side. This is a choice
+about your data: record it with your results.
 
 **Building the file from raw data.** pyair2stream has two helpers:
 
@@ -278,7 +295,7 @@ series: "series"                  # any short label
 version: 8                  # 3, 4, 5, 7 or 8 (§4)
 integrator: "CRN"           # CRN, EXP, RK4, RK2 or EUL (§4)
 Tice_cover: 0.0             # water temperature is never simulated below this (°C)
-calendar: "standard"        # standard, noleap or 360_day (§5)
+calendar: "standard"        # standard or noleap (§5)
 min_theta_floor: null       # e.g. 1.0e-6 to allow days with zero flow (§9.2)
 Qmedia: null                # mean discharge used to scale the flow; needed for FORWARD (below)
 

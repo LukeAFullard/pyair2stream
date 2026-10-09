@@ -19,7 +19,7 @@ from .config import (
     VALID_OBJECTIVES,
 )
 from .model import prepare_evaluation, check_nonpositive_discharge, STABILITY_MAX_GROWTH
-from .data_checks import check_table, PLAUSIBLE_RANGES as _PLAUSIBLE_RANGES
+from .data_checks import CALENDARS, NO_360_DAY, check_table, PLAUSIBLE_RANGES as _PLAUSIBLE_RANGES
 
 
 # Day of the year on which each month starts, minus one, in a year without 29 February.
@@ -27,10 +27,9 @@ NOLEAP_MONTH_START = np.array([0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304,
 
 
 def calendar_day_index(data: CommonData, i: int) -> int:
-    """0-based day of the year of row `i` for the noleap and 360_day calendars, from the
-    seasonal phase `data.tt` that `read_Tseries` set (tt = day of the year / days in it)."""
-    days_in_year = 365 if data.calendar == 'noleap' else 360
-    return int(round(data.tt[i] * days_in_year)) - 1
+    """0-based day of the year of row `i` for the noleap calendar, from the seasonal phase
+    `data.tt` that `read_Tseries` set (tt = day of the year / 365)."""
+    return int(round(data.tt[i] * 365)) - 1
 
 
 def _check_choice(name: str, value, allowed) -> None:
@@ -152,12 +151,13 @@ def read_calibration(config_file='config.yaml') -> CommonData:
     data.min_theta_floor = min_theta_floor
 
     data.calendar = config.get('calendar', 'standard')
-    if data.calendar not in ('standard', 'noleap', '360_day'):
+    if data.calendar == '360_day':
+        raise ValueError(NO_360_DAY)
+    if data.calendar not in CALENDARS:
         raise ValueError(
-            f"Invalid calendar '{data.calendar}'. Must be one of: 'standard', 'noleap', "
-            "'360_day'. GCM output on a non-standard calendar (no leap days, or 12 "
-            "uniform 30-day months) must declare it explicitly rather than being padded "
-            "to fake Gregorian dates -- see USER_GUIDE.md §5."
+            f"Invalid calendar '{data.calendar}'. Must be one of: 'standard', 'noleap'. "
+            "Climate-model output without leap days must declare calendar: 'noleap' rather "
+            "than being padded with invented dates -- see USER_GUIDE.md §5."
         )
 
     # Paths mapping
@@ -638,19 +638,11 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
             # Calculate day of year
             doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days + 1
             data.tt[i] = np.float64(doy / float(days_in_year))
-    elif data.calendar == 'noleap':
-        # Real dates without 29 February: the day of the year follows from each row's
-        # month and day, with the month lengths of a year that is never a leap year.
+    else:
+        # noleap: real dates without 29 February. The day of the year follows from each
+        # row's month and day, with the month lengths of a year that is never a leap year.
         doy = NOLEAP_MONTH_START[data.date[365:n_tot, 1] - 1] + data.date[365:n_tot, 2]
         data.tt[365:n_tot] = doy / 365.0
-    else:
-        # 360_day (twelve 30-day months): the first row's date sets the day of the year
-        # the file starts on, and the rows are counted on from there. Its other dates
-        # cannot be ordinary dates (a 360-day year has 30 February), so they only label
-        # the rows.
-        first = (int(data.date[365, 1]) - 1) * 30 + int(data.date[365, 2])
-        doy = (first - 1 + np.arange(n_tot - 365)) % 360 + 1
-        data.tt[365:n_tot] = doy / 360.0
 
     # The warm-up block copies the first 365 rows of forcing, so it must also copy
     # their seasonal phase. The Fortran's (j+1)/365 is only correct for a record

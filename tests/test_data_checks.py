@@ -157,7 +157,7 @@ def _noleap_table(n=400, start="2001-03-15"):
     return _table(n).assign(Date=dates.strftime("%Y-%m-%d"))
 
 
-@pytest.mark.parametrize("calendar", ["standard", "noleap", "360_day"])
+@pytest.mark.parametrize("calendar", ["standard", "noleap"])
 @pytest.mark.parametrize("period, gap_tolerant", [("calibration", False), ("scenario", False), ("calibration", True)])
 def test_every_calendar_accepts_any_start_date(calendar, period, gap_tolerant):
     df = _noleap_table(start="2003-07-19") if calendar == "noleap" else _table(start="2001-01-02")
@@ -175,14 +175,9 @@ def test_noleap_checks_the_dates_without_29_february():
         in _errors(leap, calendar="noleap")[0]
 
 
-def test_360_day_checks_the_order_and_the_first_day():
-    # The rows are counted on from the first date, so later dates only label the rows.
-    df = _table().drop(index=[99]).reset_index(drop=True)
-    assert _errors(df, calendar="360_day") == []
-    df.iloc[[20, 21]] = df.iloc[[21, 20]].to_numpy()
-    assert "must have non-decreasing dates" in _errors(df, calendar="360_day")[0]
-    assert "is the 31st of a month, which the 360_day calendar does not have" \
-        in _errors(_table(start="2001-01-31"), calendar="360_day")[0]
+def test_360_day_calendar_is_refused_with_how_to_convert():
+    with pytest.raises(ValueError, match="calendar '360_day' is not supported.*convert_calendar"):
+        check_table(_table(), "f.csv", calendar="360_day")
 
 
 # --- A run uses the same checks for every file --------------------------------------------

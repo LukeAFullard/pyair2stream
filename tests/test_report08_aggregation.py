@@ -214,22 +214,21 @@ if __name__ == '__main__':
     pytest.main([__file__, '-v'])
 
 
-def test_monthly_aggregation_of_a_long_360_day_record():
-    """Monthly scoring of a 360-day-calendar record longer than about 60 years (climate
-    projections) once ran out of room for its months (IndexError)."""
+def test_monthly_aggregation_of_a_long_record():
+    """Monthly scoring of a record longer than about 60 years (climate projections) once ran
+    out of room for its months (IndexError)."""
     import yaml
     from pyair2stream.io import read_calibration, read_Tseries
     import tempfile, os
-    n = 360 * 80
-    t = np.arange(n)
-    dates = [f"{2000 + k // 360:04d}-{(k % 360) // 30 + 1:02d}-{min(k % 30 + 1, 28):02d}" for k in t]
+    dates = pd.date_range("2000-01-01", "2079-12-31", freq="D")
+    t = np.arange(len(dates))
     with tempfile.TemporaryDirectory() as tmp:
         csv = os.path.join(tmp, "d.csv")
-        pd.DataFrame({"Date": dates, "T_air": 10 + 10 * np.sin(2 * np.pi * t / 360),
-                      "T_water": 8 + 6 * np.sin(2 * np.pi * (t - 20) / 360)}).to_csv(csv, index=False)
+        pd.DataFrame({"Date": dates.strftime("%Y-%m-%d"), "T_air": 10 + 10 * np.sin(2 * np.pi * t / 365.25),
+                      "T_water": 8 + 6 * np.sin(2 * np.pi * (t - 20) / 365.25)}).to_csv(csv, index=False)
         cfg = os.path.join(tmp, "c.yaml")
         with open(cfg, "w") as f:
-            yaml.safe_dump({"version": 5, "run_mode": "FORWARD", "calendar": "360_day", "time_resolution": "1m",
+            yaml.safe_dump({"version": 5, "run_mode": "FORWARD", "time_resolution": "1m",
                             "parameters_forward": [1, 0.5, 0.5, 0, 0, 1, 0.5, 0],
                             "paths": {"input_data": csv, "output_dir": os.path.join(tmp, "out")}}, f)
         data = read_calibration(cfg)

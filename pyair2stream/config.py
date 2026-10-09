@@ -138,9 +138,9 @@ class CommonData:
     # instead of hitting a `ZeroDivisionError` (a4 > 0) or a silent `inf` (a4 < 0).
     min_theta_floor: Optional[float] = None
 
-    # Declared calendar for the forcing series: 'standard' (real Gregorian dates,
-    # the only calendar the daily-continuity check validates against), 'noleap'
-    # (365 days every year, no Feb 29), or '360_day' (12 uniform 30-day months).
+    # Declared calendar for the forcing series: 'standard' (real Gregorian dates) or
+    # 'noleap' (real dates without 29 February: 365 days every year). '360_day' is
+    # refused: convert such files to the standard calendar first (USER_GUIDE.md §5).
     calendar: str = 'standard'
     wmin: np.float64 = np.float64(0.0)
     wmax: np.float64 = np.float64(0.0)
