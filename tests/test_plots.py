@@ -103,7 +103,7 @@ def test_yearly_statistic_several_scenarios_and_plain_arrays():
     dots = [ln for ln in ax.get_lines() if ln.get_marker() == "o"]
     assert len(dots) == 4 and len(_probabilities(ax)) == 4
     labels = [t.get_text() for t in ax.get_legend().get_texts()]
-    assert labels == ["now", "warmer"]
+    assert labels == ["now", "warmer", "limit (19 °C)"]
     # Many bars: probabilities are not written unless asked for.
     many = {y: np.random.default_rng(y).normal(20, 1, 100) for y in range(1990, 2020)}
     assert len(_probabilities(plots.yearly_statistic(many, limit=20))) == 0

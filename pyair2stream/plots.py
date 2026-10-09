@@ -76,7 +76,7 @@ def prediction_range(ensemble, dates, level: float = 90, window: int = 1, measur
     ax.set_ylabel(f"{what} (°C)")
     ax.xaxis.set_major_locator(mdates.AutoDateLocator())
     ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
-    ax.legend(loc="upper left", fontsize=8, frameon=False)
+    _legend_below(ax)
     return _style(ax)
 
 
@@ -152,10 +152,8 @@ def change(differences, dates, by: str = "month", level: float = 90, reference: 
     else:
         ax.set_ylabel(f"Mean change in {by} (°C)")
         ax.set_title(f"Dot: median of the simulations; bar: {level:g}% range", fontsize=9, color=INK2, loc="left")
-    if by == "day":
-        ax.legend(loc="upper left", fontsize=8, frameon=False)
-    elif n > 1:
-        _legend_below(ax, n)
+    if by == "day" or n > 1 or reference_label:
+        _legend_below(ax)
     return _style(ax)
 
 
@@ -193,6 +191,7 @@ def yearly_statistic(values, statistic: str = "highest 7-day mean", limit: float
     matplotlib Axes
     """
     series = _by_name(values, statistic)
+    unit = "days" if "days" in statistic else "°C"
     years = sorted({y for v in series.values() for y in v})
     n = len(series)
     if show_probability is None:
@@ -224,20 +223,19 @@ def yearly_statistic(values, statistic: str = "highest 7-day mean", limit: float
         xs = [i for i, y in enumerate(years) if y in meas and np.isfinite(meas[y])]
         ax.plot(xs, [meas[years[i]] for i in xs], "_", color=INK, ms=16, mew=2, label="measured")
     if limit is not None:
-        _reference(ax, limit, f"limit {limit:g}")
+        _reference(ax, limit, f"limit ({limit:g} {unit})")
     ax.set_xticks(range(len(years)), [str(y) for y in years])
     ax.set_xlim(-0.6, len(years) - 0.4)
     if show_probability and tops:
         lo, hi = ax.get_ylim()
         ax.set_ylim(lo, max(hi, max(tops) + 0.12 * (hi - lo)))
-    unit = "days" if "days" in statistic else "°C"
     ax.set_ylabel(f"{statistic[0].upper()}{statistic[1:]} ({unit})")
     title = f"Dot: median of the simulations; bar: {level:g}% range"
     if show_probability and limit is not None:
         title += f"; number: chance above {limit:g}"
     ax.set_title(title, fontsize=9, color=INK2, loc="left")
-    if n > 1 or measured is not None:
-        _legend_below(ax, n + (measured is not None))
+    if n > 1 or measured is not None or limit is not None:
+        _legend_below(ax)
     return _style(ax)
 
 
@@ -265,15 +263,16 @@ def _style(ax):
     return ax
 
 
-def _legend_below(ax, entries):
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), fontsize=8, frameon=False, ncol=min(3, entries))
+def _legend_below(ax):
+    """The legend under the plot, where it cannot cover the data."""
+    entries = len(ax.get_legend_handles_labels()[1])
+    if entries:
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), fontsize=8, frameon=False, ncol=min(3, entries))
 
 
 def _reference(ax, value, label):
-    ax.axhline(value, color=INK2, lw=0.9, ls=(0, (4, 3)), zorder=1)
-    if label:
-        ax.annotate(label, (1, value), xycoords=("axes fraction", "data"), xytext=(-2, 3),
-                    textcoords="offset points", ha="right", va="bottom", fontsize=7.5, color=INK2)
+    """A dashed horizontal line (a limit, a reference value), named in the legend."""
+    ax.axhline(value, color=INK2, lw=0.9, ls=(0, (4, 3)), zorder=1, label=label)
 
 
 def _colors(colors, names):
