@@ -220,7 +220,9 @@ the warning about it. Because B depends on discharge, the explicit methods
 (RK4, RK2, EUL) can become unstable on flows different from calibration and then
 give wrong numbers without any error. Before a simulation, the package checks
 the B series: the share of days with B above the method's limit, and how much a
-difference in the simulated temperature can grow over a stretch of days. The
+difference in the simulated temperature can grow over a stretch of days. Both
+include zero-flow days that are simulated (version 7, or at `min_theta_floor`,
+where versions 4 and 8 divide by the floor raised to a4 and B can be very large). The
 equation is linear in water temperature, so one step multiplies a difference by
 a factor that follows from B on the days the step uses (`step_amplification`),
 and the growth over a stretch is the product of these factors (`largest_growth`;
@@ -296,7 +298,8 @@ of a cross-validation). A model can score well over the year and still be too
 warm in summer and too cool in spring. For each calendar month, each season
 (December counted with January and February of the same year) and the whole
 year, the daily errors (simulated − measured) are first averaged within each
-year. A month, season or year counts in a year if the record covers all of
+year. The unscored warm-up days (`warm_up` = 1, §3 and §10) are left out, as
+from the scores. A month, season or year counts in a year if the record covers all of
 its days (a record that starts or ends part-way through it does not) and at
 least 10 of a month's days have both values (a season 30, a year 120). The bias is the mean of these yearly values, with the
 95% interval mean ± t₀.₉₇₅,ₙ₋₁ · sd/√n over the n years (none with fewer than
@@ -319,7 +322,10 @@ values). The search maximises the objective function (§7).
   difference between good and poor fits, and it stopped some calibrations a
   third of the way through, on a worse fit. The best candidate is then
   refined by a local L-BFGS-B search within the same bounds; the refined result
-  is kept only if it is better.
+  is kept only if it is better. A parameter set whose simulation runs away (or
+  gives no score) gets a large finite penalty, so the local search's
+  finite-difference slopes stay defined; if the search still stops early, the
+  run says so.
 - **`PSO`** — Particle Swarm Optimisation as in the Fortran: `n_particles`
   particles, `n_run` iterations, inertia decreasing linearly from `wmax` to
   `wmin`, attraction weights `c1`, `c2`. A particle that reaches a bound stops

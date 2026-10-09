@@ -514,7 +514,7 @@ After a calibration, look at these, in this order:
 |---|---|
 | `summary.md` | a one-page summary of the run: settings, data, scores, parameters, uncertainty, warnings and notes, the figures, and what each file is |
 | `summary.html` | the same page for a web browser, with the figures inside it (one file to send) |
-| `filled_water_temperature_<period>.csv` | one row per day of the calibration, validation or `FORWARD` file: `T_water_measured`, `T_water_model`, `T_water_filled` (the measurement where there is one, the model's value otherwise) and `source` (`measured`, `model` or `none`). After `DE-MCMC`, or a `FORWARD` run with intervals, also the model's prediction range (`model_lower_90`, `model_upper_90` for a 90% range). |
+| `filled_water_temperature_<period>.csv` | one row per day of the calibration, validation or `FORWARD` file: `T_water_measured`, `T_water_model`, `T_water_filled` (the measurement where there is one, the model's value otherwise) and `source` (`measured`, `model` or `none`). Where the output files have `warm_up` (gap-tolerant runs, files shorter than a year), it is copied: on those days the model is still settling, so its values are less reliable. After `DE-MCMC`, or a `FORWARD` run with intervals, also the model's prediction range (`model_lower_90`, `model_upper_90` for a 90% range). |
 | `1_*.out` | line 1: the 8 fitted parameters; line 2: the calibration score; line 3: the validation score (if run) |
 | `2_*.csv` / `3_*.csv` | one row per day of the calibration / validation file: `Year, Month, Day, Tair, Twat_obs, Twat_mod, Twat_obs_agg, Twat_mod_agg, Q`. `_agg` are the values actually scored; `-999` means none. Gap-tolerant runs add `Tair_gap, Q_gap, segment_id`. `warm_up` (gap-tolerant runs, and files shorter than a year) is 1 on the unscored days at the start of each segment or file. |
 | `goodness_of_fit_<period>_*.csv` | N, NSE, R² (squared correlation), RMSE, MAE, AIC and BIC, for `calibration` and `validation`. The `full_simulation` file repeats the calibration scores, because only measured days are scored. |
@@ -522,7 +522,7 @@ After a calibration, look at these, in this order:
 | `full_simulation_*.png` | the calibration period again, on every day, including days without a measurement |
 | `predicted_vs_measured_*.png` | simulated against measured temperature |
 | `residual_diagnostics_*.png` | the residuals' histogram, normal Q-Q plot and autocorrelation. Use it to check the assumptions behind the uncertainty ranges. |
-| `bias_by_month_<period>_*.csv` / `.png` | the mean error (simulated minus measured) for each month, each season and the whole year, with a 95% interval ([docs/METHODS.md §7](docs/METHODS.md#7-measuring-the-fit)) |
+| `bias_by_month_<period>_*.csv` / `.png` | the mean error (simulated minus measured) for each month, each season and the whole year, with a 95% interval; the unscored `warm_up` days are left out ([docs/METHODS.md §7](docs/METHODS.md#7-measuring-the-fit)) |
 | `0_*.csv`, `convergence_*.png`, `dottyplots_*.png` | every parameter set tried; the best score so far against the number of tries (it should flatten out); the score against each parameter |
 | `calibration_metadata.json` | `Qmedia`, the calibrated flow range, version, integrator, parameters, seed and the settings that go with them (`Tice_cover`, `min_theta_floor`, `calendar`, `gap_tolerant`, `time_resolution`). Later runs reuse it. Not written by `FORWARD` runs. |
 | `parameters.txt` | the bounds actually used |

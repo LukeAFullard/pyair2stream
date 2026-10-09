@@ -219,3 +219,21 @@ def test_qmedia_is_the_mean_discharge_when_zero_flow_is_simulated(tmp_path, vers
     q = _table().Discharge.to_numpy()
     expected = q.mean() if includes_zeros else q[q > 0].mean()
     assert data.Qmedia == pytest.approx(expected)
+
+
+def test_stability_checks_include_zero_flow_days_simulated_at_the_floor():
+    # Version 8 divides by theta**a4: at theta = 1e-6 the relaxation rate is 1000 times a3.
+    from pyair2stream.model import stability_report
+    data = CommonData()
+    data.version, data.mod_num, data.n_tot = 8, "RK4", 365 + 800
+    data.Q = np.concatenate([np.full(365, 2.0), _table().Discharge.to_numpy()])
+    data.Qmedia, data.gap_tolerant = 2.0, False
+    data.date = np.zeros((data.n_tot, 3), dtype=np.int32)
+    data.par = np.array([0.0, 0.5, 0.2, 0.5, 0.0, 0.0, 0.0, 0.0])
+    data.min_theta_floor = None
+    without = stability_report(data)
+    assert without["n_valid"] == data.n_tot - 25 and without["max_B"] < 1.0
+    data.min_theta_floor = 1e-6
+    report = stability_report(data)
+    assert report["n_valid"] == data.n_tot and report["n_exceeding"] == 25
+    assert report["max_B"] == pytest.approx(0.2 / 1e-3)

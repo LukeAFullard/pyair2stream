@@ -246,7 +246,7 @@ def test_default_noise_model_is_ar1(tmp_path):
 
 # --- Calibration --------------------------------------------------------------
 
-def test_de_keeps_de_solution_if_polish_is_worse(tmp_path, monkeypatch):
+def test_de_keeps_de_solution_if_polish_is_worse(tmp_path, monkeypatch, capsys):
     _csv(tmp_path / 'cal.csv')
     data = _load(tmp_path, version=3)
     aggregation(data)
@@ -256,11 +256,34 @@ def test_de_keeps_de_solution_if_polish_is_worse(tmp_path, monkeypatch):
         def __init__(self, x):
             self.x = np.asarray(x) * 0 + 0.001
             self.fun = 1e29
+            self.success, self.message = False, "ABNORMAL"
 
     monkeypatch.setattr(optimization, 'minimize', lambda f, x0, **kw: Worse(x0))
     DE_mode(data, seed=3)
-    # The DE optimum is kept, not the worse "polished" point.
+    # The DE optimum is kept, not the worse "polished" point, and the early stop is reported.
     assert not np.allclose(data.par_best[:3], 0.001)
+    assert "(L-BFGS-B) stopped early: ABNORMAL" in capsys.readouterr().out
+
+
+def test_runaway_parameter_sets_get_a_finite_penalty(tmp_path, monkeypatch):
+    # An infinite score made L-BFGS-B's finite-difference gradient inf - inf = NaN.
+    _csv(tmp_path / 'cal.csv')
+    data = _load(tmp_path, version=3)
+    aggregation(data)
+    statis(data)
+    seen = {}
+    real = optimization.minimize
+
+    def spy(f, x0, **kw):
+        seen['f'] = f
+        return real(f, x0, **kw)
+
+    monkeypatch.setattr(optimization, 'minimize', spy)
+    DE_mode(data, seed=3)
+    x = data.par_best.copy()
+    for score in (-np.inf, np.inf, np.nan):
+        monkeypatch.setattr(optimization, 'sub_1', lambda d, s=score: s)
+        assert seen['f'](x) == 1e30
 
 
 def test_de_stopping_tolerance_is_tight_and_configurable(tmp_path, monkeypatch):

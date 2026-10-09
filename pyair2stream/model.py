@@ -172,6 +172,18 @@ def largest_growth(data: CommonData) -> dict:
     return {'growth': growth, 'log10_growth': best, 'start': start, 'end': end}
 
 
+def simulated_discharge_days(data: CommonData) -> np.ndarray:
+    """The days whose discharge the model simulates with: every day for versions 3 and 5
+    (they do not use it); otherwise the days with discharge above zero, and also zero-flow
+    days when they are simulated (version 7, or at min_theta_floor; `config.zero_flow_ok`),
+    since B is computed for them as the integrators use it."""
+    if data.version in (3, 5):
+        return np.ones(data.n_tot, dtype=np.bool_)
+    if zero_flow_ok(data.version, data.min_theta_floor):
+        return (data.Q != -999.0) & (data.Q >= 0.0)
+    return (data.Q != -999.0) & (data.Q > 0.0)
+
+
 def stability_report(data: CommonData) -> dict:
     """
     Pre-flight stability check of the current integrator, from the B series.
@@ -186,11 +198,7 @@ def stability_report(data: CommonData) -> dict:
     """
     B = compute_B_series(data)
 
-    if data.version in (3, 5):
-        valid = np.ones(data.n_tot, dtype=np.bool_)
-    else:
-        valid = (data.Q != -999.0) & (data.Q > 0.0)
-    valid &= np.isfinite(B)
+    valid = simulated_discharge_days(data) & np.isfinite(B)
 
     limit = STABILITY_LIMITS.get(data.mod_num, np.inf)
 
@@ -337,9 +345,7 @@ def check_daily_plausibility(data: CommonData) -> dict:
     ended on one. Returns the numbers behind the warnings.
     """
     B = compute_B_series(data)
-    valid = np.isfinite(B)
-    if data.version not in (3, 5):
-        valid &= (data.Q != -999.0) & (data.Q > 0.0)
+    valid = simulated_discharge_days(data) & np.isfinite(B)
     n_negative = int(np.sum(valid & (B < 0.0)))
     min_B = float(np.min(B[valid])) if np.any(valid) else None
 

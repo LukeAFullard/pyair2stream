@@ -174,6 +174,26 @@
   so its ranges were too narrow. Both now use the actual spacing (METHODS §12).
   For complete daily data the effective number of values changes only by an
   end-of-record term of about 0.3%.
+- **The mean error by month leaves out the unscored warm-up days.** In
+  gap-tolerant mode and for files shorter than a year, the first
+  `warmup_drop_days` of each segment or file are not scored, but
+  `bias_by_month_*` included them. A segment that starts on a measured day
+  starts at that measurement, so these days pulled the reported seasonal
+  error towards zero. They are now left out, as from the scores. The
+  calibration's table also no longer drops a month that the record covers
+  but whose first days are unscored. `filled_water_temperature_*.csv` gets
+  the `warm_up` column, so the model's still-settling values are marked.
+- **The local search after DE no longer stops on a runaway parameter set.** A
+  simulation that ran away scored minus infinity; L-BFGS-B's finite-difference
+  slope was then undefined (SciPy's "invalid value encountered in subtract")
+  and it stopped, keeping the DE result without a message. Such sets now get
+  the same large finite penalty as a set without a score, and an early stop is
+  reported.
+- **The stability checks include simulated zero-flow days.** With
+  `min_theta_floor`, versions 4 and 8 divide by the floor raised to a4 on
+  zero-flow days, so B can be hundreds of times larger there. The growth
+  check already included them; the share of days above the integrator's
+  limit and the reported largest B left them out. Both now include them.
 - ⚠ **`scenario.aggregate` gives no value for a partial period.** A week or
   month that the dates covered only in part (at either end of the file), or
   that included days without a simulated value (gaps), was computed from the

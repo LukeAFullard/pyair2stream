@@ -1117,9 +1117,10 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
         row = list(p_vals) + [eff_index, data.current_nse, data.current_r2, data.current_mae]
         history.append(row)
 
-        # Return negated efficiency so scipy minimizes
-        # Handle NaN by returning a large positive number
-        if np.isnan(eff_index):
+        # Return negated efficiency so scipy minimizes. A NaN score, or an infinite one (a
+        # simulation that runs away), gets a large finite penalty: with inf, L-BFGS-B's
+        # finite-difference gradient is inf - inf = NaN and the polish stops.
+        if not np.isfinite(eff_index):
             return 1e30
         return -eff_index
 
@@ -1164,6 +1165,9 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
     )
 
     print(f"L-BFGS-B Finished. Best internal negated objective: {result_bfgs.fun:.6f}")
+    if not result_bfgs.success:
+        print(f"Warning: the local search after DE (L-BFGS-B) stopped early: {result_bfgs.message}. "
+              "The better of its result and the DE result is kept.")
 
     # Keep the DE solution if the local polish did not improve on it (e.g. an
     # abnormal L-BFGS-B termination).

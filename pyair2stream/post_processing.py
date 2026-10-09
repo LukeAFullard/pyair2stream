@@ -432,6 +432,9 @@ def post_process(data: CommonData, toll: float = None):
         # Create datetime index
         dates = pd.to_datetime(df[['Year', 'Month', 'Day']])
 
+        # The mean error by month uses the whole file: whether a month is covered depends on
+        # the record, not on where its first and last scored days are.
+        df_all, dates_all = df, dates
         if filter_to_obs:
             # Filter down the plotting range to the span of available observation data
             obs_valid_indices = np.where(df['Twat_obs_agg'].notna())[0]
@@ -494,9 +497,13 @@ def post_process(data: CommonData, toll: float = None):
             metrics_str = (f"\nNSE={nse:.3f}, R²={r2:.3f}, RMSE={rmse:.2f}°C, MAE={mae:.2f}°C (n={n})"
                            f"\nAIC={aic:.1f}, BIC={bic:.1f}") if (not np.isnan(nse) and not np.isnan(rmse)) else ""
 
-            # Mean error by month and season, from the daily values (is the model off in one season?)
-            if output_name != "full_simulation" and (df['Twat_obs'].notna() & df['Twat_mod'].notna()).any():
-                write_bias_by_month(dates, df['Twat_obs'], df['Twat_mod'], data.folder,
+            # Mean error by month and season, from the daily values (is the model off in one season?).
+            # The unscored warm-up days (`warm_up` = 1: the first days of each gap-tolerant segment,
+            # or of a file shorter than a year) are left out, as from the scores: the model is still
+            # settling, and on a segment's first day it starts at the measurement.
+            bias_obs = df_all['Twat_obs'].where(df_all['warm_up'] != 1) if 'warm_up' in df_all else df_all['Twat_obs']
+            if output_name != "full_simulation" and (bias_obs.notna() & df_all['Twat_mod'].notna()).any():
+                write_bias_by_month(dates_all, bias_obs, df_all['Twat_mod'], data.folder,
                                     f"bias_by_month_{output_name}_{data.runmode}_{data.fun_obj}_{data.station}",
                                     title_prefix)
         else:

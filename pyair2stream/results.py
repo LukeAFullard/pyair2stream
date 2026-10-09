@@ -219,6 +219,9 @@ def write_filled_series(data: CommonData) -> list:
         out["T_water_filled"] = out.T_water_measured.where(out.T_water_measured.notna(), out.T_water_model)
         out["source"] = np.where(out.T_water_measured.notna(), "measured",
                                  np.where(out.T_water_model.notna(), "model", "none"))
+        if "warm_up" in sim:
+            # The model is still settling on these days (not scored): its values are less reliable.
+            out["warm_up"] = sim.warm_up.fillna(0).astype(int)
         rng = _range_file(data, period)
         if rng:
             band = _read_daily(rng)
