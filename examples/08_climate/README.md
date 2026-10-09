@@ -70,8 +70,9 @@ The change, simulation by simulation (scenario minus baseline):
 
 ![Monthly mean change in water temperature for both scenarios](figures/monthly_change.png)
 
-*The monthly mean change, with its 90% range across the 1,000 parameter sets.
-The dashed line is the change in air temperature.*
+*The monthly mean change: the median of the 1,000 paired simulations (dot) and
+their 90% range (bar). The dashed line is the change in air temperature. Drawn
+with `plots.change(diffs, dates, by="month", reference=2)`.*
 
 **Reading it.**
 
@@ -104,8 +105,11 @@ all three runs.
 
 ![The year's highest 7-day mean in 1,000 simulations, for each year and scenario](figures/yearly_peaks.png)
 
-*Grey: as measured. Orange and red outlines: the two scenarios. Dashed: the
-20 °C limit. P: the share of the simulations above the limit.*
+*Each year's highest 7-day mean: the median of the 1,000 simulations (dot) and
+their 90% range (bar), corrected as in example 03. Grey: as measured; blue and
+orange: the two scenarios. The number above each bar is the share of the
+simulations above the 20 °C limit (dashed). Drawn with
+`plots.yearly_statistic`.*
 
 **Reading it.** The year's highest 7-day mean rises by 1.6 °C (90% range 1.56 to
 1.65 °C). In 2010–2012, a 20 °C limit was exceeded in one year of three (P =

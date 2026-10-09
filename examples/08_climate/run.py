@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from pyair2stream import scenario
+from pyair2stream import plots, scenario
 
 WARMING = 2.0          # degC added to the air temperature on every day
 FLOW_KEPT = 0.8        # share of the discharge kept in June-September in the second scenario
@@ -32,8 +32,7 @@ LEVEL = 90.0
 YEARS = (2010, 2011, 2012)
 SCENARIOS = ("baseline", "warmer", "warmer_drier")
 NAMES = {"baseline": "as measured", "warmer": "air +2 °C", "warmer_drier": "air +2 °C, 20% less summer flow"}
-SHORT = {"baseline": "as measured", "warmer": "air +2 °C", "warmer_drier": "+ less flow"}
-COLOURS = {"baseline": "tab:gray", "warmer": "tab:orange", "warmer_drier": "tab:red"}
+COLOURS = {"baseline": plots.MUTED, "warmer": plots.PALETTE[0], "warmer_drier": plots.PALETTE[1]}
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -85,10 +84,11 @@ print(f"Balance sensitivity a2/(a3 + a8*theta): {a2 / a3:.2f} at very low flow, 
       f"{a2 / (a3 + a8 * theta_summer):.2f} at the median summer flow (theta {theta_summer:.2f}).")
 
 # --- The change, simulation by simulation ------------------------------------------------------
-rows = []
+rows, diffs = [], {}
 months = dates.month
 for s in ("warmer", "warmer_drier"):
     diff = scenario.paired_difference_from_files(os.path.join(OUT, s, ensemble), os.path.join(OUT, "baseline", ensemble))
+    diffs[NAMES[s]] = diff
     for label, mask in (("summer (Jun-Aug) mean", np.isin(months, (6, 7, 8))),
                         ("winter (Dec-Feb) mean", np.isin(months, (12, 1, 2))),
                         ("whole-year mean", np.ones(len(months), bool))):
@@ -99,12 +99,6 @@ for s in ("warmer", "warmer_drier"):
 change_table = pd.DataFrame(rows)
 change_table.to_csv(os.path.join(OUT, "changes.csv"), index=False)
 print("\n" + change_table.to_string(index=False))
-
-# Monthly change (mean over 2010-2012), for the figure.
-monthly = {}
-for s in ("warmer", "warmer_drier"):
-    diff = ens[s] - ens["baseline"]
-    monthly[s] = np.array([np.nanmean(diff[:, months == m], axis=1) for m in range(1, 13)])   # (12, draws)
 
 # --- Yearly peaks and warm days, checked and corrected by cross-validation (example 03) --------
 check = pd.read_csv(os.path.join(OUT, "check", "cv_yearly_statistics.csv"))
@@ -131,46 +125,14 @@ print(f"\nChange in the yearly highest 7-day mean, air +2 °C: median {np.median
       f"{LEVEL:g}% range {scenario.central_range(peak_change, LEVEL)[0]:+.2f} to "
       f"{scenario.central_range(peak_change, LEVEL)[1]:+.2f} °C")
 
-# --- Figures ---------------------------------------------------------------------------------------
-fig, ax = plt.subplots(figsize=(8, 3.8))
-x = np.arange(1, 13)
-for s, dx in (("warmer", -0.12), ("warmer_drier", 0.12)):
-    lo, hi = np.percentile(monthly[s], [5, 95], axis=1)
-    ax.vlines(x + dx, lo, hi, color=COLOURS[s], lw=5, alpha=0.5)
-    ax.plot(x + dx, np.median(monthly[s], axis=1), "o", color=COLOURS[s], label=NAMES[s])
-ax.axhline(WARMING, color="black", lw=0.8, ls="--")
-ax.text(0.6, WARMING + 0.04, "the change in air temperature", fontsize=8, va="bottom")
-ax.set_xticks(x, ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
-ax.set_xlim(0.5, 12.5)
+# --- Figures, with the plotting helpers in pyair2stream.plots ------------------------------------
+ax = plots.change(diffs, dates, by="month", level=LEVEL, reference=WARMING,
+                  reference_label="the change in air temperature", colors={NAMES[s]: COLOURS[s] for s in SCENARIOS})
 ax.set_ylim(0, WARMING + 0.35)
-ax.set_ylabel("Change in water temperature (°C)")
-ax.set_title("Monthly mean change in water temperature, 2010-2012 (median and 90% range)", fontsize=10)
-ax.legend(fontsize=8, loc="lower left")
-fig.tight_layout()
-fig.savefig(os.path.join(FIG, "monthly_change.png"), dpi=130)
-plt.close(fig)
+ax.figure.savefig(os.path.join(FIG, "monthly_change.png"), dpi=130, bbox_inches="tight")
+plt.close(ax.figure)
 
-fig, axes = plt.subplots(1, len(YEARS), figsize=(10, 3.6), sharey=True)
-bins = np.arange(17.0, 25.01, 0.25)
-tallest = 0
-for ax, year in zip(axes, YEARS):
-    lines = [f"P(above {LIMIT_7DAY:g} °C)"]
-    for s in SCENARIOS:
-        p = peaks[(year, s)]
-        style = dict(alpha=0.45) if s == "baseline" else dict(histtype="step", lw=1.8)
-        counts, _, _ = ax.hist(p, bins=bins, color=COLOURS[s], label=NAMES[s], **style)
-        tallest = max(tallest, counts.max())
-        lines.append(f"{SHORT[s]}: {np.mean(p > LIMIT_7DAY):.2f}")
-    ax.axvline(LIMIT_7DAY, color="black", ls="--", lw=1)
-    ax.text(0.97, 0.96, "\n".join(lines), transform=ax.transAxes, fontsize=7.5, va="top", ha="right")
-    ax.set_title(str(year), fontsize=10)
-    ax.set_xlabel("Highest 7-day mean (°C)")
-axes[0].set_ylim(0, tallest * 1.6)
-axes[0].set_ylabel("Simulations")
-handles, labels = axes[0].get_legend_handles_labels()
-fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.94), ncol=3, fontsize=8, frameon=False)
-fig.suptitle(f"The year's highest 7-day mean in 1,000 simulations (corrected); dashed: the {LIMIT_7DAY:g} °C limit",
-             fontsize=10)
-fig.tight_layout(rect=(0, 0, 1, 0.9))
-fig.savefig(os.path.join(FIG, "yearly_peaks.png"), dpi=130)
-plt.close(fig)
+ax = plots.yearly_statistic({NAMES[s]: {y: peaks[(y, s)] for y in YEARS} for s in SCENARIOS}, limit=LIMIT_7DAY,
+                            level=LEVEL, colors={NAMES[s]: COLOURS[s] for s in SCENARIOS})
+ax.figure.savefig(os.path.join(FIG, "yearly_peaks.png"), dpi=130, bbox_inches="tight")
+plt.close(ax.figure)

@@ -891,6 +891,38 @@ left is the uncertainty of the effect itself, from the parameters. This
 assumes the model's error on a given day would be the same in both scenarios.
 [Example 04](examples/04_scenario/README.md) works through a flow abstraction.
 
+**Plots.** The `pyair2stream.plots` module draws the usual figures from these
+arrays:
+
+- `prediction_range` draws the median of the simulations and their range, day
+  by day. With `window=7` it draws 7-day means, computed in each simulation
+  first. It can add the measurements and a limit.
+- `change` draws the difference between two scenarios: day by day
+  (`by="day"`), or each month or year's mean change (`by="month"`,
+  `by="year"`). Give it a dict to compare several scenarios.
+- `yearly_statistic` draws a yearly statistic year by year: the median and the
+  range, the limit, and the chance of exceeding it above each year. It takes
+  the output of `year_statistics` directly. Give it a dict to compare
+  scenarios, or corrected and uncorrected values.
+
+```python
+from pyair2stream import plots, scenario
+
+ens, dates = scenario.load_ensemble("output/prediction/Forward_Prediction_Ensemble_<...>.npz")
+ax = plots.prediction_range(ens, dates, window=7, limit=20)        # 7-day means and a 20 °C limit
+ax.figure.savefig("prediction.png", dpi=150, bbox_inches="tight")
+
+stats = scenario.year_statistics(ens, dates, threshold=18)
+ax = plots.yearly_statistic(stats, statistic="highest 7-day mean", limit=20)
+
+ax = plots.change({"abstraction": diff}, dates, by="month")       # diff from paired_difference_from_files
+```
+
+Each function returns the matplotlib Axes it drew on. To combine figures, pass
+your own (`ax=`). Each range is 90% wide by default (`level=`). Examples
+[03](examples/03_compliance/README.md), [04](examples/04_scenario/README.md)
+and [08](examples/08_climate/README.md) make their figures this way.
+
 ## 13. Cross-validation
 
 Cross-validation calibrates the model again and again. Each time it hides one

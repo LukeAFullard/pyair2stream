@@ -65,6 +65,16 @@ p_exceeded = (peak_c > 20).mean()                               # share of simul
 
 The correction includes a random draw. `seed` makes it repeatable.
 
+The figures come from `pyair2stream.plots` (USER_GUIDE §12):
+
+```python
+from pyair2stream import plots
+
+ax = plots.prediction_range(ens, dates, window=7, limit=20)   # the 7-day mean in every simulation
+ax = plots.yearly_statistic({"uncorrected": {2010: peak}, "corrected": {2010: peak_c}}, limit=20)
+ax.figure.savefig("peak_7day_mean.png", dpi=150, bbox_inches="tight")
+```
+
 ## Results
 
 **The check.** In the seven hidden years (2003–2009), the measured yearly
@@ -86,7 +96,18 @@ year) puts the summer peaks too high.
 | 2011 | 0.34 | 0.77 | 18.8 to 20.8 °C | 19.8 °C | 19 (11 to 28) | 21 |
 | 2012 | 0.14 | 0.51 | 18.4 to 20.4 °C | 19.6 °C | 25 (16 to 34) | 22 |
 
-![Highest 7-day mean in each simulation, corrected and not](figures/peak_7day_mean.png)
+![The 7-day mean water temperature in the 1,000 simulations, the measurements and the limit](figures/prediction_7day_mean.png)
+
+*The 7-day mean water temperature in 2010–2012: the median of the 1,000
+simulations (line) and their 90% range (band), not corrected. Dots: measured.
+Dashed: the 20 °C limit.*
+
+![Each year's highest 7-day mean, corrected and not, against the limit](figures/peak_7day_mean.png)
+
+*Each year's highest 7-day mean: the median of the 1,000 simulations (dot) and
+their 90% range (bar), not corrected (grey) and corrected (blue). Black:
+measured. The number above each bar is the chance that the limit was
+exceeded.*
 
 **Reading it.**
 

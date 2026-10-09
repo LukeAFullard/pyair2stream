@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from pyair2stream import scenario
+from pyair2stream import plots, scenario
 
 LIMIT_7DAY = 20.0      # °C, illustrative limit on the 7-day mean water temperature
 WARM_DAY = 18.0        # °C, illustrative threshold for counting warm days (also in check.yaml)
@@ -76,21 +76,20 @@ table.to_csv(os.path.join(OUT, "compliance_summary.csv"), index=False)
 with pd.option_context("display.width", 250, "display.max_columns", 12):
     print("\n" + table.to_string(index=False))
 
-fig, axes = plt.subplots(1, len(YEARS), figsize=(9, 3), sharey=True)
-bins = np.arange(17.0, 23.01, 0.25)
-for ax, year in zip(axes, YEARS):
-    peak, peak_c = peaks[year]
-    ax.hist(peak, bins=bins, color="tab:gray", alpha=0.45, label="uncorrected")
-    ax.hist(peak_c, bins=bins, color="tab:blue", alpha=0.6, label="corrected")
-    ax.axvline(LIMIT_7DAY, color="black", ls="--", lw=1)
-    ax.axvline(measured[year]["highest 7-day mean"][0], color="tab:red", lw=2)
-    ax.set_title(f"{year}: P(exceeded) = {np.mean(peak_c > LIMIT_7DAY):.2f}\n(uncorrected "
-                 f"{np.mean(peak > LIMIT_7DAY):.2f})", fontsize=10)
-    ax.set_xlabel("Highest 7-day mean (°C)")
-axes[0].set_ylabel("Simulations")
-axes[0].legend(fontsize=7, loc="upper left")
-fig.suptitle(f"1000 simulations, corrected by cross-validation (blue) and not (grey). Dashed: the "
-             f"{LIMIT_7DAY:g} °C limit. Red: measured.", fontsize=9, y=0.02)
-fig.tight_layout(rect=(0, 0.06, 1, 1))
-os.makedirs(os.path.join(HERE, "figures"), exist_ok=True)
-fig.savefig(os.path.join(HERE, "figures", "peak_7day_mean.png"), dpi=130, bbox_inches="tight")
+# Figures, with the plotting helpers in pyair2stream.plots.
+FIG = os.path.join(HERE, "figures")
+os.makedirs(FIG, exist_ok=True)
+
+# The 7-day mean in the 1000 simulations (uncorrected), the measurements and the limit.
+ax = plots.prediction_range(ens, dates, window=7, level=LEVEL, measured=obs, limit=LIMIT_7DAY)
+ax.set_title("7-day mean water temperature, 2010-2012: 1000 simulations", fontsize=10)
+ax.figure.savefig(os.path.join(FIG, "prediction_7day_mean.png"), dpi=130, bbox_inches="tight")
+plt.close(ax.figure)
+
+# Each year's highest 7-day mean, corrected and not, against the limit; the numbers are P(exceeded).
+ax = plots.yearly_statistic({"uncorrected": {y: peaks[y][0] for y in YEARS},
+                             "corrected": {y: peaks[y][1] for y in YEARS}},
+                            limit=LIMIT_7DAY, measured=measured, level=LEVEL,
+                            colors=[plots.MUTED, plots.PALETTE[0]])
+ax.figure.savefig(os.path.join(FIG, "peak_7day_mean.png"), dpi=130, bbox_inches="tight")
+plt.close(ax.figure)
