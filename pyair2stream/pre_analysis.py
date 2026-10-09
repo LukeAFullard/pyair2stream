@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import os
 
+from .config import zero_flow_ok
+
 from .data_checks import check_table
 
 def analyze_timeseries(df, output_plot_path=None, output_summary_path=None, gap_tolerant=False, min_segment_days=30,
@@ -52,8 +54,10 @@ def analyze_timeseries(df, output_plot_path=None, output_summary_path=None, gap_
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').replace(-999.0, np.nan)
             if col == 'Discharge':
-                # Treat zero or negative discharge as missing data to prevent mathematical errors in the ODE
-                df.loc[df[col] <= 0.0, col] = np.nan
+                # Zero discharge is a gap for the versions that cannot simulate it (as in a run);
+                # negative discharge is an error, reported by the checks above.
+                bad = df[col] < 0.0 if zero_flow_ok(version, min_theta_floor) else df[col] <= 0.0
+                df.loc[bad, col] = np.nan
 
     # Dates: rows whose date cannot be read are left out of the description (the checks
     # report them). With the standard calendar, every date between the first and the

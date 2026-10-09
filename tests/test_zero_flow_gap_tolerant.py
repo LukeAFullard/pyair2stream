@@ -149,3 +149,59 @@ def test_theta_of_days_is_what_the_model_runs_with():
     assert list(rows) == [0, 3] and list(theta) == [1.0, 2.0]
     theta, rows = theta_of_days(q, 2.0, 1e-6)            # simulated at the floor: included
     assert list(rows) == [0, 1, 3] and list(theta) == [1.0, 1e-6, 2.0]
+
+
+# Version 7 fixes a4 = 0, so it never divides by theta^a4: zero flow is simulated at theta = 0.
+
+PAR7 = [1, 0.5, 0.5, 0, 1, 1, 0.5, 0.5]
+
+
+def test_version_7_accepts_zero_flow_with_a_note():
+    df = _table()
+    for kw in ({}, {"gap_tolerant": True}, {"gap_tolerant": True, "period": "scenario"}):
+        checked = check_table(df, "f.csv", version=7, **kw)
+        assert checked.errors == [] and checked.warnings == []
+        assert "25 day(s) (first: 2001-07-20, line 202). Version 7 simulates them with theta = 0" in checked.notes[0]
+    assert "divides by a power of discharge" in check_table(df, "f.csv", version=4).errors[0]
+    assert "divides by a power of discharge" in check_table(df, "f.csv", version=8).errors[0]
+    data = CommonData()
+    data.version, data.n_tot, data.min_theta_floor = 7, 365 + 800, None
+    data.Tair = np.full(data.n_tot, 10.0)
+    data.Q = np.concatenate([np.full(365, 2.0), df.Discharge.to_numpy()])
+    assert find_segments(data, 30)[0] == [(365, data.n_tot - 1)]
+
+
+@pytest.mark.parametrize("integrator", ["CRN", "EXP", "RK4", "RK2", "EUL"])
+def test_version_7_at_zero_flow_is_the_limit_of_low_flow(tmp_path, integrator):
+    from pyair2stream.model import call_model
+    runs = []
+    for floor in (None, 1e-9):
+        data = read_calibration(_config(tmp_path, run_mode="FORWARD", version=7, gap_tolerant=False, Qmedia=2.0,
+                                        integrator=integrator, parameters_forward=PAR7, min_theta_floor=floor))
+        read_Tseries(data, "c")
+        call_model(data)
+        runs.append(data.Twat_mod[365:].copy())
+    assert np.all(np.isfinite(runs[0]))
+    np.testing.assert_allclose(runs[0], runs[1], atol=1e-6)
+
+
+def test_version_7_calibrates_and_simulates_zero_flow_days(tmp_path):
+    for gap_tolerant in (False, True):
+        result = pyair2stream.run(_config(tmp_path, version=7, gap_tolerant=gap_tolerant), verbose=False)
+        assert any(m.startswith("Note: Zero discharge") and "theta = 0" in m for m in result.messages)
+        sim = pd.read_csv([os.path.join(result.output_dir, f) for f in result.files if f.startswith("2_")][0])
+        assert (sim.Twat_mod.iloc[DRY] != -999).all()
+        if gap_tolerant:
+            assert (sim.Q_gap.iloc[DRY] == 0).all()
+
+
+def test_version_7_forward_run_reports_zero_flow_days_at_theta_0(tmp_path, capsys):
+    _table().to_csv(tmp_path / "scenario.csv", index=False)
+    meta = tmp_path / "calibration_metadata.json"
+    meta.write_text('{"qmedia": 2.0, "theta_min": 0.5, "theta_max": 1.5, "version": 7, "integrator": "CRN", '
+                    '"par_best": [1, 0.5, 0.5, 0, 1, 1, 0.5, 0.5]}')
+    data = read_calibration(_config(tmp_path, run_mode="FORWARD", version=7, gap_tolerant=False,
+                                    paths={"input_data": str(tmp_path / "scenario.csv"), "output_dir": str(tmp_path / "o"),
+                                           "calibration_metadata": str(meta)}))
+    read_Tseries(data, "c")
+    assert "(lowest 0, highest 1.5), 25 of them zero-flow days run at theta = 0" in capsys.readouterr().out

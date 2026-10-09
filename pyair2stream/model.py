@@ -9,7 +9,7 @@ the heavy numeric lifting to the Numba-compiled functions.
 import numpy as np
 import math
 import pandas as pd
-from .config import CommonData, PI, TTT, ACTIVE_PARAMS
+from .config import CommonData, PI, TTT, ACTIVE_PARAMS, zero_flow_ok
 
 # Sanity bound on simulated water temperature (degC) -- see USER_GUIDE.md §9.1:
 # explicit integrators (RK4/RK2/EUL) can diverge silently on scenario discharge that differs
@@ -519,6 +519,8 @@ def check_nonpositive_discharge(data: CommonData) -> None:
       `Q` there is a data-quality question, not a numerical one.
     - `data.min_theta_floor` is set -- the opt-in escape hatch clamps `theta` away
       from zero instead of raising (applied inside the integrators themselves).
+    - `data.version` is 7 -- a4 is fixed at 0, so there is no theta^a4: at theta = 0
+      the discharge terms drop out (`config.zero_flow_ok`).
 
     Called from `read_Tseries` for both the calibration and validation/FORWARD-mode
     scenario record, so a naturally-occurring zero-flow day is caught once at data
@@ -526,9 +528,7 @@ def check_nonpositive_discharge(data: CommonData) -> None:
     positive `a4`, and applies identically to a naturalised-flow/climate-projection
     FORWARD run.
     """
-    if data.gap_tolerant or data.version not in (4, 7, 8):
-        return
-    if data.min_theta_floor is not None:
+    if data.gap_tolerant or zero_flow_ok(data.version, data.min_theta_floor):
         return
     if data.Q is None or data.n_tot <= 365:
         return
@@ -572,14 +572,15 @@ def find_segments(data: CommonData, min_segment_days: int):
     """
     Gap-tolerant mode: the stretches of consecutive days (from index 365 on) with valid air
     temperature and, for versions 4/7/8, discharge: present, and positive unless
-    `min_theta_floor` is set (then a zero-flow day is simulated at the floor). Returns
+    `min_theta_floor` is set (then a zero-flow day is simulated at the floor) or the
+    version is 7 (which simulates it at theta = 0). Returns
     (kept, dropped): lists of (start, end) index pairs, inclusive, split by whether they are at
     least `min_segment_days` long.
     """
     valid = data.Tair[365:data.n_tot] != -999.0
     if data.version not in [3, 5]:
         valid &= data.Q[365:data.n_tot] != -999.0
-        if getattr(data, 'min_theta_floor', None) is None:
+        if not zero_flow_ok(data.version, getattr(data, 'min_theta_floor', None)):
             valid &= data.Q[365:data.n_tot] > 0.0
     edges = np.diff(np.concatenate(([0], valid.astype(np.int8), [0])))
     starts = np.flatnonzero(edges == 1) + 365

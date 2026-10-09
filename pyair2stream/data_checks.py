@@ -17,6 +17,8 @@ from typing import List, Optional
 import numpy as np
 import pandas as pd
 
+from .config import zero_flow_ok
+
 # Daily means outside these ranges (degC) are almost certainly not real, e.g. a
 # missing-value code other than -999 (such as -99 or -9999) or a unit error.
 PLAUSIBLE_RANGES = {'T_air': (-60.0, 60.0), 'T_water': (-2.0, 50.0)}
@@ -35,7 +37,7 @@ PERIOD_NAMES = {'calibration': 'calibration', 'validation': 'validation', 'scena
 
 @dataclass
 class Problem:
-    level: str        # 'error': a run stops; 'warning': a run continues
+    level: str        # 'error': a run stops; 'warning': a run continues; 'note': information
     message: str
 
 
@@ -55,6 +57,10 @@ class CheckedTable:
     def warnings(self) -> List[str]:
         return [p.message for p in self.problems if p.level == 'warning']
 
+    @property
+    def notes(self) -> List[str]:
+        return [p.message for p in self.problems if p.level == 'note']
+
     def raise_first_error(self) -> None:
         if self.errors:
             raise ValueError(self.errors[0])
@@ -62,6 +68,8 @@ class CheckedTable:
     def print_warnings(self) -> None:
         for message in self.warnings:
             print(f"Warning: {message}")
+        for message in self.notes:
+            print(f"Note: {message}")
 
 
 def _line(i: int) -> int:
@@ -244,6 +252,15 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                                                    f"({min_theta_floor:g}), where theta^a4 is extreme: expect "
                                                    "large simulated responses on those days (USER_GUIDE.md "
                                                    "§9.2)."))
+        elif version == 7:
+            zero = df['Discharge'] == 0.0
+            if zero.any():
+                problems.append(Problem('note', f"Zero discharge in {source}: {int(zero.sum())} day(s) (first: "
+                                                f"{where(zero)}). Version 7 simulates them with theta = 0: its "
+                                                "discharge terms drop out, and the water follows the air alone. A "
+                                                "stream without flow may be dry or reduced to pools, which the "
+                                                "model may not have been calibrated on: treat those days with care "
+                                                "(USER_GUIDE.md §9.2)."))
 
     if not gap_tolerant:
         gaps = df['T_air'].isna()
@@ -257,7 +274,7 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                 problems.append(Problem('error', f"The series of discharge in {source} must be complete: "
                                                  f"{int(gaps.sum())} day(s) have no value (first: {where(gaps)}). "
                                                  "Fill them, or set gap_tolerant: true."))
-        if uses_q and min_theta_floor is None:
+        if uses_q and not zero_flow_ok(version, min_theta_floor):
             nonpositive = df['Discharge'] <= 0.0
             if nonpositive.any():
                 problems.append(Problem('error', f"Non-positive discharge (Q <= 0) in {source}: {int(nonpositive.sum())} "
@@ -266,7 +283,7 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                                                  "Correct the data, set gap_tolerant: true to treat such days as "
                                                  "gaps, or set min_theta_floor (USER_GUIDE.md §9.2)."))
 
-    elif uses_q and min_theta_floor is None:
+    elif uses_q and not zero_flow_ok(version, min_theta_floor):
         nonpositive = df['Discharge'] <= 0.0
         if nonpositive.any():
             n = int(nonpositive.sum())

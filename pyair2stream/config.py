@@ -28,6 +28,23 @@ ACTIVE_PARAMS = {
     8: (0, 1, 2, 3, 4, 5, 6, 7),
 }
 VALID_VERSIONS = tuple(ACTIVE_PARAMS)
+
+
+def zero_flow_ok(version: int, min_theta_floor=None) -> bool:
+    """Whether a day of zero discharge can be simulated. Versions 3 and 5 do not use
+    discharge. Version 7 fixes a4 = 0, so it never divides by theta^a4: at theta = 0 its
+    discharge terms drop out. Versions 4 and 8 divide by theta^a4 and need
+    min_theta_floor (or gap-tolerant mode, which leaves such days out)."""
+    return version in (3, 5, 7) or min_theta_floor is not None
+
+
+def theta_floor_of(version: int, min_theta_floor=None):
+    """The lowest theta the model runs at, for `io.theta_of_days`: min_theta_floor when set,
+    0 for version 7 (which runs zero-flow days at theta = 0), else None (zero-flow days are
+    not simulated)."""
+    if min_theta_floor is not None:
+        return min_theta_floor
+    return 0.0 if version == 7 else None
 VALID_RUN_MODES = ('DE', 'PSO', 'LATHYP', 'FORWARD', 'DE-MCMC')
 VALID_INTEGRATORS = ('CRN', 'EXP', 'RK4', 'RK2', 'EUL')
 VALID_OBJECTIVES = ('NSE', 'KGE', 'RMS')

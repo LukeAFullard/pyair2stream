@@ -16,7 +16,7 @@ import pandas as pd
 
 from .io import read_calibration, read_Tseries, precheck_validation, SettingsFileNotFoundError, theta_of_days, fit_settings
 from .optimization import forward_mode, PSO_mode, LH_mode, DE_mode, DE_MCMC_mode
-from .config import CommonData
+from .config import CommonData, theta_floor_of, zero_flow_ok
 from .post_processing import post_process
 from .sensitivity import sensitivity_analysis
 from .results import (RunResult, capture_output, collect_parameters, collect_scores, files_of_this_run,
@@ -93,7 +93,7 @@ def _write_calibration_metadata(data: CommonData) -> None:
     # min_theta_floor when it is set): a FORWARD run reports days outside this range.
     theta_min = theta_max = None
     if data.Qmedia > 0:
-        theta_cal, _ = theta_of_days(data.Q[365:data.n_tot], data.Qmedia, data.min_theta_floor)
+        theta_cal, _ = theta_of_days(data.Q[365:data.n_tot], data.Qmedia, theta_floor_of(data.version, data.min_theta_floor))
         if theta_cal.size:
             theta_min = float(np.min(theta_cal))
             theta_max = float(np.max(theta_cal))
@@ -173,7 +173,7 @@ def forward(data: CommonData) -> None:
     # Discharge that cannot be used: missing, or (versions 4/7/8 without min_theta_floor, which
     # cannot simulate a day without flow) zero or negative; gap-tolerant mode treats both as gaps.
     q_zero = np.zeros(data.n_tot, dtype=bool)
-    if data.version in (4, 7, 8) and data.min_theta_floor is None:
+    if not zero_flow_ok(data.version, data.min_theta_floor):
         q_zero = (data.Q != -999.0) & (data.Q <= 0.0)
     q_gap = np.where((data.Q == -999.0) | q_zero, 1, 0)
     segment_id = np.full(data.n_tot, -999)

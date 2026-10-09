@@ -68,7 +68,7 @@ Date,T_air,T_water,Discharge
 | `Date` | always | the date, for example `2020-01-31` |
 | `T_air` | always | daily mean air temperature (°C) |
 | `T_water` | always | daily mean measured water temperature (°C); gaps are fine |
-| `Discharge` | for versions 4, 7 and 8 | daily mean flow, in any unit; it must be above zero |
+| `Discharge` | for versions 4, 7 and 8 | daily mean flow, in any unit; above zero for versions 4 and 8 (zero is accepted by version 7) |
 
 The rules:
 

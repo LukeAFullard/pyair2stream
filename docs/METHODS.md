@@ -86,9 +86,12 @@ The checks:
 - **`T_air` and `Discharge` must be complete** in the default mode. If they have
   gaps, use gap-tolerant mode (§10). Versions 3 and 5 do not use discharge, so the
   column may be absent or incomplete for them.
-- **Discharge must be positive** for versions 4, 7 and 8, because the equation
-  divides by a power of discharge. A zero or negative value is an error unless you
-  set `min_theta_floor` (§5) or use gap-tolerant mode.
+- **Discharge must be positive** for versions 4 and 8, because the equation
+  divides by a power of discharge. Zero is an error unless you set
+  `min_theta_floor` (§5) or use gap-tolerant mode. Version 7 fixes a4 = 0, so
+  it does not divide by θ: a zero-flow day is simulated at θ = 0, where its
+  discharge terms drop out (a note says how many). Negative discharge is an
+  error for every version.
 - **Any start date.** The time of year is taken from each row's date, so a
   file may start on any day (the Fortran assumed 1 January; §17).
 - **Calibration: at least 365 days**, so that the parameters of the yearly
@@ -191,7 +194,8 @@ Parameters a version does not use are forced to zero everywhere, including
 values typed into `parameters_forward`.
 
 If `min_theta_floor` is set, θ is raised to at least that value before θ^a4 is
-evaluated, so a zero-flow day does not make the equation undefined.
+evaluated, so a zero-flow day does not make the equation undefined. Version 7
+(a4 = 0) needs no floor: it runs a zero-flow day at θ = 0.
 
 ## 6. Solving the equation
 
@@ -346,8 +350,8 @@ not fitted to, which is the better guide to its reliability.
 With `gap_tolerant: true`, `T_air` and `Discharge` may have gaps:
 
 1. The record is split into **segments**: runs of consecutive days with valid
-   `T_air` (and, for versions 4/7/8, discharge, which must be positive unless
-   `min_theta_floor` is set). Segments shorter than `min_segment_days`
+   `T_air` (and, for versions 4/7/8, discharge, which for versions 4 and 8 must
+   be positive unless `min_theta_floor` is set). Segments shorter than `min_segment_days`
    (default 30) are dropped. Zero-flow days left out this way are reported (a
    warning, `Q_gap` and `gaps_summary.txt`); in a FORWARD run they are an
    error, because the scenario's results would silently leave them out.
@@ -896,7 +900,8 @@ takes `Qmedia` and the calibrated parameters from it (unless
 `Tice_cover` or `min_theta_floor` (for the versions that use discharge),
 and warns if any day has θ outside the range seen in calibration
 (extrapolation), giving the number of days, the first one, the lowest and
-highest θ, and how many are zero-flow days run at `min_theta_floor`. θ is taken
+highest θ, and how many are zero-flow days run at `min_theta_floor` (or, for
+version 7, at θ = 0). θ is taken
 as the model uses it, so zero-flow days count at the floor, both in the
 calibration's range and in the run. If the file contains water-temperature observations, the fit is
 reported as in §7.
@@ -1039,6 +1044,7 @@ change one-sided.
 | Discharge outside the calibrated range (any day, zero-flow days at `min_theta_floor` included) | FORWARD runs | warning |
 | Negative discharge (a missing-value code other than −999) | loading each file (versions 4, 7, 8) | error |
 | Zero discharge with `min_theta_floor` set | loading each file | warning |
+| Zero discharge, version 7 (simulated at θ = 0) | loading each file | note |
 | Calibration file shorter than 365 days; FORWARD file shorter than 30 days (§2) | loading each file | error |
 | Validation or FORWARD file shorter than a year (§2, §3) | loading each file | warning |
 | Segment warm-up, or the unscored start of a file shorter than a year, too short (§3, §10) | gap-tolerant runs; files shorter than a year | warning |

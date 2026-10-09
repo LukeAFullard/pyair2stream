@@ -92,6 +92,13 @@
   the warm-up's copy of its measurements is hidden too, so they play no part
   (the model then starts at 4 °C, a year before the record). Examples 03, 06
   and 08 were rerun with the new defaults.
+- **Version 7 accepts zero discharge.** It was refused, like versions 4 and 8,
+  because those divide by θ^a4, which is undefined at zero flow; version 7
+  fixes a4 = 0 and never divides by θ. A zero-flow day is now simulated at
+  θ = 0 (its discharge terms drop out) in every mode, with a note giving the
+  number of days; in gap-tolerant mode it is no longer a gap. A FORWARD run
+  counts such days as outside the calibrated flows unless the calibration had
+  them too. Versions 4 and 8 are unchanged; negative discharge stays an error.
 - **`Qmedia` must be positive.** A `Qmedia` of zero or below was refused only in
   gap-tolerant mode; otherwise every simulated temperature was NaN and the run
   stopped with an error that blamed the integrator. It is now refused for

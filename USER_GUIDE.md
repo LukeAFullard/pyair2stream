@@ -193,8 +193,8 @@ first line with the problem.
   looks implausible, but replace such codes with empty cells first.
 - **`T_air` and `Discharge` must have no gaps.** If yours have gaps, fill them
   or use [gap-tolerant mode](#10-gap-tolerant-mode).
-- **Discharge must be above zero** for versions 4, 7 and 8
-  ([§9.2](#92-zero-or-negative-discharge)).
+- **Discharge must be above zero** for versions 4 and 8. Version 7 accepts
+  zero flow ([§9.2](#92-zero-or-negative-discharge)).
 - **A calibration file must be at least 365 days long.** The model has
   parameters for the yearly cycle, which cannot be fitted from part of a year.
   A file may start on any day.
@@ -655,9 +655,9 @@ at the 0 °C floor, and how to check a scenario's B series before you run it.
 
 ### 9.2 Zero or negative discharge
 
-Versions 4, 7 and 8 divide by `θ^a4`. That is undefined when the flow is zero.
-So a zero or negative discharge stops the run when the data are loaded. The
-message names the first bad date. You can:
+Versions 4 and 8 divide by `θ^a4`. That is undefined when the flow is zero.
+So a zero discharge stops the run when the data are loaded. The message names
+the first bad date. You can:
 
 1. correct the data;
 2. use `gap_tolerant: true`, which treats those days as gaps: they are not
@@ -674,9 +674,16 @@ message names the first bad date. You can:
    a FORWARD run counts them as outside the calibrated flows unless the
    calibration had such days too.
 
-Negative discharge always stops the run: flow cannot be negative, so it is
-almost certainly a code for a missing value. Write missing values as `-999` or
-leave the cell blank.
+**Version 7** fixes a4 at zero, so it never divides by θ: it simulates a
+zero-flow day with θ = 0. Its discharge terms then drop out, and the water
+follows the air alone. A note gives the number of such days and the first one,
+in every mode. A stream without flow may be dry or reduced to pools, which the
+model may not have been calibrated on: a FORWARD run counts these days as
+outside the calibrated flows unless the calibration had such days too.
+
+Negative discharge always stops the run, for every version: flow cannot be
+negative, so it is almost certainly a code for a missing value. Write missing
+values as `-999` or leave the cell blank.
 
 ## 10. Gap-tolerant mode
 
@@ -684,8 +691,8 @@ With `gap_tolerant: true`, `T_air` and `Discharge` may have gaps. This is how
 it works:
 
 - The record is split at each gap into **segments**: stretches with no gaps.
-  For versions 4, 7 and 8, a day with zero or negative discharge is also a gap
-  unless `min_theta_floor` is set (§9.2).
+  For versions 4 and 8, a day with zero discharge is also a gap unless
+  `min_theta_floor` is set (§9.2). Version 7 simulates it.
 - Segments shorter than `min_segment_days` (default 30) are dropped.
 - Each segment is simulated on its own. It starts from the measured water
   temperature on its first day, or, if there is none, from the average for

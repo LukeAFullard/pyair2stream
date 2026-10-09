@@ -15,7 +15,7 @@ import pandas as pd
 from typing import Tuple
 
 from .config import (
-    CommonData, DEFAULT_NOISE_MODEL, DEFAULT_LIKELIHOOD, VALID_LIKELIHOODS, DEFAULT_RHO_TIMESCALE, VALID_RHO_TIMESCALES, ACTIVE_PARAMS, VALID_VERSIONS, VALID_RUN_MODES, VALID_INTEGRATORS,
+    CommonData, theta_floor_of, DEFAULT_NOISE_MODEL, DEFAULT_LIKELIHOOD, VALID_LIKELIHOODS, DEFAULT_RHO_TIMESCALE, VALID_RHO_TIMESCALES, ACTIVE_PARAMS, VALID_VERSIONS, VALID_RUN_MODES, VALID_INTEGRATORS,
     VALID_OBJECTIVES,
 )
 from .model import prepare_evaluation, check_nonpositive_discharge, STABILITY_MAX_GROWTH
@@ -29,8 +29,9 @@ NOLEAP_MONTH_START = np.array([0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304,
 
 def theta_of_days(Q: np.ndarray, qmedia: float, floor=None):
     """theta = Q / Qmedia as the model uses it, on the days with discharge, and their row
-    positions in Q. Zero-flow days are included at `min_theta_floor` when it is set (the
-    model then runs them at that floor); otherwise they are not simulated and are left out."""
+    positions in Q. With a `floor` (`config.theta_floor_of`: min_theta_floor, or 0 for
+    version 7) zero-flow days are included at it, as the model runs them; otherwise they
+    are not simulated and are left out."""
     rows = np.flatnonzero(Q != -999.0) if floor is not None else np.flatnonzero((Q != -999.0) & (Q > 0.0))
     theta = Q[rows] / qmedia
     if floor is not None:
@@ -773,7 +774,8 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
         ):
             # Every day outside the calibrated range is reported, zero-flow days run at
             # min_theta_floor included: results on those days are an extrapolation.
-            theta, rows = theta_of_days(data.Q[365:data.n_tot], data.Qmedia, data.min_theta_floor)
+            theta, rows = theta_of_days(data.Q[365:data.n_tot], data.Qmedia,
+                                        theta_floor_of(data.version, data.min_theta_floor))
             outside = (theta < data.calib_theta_min) | (theta > data.calib_theta_max)
             if outside.any():
                 first = data.date[365 + rows[np.argmax(outside)]]
@@ -783,7 +785,9 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
                     f"first: {first[0]:04d}-{first[1]:02d}-{first[2]:02d}) have theta = Q/Qmedia outside the "
                     f"calibrated range [{data.calib_theta_min:.5g}, {data.calib_theta_max:.5g}] "
                     f"(lowest {theta.min():.5g}, highest {theta.max():.5g})"
-                    + (f", {at_floor:,} of them zero-flow days run at min_theta_floor" if at_floor else "")
+                    + (f", {at_floor:,} of them zero-flow days run at "
+                       + ("min_theta_floor" if data.min_theta_floor is not None else "theta = 0")
+                       if at_floor else "")
                     + ". The model is extrapolated beyond the flows it was calibrated on on these days, so "
                     "treat their results with care."
                 )
