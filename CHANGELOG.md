@@ -12,6 +12,13 @@
   data used, the scores, the parameters (flagging any on a bound), the
   uncertainty, every warning and note the run printed, and what each output
   file is.
+- **`pyair2stream.plots`: ready-made figures** for simulation ensembles
+  (USER_GUIDE §12). `prediction_range` draws the median and range of the
+  simulations day by day, optionally as 7-day means (computed in each
+  simulation first), with the measurements and a limit. `change` draws the
+  difference between scenarios by day, month or year. `yearly_statistic` draws
+  a yearly statistic year by year against a limit, with the chance of
+  exceeding it. Examples 03, 04 and 08 now make their figures with them.
 - **`filled_water_temperature_<period>.csv`**: the measured water temperature
   with the model's values on the days without a measurement, a `source` column
   saying which, and the prediction range after DE-MCMC or a FORWARD run with

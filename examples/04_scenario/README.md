@@ -70,6 +70,10 @@ diff = scenario.paired_difference_from_files(
 
 ![Daily effect of the abstraction and the summer average](figures/abstraction_effect.png)
 
+*Left: the change on each day, the median of the 1,000 paired simulations and
+their 90% range, drawn with `plots.change(diff, dates, by="day")`. Right: each
+simulation's average summer change, paired (orange) and not paired (grey).*
+
 **Reading it.**
 
 - According to the fitted model, this abstraction changes the Mentue's

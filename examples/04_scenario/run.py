@@ -12,12 +12,11 @@ import sys
 
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from pyair2stream import scenario
+from pyair2stream import plots, scenario
 
 FLOW_KEPT = 0.7        # the abstraction scenario keeps 70% of the measured discharge
 SUMMER = (6, 7, 8)
@@ -74,17 +73,12 @@ table.to_csv(os.path.join(OUT, "scenario_summary.csv"), index=False)
 print("\n" + table.to_string(index=False))
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.4), gridspec_kw={"width_ratios": [2.2, 1]})
-lo, med, hi = np.nanpercentile(diff, [5, 50, 95], axis=0)
-ax1.fill_between(dates, lo, hi, color="tab:red", alpha=0.25, lw=0, label="90% range")
-ax1.plot(dates, med, color="tab:red", lw=1, label="median")
-ax1.axhline(0, color="black", lw=0.8)
+# Left: the daily change with its 90% range (pyair2stream.plots). Right: why pairing matters.
+plots.change(diff, dates, by="day", ax=ax1, colors=[plots.PALETTE[1]])
 ax1.set(ylabel="Change from abstraction (°C)", title="Daily effect, 2010-2012")
-ax1.legend(frameon=False, fontsize=8)
-ax1.xaxis.set_major_locator(mdates.YearLocator())
-ax1.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
 bins = np.linspace(min(unpaired.min(), effect.min()), max(unpaired.max(), effect.max()), 40)
-ax2.hist(unpaired, bins=bins, color="0.7", label="not paired")
-ax2.hist(effect, bins=bins, color="tab:red", alpha=0.8, label="paired")
+ax2.hist(unpaired, bins=bins, color=plots.GRID, label="not paired")
+ax2.hist(effect, bins=bins, color=plots.PALETTE[1], alpha=0.8, label="paired")
 ax2.set(xlabel="Average summer change (°C)", ylabel="Simulations", title="Summer average")
 ax2.legend(frameon=False, fontsize=8)
 fig.tight_layout()
