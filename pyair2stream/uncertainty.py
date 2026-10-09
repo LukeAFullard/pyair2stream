@@ -8,7 +8,6 @@ for probabilistic forward predictions.
 
 import numpy as np
 import scipy.signal
-import logging
 from scipy.optimize import brentq
 
 MIN_PAIRS_FOR_RHO_ESTIMATE = 30
@@ -38,7 +37,7 @@ def estimate_ar1_rho(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mask: np.n
     n_valid_pairs = len(pairs_t0)
 
     if n_valid_pairs < MIN_PAIRS_FOR_RHO_ESTIMATE:
-        logging.warning(f"Only {n_valid_pairs} valid residual pairs available for AR(1) estimation (need >= {MIN_PAIRS_FOR_RHO_ESTIMATE}). Falling back to rho=0.0.")
+        print(f"Warning: Only {n_valid_pairs} valid residual pairs available for AR(1) estimation (need >= {MIN_PAIRS_FOR_RHO_ESTIMATE}). Falling back to rho=0.0.")
         return 0.0
 
     pairs_t0 = np.array(pairs_t0)
@@ -49,7 +48,7 @@ def estimate_ar1_rho(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mask: np.n
     rho = np.corrcoef(pairs_t0, pairs_t1)[0, 1]
 
     if np.isnan(rho):
-        logging.warning("AR(1) rho estimation resulted in NaN. Falling back to rho=0.0.")
+        print("Warning: AR(1) rho estimation resulted in NaN. Falling back to rho=0.0.")
         return 0.0
 
     # Clip strictly to [0.0, 0.99]. Note: the lower bound of 0.0 enforces non-negative serial correlation.
@@ -150,10 +149,10 @@ def estimate_ar1_rho_weekly(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mas
     first = np.concatenate(first) if first else np.empty(0)
     second = np.concatenate(second) if second else np.empty(0)
     if len(first) < WEEK * MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE:
-        logging.warning(f"Only {len(first)} pairs of complete 7-day windows a week apart are available for the "
-                        f"weekly rho estimate (need >= {WEEK * MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE}, about "
-                        f"{MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE + 1} complete weeks). Using the lag-1 correlation of "
-                        "consecutive days instead.")
+        print(f"Warning: Only {len(first)} pairs of complete 7-day windows a week apart are available for the "
+              f"weekly rho estimate (need >= {WEEK * MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE}, about "
+              f"{MIN_WEEK_PAIRS_FOR_RHO_ESTIMATE + 1} complete weeks). Using the lag-1 correlation of "
+              "consecutive days instead.")
         return estimate_ar1_rho(Twat_mod, Twat_obs, eval_mask, segments)
     # Errors that do not vary (to rounding of the running sums) carry no persistence to measure.
     scale = max(float(np.max(np.abs(first))), float(np.max(np.abs(second))), 1e-300)
@@ -189,10 +188,10 @@ def estimate_rho(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mask: np.ndarr
     else:
         raise ValueError(f"Invalid rho_timescale '{timescale}'. Must be 'weekly' or 'daily'.")
     if rho >= MAX_RHO:
-        logging.warning(f"rho reached its upper limit of {MAX_RHO}: the model's errors persist for months. This "
-                        "usually means a systematic error, such as a bias in one season (see the "
-                        "bias_by_month output). Intervals for multi-week quantities will be wide, and the "
-                        "model may not suit this river.")
+        print(f"Warning: rho reached its upper limit of {MAX_RHO}: the model's errors persist for months. This "
+              "usually means a systematic error, such as a bias in one season (see the "
+              "bias_by_month output). Intervals for multi-week quantities will be wide, and the "
+              "model may not suit this river.")
     return rho
 
 

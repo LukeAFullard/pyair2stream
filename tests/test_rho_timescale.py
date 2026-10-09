@@ -256,17 +256,16 @@ def test_weekly_resolution_calibration_records_rho_from_daily_errors(tmp_path):
     assert 0.6 < meta["rho"] < 0.99
 
 
-def test_rho_at_its_limit_warns(caplog):
-    """Errors that drift with the seasons (a systematic error) push rho to its cap; say so."""
+def test_rho_at_its_limit_warns(capsys):
+    """Errors that drift with the seasons (a systematic error) push rho to its cap; say so,
+    as a printed warning, so it reaches summary.md and RunResult.messages."""
     n = 4 * 365
     err = 0.8 * np.sin(2 * np.pi * np.arange(n) / 365.0)
-    with caplog.at_level("WARNING"):
-        assert _estimate(err, lambda *a: estimate_rho(*a, "weekly")) == 0.99
-    assert "upper limit" in caplog.text and "bias_by_month" in caplog.text
-    caplog.clear()
-    with caplog.at_level("WARNING"):
-        _estimate(_ar1(n, 0.7, np.random.default_rng(2)), lambda *a: estimate_rho(*a, "weekly"))
-    assert "upper limit" not in caplog.text
+    assert _estimate(err, lambda *a: estimate_rho(*a, "weekly")) == 0.99
+    out = capsys.readouterr().out
+    assert "Warning: rho reached its upper limit" in out and "bias_by_month" in out
+    _estimate(_ar1(n, 0.7, np.random.default_rng(2)), lambda *a: estimate_rho(*a, "weekly"))
+    assert "upper limit" not in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("sidecar_extra,option,expect_note", [

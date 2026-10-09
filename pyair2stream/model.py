@@ -430,7 +430,10 @@ def is_numerically_divergent(data: CommonData, max_plausible_twat: float = None)
     """
     Lightweight, non-raising sibling of `check_numerical_divergence`: True if
     `data.Twat_mod` currently contains any non-finite or implausibly large (present)
-    value. Intended for a per-draw check inside an ensemble/posterior-sample loop
+    value, or if, with an explicit integrator (RK4/RK2/EUL), a difference can grow
+    more than `data.stability_max_growth` times over a stretch of days at the current
+    `data.par` (`largest_growth`): such a run can look plausible and still be wrong.
+    Intended for a per-draw check inside an ensemble/posterior-sample loop
     (`optimization.forward_mode`'s prediction-interval loop,
     `optimization._run_mcmc_uncertainty`'s envelope loop), where a single bad draw
     should be excluded (or the batch aborted, per `on_divergent_draw`) rather than
@@ -438,7 +441,12 @@ def is_numerically_divergent(data: CommonData, max_plausible_twat: float = None)
     """
     if max_plausible_twat is None:
         max_plausible_twat = getattr(data, 'max_plausible_twat', TWAT_SANITY_MAX)
-    return bool(np.any(_divergence_bad_mask(data.Twat_mod, max_plausible_twat)))
+    if np.any(_divergence_bad_mask(data.Twat_mod, max_plausible_twat)):
+        return True
+    if data.mod_num in ('RK4', 'RK2', 'EUL'):
+        limit = getattr(data, 'stability_max_growth', STABILITY_MAX_GROWTH)
+        return bool(largest_growth(data)['growth'] > limit)
+    return False
 
 
 def check_numerical_divergence(data: CommonData, max_plausible_twat: float = None) -> None:
@@ -692,8 +700,8 @@ def call_model_segmented(data: CommonData) -> None:
                 day = data.date[start, 2]
                 doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
             else:
-                days_in_year = 365 if data.calendar == 'noleap' else 360
-                doy = (start - 365) % days_in_year
+                from .io import calendar_day_index
+                doy = calendar_day_index(data, start)
             data.Twat_mod[start] = data.doy_climatology[doy]
 
     _run_integration(data, data.segments, p)

@@ -76,8 +76,8 @@ The rules:
 - `T_air` and `Discharge` must have no gaps, unless you use gap-tolerant mode.
   [Example 05](examples/05_gaps/README.md) shows when to fill gaps and when to
   use that mode.
-- The file must start on 1 January and cover at least a year. Several years
-  are better.
+- The file can start on any day and must cover at least a year. Several
+  years are better.
 - A run checks your files before it calibrates anything. If something is
   wrong, it stops and names the file, the column and the line. To check a file
   yourself first, use `pyair2stream.analyze_timeseries`

@@ -149,10 +149,16 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                                          "Write dates as YYYY-MM-DD, in the same format on every row."))
     if blank.any() or unreadable.any():
         dates = None
-    elif calendar == 'standard':
+    elif calendar in ('standard', 'noleap'):
+        leap_days = (dates.dt.month == 2) & (dates.dt.day == 29)
         duplicated = dates.duplicated(keep=False)
         backwards = dates.diff() < pd.Timedelta(0)
-        if dates.duplicated().any():
+        if calendar == 'noleap' and leap_days.any():
+            i = int(np.argmax(leap_days.to_numpy()))
+            problems.append(Problem('error', f"{dates.iloc[i].date()} on line {_line(i)} of {source} is 29 February, "
+                                             "which the noleap calendar does not have. Remove the 29 February rows, "
+                                             "or use calendar: 'standard'."))
+        elif dates.duplicated().any():
             d = dates[duplicated].iloc[0]
             lines = [_line(i) for i in np.flatnonzero((dates == d).to_numpy())]
             problems.append(Problem('error', f"The time series in {source} must be continuous at a daily time scale "
@@ -166,6 +172,8 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                                              f"{dates.iloc[i - 1].date()} on line {_line(i - 1)}. Sort the rows by date."))
         elif len(dates):
             expected = pd.date_range(dates.iloc[0], dates.iloc[-1], freq='D')
+            if calendar == 'noleap':
+                expected = expected[~((expected.month == 2) & (expected.day == 29))]
             missing = expected.difference(pd.DatetimeIndex(dates))
             if len(missing):
                 after = int(np.searchsorted(dates.to_numpy(), missing[0].to_datetime64())) - 1
@@ -174,21 +182,20 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                                                  f"{missing[0].date()}, after line {_line(after)}). Add a row for each "
                                                  "missing date and leave its values blank."))
     else:
-        # Non-standard calendars: the dates only label the rows (time is taken from the
-        # row position), so only their order can be checked.
+        # 360_day: the first date sets the day of the year the file starts on, and the
+        # rows are counted on from there; the later dates only label the rows, so only
+        # their order can be checked.
         backwards = dates.diff() < pd.Timedelta(0)
         if backwards.any():
             i = int(np.argmax(backwards.to_numpy()))
             problems.append(Problem('error', f"The time series in {source} must have non-decreasing dates: "
                                              f"{dates.iloc[i].date()} on line {_line(i)} comes after "
                                              f"{dates.iloc[i - 1].date()} on line {_line(i - 1)}."))
+        if len(dates) and dates.iloc[0].day > 30:
+            problems.append(Problem('error', f"The first date of {source}, {dates.iloc[0].date()}, is the 31st of a "
+                                             "month, which the 360_day calendar does not have. It sets the day of the "
+                                             "year the file starts on: use a day from 1 to 30."))
 
-    if dates is not None and len(dates):
-        if not gap_tolerant and period != 'scenario' and (dates.iloc[0].month, dates.iloc[0].day) != (1, 1):
-            problems.append(Problem('error', f"The time series in {source} must start on January 1st (it starts on "
-                                             f"{dates.iloc[0].date()}). Start the file on 1 January: fill in air "
-                                             "temperature and discharge and leave T_water blank until your "
-                                             "measurements begin."))
     n_days = len(df)
     if n_days < MIN_DAYS:
         if period == 'validation':

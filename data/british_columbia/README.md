@@ -59,5 +59,5 @@ original air2stream program assumes that every record starts on 1 January and
 takes the seasonal term's timing from the row number, not the date. The
 published simulation of that station's calibration period is reproduced only
 when the record is read that way, that is, with its seasonal term ten months
-out of phase (V15). pyair2stream takes the timing from the dates and refuses a
-calibration record that does not start on 1 January.
+out of phase (V15). pyair2stream takes the timing from the dates, so a record
+may start on any date.

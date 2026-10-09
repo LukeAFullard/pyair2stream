@@ -132,8 +132,10 @@ example by running several input scenarios.
    mean, a yearly peak or a count of days, is computed in each of the 1,000
    series. The spread across series is its uncertainty; the share above a limit
    is the probability that the limit was exceeded (section [7](#7-weekly-means-yearly-peaks-days-above-a-limit)).
-6. **Check.** Cross-validation repeats steps 1–5 with each year hidden in turn,
-   and records whether the stated ranges contained what was measured
+6. **Check.** Cross-validation hides each year in turn and repeats steps 1, 3,
+   4 and 5 without it (step 2 is left out: each fold has one parameter set, so
+   its ranges are slightly narrower). It records whether the stated ranges
+   contained what was measured
    (section [8](#8-testing-on-years-the-model-has-not-seen-cross-validation)).
 7. **Correct and report.** For yearly statistics, the bias found in step 6 is
    removed (section [9](#9-correcting-yearly-statistics-for-the-models-bias)).

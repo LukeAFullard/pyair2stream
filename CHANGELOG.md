@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.5.1] - 2026-10-09
+
+### Fixed
+- ⚠ **Any file may start on any date.** The 1 January start, which the
+  Fortran assumed (it counted the time of year from the row number), is no
+  longer required for calibration and validation files: the time of year comes
+  from each row's date, and the warm-up year copies the phase of the rows it
+  repeats. Before, a record starting on 2 January had to wait for the next
+  1 January, losing almost a year of measurements. Records starting on
+  1 January give exactly the same results as before.
+- **`calendar: "noleap"` and `"360_day"` take the time of year from the dates.**
+  They counted it from the row position with the first row as 1 January, so a
+  FORWARD or gap-tolerant file starting on another date (for example
+  1 October, a water year) ran with its seasonal term out of phase, without a
+  message. A `noleap` file now has real dates without 29 February, checked for
+  missing and repeated days like standard dates. In a `360_day` file the first
+  date sets the day of the year the file starts on, and the rows are counted on
+  from there (METHODS §2).
+- **Ensemble draws that are unstable with RK4, RK2 or EUL are excluded.** In
+  the DE-MCMC band and FORWARD intervals a draw now also counts as divergent
+  when a difference can grow more than `stability_max_growth` times
+  (`largest_growth`), as the best-fit run already did; such a run can stay below
+  `max_plausible_twat` and still be wrong. `CRN` and `EXP` are not affected.
+- **DE-MCMC likelihood: exactly the scored values.** With weekly or monthly
+  scoring, `prc` below 1 and gap-tolerant mode, a block whose middle day was
+  itself unscored was scored by the objective but left out of the likelihood.
+  The likelihood now uses the same blocks as the objective. Daily scoring and
+  `prc: 1` are unchanged.
+- **LATHYP** started from a best score of −999, so if every sample scored
+  lower (NSE can be far below −999), it returned the all-zero start
+  parameters. It now keeps the best finite score, and stops with an error if
+  no sample has one.
+- The warnings about ρ (too few pairs, ρ at its limit of 0.99) are printed like
+  every other warning, so they now appear in `summary.md` and
+  `RunResult.messages`.
+
+### Documentation
+- METHODS §7 and USER_GUIDE §8: the scores in `goodness_of_fit_*.csv` are
+  computed on the scored values (daily values, or weekly or monthly means).
+- METHODS §10: a gap-tolerant FORWARD run takes the day-of-year averages from
+  its own file. METHODS §13: in gap-tolerant mode a paired difference is too
+  small for the first days of each segment.
+
 ## [0.5.0] - 2026-10-05
 
 ### Added

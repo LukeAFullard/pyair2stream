@@ -136,8 +136,7 @@ and discharge are identical. Air temperature differs only by rounding (median
 
 ## Step 4: split the file and run the model
 
-Calibration and validation files must start on 1 January. Split the prepared
-file by year:
+Split the prepared file into calibration and validation years:
 
 ```python
 dates = pd.to_datetime(filled.Date)
@@ -158,8 +157,7 @@ same as example [01](../01_quickstart/README.md) on the original data.
    run (`version`, `gap_tolerant`).
 4. Fill short gaps in air temperature and discharge. For long gaps, see
    example [05](../05_gaps/README.md).
-5. Check again, then split into calibration and validation files that start on
-   1 January.
+5. Check again, then split into calibration and validation files.
 
 Keep the raw files, and record what you filled or left out.
 

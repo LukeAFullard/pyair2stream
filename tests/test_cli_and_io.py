@@ -15,8 +15,8 @@ Regression tests for docs/audit/05_cli_and_io_correctness.md.
    for anyone reading the file directly.
 4. Defect D: a non-standard-calendar (e.g. 360-day GCM) series either failed
    validation outright or, if padded to fake Gregorian dates, silently
-   misaligned the seasonal term. `calendar: noleap`/`360_day` computes tt from
-   row position against the declared calendar instead.
+   misaligned the seasonal term. `calendar: noleap` computes tt from the dates
+   without 29 February; `360_day` from the first date, counting rows on from it.
 """
 
 import os
@@ -179,7 +179,7 @@ class TestCliAndIoCorrectness(unittest.TestCase):
             with self.assertRaises(ValueError):
                 read_Tseries(data, 'c')
 
-    def test_noleap_calendar_computes_tt_from_row_position(self):
+    def test_noleap_calendar_computes_tt_from_its_dates(self):
         with tempfile.TemporaryDirectory() as tmp:
             dates = pd.date_range('2000-01-01', '2000-12-31', freq='D')
             dates = dates[~((dates.month == 2) & (dates.day == 29))]  # 365 real days
@@ -222,6 +222,45 @@ class TestCliAndIoCorrectness(unittest.TestCase):
             self.assertAlmostEqual(data.tt[365], 1.0 / 360.0)          # day 1 of year 1
             self.assertAlmostEqual(data.tt[365 + 359], 1.0)            # day 360, end of year 1
             self.assertAlmostEqual(data.tt[365 + 360], 1.0 / 360.0)    # day 1 of year 2, restarts
+
+    def _read_tt(self, calendar, dates):
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = os.path.join(tmp, 'series.csv')
+            n = len(dates)
+            pd.DataFrame({
+                'Date': dates,
+                'T_air': 10.0 + 5.0 * np.sin(np.linspace(0, 4 * np.pi, n)),
+                'Discharge': np.full(n, 10.0),
+                'T_water': np.full(n, 8.0),
+            }).to_csv(csv_path, index=False)
+            data = CommonData()
+            data.runmode = 'DE'
+            data.calendar = calendar
+            data._input_data_path_cal = csv_path
+            read_Tseries(data, 'c')
+            return data.tt
+
+    def test_noleap_calendar_may_start_on_any_date(self):
+        dates = pd.date_range('2003-07-19', '2005-12-31', freq='D')
+        dates = dates[~((dates.month == 2) & (dates.day == 29))]
+        tt = self._read_tt('noleap', dates.strftime('%Y-%m-%d'))
+        self.assertAlmostEqual(tt[365], 200.0 / 365.0)                  # 19 July is day 200
+        i = 365 + list(dates).index(pd.Timestamp('2004-03-01'))
+        self.assertAlmostEqual(tt[i - 1], 59.0 / 365.0)                 # 28 February 2004
+        self.assertAlmostEqual(tt[i], 60.0 / 365.0)                     # 1 March 2004, no 29 February
+        np.testing.assert_allclose(tt[:365], tt[365:730])              # warm-up keeps the time of year
+
+    def test_360_day_calendar_starts_on_the_day_of_its_first_date(self):
+        tt = self._read_tt('360_day', pd.date_range('2001-03-15', periods=720, freq='D').strftime('%Y-%m-%d'))
+        self.assertAlmostEqual(tt[365], 75.0 / 360.0)                   # 15 March: 2 x 30 + 15
+        self.assertAlmostEqual(tt[365 + 285], 1.0)                      # day 360 of that year
+        self.assertAlmostEqual(tt[365 + 286], 1.0 / 360.0)              # then the next year starts
+        np.testing.assert_allclose(tt[:365], tt[365:730])
+
+    def test_standard_calendar_may_start_on_any_date(self):
+        tt = self._read_tt('standard', pd.date_range('2001-01-02', periods=400, freq='D').strftime('%Y-%m-%d'))
+        self.assertAlmostEqual(tt[365], 2.0 / 365.0)
+        np.testing.assert_allclose(tt[:365], tt[365:730])
 
     def test_invalid_calendar_value_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
