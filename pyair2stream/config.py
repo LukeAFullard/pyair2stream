@@ -107,6 +107,9 @@ class CommonData:
     # {"seed": int or None, "source": "forward_options.random_seed" / "random_seed" / None,
     #  "reused_from": path or None}. None when no parameter sets were drawn.
     forward_draw: Optional[dict] = None
+    # The output folder's files when the run started ({relative path: (mtime_ns, size)}), so
+    # the summary describes only the files this run wrote (results.files_of_this_run).
+    folder_before: Optional[dict] = None
 
     # Cross Validation
     cross_validation: Optional['CVConfig'] = None  # Expected to be Optional[CVConfig]

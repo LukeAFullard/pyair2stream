@@ -19,8 +19,8 @@ from .optimization import forward_mode, PSO_mode, LH_mode, DE_mode, DE_MCMC_mode
 from .config import CommonData
 from .post_processing import post_process
 from .sensitivity import sensitivity_analysis
-from .results import (RunResult, capture_output, collect_parameters, collect_scores, messages_from,
-                      output_files, write_filled_series, write_summary)
+from .results import (RunResult, capture_output, collect_parameters, collect_scores, files_of_this_run,
+                      messages_from, snapshot_folder, write_filled_series, write_summary)
 from . import __version__
 
 from .model import (call_model, aggregation, statis, funcobj, detect_segments, warn_on_stability,
@@ -321,12 +321,18 @@ def run(config, verbose: bool = True) -> RunResult:
     if verbose and summary:
         print(f"Summary of this run: {summary}")
     return RunResult(output_dir=data.folder, run_mode=data.runmode, version=data.version, parameters=parameters,
-                     scores=scores, messages=messages, summary=summary, files=output_files(data.folder), data=data)
+                     scores=scores, messages=messages, summary=summary, files=files_of_this_run(data), data=data)
 
 
 def _run(config, t1: float) -> CommonData:
     """The run itself: load and check the data, calibrate or simulate, write the outputs."""
     data = read_calibration(config_file=config)
+    # Record what the output folder already holds, so the summary describes only this run's files.
+    data.folder_before = snapshot_folder(data.folder)
+    if data.folder_before:
+        print(f"Warning: the output folder {data.folder} already holds {len(data.folder_before):,} file(s) from "
+              "earlier runs. This run replaces those with the same names as its own outputs (for example "
+              "summary.md) and keeps the others; summary.md describes only this run's files and counts the others.")
 
     read_Tseries(data, 'c')
     # The validation file is used only after the calibration, which can take hours:

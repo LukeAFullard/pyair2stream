@@ -470,6 +470,12 @@ every warning and note the run printed, the figures, and what each output
 file is. `summary.html` is the same page for a web browser, with the figures
 inside it, so it can be sent as one file.
 
+Several runs may share an output folder (for example a calibration and its
+FORWARD runs). A run then warns that the folder already holds files from
+earlier runs, and its summary describes only the files it wrote. It counts the
+others and names those it replaced, such as the earlier `summary.md`: copy a
+summary elsewhere first if you want to keep it, or give each run its own folder.
+
 ### What to check first
 
 After a calibration, look at these, in this order:

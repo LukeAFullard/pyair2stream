@@ -118,3 +118,30 @@ def test_dropped_segment_warnings_are_counted():
     messages = messages_from(lines)
     assert messages[0].startswith("Warning: 2 stretch(es)")
     assert messages[1:] == ["Note: something"]
+
+
+def test_a_run_into_a_shared_folder_describes_only_its_own_files(tmp_path):
+    # A calibration, then a FORWARD run into the same folder, which also holds the
+    # uncertainty record of an earlier DE-MCMC run (coverage 55.5%).
+    _csv(tmp_path / 'cal.csv')
+    _csv(tmp_path / 'future.csv', start='2018-01-01', seed=1)
+    calibration = pyair2stream.run(_config(tmp_path), verbose=False)
+    with open(os.path.join(calibration.output_dir, 'MCMC_chain_S_c_1d_meta.json'), 'w') as f:
+        f.write('{"converged": true, "sigma": 0.9, "interval_coverage": 0.555, "interval_coverage_n_days": 999}')
+    earlier = set(os.listdir(calibration.output_dir))
+    forward = pyair2stream.run(_config(
+        tmp_path, run_mode='FORWARD', parameters_forward=list(calibration.data.par_best),
+        paths={'input_data': str(tmp_path / 'future.csv'), 'output_dir': str(tmp_path / 'out'),
+               'calibration_metadata': os.path.join(calibration.output_dir, 'calibration_metadata.json')}),
+        verbose=False)
+
+    warning = [m for m in forward.messages if 'already holds' in m]
+    assert warning and f"{len(earlier):,} file(s) from earlier runs" in warning[0]
+    summary = open(forward.summary, encoding='utf-8').read()
+    assert '55.5%' not in summary and '## Uncertainty' not in summary      # not this run's record
+    assert 'calibration_DE_NSE_S.png' not in summary                        # the calibration's figure
+    assert all(not f.startswith(('0_DE', '1_DE', 'calibration_DE')) for f in forward.files)
+    replaced = {'summary.md', 'summary.html'}
+    assert f"also holds {len(earlier) - len(replaced):,} file(s) from earlier runs" in summary
+    assert "This run replaced these files of an earlier run: `summary.html`, `summary.md`." in summary
+    assert set(forward.files) >= replaced

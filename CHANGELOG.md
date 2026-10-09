@@ -31,6 +31,15 @@
   from the chain's `_meta.json`; a different one set in the FORWARD settings is
   used with a note, as are `residual_sigma` and `ar1_rho` set there (notes
   appear in `summary.md`).
+- **The summary describes only its own run.** When runs shared an output
+  folder (as a calibration and its FORWARD runs may), `summary.md` took its
+  uncertainty section from the first record in the folder, so a FORWARD run's
+  summary could show the calibration's coverage, σ and convergence as its own;
+  it listed every file and figure in the folder as the run's outputs; and the
+  gap-filled series could take a prediction range left by an earlier run. Now a
+  run records the folder's files when it starts, warns if there are any, and
+  its summary, gap-filled series and `RunResult.files` use only the files it
+  wrote. The summary counts the others and names those it replaced.
 - **A FORWARD run's seed.** The draw of parameter sets for its prediction
   intervals used only `forward_options.random_seed`, so a run with the
   top-level `random_seed` alone was not repeatable, and `summary.md` reported

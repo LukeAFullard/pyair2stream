@@ -46,7 +46,8 @@ class RunResult:
         run's (all held-out days together) under "cross-validation".
     messages: the warnings and notes the run printed, in order.
     summary: the path of summary.md (summary.html, beside it, is the same page with the figures).
-    files: every output file, relative to output_dir.
+    files: the files this run wrote or replaced, relative to output_dir (the folder may also
+        hold files from earlier runs).
     data: the run's internal state (CommonData), for advanced use.
     """
     output_dir: str
@@ -116,7 +117,7 @@ def _simulation_files(data: CommonData) -> dict:
     files = {"calibration" if data.runmode != "FORWARD" else "forward":
              os.path.join(data.folder, f"2_{stem}c_{data.time_res}.csv"),
              "validation": os.path.join(data.folder, f"3_{stem}v_{data.time_res}.csv")}
-    return {k: v for k, v in files.items() if os.path.exists(v)}
+    return {k: v for k, v in files.items() if os.path.exists(v) and _this_run(data, v)}
 
 
 def _read_daily(path: str) -> pd.DataFrame:
@@ -135,7 +136,7 @@ def _range_file(data: CommonData, period: str) -> Optional[str]:
     else:
         return None
     path = os.path.join(data.folder, name)
-    return path if os.path.exists(path) else None
+    return path if os.path.exists(path) and _this_run(data, path) else None
 
 
 def _level(data: CommonData) -> float:
@@ -177,6 +178,30 @@ def output_files(folder: str) -> list:
         for name in names:
             out.append(os.path.relpath(os.path.join(root, name), folder))
     return sorted(out)
+
+
+def _stamp(path: str):
+    st = os.stat(path)
+    return st.st_mtime_ns, st.st_size
+
+
+def snapshot_folder(folder: str) -> dict:
+    """The files in a folder now, with when they were last written: {relative path: stamp}."""
+    return {name: _stamp(os.path.join(folder, name)) for name in output_files(folder)} if os.path.isdir(folder) else {}
+
+
+def files_of_this_run(data: CommonData) -> list:
+    """The files in the output folder that this run wrote or replaced (all of them if the
+    folder was not recorded when the run started)."""
+    before = getattr(data, "folder_before", None)
+    files = output_files(data.folder)
+    if before is None:
+        return files
+    return [f for f in files if before.get(f) != _stamp(os.path.join(data.folder, f))]
+
+
+def _this_run(data: CommonData, path: str) -> bool:
+    return os.path.relpath(path, data.folder) in set(files_of_this_run(data))
 
 
 # --- Gap-filled water temperature --------------------------------------------------------------------
@@ -364,7 +389,8 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
         if data.runmode != "FORWARD":
             lines.append("| lower bound | " + " | ".join(f"{lo[n]:.4g}" for n in names) + " |")
             lines.append("| upper bound | " + " | ".join(f"{hi[n]:.4g}" for n in names) + " |")
-            sig = glob.glob(os.path.join(data.folder, "parameter_significance_*.csv"))
+            sig = [f for f in glob.glob(os.path.join(data.folder, "parameter_significance_*.csv"))
+                   if _this_run(data, f)]
             if sig:
                 table = pd.read_csv(sig[0])
                 lower = [c for c in table.columns if c.endswith("_CI_Lower")]
@@ -383,8 +409,11 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
                       + (" Widen that bound and calibrate again." if at_bound else "")]
         lines.append("")
 
-    meta = glob.glob(os.path.join(data.folder, "MCMC_chain_*_meta.json")) + \
-        glob.glob(os.path.join(data.folder, "Forward_Prediction_Ensemble_*_meta.json"))
+    # The uncertainty record of this run only: a FORWARD run's prediction intervals, or a
+    # DE-MCMC run's chain (not those of another run sharing the output folder).
+    pattern = {"FORWARD": "Forward_Prediction_Ensemble_*_meta.json", "DE-MCMC": "MCMC_chain_*_meta.json"}
+    meta = [f for f in glob.glob(os.path.join(data.folder, pattern.get(data.runmode, "-")))
+            if _this_run(data, f)]
     if meta:
         m = json.load(open(meta[0]))
         level = _level(data)
@@ -408,7 +437,7 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
     lines += [f"- {msg}" for msg in messages] if messages else ["None."]
     lines.append("")
 
-    files = sorted(set(output_files(data.folder)) | {"summary.md", "summary.html"})
+    files = sorted(set(files_of_this_run(data)) | {"summary.md", "summary.html"})
     figures = sorted((name for name in files if name.lower().endswith(".png")), key=_figure_rank)
     if figures:
         lines += ["## Figures", ""]
@@ -425,6 +454,13 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
         shown = f"[`{names[0]}`]({_href(names[0])})" if len(names) == 1 else f"`{key}` (" + ", ".join(
             f"[{os.path.splitext(n)[1]}]({_href(n)})" for n in names) + ")"
         lines.append(f"| {shown} | {_describe(names[0])} |")
+    before = getattr(data, "folder_before", None) or {}
+    replaced = sorted(f for f in before if f in files)
+    earlier = len(before) - len(replaced)
+    if before:
+        lines += ["", f"This folder also holds {earlier:,} file(s) from earlier runs, not described here."
+                  + (" This run replaced these files of an earlier run: " + ", ".join(f"`{f}`" for f in replaced)
+                     + "." if replaced else "")]
     lines += ["", "## Next", "",
               "- How to read these results: USER_GUIDE.md §8.",
               "- Before using them for a decision: the checklist in USER_GUIDE.md §14.", ""]
