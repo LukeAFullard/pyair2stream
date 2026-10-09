@@ -16,12 +16,12 @@ Mentue,5,RK2,0.206,1.120,31%,none
 Mentue,5,EUL,0.883,4.472,133%,none
 Mentue,7,CRN,0.077,0.847,12%,none
 Mentue,7,EXP,0.099,0.765,16%,none
-Mentue,7,RK4,diverged,diverged,,stopped (diverged)
-Mentue,7,RK2,diverged,diverged,,stopped (diverged)
-Mentue,7,EUL,diverged,diverged,,stopped (diverged)
+Mentue,7,RK4,diverged,diverged,,stopped (stability check)
+Mentue,7,RK2,diverged,diverged,,stopped (stability check)
+Mentue,7,EUL,diverged,diverged,,stopped (stability check)
 Mentue,8,CRN,0.090,0.880,14%,none
 Mentue,8,EXP,0.119,0.911,18%,none
-Mentue,8,RK4,diverged,diverged,,stopped (diverged)
+Mentue,8,RK4,diverged,diverged,,stopped (stability check)
 Mentue,8,RK2,diverged,diverged,,stopped (stability check)
 Mentue,8,EUL,diverged,diverged,,stopped (stability check)
 Rhône,3,CRN,0.050,0.277,5%,none
