@@ -32,6 +32,7 @@ import pandas as pd
 from pyair2stream.config import CommonData, PI
 from pyair2stream.optimization import forward_mode
 from pyair2stream import scenario
+from pyair2stream.results import seed_text
 
 STABLE_PAR = [1.0, 0.1, 0.1, 0.5, 1.0, 1.0, 0.5, 0.1]
 
@@ -310,6 +311,55 @@ class TestPairedDifferenceFromFiles(unittest.TestCase):
                                        reuse_from=ensemble_a.replace('.npz', '_meta.json'), **kw_b)
                 with self.assertRaisesRegex(ValueError, label or 'error persistence'):
                     scenario.paired_difference_from_files(ensemble_a, ensemble_b)
+
+    def _draw(self, folder, top_seed=None, forward_seed=None, reuse_from=None):
+        data = _build_forward_data(folder)
+        data.random_seed = top_seed
+        data.forward_options = {'enable_prediction_intervals': True, 'mcmc_chain_path': self.chain_path,
+                                'residual_sigma': 1.0, 'n_samples': 6}
+        if forward_seed is not None:
+            data.forward_options['random_seed'] = forward_seed
+        if reuse_from is not None:
+            data.forward_options['reuse_sample_indices_from'] = reuse_from
+        data.uncertainty_options = {'noise_model': 'iid', 'save_ensemble': True}
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            forward_mode(data)
+        path = os.path.join(folder, f"Forward_Prediction_Ensemble_{data.station}_{data.series}_{data.time_res}")
+        with open(path + '_meta.json') as f:
+            meta = json.load(f)
+        ens, _ = scenario.load_ensemble(path + '.npz')
+        return data, meta, ens, out.getvalue()
+
+    def test_the_same_settings_give_the_same_numbers_with_either_seed(self):
+        for kw, source in (({'top_seed': 5}, 'random_seed'), ({'forward_seed': 5}, 'forward_options.random_seed')):
+            with self.subTest(source=source):
+                data, meta, ens, _ = self._draw(self.folder_a, **kw)
+                _, meta2, ens2, _ = self._draw(self.folder_b, **kw)
+                self.assertEqual(meta['sample_indices'], meta2['sample_indices'])
+                np.testing.assert_array_equal(ens, ens2)
+                self.assertEqual((meta['requested_seed'], meta['seed_source']), (5, source))
+                self.assertEqual(seed_text(data), f"5 ({source})")
+        # Either way of setting seed 5 draws the same parameter sets.
+        self.assertEqual(self._draw(self.folder_a, top_seed=5)[1]['sample_indices'],
+                         self._draw(self.folder_b, forward_seed=5)[1]['sample_indices'])
+
+    def test_when_both_seeds_differ_the_forward_one_is_used_with_a_note(self):
+        data, meta, _, printed = self._draw(self.folder_a, top_seed=1, forward_seed=5)
+        self.assertEqual(meta['requested_seed'], 5)
+        self.assertIn("Note: random_seed is 1 and forward_options.random_seed is 5", printed)
+        self.assertEqual(seed_text(data), "5 (forward_options.random_seed)")
+
+    def test_the_summary_says_how_the_parameter_sets_were_chosen(self):
+        data, _, _, _ = self._draw(self.folder_a)
+        self.assertEqual(seed_text(data), "none (not repeatable)")
+        reused, _, _, _ = self._draw(self.folder_b, top_seed=3,
+                                     reuse_from=os.path.join(self.folder_a, f"Forward_Prediction_Ensemble_"
+                                                             f"{data.station}_{data.series}_{data.time_res}_meta.json"))
+        self.assertIn("not needed: the parameter sets were reused from", seed_text(reused))
+        plain = _build_forward_data(self.folder_a)
+        plain.runmode = 'FORWARD'
+        self.assertEqual(seed_text(plain), "not needed (no random choices in this run)")
 
     def test_mismatched_dates_raises(self):
         ensemble_a = self._run(self.folder_a, q_scale=1.0, n_samples=6, seed=7)

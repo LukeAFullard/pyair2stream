@@ -834,7 +834,7 @@ forward_options:
   enable_prediction_intervals: true
   mcmc_chain_path: "output/MCMC_chain_Station_A_series_1d.csv"   # from a DE-MCMC run
   n_samples: 1000
-  random_seed: 42
+  random_seed: 42             # default: the top-level random_seed
   residual_sigma: null        # default: taken from the chain's _meta.json
 ```
 

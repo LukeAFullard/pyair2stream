@@ -103,6 +103,10 @@ class CommonData:
 
     # Top-level calibration seed. None reproduces the previous unseeded behaviour.
     random_seed: Optional[int] = None
+    # How a FORWARD run with prediction intervals chose its parameter sets, for the summary:
+    # {"seed": int or None, "source": "forward_options.random_seed" / "random_seed" / None,
+    #  "reused_from": path or None}. None when no parameter sets were drawn.
+    forward_draw: Optional[dict] = None
 
     # Cross Validation
     cross_validation: Optional['CVConfig'] = None  # Expected to be Optional[CVConfig]

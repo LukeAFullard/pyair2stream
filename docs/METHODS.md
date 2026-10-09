@@ -301,7 +301,11 @@ MAE. After the search, the model is re-run with the best parameters and the
 objective is recomputed; if it does not match, the run stops with an error.
 
 **Reproducibility.** With `random_seed:` set, DE, PSO, LATHYP and DE-MCMC give
-identical results on every run. Without it, results can differ between runs.
+identical results on every run. Without it, results can differ between runs. A
+FORWARD run's only random choice is the draw of parameter sets for its
+prediction intervals: it uses `forward_options.random_seed`, else `random_seed`
+(if both are set and differ, `forward_options.random_seed`, with a note).
+`summary.md` states which seed decided the run, or that none did.
 
 ## 9. Validation
 

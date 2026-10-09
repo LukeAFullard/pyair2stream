@@ -31,6 +31,15 @@
   from the chain's `_meta.json`; a different one set in the FORWARD settings is
   used with a note, as are `residual_sigma` and `ar1_rho` set there (notes
   appear in `summary.md`).
+- **A FORWARD run's seed.** The draw of parameter sets for its prediction
+  intervals used only `forward_options.random_seed`, so a run with the
+  top-level `random_seed` alone was not repeatable, and `summary.md` reported
+  the top-level seed whether or not it had been used (it said "not repeatable"
+  for every example, which are). The draw now uses
+  `forward_options.random_seed`, else `random_seed` (a note says so if both are
+  set and differ), and `summary.md` states the seed used and where it was set,
+  that the parameter sets were reused from another run, or that the run has no
+  random choices.
 - **A paired difference checks the error settings.**
   `scenario.paired_difference_from_files` now refuses two runs with a different
   error model, σ or ρ: the error added to each draw then does not cancel, and

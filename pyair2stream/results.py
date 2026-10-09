@@ -297,6 +297,21 @@ def _fmt(x, digits=3):
     return "" if x is None or (isinstance(x, float) and not np.isfinite(x)) else f"{x:.{digits}f}"
 
 
+def seed_text(data: CommonData) -> str:
+    """What made the run's random choices repeatable, for the summary. A FORWARD run's only
+    random choice is the draw of parameter sets for its prediction intervals."""
+    if data.runmode != "FORWARD":
+        return str(data.random_seed) if data.random_seed is not None else "none (not repeatable)"
+    draw = getattr(data, "forward_draw", None)
+    if not draw:
+        return "not needed (no random choices in this run)"
+    if draw.get("reused_from"):
+        return f"not needed: the parameter sets were reused from `{draw['reused_from']}`"
+    if draw.get("seed") is None:
+        return "none (not repeatable)"
+    return f"{draw['seed']} ({draw['source']})"
+
+
 def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], messages: list,
                   settings: str = "", seconds: Optional[float] = None) -> str:
     """Write summary.md into the output folder and return its path."""
@@ -313,7 +328,7 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
     if data.runmode != "FORWARD":
         lines.append(f"| Score | {data.fun_obj}, on {_resolution(data.time_res)} |")
     lines.append(f"| Integrator | {data.mod_num} |")
-    lines.append(f"| Random seed | {data.random_seed if data.random_seed is not None else 'none (not repeatable)'} |")
+    lines.append(f"| Random seed | {seed_text(data)} |")
     lines.append(f"| Gap-tolerant mode | {'yes' if data.gap_tolerant else 'no'} |")
     if data.version in (4, 7, 8):
         lines.append(f"| Qmedia (mean discharge) | {data.Qmedia:.4g} ({'set in the settings' if data.Qmedia_user is not None else 'computed from the calibration file'}) |")

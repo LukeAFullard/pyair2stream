@@ -570,8 +570,20 @@ def forward_mode(data: CommonData) -> None:
 
         print(f"Generating Forward Prediction Intervals from {chain_path}...")
 
-        seed = data.forward_options.get('random_seed', None)
+        # The seed of the draw of parameter sets: forward_options.random_seed, else the
+        # top-level random_seed (the one the guide documents for repeatable results).
+        forward_seed = data.forward_options.get('random_seed', None)
+        if forward_seed is not None:
+            seed, seed_source = int(forward_seed), 'forward_options.random_seed'
+            if data.random_seed is not None and int(data.random_seed) != seed:
+                print(f"Note: random_seed is {data.random_seed} and forward_options.random_seed is {seed}; the "
+                      f"parameter sets are drawn with forward_options.random_seed ({seed}).")
+        elif data.random_seed is not None:
+            seed, seed_source = int(data.random_seed), 'random_seed'
+        else:
+            seed, seed_source = None, None
         rng = np.random.default_rng(seed)
+        data.forward_draw = {"seed": seed, "source": seed_source, "reused_from": None}
 
         chain_df = pd.read_csv(chain_path)
         chain = chain_df.values
@@ -608,6 +620,7 @@ def forward_mode(data: CommonData) -> None:
                 )
             sample_indices = np.asarray(prior_meta['sample_indices'], dtype=np.int64)
             n_samples = len(sample_indices)
+            data.forward_draw["reused_from"] = reuse_path
             print(
                 f"Reusing {n_samples} sample indices from {reuse_path} "
                 "(random_seed/global random state ignored for this draw)."
@@ -818,6 +831,7 @@ def forward_mode(data: CommonData) -> None:
             "chain_content_sha256": chain_hash,
             "chain_n_rows": chain_n_rows,
             "requested_seed": seed,
+            "seed_source": seed_source,
             "sample_indices": [int(x) for x in sample_indices],
             "reused_sample_indices_from": reuse_path if reuse_path else None,
             "source_chain_converged": source_chain_converged,
