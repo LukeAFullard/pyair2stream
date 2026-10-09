@@ -31,6 +31,7 @@ its steps and redraws the figures its README shows.
 | Decide whether a temperature limit was exceeded | 03 |
 | Compare a change in flow with the present | 04 |
 | Project a warmer climate | 08 |
+| Plot a prediction range, a scenario change or a yearly peak against a limit (`pyair2stream.plots`) | 03, 04, 08 |
 | Choose a model version; see which parameters matter | 06 |
 
 The times are for a 4-core computer. Outputs go to each example's `output/`
