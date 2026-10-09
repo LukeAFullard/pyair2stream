@@ -17,6 +17,7 @@ import emcee
 
 import json
 from .config import CommonData, DEFAULT_NOISE_MODEL, DEFAULT_LIKELIHOOD, DEFAULT_RHO_TIMESCALE
+from .io import fit_settings, settings_differences, SETTINGS_NOT_RECORDED
 from .model import (
     call_model, funcobj, aggregation, statis, warn_on_stability, check_numerical_divergence,
     is_numerically_divergent, NumericalDivergenceError, check_daily_plausibility,
@@ -369,11 +370,12 @@ def _hash_file(path: str) -> str:
 
 def _check_chain_provenance(data: CommonData, sidecar_path: str) -> None:
     """
-    Refuse a FORWARD run whose model version, integrator or Qmedia differ from those
-    the chain's parameters were fitted under (recorded in the chain's `_meta.json`):
-    the parameters mean something only with them (docs/METHODS.md §4, §6). Chains
-    written before this was recorded (0.4.2 and earlier) cannot be checked; a note
-    says so.
+    Refuse a FORWARD run whose model version, integrator, Qmedia, Tice_cover or
+    min_theta_floor differ from those the chain's parameters were fitted under
+    (recorded in the chain's `_meta.json`): the parameters mean something only with
+    them (docs/METHODS.md §4, §6). Chains written before these were recorded (0.4.2
+    and earlier for the first three, 0.5.0 and earlier for the last two) cannot be
+    checked; a note says so.
     """
     meta = {}
     if os.path.exists(sidecar_path):
@@ -395,6 +397,11 @@ def _check_chain_provenance(data: CommonData, sidecar_path: str) -> None:
     # 0.1%: a Qmedia typed with a few significant digits is the same one.
     if data.version not in (3, 5) and not np.isclose(float(meta["qmedia"]), float(data.Qmedia), rtol=1e-3, atol=0.0):
         problems.append(f"Qmedia {meta['qmedia']} (this run: {float(data.Qmedia)}; they differ by more than 0.1%)")
+    differences = settings_differences(meta, data)
+    if differences is None:
+        print(SETTINGS_NOT_RECORDED.format(path=sidecar_path))
+    else:
+        problems += differences
     if problems:
         raise ValueError(
             f"The MCMC chain {sidecar_path.replace('_meta.json', '.csv')} was fitted with "
@@ -1399,6 +1406,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         "version": int(data.version),
         "integrator": data.mod_num,
         "qmedia": float(data.Qmedia),
+        **fit_settings(data),
         "rho": best_rho,
         "rho_timescale": rho_timescale,
         "rho_likelihood": rho_likelihood,

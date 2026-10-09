@@ -14,7 +14,7 @@ import argparse
 import numpy as np
 import pandas as pd
 
-from .io import read_calibration, read_Tseries, precheck_validation, SettingsFileNotFoundError, theta_of_days
+from .io import read_calibration, read_Tseries, precheck_validation, SettingsFileNotFoundError, theta_of_days, fit_settings
 from .optimization import forward_mode, PSO_mode, LH_mode, DE_mode, DE_MCMC_mode
 from .config import CommonData
 from .post_processing import post_process
@@ -107,6 +107,7 @@ def _write_calibration_metadata(data: CommonData) -> None:
         "version": int(data.version),
         "integrator": data.mod_num,
         "par_best": [float(x) for x in data.par_best],
+        **fit_settings(data),
         "pyair2stream_version": __version__,
         "random_seed": data.random_seed,
     }

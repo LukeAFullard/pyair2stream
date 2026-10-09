@@ -1146,10 +1146,11 @@ one).*
 | `... draws were excluded as numerically divergent` | some parameter sets make the simulation blow up (usually with an explicit integrator) | use `CRN` (the default); check `parameter_bounds` |
 | `rho reached its upper limit of 0.99` | errors persist for months: a systematic error | look at the mean error by month; consider another model version |
 | `the exact AR(1) likelihood treats the scored errors as independent` | with weekly or monthly scoring that likelihood ignores persistence | keep the default `likelihood: "least_squares"` |
-| `The MCMC chain ... was fitted with ...` | the chain belongs to a calibration with another model version, integrator or `Qmedia` | use the matching chain and `paths.calibration_metadata` |
+| `The MCMC chain ... was fitted with ...` | the chain belongs to a calibration with another model version, integrator, `Qmedia`, `Tice_cover` or `min_theta_floor` | use the matching chain and `paths.calibration_metadata` |
 | `the relaxation rate B is negative` / `zigzags from one day to the next` | physically impossible parameters, usually after weekly or monthly scoring | set the minimum of `a2` and `a3` to 0 and calibrate again |
 | `... days ... have theta = Q/Qmedia outside the calibrated range` | the scenario's flows go beyond those calibrated on | treat the results as extrapolation |
 | `Note: ... does not record the model version, integrator and Qmedia` | a chain from version 0.4.2 or earlier | make sure it matches, or rerun DE-MCMC |
+| `Note: ... does not record the Tice_cover and min_theta_floor` | a chain or calibration from version 0.5.0 or earlier | make sure they match, or rerun the calibration |
 
 ---
 

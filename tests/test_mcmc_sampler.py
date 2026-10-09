@@ -114,6 +114,8 @@ def test_unconverged_run_can_opt_out_and_is_marked(tmp_path):
     # What the parameters were fitted with, checked by FORWARD runs (test_chain_provenance.py).
     assert (meta["version"], meta["integrator"]) == (3, "CRN")
     assert meta["qmedia"] == pytest.approx(float(data.Qmedia))
+    assert (meta["Tice_cover"], meta["min_theta_floor"]) == (float(data.Tice_cover), data.min_theta_floor)
+    assert (meta["calendar"], meta["time_resolution"]) == (data.calendar, "1d")
 
 
 def test_saved_chain_is_thinned(tmp_path):

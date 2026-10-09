@@ -400,7 +400,9 @@ point `paths.calibration_metadata` at the `calibration_metadata.json` the
 calibration wrote. This also:
 
 - supplies the fitted parameters;
-- checks that `version` and `integrator` match the calibration;
+- checks that `version`, `integrator`, `Tice_cover` and `min_theta_floor` match
+  the calibration, and stops if they don't (the parameters only mean something
+  with the settings they were fitted with);
 - warns if any of the scenario's flows go outside the calibrated range, with
   the number of days and the first one (days of zero flow run at
   `min_theta_floor` count too).
@@ -515,7 +517,7 @@ After a calibration, look at these, in this order:
 | `residual_diagnostics_*.png` | the residuals' histogram, normal Q-Q plot and autocorrelation. Use it to check the assumptions behind the uncertainty ranges. |
 | `bias_by_month_<period>_*.csv` / `.png` | the mean error (simulated minus measured) for each month, each season and the whole year, with a 95% interval ([docs/METHODS.md §7](docs/METHODS.md#7-measuring-the-fit)) |
 | `0_*.csv`, `convergence_*.png`, `dottyplots_*.png` | every parameter set tried; the best score so far against the number of tries (it should flatten out); the score against each parameter |
-| `calibration_metadata.json` | `Qmedia`, the calibrated flow range, version, integrator, parameters and seed. Later runs reuse it. Not written by `FORWARD` runs. |
+| `calibration_metadata.json` | `Qmedia`, the calibrated flow range, version, integrator, parameters, seed and the settings that go with them (`Tice_cover`, `min_theta_floor`, `calendar`, `gap_tolerant`, `time_resolution`). Later runs reuse it. Not written by `FORWARD` runs. |
 | `parameters.txt` | the bounds actually used |
 | `gaps_summary.txt` | gap-tolerant runs: the stretches of data used |
 | `sensitivity_*` | §11 |
@@ -565,7 +567,9 @@ After a calibration, look at these, in this order:
 | `prc must be a fraction above 0 and at most 1` | Set `prc` to, for example, `0.6` (60% of the days in each week or month). |
 | `Warning: ... value(s) of T_air` (or `T_water`) `... are outside` | Usually a missing-value code other than `-999`. Replace it with an empty cell. Otherwise check that the units are °C. |
 | `No valid segments found` | Gap-tolerant mode: no stretch without gaps is at least `min_segment_days` long. |
-| `Qmedia is zero or negative` | Gap-tolerant mode: too little valid discharge. Set `Qmedia:`. |
+| `Qmedia must be positive` | `Qmedia:` (or the `qmedia` in `calibration_metadata.json`) is zero or negative. It is the average discharge that flow is divided by. |
+| `Qmedia ... cannot be computed` | The record has no positive discharge. Set `Qmedia:`. |
+| `The calibration in ... was fitted with ...` | The FORWARD run's `Tice_cover` or `min_theta_floor` differs from the calibration's. Set them as in the calibration. |
 | `NumericalDivergenceError` / `exceed the ... stability limit` / `can grow ... times` | Use `CRN` or `EXP` ([§9.1](#91-numerical-stability-and-the-choice-of-integrator)). |
 | `Warning: the relaxation rate B is negative` / `zigzags from one day to the next` | The fitted parameters are physically impossible. This usually follows weekly or monthly scoring with bounds that allow a negative `a2` or `a3`. Set their minimum to 0 and calibrate again ([§6](#parameters-a1a8)). Do not use the results. |
 | `Efficiency mismatch in forward run` | An internal check failed. Please report it, with your settings file. |
@@ -576,7 +580,7 @@ After a calibration, look at these, in this order:
 | `enable_prediction_intervals is True but residual_sigma is 0.0/unavailable` | Point `mcmc_chain_path` at a chain that has its `_meta.json`, or set `residual_sigma`. |
 | `draws ... were excluded as numerically divergent` | Use `CRN` or `EXP`, or check the chain and the bounds ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `paired_difference_from_files: ... differs` | The two scenario runs did not use the same parameter sets ([§12](#12-scenario-runs-and-prediction-intervals)). |
-| `The MCMC chain ... was fitted with ...` | The FORWARD run's model version, integrator or `Qmedia` differs from the chain's calibration. Use `paths.calibration_metadata` from that calibration ([§12](#12-scenario-runs-and-prediction-intervals)). |
+| `The MCMC chain ... was fitted with ...` | The FORWARD run's model version, integrator, `Qmedia`, `Tice_cover` or `min_theta_floor` differs from the chain's calibration. Use `paths.calibration_metadata` from that calibration ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `Warning: warmup_drop_days=... is shorter than` | Gap-tolerant mode: increase `warmup_drop_days` as the message suggests ([§10](#10-gap-tolerant-mode)). |
 | `Note: the calibrated model forgets its restart within about ... days` | Gap-tolerant mode: a shorter warm-up would score more measured days. Set the values it gives and calibrate again ([§10](#10-gap-tolerant-mode)). |
 | (no message) Good overall scores, but `bias_by_month_*.png` shows the model too warm or too cool in some months | A score over the whole year can hide an error in one season. Compare model versions ([§4](#4-choosing-a-model-version-and-integrator)). Where discharge drives the summer temperature, use version 7 or 8. If an error remains in the season of your limit, report it. A model that is too warm overstates the chance that a warm-water limit was exceeded; one that is too cool understates it. |
@@ -859,8 +863,8 @@ With prediction intervals, the run:
 3. adds random error with the calibration's typical size and persistence (σ
    and ρ, from the chain's `_meta.json`).
 
-It stops if the chain was fitted with another model version, integrator or
-`Qmedia`. If the input file has water temperature measurements, the run
+It stops if the chain was fitted with another model version, integrator,
+`Qmedia`, `Tice_cover` or `min_theta_floor`. If the input file has water temperature measurements, the run
 reports the fit and the share of measured days inside the band. The lower
 edge of the band can fall below `Tice_cover`, because the error is added after
 the simulation. Method: [docs/METHODS.md §13](docs/METHODS.md#13-forward-runs-and-scenario-comparisons).

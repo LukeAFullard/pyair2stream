@@ -64,6 +64,18 @@
   value (for example a missing-value code such as -9999) was silently run as
   zero flow. Negative discharge now always stops the run, and zero discharge
   with `min_theta_floor` gives a warning with the number of days.
+- ⚠ **A FORWARD run uses the settings the parameters were fitted with.**
+  `Tice_cover` and `min_theta_floor` change what the model computes, but were
+  not recorded with the calibration, so a FORWARD run with different ones used
+  the parameters under different physics without a message.
+  `calibration_metadata.json` and the MCMC chain's `_meta.json` now record them
+  (with `calendar`, `gap_tolerant` and `time_resolution`, which describe the
+  fit), and a FORWARD run that loads either file stops if they differ. Files
+  written by earlier versions give a note asking you to check them.
+- **`Qmedia` must be positive.** A `Qmedia` of zero or below was refused only in
+  gap-tolerant mode; otherwise every simulated temperature was NaN and the run
+  stopped with an error that blamed the integrator. It is now refused for
+  versions 4, 7 and 8 in every mode, with a message that says why.
 - **Partial years and months are no longer counted as whole ones.** A record
   that starts or ends part-way through a year has a partial first or last year
   and month, which five places treated as whole. One rule now applies

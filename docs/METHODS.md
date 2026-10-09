@@ -136,6 +136,8 @@ so:
 
 - the validation period is simulated with the calibration `Qmedia`;
 - every calibration writes it to `calibration_metadata.json`;
+- it must be positive (θ is divided by it): zero or a negative value is refused
+  for the versions that use discharge;
 - a FORWARD run must be given it explicitly (`Qmedia:` or
   `paths.calibration_metadata`). Recomputing it from new discharge data would
   rescale θ and cancel part or all of the discharge change being studied.
@@ -862,7 +864,8 @@ earlier, or to show how much a conclusion depends on the choice.
 without calibrating. It requires the calibration `Qmedia` (§4). Given
 `paths.calibration_metadata` (the calibration's `calibration_metadata.json`), it
 takes `Qmedia` and the calibrated parameters from it (unless
-`parameters_forward` is given), refuses a different model version or integrator,
+`parameters_forward` is given), refuses a different model version, integrator,
+`Tice_cover` or `min_theta_floor` (for the versions that use discharge),
 and warns if any day has θ outside the range seen in calibration
 (extrapolation), giving the number of days, the first one, the lowest and
 highest θ, and how many are zero-flow days run at `min_theta_floor`. θ is taken
@@ -882,8 +885,9 @@ own residuals. A value set in the run's settings instead of the chain's is
 reported as a note, so it appears in `summary.md`.
 With the `_meta.json` that DE-MCMC writes next to the chain, the interval
 therefore does not depend on the observations it is checked against. The run
-refuses a chain whose `_meta.json` records another model version, integrator or
-`Qmedia` (by more than 0.1%) than its own. Coverage is reported if observations exist. The noise
+refuses a chain whose `_meta.json` records another model version, integrator,
+`Qmedia` (by more than 0.1%), `Tice_cover` or `min_theta_floor` than its own.
+Files written before these were recorded give a note asking you to check them. Coverage is reported if observations exist. The noise
 model, σ and ρ used are recorded in the run's
 `Forward_Prediction_Ensemble_*_meta.json`. σ and ρ are used at their estimated
 values; their own uncertainty is not added.
@@ -1009,7 +1013,8 @@ change one-sided.
 | Zero discharge with `min_theta_floor` set | loading each file | warning |
 | Segment warm-up too short | gap-tolerant runs | warning |
 | MCMC convergence; draws that diverge or, with RK4/RK2/EUL, are unstable (§12) | DE-MCMC, FORWARD intervals | warning / error |
-| Chain fitted with another model version, integrator or `Qmedia` (§13) | FORWARD intervals | error |
+| Chain or calibration fitted with another model version, integrator, `Qmedia`, `Tice_cover` or `min_theta_floor` (§13) | FORWARD runs | error |
+| `Qmedia` zero or negative (§4) | loading data (versions 4, 7, 8) | error |
 
 ## 16. Limitations and good practice
 

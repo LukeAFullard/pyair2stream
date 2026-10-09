@@ -37,6 +37,45 @@ def theta_of_days(Q: np.ndarray, qmedia: float, floor=None):
     return theta, rows
 
 
+def fit_settings(data: CommonData) -> dict:
+    """The settings, besides version, integrator and Qmedia, recorded with fitted parameters
+    (calibration_metadata.json, the MCMC chain's _meta.json). Tice_cover and min_theta_floor
+    change what the model computes, so a FORWARD run must use the same ones
+    (`settings_differences`); the others describe the fit."""
+    return {
+        "Tice_cover": float(data.Tice_cover),
+        "min_theta_floor": data.min_theta_floor,
+        "calendar": data.calendar,
+        "gap_tolerant": bool(data.gap_tolerant),
+        "time_resolution": data.time_res,
+    }
+
+
+def settings_differences(meta: dict, data: CommonData):
+    """How this run's Tice_cover and min_theta_floor differ from those recorded in `meta`
+    (a list, empty when they match), or None when `meta` does not record them (files
+    written by version 0.5.0 or earlier). min_theta_floor is compared only for the
+    versions that use discharge."""
+    if not all(k in meta for k in ("Tice_cover", "min_theta_floor")):
+        return None
+    problems = []
+    if not np.isclose(float(meta["Tice_cover"]), float(data.Tice_cover), rtol=0.0, atol=1e-9):
+        problems.append(f"Tice_cover {meta['Tice_cover']} (this run: {float(data.Tice_cover)})")
+    floor, this_floor = meta["min_theta_floor"], data.min_theta_floor
+    same_floor = (floor is None and this_floor is None) or (
+        floor is not None and this_floor is not None and np.isclose(float(floor), this_floor, rtol=1e-9, atol=0.0))
+    if data.version not in (3, 5) and not same_floor:
+        problems.append(f"min_theta_floor {floor} (this run: {this_floor})")
+    return problems
+
+
+SETTINGS_NOT_RECORDED = (
+    "Note: {path} does not record the Tice_cover and min_theta_floor the parameters were "
+    "fitted with (files written by version 0.5.0 or earlier), so they cannot be checked "
+    "against this run. Make sure they match."
+)
+
+
 def calendar_day_index(data: CommonData, i: int) -> int:
     """0-based day of the year of row `i` for the noleap calendar, from the seasonal phase
     `data.tt` that `read_Tseries` set (tt = day of the year / 365)."""
@@ -204,6 +243,15 @@ def read_calibration(config_file='config.yaml') -> CommonData:
             raise ValueError(
                 f"calibration_metadata integrator ('{meta_integrator}') does not match "
                 f"the configured integrator ('{data.mod_num}')."
+            )
+        differences = settings_differences(calib_metadata, data)
+        if differences is None:
+            print(SETTINGS_NOT_RECORDED.format(path=calib_metadata_path))
+        elif differences:
+            raise ValueError(
+                f"The calibration in {calib_metadata_path} was fitted with "
+                + "; ".join(differences) + ". Its parameters mean something only with the "
+                "settings they were fitted with: set them as in the calibration."
             )
         meta_qmedia = float(calib_metadata['qmedia'])
         if qmedia_user is not None and abs(float(qmedia_user) - meta_qmedia) > 1e-9:
@@ -434,10 +482,22 @@ def compute_qmedia(data: CommonData, verbose: bool = False) -> None:
     else:
         data.Qmedia = computed_qmedia
 
+    # theta = Q / Qmedia: with Qmedia <= 0 every simulated temperature is NaN, and the run
+    # stopped later with a divergence error that blamed the integrator.
+    if data.Qmedia <= 0 and data.version not in (3, 5):
+        if data.Qmedia_user is not None:
+            raise ValueError(
+                f"Qmedia must be positive, got {data.Qmedia_user}: it is the average discharge that "
+                "flow is divided by (theta = Q/Qmedia). Check `Qmedia:` in the configuration "
+                "(or the qmedia in paths.calibration_metadata)."
+            )
+        raise ValueError(
+            "Qmedia, the average of the positive discharge values, cannot be computed: the "
+            "record has no positive discharge. Supply Qmedia in the configuration."
+        )
+
     if data.gap_tolerant:
         n_tot_raw = data._n_tot_raw if data._n_tot_raw is not None else data.n_tot - 365
-        if data.Qmedia <= 0 and data.version not in [3, 5]:
-            raise ValueError("Qmedia is zero or negative. Please supply Qmedia in the configuration file if the data is mostly empty.")
         if verbose and (data.n_Q / n_tot_raw) < 0.5 and data.Qmedia_user is None:
             print("Warning: More than 50% of Discharge values are missing. Consider supplying Qmedia_user in the configuration file.")
         if verbose and data.version in [3, 5]:
