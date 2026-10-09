@@ -283,12 +283,41 @@ def run(ctx) -> Result:
         "Days of air temperature averaged by each averaged-air regression, chosen on the calibration years.",
         tables=[("Days averaged", pd.DataFrame(chosen_rows))]))
     res.sections.append(Section("Every river and method", "", tables=[("Every river and method", _rounded(df))]))
-    res.notes.append("A regression has no memory of the water's own temperature, so it reacts to a hot or cold "
-                     "spell at once and by the same amount in every season. air2stream carries the water "
-                     "temperature from one day to the next and lets the river's response change with discharge "
-                     "and season. Averaging the air temperature gives a regression some memory, which is why the "
-                     "averaged regressions come closest.")
+    which = wide["which"].value_counts()
+    worst = int((wide[list(REGRESSIONS)].idxmax(axis=1) == "air, same day").sum())
+    res.notes.append(
+        f"The S-curve regression on averaged air temperature came closest on {int(which.get('air averaged, S-curve', 0))} "
+        f"of {len(wide)} rivers. It levels off near 0 °C, where a river stays all winter however cold the air, "
+        "and the averaging gives it some memory of earlier days. A straight line on the day's air temperature has "
+        f"neither, and was the worst regression on {worst} of {len(wide)} rivers. air2stream carries the water temperature "
+        "from one day to the next and lets the river's response change with discharge and season.")
+    parts = []
+    for key, label in (("yearly peak error", "each year's highest temperature"),
+                       ("hot-day RMSE", f"the {HOT_SHARE:.0%} of days with the hottest air"),
+                       ("heat-dome RMSE", "the 2021 heat dome")):
+        for ds in ("British Columbia", "Switzerland"):
+            won, n, v8, best = _beats(df, key, ds)
+            if n:
+                parts.append(f"{label} in {ds}: {won} of {n} rivers (median error {v8:.2f} °C against {best:.2f} °C)")
+    res.notes.append(
+        "On the extremes, air2stream's lead is smaller and less consistent. Rivers on which version 8 did better than "
+        "every regression (compared with the regression closest on each river): " + "; ".join(parts) + ". For a "
+        "question about peaks or hot spells, compare the model with a regression on your own held-out years, and "
+        "check the yearly statistics by cross-validation (USER_GUIDE.md §13).")
     return res
+
+
+def _beats(df, key, ds):
+    """Rivers of a data set on which version 8's `key` was below every regression's, the number of rivers
+    scored, and the medians of version 8's and of the closest regression's `key`."""
+    g = df[df["data set"] == ds]
+    if key not in g or g[key].isna().all():
+        return 0, 0, np.nan, np.nan
+    w = g.pivot(index="river", columns="method", values=key)
+    best = w[list(REGRESSIONS)].min(axis=1)
+    ok = w["version 8"].notna() & best.notna()
+    return (int((w["version 8"][ok] < best[ok]).sum()), int(ok.sum()), float(w["version 8"][ok].median()),
+            float(best[ok].median()))
 
 
 def _rounded(df):
