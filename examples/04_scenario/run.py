@@ -58,6 +58,18 @@ effect = np.nanmean(diff[:, summer], axis=1)
 shuffled = abst[np.random.default_rng(0).permutation(len(abst))]
 unpaired = np.nanmean(shuffled[:, summer] - base[:, summer], axis=1)
 
+# What pairing means, on the first three simulations (README, "Paired and not paired").
+base_summer = np.nanmean(base[:, summer], axis=1)
+abst_summer = np.nanmean(abst[:, summer], axis=1)
+print("\nAverage summer water temperature in the 1000 baseline simulations: 90% range "
+      "{:.1f} to {:.1f} °C".format(*np.percentile(base_summer, [5, 95])))
+for i in range(3):
+    print(f"Simulation {i + 1}: baseline {base_summer[i]:.2f} °C, abstraction {abst_summer[i]:.2f} °C, "
+          f"difference {abst_summer[i] - base_summer[i]:+.2f} °C")
+print(f"Not paired: abstraction of simulation 3 minus baseline of simulation 2: "
+      f"{abst_summer[2] - base_summer[1]:+.2f} °C; abstraction of simulation 2 minus baseline of simulation 3: "
+      f"{abst_summer[1] - base_summer[2]:+.2f} °C")
+
 extra_warm = (scenario.exceedance(abst, WARM_DAY) - scenario.exceedance(base, WARM_DAY)) / 3   # per year
 rows = [
     ("Average summer (Jun-Aug) change, °C", effect, 2),

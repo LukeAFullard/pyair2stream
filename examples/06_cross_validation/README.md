@@ -10,7 +10,8 @@
 
 Cross-validation answers these with the data you have. It hides one year,
 calibrates on the others, and predicts the hidden year. Then it repeats this
-for each year.
+for each year. Each of these calibrations, with one year hidden, is called a
+**fold**.
 
 ## Run it
 
@@ -36,8 +37,9 @@ each fold's own mean discharge.
 
 Each run writes:
 
-- **`cv_results.csv`**: one row per hidden year, with its NSE, KGE and RMSE,
-  and the parameters fitted without it. Then the mean, the standard deviation,
+- **`cv_results.csv`**: one row per hidden year, with its scores (NSE and KGE,
+  where 1 is perfect, and RMSE, the typical daily error) and the parameters
+  fitted without it. Then the mean, the standard deviation,
   the scores over all hidden days together (`pooled`), and 90% confidence
   intervals for the parameters (`jackknife_90_lower`, `jackknife_90_upper`).
 - **`cv_bias_by_month.png`** (and `.csv`): the mean error in each month over
