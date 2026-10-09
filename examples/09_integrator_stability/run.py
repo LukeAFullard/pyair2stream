@@ -41,8 +41,9 @@ from matplotlib.patches import Patch
 from numba import njit
 
 from pyair2stream.io import read_calibration, read_Tseries
-from pyair2stream.model import (NumericalDivergenceError, STABILITY_LIMITS, call_model, check_numerical_divergence,
-                                compute_B_series, stability_report, warn_on_stability)
+from pyair2stream.model import (NumericalDivergenceError, STABILITY_LIMITS, STABILITY_MAX_GROWTH, call_model,
+                                check_numerical_divergence, compute_B_series, largest_growth, stability_report,
+                                step_amplification, warn_on_stability)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -223,42 +224,7 @@ def reference(data):
                       float(tw0), float(data.Qmedia), float(data.Tice_cover), SUBSTEPS)
 
 
-# --- What one step does to a difference: the amplification factor, and growth over days -----
-
-def step_factors(data):
-    """R_j for j = 0..n-2: one step of the integrator multiplies a difference in water temperature
-    on day j by R_j. Exact for this equation (it is linear in water temperature), apart from the
-    ice floor. Each method uses B on the days the package's integrator uses it: CRN B_j and
-    B_j+1; EXP their mean; EUL B_j+1 (the Fortran variant uses the next day's inputs); RK2 B_j
-    and B_j+1; RK4 also B at the mean discharge of the two days (its midpoint stages)."""
-    B = compute_B_series(data)
-    b0, b1 = B[:-1], B[1:]
-    scheme = data.mod_num
-    if scheme == "CRN":
-        return (1 - b0 / 2) / (1 + b1 / 2)
-    if scheme == "EXP":
-        return np.exp(-(b0 + b1) / 2)
-    if scheme == "EUL":
-        return 1 - b1
-    if scheme == "RK2":
-        return 1 - b0 / 2 - b1 * (1 - b0) / 2
-    bm = compute_B_series(dataclasses.replace(data, Q=(data.Q[:-1] + data.Q[1:]) / 2))
-    k1 = -b0
-    k2 = -bm * (1 + k1 / 2)
-    k3 = -bm * (1 + k2 / 2)
-    k4 = -b1 * (1 + k3)
-    return 1 + (k1 + 2 * k2 + 2 * k3 + k4) / 6
-
-
-def worst_growth(R):
-    """log10 of the largest factor by which a difference can grow over any stretch of
-    consecutive days: the largest sum of log10|R_j| over a run of days (0 = it never grows)."""
-    best = current = 0.0
-    for x in np.log10(np.abs(R)):
-        current = max(0.0, current + x)
-        best = max(best, current)
-    return best
-
+# --- What one step does to a difference, with B the same every day -----------------------------
 
 def R_formula(scheme, B):
     """The amplification factor with B the same on every day: the stability function R(z), z = -B."""
@@ -437,7 +403,7 @@ for scheme in ("RK4", "RK2"):
 print(f"RK4's limit: R(-B) = 1 at B = {RK4_LIMIT_EXACT:.4f} (the package uses {RK4_LIMIT}).")
 
 # B changing from day to day: version 8 with the forcing switched off (a1 = a2 = a5 = a6 = 0, so A = 0) on each
-# river's real discharge. Then each day multiplies the water temperature by exactly R_j (step_factors).
+# river's real discharge. Then each day multiplies the water temperature by exactly R_j (step_amplification).
 worst, days = 0.0, 0
 for station in RIVERS:
     csv = calibration_csv(station)
@@ -449,11 +415,11 @@ for station in RIVERS:
             call_model(d)
         tw = d.Twat_mod
         ok = (np.abs(tw[:-1]) > 1e-200) & (np.abs(tw[:-1]) < 1e200) & np.isfinite(tw[1:])
-        R = step_factors(d)
+        R = step_amplification(d)
         worst = max(worst, float(np.max(np.abs(tw[1:][ok] / tw[:-1][ok] - R[ok]) / np.maximum(1.0, np.abs(R[ok])))))
         days += int(ok.sum())
-print(f"B changing with discharge (version 8, three rivers, five methods): the per-day factors match the package "
-      f"on {days} steps, largest relative difference {worst:.1e}.")
+print(f"B changing with discharge (version 8, three rivers, five methods): step_amplification matches the "
+      f"integrators on {days} steps, largest relative difference {worst:.1e}.")
 
 
 def fig_amplification():
@@ -665,7 +631,7 @@ for station, river in RIVERS.items():
                     float(np.sqrt(np.mean((sim[seen] - obs[seen]) ** 2))),
                     "RMSE of the reference (degC)": rmse_ref,
                     "days B above the limit (%)": 100 * stability_report(d)["frac_exceeding"],
-                    "log10 largest growth": worst_growth(step_factors(d)) if scheme in EXPLICIT else 0.0,
+                    "log10 largest growth": largest_growth(d)["log10_growth"],
                     "days at the 0 degC floor": int(np.sum(sim <= d.Tice_cover)) if not diverged else -1,
                     "days at the floor, reference": int(np.sum(ref[365:] <= d.Tice_cover)),
                     "diverged": diverged, "package": response})
@@ -688,16 +654,28 @@ for source in SOURCES:
         print(f"  {scheme}: follows the equation (<= {GOOD} degC) in {int((s['RMS difference from reference (degC)'] <= GOOD).sum())}"
               f" of 15, diverged in {int(s.diverged.sum())}; package stopped {int((s.package == 'stopped').sum())}, "
               f"warned {int((s.package == 'warned').sum())}")
-stable = runs[runs["log10 largest growth"] == 0]
-print("\nRMS difference from the reference of runs in which no difference ever grows (degC):")
+stable = runs[(runs["log10 largest growth"] == 0) | runs.integrator.isin(["CRN", "EXP"])]
+print("\nRMS difference from the reference of the stable runs: CRN and EXP always, the others where no difference "
+      "can grow (degC):")
 for scheme in SCHEMES:
     x = stable.loc[stable.integrator == scheme, "RMS difference from reference (degC)"]
     print(f"  {scheme}: {x.min():.3f} to {x.max():.3f} over {len(x)} runs")
+crn = runs[runs.integrator == "CRN"]
+print(f"CRN: the largest growth of a difference over a stretch of days is {10 ** crn['log10 largest growth'].max():.2f} "
+      f"times ({crn.loc[crn['log10 largest growth'].idxmax(), 'river']}, version "
+      f"{crn.loc[crn['log10 largest growth'].idxmax(), 'version']}); it is never stopped.")
 wrong_unstopped = runs[(runs["RMS difference from reference (degC)"] > POOR) & (runs.package != "stopped")]
-print(f"\nRuns more than {POOR} degC from the reference that the package did not stop:")
-print(wrong_unstopped[["river", "parameters", "version", "integrator", "RMS difference from reference (degC)",
-                       "days B above the limit (%)", "log10 largest growth", "days at the 0 degC floor",
-                       "days at the floor, reference", "package"]].round(2).to_string(index=False))
+print(f"\nRuns more than {POOR} degC from the reference that the package did not stop:"
+      + (" none" if wrong_unstopped.empty else ""))
+if not wrong_unstopped.empty:
+    print(wrong_unstopped[["river", "parameters", "version", "integrator", "RMS difference from reference (degC)",
+                           "days B above the limit (%)", "log10 largest growth", "days at the 0 degC floor",
+                           "days at the floor, reference", "package"]].round(2).to_string(index=False))
+inaccurate = runs[(runs["RMS difference from reference (degC)"] > GOOD) & (runs.package != "stopped")]
+print(f"Runs more than {GOOD} degC from the reference that the package did not stop "
+      f"({len(inaccurate)}; largest growth up to {10 ** inaccurate['log10 largest growth'].max():.1f} times):")
+print(inaccurate[["river", "parameters", "version", "integrator", "RMS difference from reference (degC)",
+                  "log10 largest growth", "package"]].round(2).to_string(index=False))
 
 
 def fig_outcomes():
@@ -886,7 +864,7 @@ for station, v in SCENARIO_CASES:
                          "B max": B.max(), "RMS difference from reference (degC)":
                              np.inf if diverged else float(np.sqrt(np.mean((sim - ref) ** 2))),
                          "days B above the limit (%)": 100 * stability_report(d)["frac_exceeding"],
-                         "log10 largest growth": worst_growth(step_factors(d)) if scheme in EXPLICIT else 0.0,
+                         "log10 largest growth": largest_growth(d)["log10_growth"],
                          "package": response})
 scen = pd.DataFrame(scen)
 scen.round(4).to_csv(os.path.join(OUT, "scenario_flows.csv"), index=False)
@@ -901,6 +879,10 @@ for (river, v), g in scen.groupby(["river", "version"], sort=False):
     print(f"\n{river}, version {v}, parameters calibrated with RK4 (2015); RMS difference from the reference (degC); "
           f"W warned, S stopped")
     print(shown.to_string())
+c = scen[scen.integrator == "CRN"]
+print(f"\nCRN in every scenario: a difference grows at most {10 ** c['log10 largest growth'].max():.2f} times over a "
+      f"stretch of days, and the run is at most {c['RMS difference from reference (degC)'].max():.2f} degC from the "
+      f"fine-step solution.")
 
 
 def fig_scenarios():
@@ -983,6 +965,7 @@ def fig_growth():
     axes[0].set_xticks([0, 1, 10, 100], ["0", "1", "10", "100"])
     limit_line(axes[0], 10, "stop above 10%", axis="x")
     axes[0].set_xlabel("Days with B above the method's limit (%)\n(the package's check)")
+    limit_line(axes[1], np.log10(STABILITY_MAX_GROWTH), "stop above ×100", axis="x")
     axes[1].set_xscale("symlog", linthresh=1)
     axes[1].set_xlim(-0.3, 5000)
     axes[1].set_xticks([0, 1, 10, 100, 1000], ["none", "×10", "×10¹⁰", "×10¹⁰⁰", "×10¹⁰⁰⁰"])

@@ -124,6 +124,9 @@ class CommonData:
     # Numerical-stability guard settings
     max_plausible_twat: np.float64 = np.float64(60.0)
     stability_error_fraction: np.float64 = np.float64(0.10)
+    # Stop an explicit-integrator run if a difference can grow more than this many times over
+    # a stretch of days (model.largest_growth); the default is model.STABILITY_MAX_GROWTH.
+    stability_max_growth: np.float64 = np.float64(100.0)
 
     # Opt-in escape hatch for a legitimate zero-flow (or negative, e.g. sensor fault)
     # discharge day in a version that evaluates theta = Q/Qmedia (4, 7, 8). None

@@ -3,6 +3,23 @@
 ## [0.5.0] - 2026-10-05
 
 ### Added
+- ⚠ **A stricter stability check for RK4, RK2 and EUL.** Before simulating, the
+  package now also works out from the B series how much a difference in the
+  simulated temperature (from the start value, rounding or the inputs) can grow
+  over a stretch of days, and stops the run if it can grow more than
+  `stability_max_growth` times (new setting, default 100). The equation is
+  linear in water temperature, so this follows exactly from B:
+  `model.step_amplification` gives what one step of each integrator does to a
+  difference, and `model.largest_growth` the largest product over a stretch of
+  days; `stability_report` returns it (`max_growth`, `growth_stretch`) and the
+  warning names the stretch. Why: the share of days above the limit (stop
+  above 10%) let through runs that went wrong. With the Swiss rivers' published
+  parameters, `RK2` on the Rhône (version 7, 2015 parameters) was 0.99 °C off
+  the equation with B above its limit on 4.2% of days (a difference could grow
+  800,000 times), and `RK4` with the Mentue's flows doubled 0.50 °C off; the
+  0 °C floor kept both below the 60 °C divergence check
+  ([example 09](examples/09_integrator_stability/README.md)). `CRN` and `EXP`
+  are not affected.
 - ⚠ **A cross-validated check of yearly statistics**, written by every
   cross-validation run (`cv_yearly_statistics.csv`,
   `cv_yearly_statistics_summary.csv`; docs/METHODS.md §11). For each held-out

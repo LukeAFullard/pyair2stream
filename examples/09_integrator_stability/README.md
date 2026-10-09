@@ -58,8 +58,15 @@ this page comes from it.
   behaves just under its limit, and the same equation solved exactly fits much
   worse.
 - **An unstable run does not always blow up.** The 0 °C floor can turn it into
-  plausible-looking numbers. The package stops most such runs, but some only
-  get a warning. The B series shows in advance which runs are at risk.
+  plausible-looking numbers that no check after the run sees. So the package
+  checks the B series before running. Besides the share of days above the
+  limit, it works out how much a difference can grow over a stretch of days,
+  and stops the run if it can grow more than 100 times. With the 30 published
+  parameter sets, that stops every run that was more than 1 °C off the
+  equation.
+- **With `CRN`, discharge cannot make a run unstable.** A difference can grow
+  briefly when B falls sharply after a flood (at most 2.6 times here), but the
+  growth cannot compound.
 
 ## 1. One equation, one number: B
 
@@ -110,7 +117,8 @@ data = read_calibration("my_scenario.yaml")     # e.g. a FORWARD settings file
 read_Tseries(data, "c")
 B = compute_B_series(data)    # per day; the first 365 values repeat the first year (the warm-up)
 print(B[365:].max())          # the largest B
-print(stability_report(data)) # the share of days above the integrator's limit, and the worst days
+print(stability_report(data)) # the share of days above the integrator's limit, the worst days,
+                              # and the largest growth of a difference (section 9)
 ```
 
 Here is B through 2004, with the 2016 parameters:
@@ -221,8 +229,20 @@ With B_j and B_j+1 the values on the two days of a step:
 | `RK2` | 1 − B_j/2 − B_j+1·(1 − B_j)/2 |
 | `EUL` | 1 − B_j+1 (like the Fortran, it uses the next day's inputs) |
 
-On the real discharge of the three rivers (version 8, all five methods), these
-daily factors match the package's steps to 1.2 × 10⁻¹⁵, over 10,997 steps.
+The package computes these daily factors itself (`step_amplification`). On the
+real discharge of the three rivers (version 8, all five methods), they match
+the integrators' steps to 1.2 × 10⁻¹⁵, over 10,997 steps.
+
+**With `CRN`, a difference can grow for a step when B falls sharply**, for
+example the day after a flood peak: 1 − B_j/2 is then large and negative, and
+1 + B_j+1/2 is small. But it cannot compound. Over a stretch of days the
+factors telescope: their product is (1 − B_first/2) / (1 + B_last/2) times a
+factor (1 − B/2) / (1 + B/2) for each day in between, and each of those lies
+between −1 and 1. So however long the run, a difference never grows by more
+than a factor of about half the largest B. With the published parameters it
+grew at most 2.6 times (the Mentue, version 8), and at most 1.5 times in the
+scenario flows of section 8. `EXP` never lets a difference grow: its factor is
+exp(−B) on every step.
 
 ## 4. Where the limits come from: B-series
 
@@ -374,7 +394,8 @@ difference in °C.
   peaks at 67 °C, is 1.7 °C off instead.)
 - **With the 2015 parameters (calibrated with `RK4`), `RK4` followed the
   equation in 14 of 15 cases.** The package warned in 7 of them, because B was
-  above 2.785 on 0.15–2.3% of days, but this did not matter (section 9). The
+  above 2.785 on 0.15–2.3% of days, but this did not matter: a difference could
+  grow at most 26 times (section 9). The
   exception, Dischmabach version 5 (0.75 °C), is the subject of section 6.
 - **Where it does not fail, `EUL` is still 0.45–0.98 °C off.** It is a
   first-order method, and the package's variant (the Fortran's) runs a day
@@ -446,7 +467,8 @@ Calibrate again with `CRN`, and compare.
 ## 7. Stable is not the same as accurate
 
 Even where they are stable, the methods differ in how closely they follow the
-equation. Over the runs of section 5 in which no difference ever grows:
+equation. Over the stable runs of section 5 (`CRN` and `EXP` always, the other
+methods where no difference can grow):
 
 | `integrator` | RMS difference from the fine-step solution |
 |---|---|
@@ -501,7 +523,7 @@ in any scenario run
 | 0.5 | 2.68 | 0.02 | 0.24, warned | 1.91 | 0.02 | 0.21 |
 | 1 (recorded) | 4.39 | 0.04, warned | 0.28, warned | 2.27 | 0.02 | 0.13, warned |
 | 1.5 | 6.01 | 0.16, warned | 0.57, warned | 2.53 | 0.01 | 0.10, warned |
-| 2 | 7.57 | 0.50, warned | 0.98, warned | 2.74 | 0.01 | 0.80, warned |
+| 2 | 7.57 | 0.50, stopped | 0.98, stopped | 2.74 | 0.01 | 0.80, stopped |
 | 3 | 10.55 | diverged, stopped | diverged, stopped | 3.06 | 0.01, warned | 3.32, stopped |
 
 RMS difference from the fine-step solution, °C. `CRN` stayed within 0.14 °C and
@@ -512,25 +534,30 @@ RMS difference from the fine-step solution, °C. `CRN` stayed within 0.14 °C an
 - **On the recorded flows, `RK4` is fine**: within 0.04 °C (Mentue) and
   0.02 °C (Rhône) of the equation.
 - **Mentue (a4 = 0.129): floods raise B.** With the flows doubled, `RK4` is
-  0.50 °C off, and the package only warns: B is above the limit on 1.1% of
-  days. With the flows tripled, `RK4` diverges.
+  0.50 °C off. B is above the limit on only 1.1% of days, but on consecutive
+  days of a flood, so a difference can grow 110 times, and the package stops
+  the run. With the flows tripled, `RK4` diverges.
 - **Rhône (a4 = 0.718): low flows raise B.** At a tenth of the flow (a large
   abstraction, or a severe drought), `RK4` diverges. `RK2`, with its lower
-  limit, goes wrong sooner: 0.84 °C off at a fifth of the flow and 0.80 °C off
-  at twice the flow, each time with only a warning (B above 2 on 2.8% and 9.5%
-  of days).
+  limit, goes wrong sooner. At twice the flow it is 0.80 °C off, and stopped (a
+  difference can grow 3,000 times). At a fifth of the flow it is 0.84 °C off
+  with only a warning: there a difference can grow only 11 times, but `RK2`
+  barely damps so close to its limit (section 9).
 - **`CRN` and `EXP` are unaffected.**
 
-## 9. How the package protects you, and what the B series adds
+## 9. How the package protects you
 
 Around the simulations it reports (FORWARD runs, the validation years,
 sensitivity analyses), the package makes these checks
 ([docs/METHODS.md §15](../../docs/METHODS.md#15-automatic-checks)):
 
-1. **Before: the B check** (`stability_report`, `warn_on_stability`). It
-   computes the B series and the share of days on which B is above the
-   method's limit. If there are any such days, it warns. If they are more than
-   `stability_error_fraction` of the days (default 10%), it stops.
+1. **Before: the B check** (`stability_report`, `warn_on_stability`). From the
+   B series, it works out the share of days on which B is above the method's
+   limit, and how much a difference can grow over a stretch of days (see
+   below). If B is above the limit on any day, it warns. It stops the run if
+   that happens on more than `stability_error_fraction` of the days (default
+   10%), or if a difference can grow more than `stability_max_growth` times
+   (default 100).
 2. **After: the divergence check** (`check_numerical_divergence`). It stops a
    run with a temperature that is not a number, or is above
    `max_plausible_twat` (default 60 °C).
@@ -555,50 +582,23 @@ plausible-looking numbers:
   the limit on 47% of days).
 - **`RK2` in a flood.** On the Rhône (version 7, 2015 parameters), B is above
   2 on four days of the October 2000 flood. `RK2` falls to 0 °C and takes about
-  a week to recover. Over the whole record, B is above 2 on 4.2% of days, below
-  the 10% threshold, so the package warns but does not stop. This run is
+  a week to recover. Over the whole record, B is above 2 on only 4.2% of days,
+  below the 10% threshold. But in the summer of 1995 it stays above 2 long
+  enough for a difference to grow 800,000 times, so the package stops the
+  run. Before it checked the growth, the package only warned. This run is
   0.99 °C RMS off the equation (and `EUL`, in the same case, 1.22 °C).
 
-**The share of days is a screen, not a verdict.** How wrong a run goes depends
-on how much a difference can grow: on how many days in a row B stays above the
-limit, and how far above it. The equation is linear, so the growth over a
-stretch of days is the product of the daily factors R_j of section 3. It can be
-computed from the B series before running. `run.py` does it with these two
-functions, which you can copy:
+**Why the growth, and not only the share of days.** How wrong a run goes
+depends on how much a difference can grow: on how many days in a row B stays
+above the limit, and how far above it. The equation is linear, so the growth
+over a stretch of days is the product of the daily factors R_j of section 3
+(`step_amplification`). It follows from the B series before anything is
+simulated (`largest_growth`), and `stability_report` returns it:
 
 ```python
-import dataclasses
-import numpy as np
-from pyair2stream.model import compute_B_series
-
-def step_factors(data):
-    """R_j: one step of data.mod_num multiplies a difference on day j by R_j."""
-    B = compute_B_series(data)
-    b0, b1 = B[:-1], B[1:]
-    if data.mod_num == "CRN":
-        return (1 - b0 / 2) / (1 + b1 / 2)
-    if data.mod_num == "EXP":
-        return np.exp(-(b0 + b1) / 2)
-    if data.mod_num == "EUL":
-        return 1 - b1
-    if data.mod_num == "RK2":
-        return 1 - b0 / 2 - b1 * (1 - b0) / 2
-    bm = compute_B_series(dataclasses.replace(data, Q=(data.Q[:-1] + data.Q[1:]) / 2))   # RK4
-    k1 = -b0
-    k2 = -bm * (1 + k1 / 2)
-    k3 = -bm * (1 + k2 / 2)
-    k4 = -b1 * (1 + k3)
-    return 1 + (k1 + 2 * k2 + 2 * k3 + k4) / 6
-
-def worst_growth(R):
-    """log10 of the largest factor by which a difference can grow over a stretch of days (0: never)."""
-    best = current = 0.0
-    for x in np.log10(np.abs(R)):
-        current = max(0.0, current + x)
-        best = max(best, current)
-    return best
-
-print(worst_growth(step_factors(data)))     # data: loaded as in section 2
+report = stability_report(data)     # data: loaded as in section 2, with the integrator to check
+print(report["max_growth"])         # how many times a difference can grow (1.0: never)
+print(report["growth_stretch"])     # the first and last day of that stretch (indices)
 ```
 
 Here are both measures for the 90 runs of the three explicit methods with the
@@ -608,17 +608,21 @@ Here are both measures for the 90 runs of the three explicit methods with the
 
 **Reading it.**
 
-- **Left: the package's screen.** Runs with B above the limit on 0.1–10% of
-  days (warned, not stopped by the B check) range from 0.03 °C off to
-  diverged.
+- **Left: the share of days.** Runs with B above the limit on 0.1–10% of days
+  range from 0.03 °C off to diverged.
 - **Right: the largest growth, from the B series alone.** Where no difference
   can grow more than 10 times, every `RK2` run, and every `RK4` run but the one
   of section 6, stayed within 0.34 °C of the equation. (`EUL`'s 0.45–0.98 °C
   there is its own inaccuracy, section 7.) Where a difference can grow more than
   1,000 times, 46 of 47 runs were more than 1 °C off or diverged; the other was
-  0.99 °C off.
-- **The package does not compute this growth.** Compute it for a scenario
-  before you trust an explicit method, or use `CRN`.
+  0.99 °C off. The package stops a run above 100 times (the dashed line); the
+  `RK4` runs that followed the equation could grow at most 26 times.
+- **What the growth does not catch.** It measures instability, not accuracy.
+  `EUL` is 0.45–0.98 °C off where it is stable, and the `RK4` calibration of
+  section 6 has no growth at all. `RK2` barely damps close to its limit (its R
+  is near 1). So on the Rhône at a fifth of the flow it is 0.84 °C off, while a
+  difference can grow only 11 times, and the package only warns. These are
+  reasons to use `CRN`, rather than to tighten the check.
 
 ## What to do
 
@@ -633,8 +637,10 @@ Here are both measures for the 90 runs of the three explicit methods with the
 - **Be wary of a calibrated B just under an explicit method's limit** (for
   example `a3` near 2.785 with `RK4`). Calibrate again with `CRN`, and compare.
 - **Before a scenario with versions 4, 7 or 8, look at the B series of the
-  scenario's inputs** (`compute_B_series`). With an explicit method, compute
-  the largest growth too. In versions 3 and 5, flow does not change stability.
+  scenario's inputs** (`compute_B_series`). With an explicit method,
+  `stability_report` also gives the largest growth, and the package stops the
+  run above `stability_max_growth`. In versions 3 and 5, flow does not change
+  stability.
 - **A negative B is impossible**: every method grows, and the package warns.
   Narrow the parameter bounds so that B stays positive (`a3` at least 0 for
   versions 3 and 5).

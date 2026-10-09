@@ -17,7 +17,7 @@ from .config import (
     CommonData, DEFAULT_NOISE_MODEL, DEFAULT_LIKELIHOOD, VALID_LIKELIHOODS, DEFAULT_RHO_TIMESCALE, VALID_RHO_TIMESCALES, ACTIVE_PARAMS, VALID_VERSIONS, VALID_RUN_MODES, VALID_INTEGRATORS,
     VALID_OBJECTIVES,
 )
-from .model import prepare_evaluation, check_nonpositive_discharge
+from .model import prepare_evaluation, check_nonpositive_discharge, STABILITY_MAX_GROWTH
 from .data_checks import check_table, PLAUSIBLE_RANGES as _PLAUSIBLE_RANGES
 
 
@@ -113,6 +113,12 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
     data.random_seed = int(random_seed) if random_seed is not None else None
     data.max_plausible_twat = np.float64(config.get('max_plausible_twat', 60.0))
     data.stability_error_fraction = np.float64(config.get('stability_error_fraction', 0.10))
+    data.stability_max_growth = np.float64(config.get('stability_max_growth', STABILITY_MAX_GROWTH))
+    if not data.stability_max_growth >= 1.0:
+        raise ValueError(
+            f"stability_max_growth must be at least 1 (the most that a difference between two "
+            f"simulations may grow over a stretch of days), got {data.stability_max_growth}."
+        )
 
     # Opt-in escape hatch for zero/negative discharge in versions 4/7/8 (which evaluate
     # theta = Q/Qmedia and theta**a4); see `min_theta_floor` on CommonData and

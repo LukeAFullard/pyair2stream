@@ -296,6 +296,7 @@ paths:
 # --- Safety checks (docs/METHODS.md §15) ---
 max_plausible_twat: 60.0            # stop if a simulated temperature is above this (°C)
 stability_error_fraction: 0.10      # stop if more than this share of days is unstable (§9.1)
+stability_max_growth: 100           # stop if a difference can grow more than this many times (§9.1)
 
 # --- Optional features ---
 gap_tolerant: false                 # §10
@@ -497,7 +498,7 @@ After a calibration, look at these, in this order:
 | `Warning: ... value(s) of T_air` (or `T_water`) `... are outside` | Usually a missing-value code other than `-999`. Replace it with an empty cell. Otherwise check that the units are °C. |
 | `No valid segments found` | Gap-tolerant mode: no stretch without gaps is at least `min_segment_days` long. |
 | `Qmedia is zero or negative` | Gap-tolerant mode: too little valid discharge. Set `Qmedia:`. |
-| `NumericalDivergenceError` / `exceed the ... stability limit` | Use `CRN` or `EXP` ([§9.1](#91-numerical-stability-and-the-choice-of-integrator)). |
+| `NumericalDivergenceError` / `exceed the ... stability limit` / `can grow ... times` | Use `CRN` or `EXP` ([§9.1](#91-numerical-stability-and-the-choice-of-integrator)). |
 | `Warning: the relaxation rate B is negative` / `zigzags from one day to the next` | The fitted parameters are physically impossible. This usually follows weekly or monthly scoring with bounds that allow a negative `a2` or `a3`. Set their minimum to 0 and calibrate again ([§6](#parameters-a1a8)). Do not use the results. |
 | `Efficiency mismatch in forward run` | An internal check failed. Please report it, with your settings file. |
 | `mcmc_walkers ... must be at least 2x` | Increase `mcmc_walkers`. |
@@ -531,9 +532,23 @@ To protect you, pyair2stream:
 - warns before simulating if B goes above the chosen method's limit on some
   days, and stops if this happens on more than `stability_error_fraction` of
   the days;
+- also stops before simulating if a difference in the simulated temperature
+  (from the start value, rounding or the inputs) could grow more than
+  `stability_max_growth` times (default 100) over a stretch of days. The
+  equation is linear in water temperature, so this growth follows exactly
+  from B, before anything is simulated. It catches unstable runs that the
+  share of days misses, such as a flood of a few days;
 - stops if a simulated temperature is not a number, or is above
   `max_plausible_twat`;
 - prints a note when you choose `RK4`, `RK2` or `EUL`.
+
+An unstable run does not always blow up: the 0 °C floor (`Tice_cover`) can hold
+it at 0 °C for months, or make it flip between 0 °C and 25 °C, and then no
+temperature is above `max_plausible_twat`. The checks before simulating catch
+these runs. With `CRN`, a difference can grow for a day when B falls sharply
+after a flood, but never by more than a factor of about half the largest B,
+however long the run: it does not compound. [Example 09](examples/09_integrator_stability/README.md)
+shows all of this on the Swiss rivers.
 
 Use `RK4`, `RK2` or `EUL` only to reproduce Fortran results, never for
 scenarios. Even when stable, they can be inaccurate with a one-day step: `EUL`

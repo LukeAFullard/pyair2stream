@@ -185,7 +185,13 @@ daily inputs. Five methods (`integrator`) are available:
 temperature would move away from equilibrium); see §7 for how it can arise and
 the warning about it. Because B depends on discharge, the explicit methods
 (RK4, RK2, EUL) can become unstable on flows different from calibration and then
-give wrong numbers without any error. `CRN` is therefore the default and is the
+give wrong numbers without any error. Before a simulation, the package checks
+the B series: the share of days with B above the method's limit, and how much a
+difference in the simulated temperature can grow over a stretch of days. The
+equation is linear in water temperature, so one step multiplies a difference by
+a factor that follows from B on the days the step uses (`step_amplification`),
+and the growth over a stretch is the product of these factors (`largest_growth`;
+§15). `CRN` is therefore the default and is the
 method recommended by the original authors. `RK4`, `RK2` and `EUL` reproduce the
 Fortran exactly and are mainly useful for that purpose.
 
@@ -923,7 +929,7 @@ change one-sided.
 | Missing, repeated, unordered or unreadable dates; text values; missing columns; incomplete `T_air`/`Discharge`; non-positive discharge; no `T_water` measurements; start date; short record (§2) | loading each file; the validation file before calibration | error |
 | `T_air` or `T_water` outside a plausible range; a validation file shorter than a year; validation days that are also calibration days (§2) | loading each file; the validation file before calibration | warning |
 | Invalid version, run mode, integrator, objective, time resolution, `prc`, bounds | loading config | error |
-| Stability of the chosen integrator (B vs. limit, §6) | before each user-facing simulation | warning; error if >10% of days exceed it |
+| Stability of the chosen integrator (B vs. limit, §6) | before each user-facing simulation | warning; error if >10% of days exceed it (`stability_error_fraction`), or if a difference can grow more than 100 times over a stretch of days (`stability_max_growth`) |
 | Simulated temperature not finite or above `max_plausible_twat` (60 °C) | after each user-facing simulation | error |
 | Negative relaxation rate B, or a daily simulation that zigzags (§7) | after calibration, before DE-MCMC sampling, FORWARD runs | warning |
 | ρ at its limit of 0.99; exact likelihood with weekly or monthly scoring (§12) | DE-MCMC | warning |
