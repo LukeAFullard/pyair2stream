@@ -383,8 +383,9 @@ uncertainty_options:
 
 - DE-MCMC records `rho`, `rho_timescale` and `rho_likelihood` in
   `MCMC_chain_*_meta.json`.
-- Every `FORWARD` run prints the ρ it uses, for example
-  `Using rho=0.8585 carried from calibration run ...`.
+- Every `FORWARD` run uses the chain's error model and ρ, and prints them, for
+  example `Using rho=0.8585 carried from calibration run ...`. A different
+  value set in the FORWARD settings is used, with a note in `summary.md`.
 - To check it at your site, run a cross-validation (section 8). In
   `cv_interval_coverage.csv`, the 7-day mean column should be close to the
   stated levels. In `cv_yearly_statistics_summary.csv`, the yearly statistics'

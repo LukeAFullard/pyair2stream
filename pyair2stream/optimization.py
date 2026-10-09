@@ -637,10 +637,18 @@ def forward_mode(data: CommonData) -> None:
         # Resolve sigma: explicit config override first, then the sidecar written by
         # DE-MCMC (mirroring the `rho` resolution below), matching `rho`'s
         # existing carry-forward instead of silently defaulting to 0.0 behind a print.
+        chain_meta = {}
+        if os.path.exists(sidecar_path):
+            try:
+                with open(sidecar_path, 'r') as f:
+                    chain_meta = json.load(f)
+            except (OSError, ValueError):
+                chain_meta = {}
         sigma_override = data.forward_options.get('residual_sigma')
         if sigma_override is not None and float(sigma_override) > 0.0:
             sigma = float(sigma_override)
-            print(f"Using explicit residual_sigma override: {sigma}")
+            print(f"Note: this run uses residual_sigma = {sigma:g}, as set in forward_options, not the "
+                  f"chain's {chain_meta.get('sigma', 'unrecorded value')}.")
         elif os.path.exists(sidecar_path):
             try:
                 with open(sidecar_path, 'r') as f:
@@ -662,7 +670,22 @@ def forward_mode(data: CommonData) -> None:
                 "not a prediction interval (docs/METHODS.md §13)."
             )
 
-        noise_model = uncertainty_options.get('noise_model', DEFAULT_NOISE_MODEL)
+        # The error model the chain was fitted with, unless this run's settings name another
+        # (a deliberate choice, e.g. a sensitivity test, which is then noted in the summary).
+        set_noise_model = uncertainty_options.get('noise_model', DEFAULT_NOISE_MODEL)
+        chain_noise_model = chain_meta.get('noise_model_used_for_this_run')
+        if chain_noise_model is None:
+            noise_model = set_noise_model
+            print(f"Note: {sidecar_path} does not record the error model (noise_model) the chain was fitted "
+                  f"with, so this run uses '{noise_model}' from its settings. Make sure it is the calibration's.")
+        elif uncertainty_options.get('noise_model_set') and set_noise_model != chain_noise_model:
+            noise_model = set_noise_model
+            print(f"Note: the MCMC chain was fitted with noise_model '{chain_noise_model}'; this run uses "
+                  f"'{noise_model}', as set in uncertainty_options. Its prediction ranges are therefore not "
+                  "those of the calibration's error model.")
+        else:
+            noise_model = chain_noise_model
+            print(f"Using noise_model '{noise_model}' carried from calibration run {sidecar_path}")
         rho_used = 0.0
 
         if noise_model == 'ar1':
@@ -684,7 +707,8 @@ def forward_mode(data: CommonData) -> None:
                     print(f"Warning: Failed to read rho from sidecar {sidecar_path} ({e}).")
             if ar1_rho_override is not None:
                 rho_used = ar1_rho_override
-                print(f"Using explicit ar1_rho override: {rho_used}")
+                print(f"Note: this run uses ar1_rho = {rho_used:g}, as set in uncertainty_options, not the "
+                      f"chain's {sidecar_rho if sidecar_rho is not None else 'unrecorded value'}.")
             elif sidecar_rho is not None:
                 rho_used = float(sidecar_rho)
                 print(f"Using rho={rho_used:.4f} carried from calibration run {sidecar_path}")

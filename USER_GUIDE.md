@@ -829,7 +829,7 @@ paths:
   calibration_metadata: "output/calibration_metadata.json"
 # parameters_forward: [8 values]  # only to run parameters other than the calibrated ones
 uncertainty_options:
-  noise_model: "ar1"          # the same as in the calibration
+  # noise_model: "ar1"        # default: the calibration's, from the chain; set it only to use another
 forward_options:
   enable_prediction_intervals: true
   mcmc_chain_path: "output/MCMC_chain_Station_A_series_1d.csv"   # from a DE-MCMC run

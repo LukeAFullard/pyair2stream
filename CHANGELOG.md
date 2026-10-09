@@ -23,6 +23,18 @@
   - `scenario.exceedance` and `scenario.aggregate` warn about days without a
     simulated value, and `scenario.paired_difference` refuses two runs that
     simulated different days.
+- **FORWARD runs use the calibration's error model.** A FORWARD run took the
+  error model (`noise_model`) from its own settings, so after a calibration
+  with `noise_model: "iid"` it used the default `"ar1"` unless the setting was
+  repeated, with a ρ the calibration had not used: its prediction ranges were
+  wider than the calibration's, without a message. It now takes the error model
+  from the chain's `_meta.json`; a different one set in the FORWARD settings is
+  used with a note, as are `residual_sigma` and `ar1_rho` set there (notes
+  appear in `summary.md`).
+- **A paired difference checks the error settings.**
+  `scenario.paired_difference_from_files` now refuses two runs with a different
+  error model, σ or ρ: the error added to each draw then does not cancel, and
+  the difference's spread would include it.
 - **Yearly statistics leave out partial years.** `scenario.year_statistics`
   gave a "highest 7-day mean" and a count of warm days for the first and last
   year of a file even when the file covered only part of them (for example a

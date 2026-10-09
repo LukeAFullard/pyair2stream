@@ -19,6 +19,8 @@ check that:
    internally, and covered directly by tests/test_report04_uncertainty_and_mcmc.py).
 """
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -255,6 +257,59 @@ class TestPairedDifferenceFromFiles(unittest.TestCase):
             os.remove(self.chain_path.replace('.csv', '_meta.json'))
         self.assertEqual(meta['rho'], 0.3)
         self.assertEqual(meta['residual_sigma'], 0.8)
+
+    def _forward_with_chain_meta(self, chain_meta, uncertainty):
+        with open(self.chain_path.replace('.csv', '_meta.json'), 'w') as f:
+            json.dump(chain_meta, f)
+        data = _build_forward_data(self.folder_a)
+        data.forward_options = {'enable_prediction_intervals': True, 'mcmc_chain_path': self.chain_path,
+                                'n_samples': 4, 'random_seed': 1}
+        data.uncertainty_options = uncertainty
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out):
+                forward_mode(data)
+            with open(os.path.join(self.folder_a, f"Forward_Prediction_Ensemble_{data.station}_"
+                                                  f"{data.series}_{data.time_res}_meta.json")) as f:
+                meta = json.load(f)
+        finally:
+            os.remove(self.chain_path.replace('.csv', '_meta.json'))
+        return meta, out.getvalue()
+
+    def test_the_error_model_comes_from_the_chain(self):
+        # A chain fitted with iid errors: a FORWARD run whose settings do not name an error
+        # model (so 'ar1' only by default) uses iid, not the default.
+        chain = {'sigma': 0.8, 'rho': 0.6, 'noise_model_used_for_this_run': 'iid'}
+        meta, printed = self._forward_with_chain_meta(chain, {'noise_model': 'ar1', 'noise_model_set': False})
+        self.assertEqual(meta['noise_model'], 'iid')
+        self.assertEqual(meta['rho'], 0.0)
+        self.assertIn("Using noise_model 'iid' carried from calibration run", printed)
+
+    def test_an_error_model_set_explicitly_is_used_with_a_note(self):
+        chain = {'sigma': 0.8, 'rho': 0.6, 'noise_model_used_for_this_run': 'iid'}
+        meta, printed = self._forward_with_chain_meta(chain, {'noise_model': 'ar1', 'noise_model_set': True})
+        self.assertEqual(meta['noise_model'], 'ar1')
+        self.assertEqual(meta['rho'], 0.6)
+        self.assertIn("Note: the MCMC chain was fitted with noise_model 'iid'; this run uses 'ar1'", printed)
+
+    def test_overrides_of_sigma_and_rho_are_notes(self):
+        meta, printed = self._forward_with_chain_meta(
+            {'sigma': 0.8, 'rho': 0.6, 'noise_model_used_for_this_run': 'ar1'},
+            {'noise_model': 'ar1', 'ar1_rho': 0.2})
+        self.assertIn("Note: this run uses ar1_rho = 0.2, as set in uncertainty_options, not the chain's 0.6", printed)
+        self.assertEqual(meta['rho'], 0.2)
+
+    def test_different_error_settings_are_refused_in_a_paired_difference(self):
+        for kw_b, label in (({'uncertainty': {'noise_model': 'ar1', 'ar1_rho': 0.7}}, 'error model'),
+                            ({'sigma': 0.5}, 'error size'),
+                            ({'uncertainty': {'noise_model': 'ar1', 'ar1_rho': 0.5}}, None)):
+            with self.subTest(label=label):
+                kw_a = {'uncertainty': {'noise_model': 'ar1', 'ar1_rho': 0.7}} if label is None else {}
+                ensemble_a = self._run(self.folder_a, q_scale=1.0, n_samples=6, seed=7, **kw_a)
+                ensemble_b = self._run(self.folder_b, q_scale=1.0,
+                                       reuse_from=ensemble_a.replace('.npz', '_meta.json'), **kw_b)
+                with self.assertRaisesRegex(ValueError, label or 'error persistence'):
+                    scenario.paired_difference_from_files(ensemble_a, ensemble_b)
 
     def test_mismatched_dates_raises(self):
         ensemble_a = self._run(self.folder_a, q_scale=1.0, n_samples=6, seed=7)

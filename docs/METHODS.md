@@ -858,10 +858,14 @@ reported as in §7.
 
 **Prediction intervals** (`forward_options.enable_prediction_intervals: true`)
 reuse a DE-MCMC chain (`mcmc_chain_path`): `n_samples` (default 1000) parameter
-sets are drawn, each is run, and error is added with standard deviation σ =
-`forward_options.residual_sigma`, or else the calibration's daily residual
-standard deviation stored in the chain's `_meta.json`. For `ar1`, ρ is taken from
-`ar1_rho`, else from the chain's `_meta.json`, else from this run's own residuals.
+sets are drawn, each is run, and error is added. The error model (`ar1` or
+`iid`) is the one the chain was fitted with, recorded in its `_meta.json`,
+unless the run's settings name another (then a note says so). Its standard
+deviation σ is `forward_options.residual_sigma`, or else the calibration's daily
+residual standard deviation stored in the chain's `_meta.json`. For `ar1`, ρ is
+taken from `ar1_rho`, else from the chain's `_meta.json`, else from this run's
+own residuals. A value set in the run's settings instead of the chain's is
+reported as a note, so it appears in `summary.md`.
 With the `_meta.json` that DE-MCMC writes next to the chain, the interval
 therefore does not depend on the observations it is checked against. The run
 refuses a chain whose `_meta.json` records another model version, integrator or
@@ -950,8 +954,9 @@ not its inability to follow the years.
 FORWARD once per scenario from the same chain with `save_ensemble: true`, and
 for the second run set `forward_options.reuse_sample_indices_from` to the first
 run's `Forward_Prediction_Ensemble_*_meta.json`, so both use exactly the same
-parameter sets. `scenario.paired_difference_from_files()` then checks this before
-computing the difference draw by draw, which gives an uncertainty band for the
+parameter sets. `scenario.paired_difference_from_files()` then checks this, and
+that both runs used the same error model, σ and ρ, before computing the
+difference draw by draw, which gives an uncertainty band for the
 *difference* itself. The random error added to a draw is generated from a seed
 fixed by the chain's content and the draw's row in it, so both runs add the same
 error to the same draw on the same day and it cancels in the difference: the

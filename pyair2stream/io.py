@@ -281,6 +281,8 @@ def read_calibration(config_file='config.yaml') -> CommonData:
 
     data.uncertainty_options = {
         "noise_model": noise_model,
+        # Whether the settings name the error model: a FORWARD run otherwise takes the chain's.
+        "noise_model_set": 'noise_model' in uncertainty_options,
         "likelihood": likelihood,
         "rho_timescale": rho_timescale,
         "ar1_rho": ar1_rho,

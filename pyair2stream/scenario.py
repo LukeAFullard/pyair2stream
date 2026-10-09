@@ -378,7 +378,8 @@ def paired_difference_from_files(path_a: str, path_b: str) -> np.ndarray:
     with this function. See docs/METHODS.md §13 for the full workflow.
 
     Checks, in order: the two runs' source MCMC/posterior chain (content hash and
-    row count), the number of samples requested, the exact `sample_indices` drawn,
+    row count), the number of samples requested, the error settings (noise model,
+    σ and ρ: the added error cancels only if they match), the exact `sample_indices` drawn,
     and `valid_draw_indices` -- the subset of those indices that actually survived
     per-draw divergence filtering
     and therefore ended up as rows in the saved ensemble. `valid_draw_indices` is
@@ -410,6 +411,21 @@ def paired_difference_from_files(path_a: str, path_b: str) -> np.ndarray:
                 f"({meta_a.get(key)!r}) and '{path_b}' ({meta_b.get(key)!r}). Both runs "
                 "must be forward_mode() (or DE-MCMC envelope) calls against "
                 "the SAME posterior chain -- see docs/METHODS.md §13."
+            )
+
+    # The daily error added to a draw cancels in the difference only if both runs used the
+    # same error model, size and persistence.
+    for key, label in (('noise_model', 'error model (noise_model)'), ('residual_sigma', 'error size σ'),
+                       ('rho', 'error persistence ρ')):
+        a, b = meta_a.get(key), meta_b.get(key)
+        same = a == b or (isinstance(a, (int, float)) and isinstance(b, (int, float)) and np.isclose(a, b))
+        if not same:
+            raise ValueError(
+                f"paired_difference_from_files: the {label} differs between '{path_a}' ({a!r}) and "
+                f"'{path_b}' ({b!r}). The daily error added to each draw cancels in a paired difference only "
+                "if both runs used the same error settings; otherwise the difference's spread would include "
+                "that error, not only the parameter uncertainty. Run both scenarios with the same "
+                "uncertainty_options and forward_options.residual_sigma (docs/METHODS.md §13)."
             )
 
     if meta_a.get('sample_indices') != meta_b.get('sample_indices'):
