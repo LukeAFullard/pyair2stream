@@ -41,7 +41,7 @@ With `"iid"`, the 7-day means would be far too certain
 ([V5](../../validation/REPORT.md#v5)).
 
 [`check.yaml`](check.yaml) tests the same statistics on years the model was not
-calibrated on. It hides each of 2003–2009 in turn and calibrates on the
+calibrated on. It hides each of 2002–2009 in turn and calibrates on the
 others. For each hidden year, it records where the measured statistic fell
 among 1,000 simulations (`output/check/cv_yearly_statistics.csv`). It uses the
 same 18 °C threshold as the question.
@@ -77,24 +77,23 @@ ax.figure.savefig("peak_7day_mean.png", dpi=150, bbox_inches="tight")
 
 ## Results
 
-**The check.** In the seven hidden years (2003–2009), the measured yearly
+**The check.** In the eight hidden years (2002–2009), the measured yearly
 peaks were lower than predicted:
 
-- the highest 7-day mean by 0.65 °C on average (95% interval 0.20 to 1.10 °C);
-- the highest daily mean by 0.78 °C.
+- the highest 7-day mean by 0.65 °C on average (95% interval 0.26 to 1.05 °C);
+- the highest daily mean by 0.75 °C (95% interval 0.40 to 1.10 °C).
 
-The uncorrected 90% ranges held in only 5 of the 7 years (7-day mean) and 4 of
-the 7 (daily mean). The number of days above 18 °C was not biased (+0.3 days,
-95% interval −5.7 to +6.3). So on this river, the model (fitted to the whole
+The uncorrected 90% ranges held in only 6 of the 8 years, for both. The number
+of days above 18 °C was not biased (−0.3 days, 95% interval −5.5 to +5.0). So on this river, the model (fitted to the whole
 year) puts the summer peaks too high.
 
 **The answer.**
 
 | Year | P(7-day mean > 20 °C), corrected | uncorrected | Highest 7-day mean, 90% range, corrected | Measured | Days above 18 °C, corrected: median (90% range) | Measured |
 |---|---|---|---|---|---|---|
-| 2010 | 0.57 | 0.92 | 19.2 to 21.1 °C | 21.0 °C | 31 (22 to 39) | 30 |
-| 2011 | 0.34 | 0.77 | 18.8 to 20.8 °C | 19.8 °C | 19 (11 to 28) | 21 |
-| 2012 | 0.14 | 0.51 | 18.4 to 20.4 °C | 19.6 °C | 25 (16 to 34) | 22 |
+| 2010 | 0.57 | 0.92 | 19.2 to 21.1 °C | 21.0 °C | 30 (22 to 38) | 30 |
+| 2011 | 0.33 | 0.77 | 18.8 to 20.8 °C | 19.8 °C | 18 (11 to 27) | 21 |
+| 2012 | 0.14 | 0.51 | 18.4 to 20.4 °C | 19.6 °C | 24 (15 to 33) | 22 |
 
 ![The 7-day mean water temperature in the 1,000 simulations, the measurements and the limit](figures/prediction_7day_mean.png)
 
@@ -112,14 +111,14 @@ exceeded.*
 **Reading it.**
 
 - The limit was in fact exceeded in 2010, and not in 2011 or 2012.
-- The corrected probabilities (0.57, 0.34, 0.14) match this better than the
+- The corrected probabilities (0.57, 0.33, 0.14) match this better than the
   uncorrected ones (0.92, 0.77, 0.51). The uncorrected ones would have called
   2011 a likely exceedance.
 - The Brier score (the mean squared difference between probability and
-  outcome; lower is better) is 0.11 corrected, against 0.29 uncorrected.
+  outcome; lower is better) is 0.10 corrected, against 0.29 uncorrected.
 - All measured values lie inside the corrected 90% ranges.
 - 2010's measured peak, 21.0 °C, is near the top of its range: the bias in
-  2010–2012 was smaller than in 2003–2009.
+  2010–2012 was smaller than in 2002–2009.
 
 Report such results as probabilities with ranges, together with the check. Do
 not report them as a yes or no.
@@ -130,7 +129,7 @@ not report them as a yes or no.
   assess limits on daily maximum temperature.
 - **The correction rests on the check.** It assumes the model's average error
   in the statistic is the same in the years predicted as in the hidden years.
-  With 7 years that average is uncertain, and the corrected ranges include
+  With 8 years that average is uncertain, and the corrected ranges include
   this uncertainty. Over 48 hidden years on three Swiss rivers, corrected 90%
   ranges held in 85–94% of years, and uncorrected ones in 73–92%
   ([V11](../../validation/REPORT.md#v11)).

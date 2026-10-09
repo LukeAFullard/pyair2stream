@@ -664,9 +664,7 @@ percentiles, is a basic property of probability.
 ### What it is
 
 The model is calibrated with one year hidden, then asked to predict that year.
-This is repeated for every year except the first one or two, which are always
-used for calibration (`min_train_years`; the model needs earlier data to start
-from). Each prediction is honest, because the year's measurements played
+This is repeated for every whole year in turn. Each prediction is honest, because the year's measurements played
 no part in it.
 
 ### Why
@@ -698,7 +696,6 @@ run_mode: "DE"
 Qmedia: 1.4915                 # your calibration's mean discharge (here the Mentue's): every fold scales flow alike
 cross_validation:
   enabled: true
-  min_train_years: 0           # hold out every year but the first: the check needs as many years as possible
   threshold: 18                # °C: the threshold of your question, for "days above threshold"
   season_months: [6, 7, 8, 9]  # a year counts if 80% of these months was measured (default: the 4 warmest)
 uncertainty_options:

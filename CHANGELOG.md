@@ -82,6 +82,16 @@
   longer to forget its start. A calibration still needs a year, and the error
   now gives the reason: the parameters of the yearly cycle cannot be fitted from
   part of a year. Files of a year or more are unchanged.
+- **Cross-validation tests every whole year.** By default the first two years
+  were never held out, on the belief that the model needed earlier data to
+  start from; it does not (the held-out year keeps its forcing and has the
+  warm-up year before it, or in gap-tolerant mode restarts like any segment).
+  With 5 years, only 3 were tested. The defaults are now `skip_first_year:
+  false` and `min_train_years: 0`, and the error that refused them is gone;
+  both settings can still exclude first years. When the first year is held out,
+  the warm-up's copy of its measurements is hidden too, so they play no part
+  (the model then starts at 4 °C, a year before the record). Examples 03, 06
+  and 08 were rerun with the new defaults.
 - **`Qmedia` must be positive.** A `Qmedia` of zero or below was refused only in
   gap-tolerant mode; otherwise every simulated temperature was NaN and the run
   stopped with an error that blamed the integrator. It is now refused for

@@ -1006,19 +1006,24 @@ cross_validation:
   unit: "year"              # or "n_years" with n_years_per_fold
   n_years_per_fold: 1
   water_year_start_month: 1 # e.g. 10 for October-September years
-  min_train_years: 1        # extra first years that are never hidden
-  skip_first_year: true     # the first year is never hidden
+  skip_first_year: false    # true: never hide the first year
+  min_train_years: 0        # never hide this many further first years
   min_valid_obs: 10         # skip years with fewer measurements
   optimizer_overrides:      # optional cheaper settings for each fold
     n_run: 50
 ```
 
-With these defaults, the first two years are always used for calibration
-only. A year the file covers only in part (for example a last year ending in
-March) is also used for calibration only, with a warning: a few months are not a
-test of a year. For versions 4, 7 and 8, also set `Qmedia:` (the mean discharge of the
-file). Then every fold scales discharge the same way. Otherwise the parameters
-also move with each fold's own mean discharge.
+With these defaults, every whole year is hidden in turn, the first one
+included: the model does not need earlier data to start from (it has its
+warm-up year, §3 of docs/METHODS.md). Each fold is calibrated on all the
+years it does not hide, so excluding early years with `skip_first_year` or
+`min_train_years` only removes test years. A year the file covers only in
+part (for example a last year ending in March) is used for calibration only,
+with a warning: a few months are not a test of a year.
+
+For versions 4, 7 and 8, also set `Qmedia:` (the mean discharge of the file).
+Then every fold scales discharge the same way. Otherwise the parameters also
+move with each fold's own mean discharge.
 
 A cross-validation run writes these files instead of the usual outputs:
 
@@ -1050,7 +1055,6 @@ Settings for the yearly statistics:
 cross_validation:
   threshold: 18             # °C, for "days above threshold" (default: the 90th percentile of the measurements)
   season_months: [6, 7, 8, 9]   # a year counts if 80% of these months was measured (default: the 4 warmest)
-  min_train_years: 0        # hide every year but the first: the check needs as many years as possible
 ```
 
 The check uses the error settings of `uncertainty_options` (`noise_model`,

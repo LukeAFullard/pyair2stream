@@ -409,9 +409,15 @@ LATHYP:
 
 1. Years are labelled by calendar year, or by a water year starting in
    `water_year_start_month`.
-2. The first year (and the next `min_train_years`, default 1) are never held out,
-   because the model needs earlier data to start from. Later years become folds
-   (one year each, or blocks of `n_years_per_fold`). A year the record covers
+2. Every year becomes a fold (one year each, or blocks of `n_years_per_fold`),
+   the first one included. It needs no earlier data: in the default mode the
+   hidden year keeps its air temperature and discharge, so the model runs
+   through it as usual, after the warm-up year (§3), whose copy of the hidden
+   year's measurements is hidden too; in gap-tolerant mode the hidden year is a
+   gap, and when scored it starts like any segment (§10). `skip_first_year` and
+   `min_train_years` can exclude the first years (until version 0.5.0 the first
+   two were excluded by default); every fold is calibrated on all the years it
+   does not hide, so excluding them only removes test years. A year the record covers
    only in part (its last year, when it ends part-way through one) is used for
    training but not held out, with a warning: a few months are not a test of a
    year. Folds with fewer than `min_valid_obs` observations are skipped.
@@ -512,8 +518,9 @@ with L the level `uncertainty_options.parameter_interval` (default 0.90; the
 rows are named `jackknife_90_lower` and so on).
 
 When every block is held out (m = n) this is the standard delete-one-block
-jackknife; the first years are never held out, so the sum over n blocks is
-estimated as n/m times the sum over the m folds. In validation V4 these 90%
+jackknife. When fewer blocks are held out (first years excluded, or years with
+too few observations), the sum over n blocks is estimated as n/m times the sum
+over the m folds. In validation V4 these 90%
 intervals contained the true parameters 83–95% of the time for every version.
 On the same data, the DE-MCMC parameter intervals (§12, default likelihood)
 contained them 97% of the time for version 5 and 93% for version 8. For

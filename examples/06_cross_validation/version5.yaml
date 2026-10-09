@@ -22,5 +22,4 @@ parameter_bounds:
 
 cross_validation:
   enabled: true
-  unit: "year"             # hide one calendar year at a time
-  skip_first_year: true    # 2002 and 2003 are always used for calibration
+  unit: "year"             # hide one calendar year at a time: each of 2002-2009 in turn

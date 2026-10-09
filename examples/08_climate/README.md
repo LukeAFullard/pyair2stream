@@ -97,9 +97,9 @@ all three runs.
 
 | Year | P(7-day mean > 20 °C): as measured | air +2 °C | air +2 °C, less summer flow | Days above 18 °C: as measured | air +2 °C | air +2 °C, less summer flow |
 |---|---|---|---|---|---|---|
-| 2010 | 0.57 | 1.00 | 1.00 | 31 (22 to 39) | 51 (42 to 60) | 51 (43 to 61) |
-| 2011 | 0.34 | 0.99 | 0.99 | 19 (11 to 28) | 41 (33 to 50) | 42 (34 to 51) |
-| 2012 | 0.14 | 0.95 | 0.97 | 25 (16 to 34) | 57 (43 to 70) | 59 (45 to 72) |
+| 2010 | 0.57 | 1.00 | 1.00 | 30 (22 to 38) | 50 (42 to 59) | 51 (43 to 60) |
+| 2011 | 0.33 | 0.99 | 0.99 | 18 (11 to 27) | 41 (33 to 49) | 41 (33 to 50) |
+| 2012 | 0.14 | 0.95 | 0.97 | 24 (15 to 33) | 56 (43 to 70) | 59 (45 to 72) |
 
 *Days above 18 °C: median, with the 90% range in brackets.*
 
@@ -129,7 +129,8 @@ change:
 - climate models are biased. Adjust their air temperature and discharge to the
   measured ones first (bias correction). Or use them as a change applied to the
   measurements, as here;
-- a scenario file must be at least 365 days long.
+- a scenario file needs at least 30 days, and a year or more is recommended
+  (USER_GUIDE [§5](../../USER_GUIDE.md#5-preparing-your-own-data)).
 
 ## Limits of this approach
 
