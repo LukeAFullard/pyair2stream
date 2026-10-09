@@ -169,6 +169,16 @@ def read_calibration(config_file='config.yaml') -> CommonData:
             "parameters are from year to year (USER_GUIDE §13)."
         )
     _check_choice('run_mode', data.runmode, VALID_RUN_MODES)
+    # DE-MCMC samples a least-squares likelihood around the calibration's best fit; with KGE
+    # the reported best fit (KGE) and the uncertainty ranges (least squares) would describe
+    # two different fits.
+    if data.runmode == 'DE-MCMC' and data.fun_obj == 'KGE':
+        raise ValueError(
+            "run_mode DE-MCMC cannot be used with objective_function KGE: the uncertainty ranges are "
+            "sampled from a least-squares likelihood, so they would be centred on a different fit than "
+            "the KGE best fit reported with them. Use NSE or RMS (both least squares) with DE-MCMC; "
+            "KGE remains available for DE, PSO, LATHYP and cross-validation."
+        )
     data.prc = np.float64(config.get('prc', 1.0))
     if not (0.0 < data.prc <= 1.0):
         raise ValueError(

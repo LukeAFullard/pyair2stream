@@ -388,7 +388,7 @@ parameters, this happened in 9 of 30 weekly-scored calibrations
 | `DE` | Calibrates with Differential Evolution, then a local search. **Recommended.** |
 | `PSO` | Calibrates with Particle Swarm Optimisation, as the original Fortran does. Less reliable: check that it converged. |
 | `LATHYP` | Tries many parameter sets spread over the bounds (Latin hypercube). This explores; it does not optimise. |
-| `DE-MCMC` | Calibrates with `DE`, then measures the uncertainty of the parameters and predictions (§11). |
+| `DE-MCMC` | Calibrates with `DE`, then measures the uncertainty of the parameters and predictions (§11). Needs `objective_function` NSE or RMS. |
 | `FORWARD` | Does not calibrate. Runs given parameters, for example on a scenario (§12). |
 
 ### Qmedia: keep it fixed when discharge changes
@@ -584,6 +584,7 @@ After a calibration, look at these, in this order:
 | `Warning: the relaxation rate B is negative` / `zigzags from one day to the next` | The fitted parameters are physically impossible. This usually follows weekly or monthly scoring with bounds that allow a negative `a2` or `a3`. Set their minimum to 0 and calibrate again ([§6](#parameters-a1a8)). Do not use the results. |
 | `Efficiency mismatch in forward run` | An internal check failed. Please report it, with your settings file. |
 | `mcmc_walkers ... must be at least 2x` | Increase `mcmc_walkers`. |
+| `run_mode DE-MCMC cannot be used with objective_function KGE` | Use `objective_function: "NSE"` or `"RMS"`. The uncertainty ranges are measured around the least-squares fit, which a KGE fit is not ([§11](#11-uncertainty-de-mcmc-and-sensitivity-analysis)). |
 | `MCMC did not converge within ... steps` | Try a simpler model version, or increase `mcmc_steps` ([§11](#11-uncertainty-de-mcmc-and-sensitivity-analysis)). |
 | `FORWARD mode needs parameters` | Set `paths.calibration_metadata` (or `parameters_forward`) ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `Note: integrator RK4/RK2/EUL is kept to reproduce the original Fortran` | Use `CRN`, unless you need results identical to the Fortran ([§9.1](#91-numerical-stability-and-the-choice-of-integrator)). |

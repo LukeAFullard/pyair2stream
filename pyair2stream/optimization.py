@@ -22,8 +22,8 @@ from .model import (
     call_model, funcobj, aggregation, statis, warn_on_stability, check_numerical_divergence,
     is_numerically_divergent, NumericalDivergenceError, check_daily_plausibility,
 )
-from .uncertainty import (estimate_rho, estimate_ar1_rho, generate_ar1_noise, build_ar1_runs, ar1_whitened_stats,
-                          mean_error_variance_factor, scoring_block_days)
+from .uncertainty import (estimate_rho, estimate_ar1_rho, generate_ar1_noise, ar1_whitened_stats,
+                          scored_error_variance_factor, scoring_block_days)
 
 # A near-perfect-fit MCMC log-likelihood is capped at this large but finite value rather
 # than returned as a literal np.inf, which poisons emcee's acceptance-ratio arithmetic
@@ -73,44 +73,47 @@ def _iid_log_likelihood(mod_valid: np.ndarray, obs_valid: np.ndarray) -> float:
     return -0.5 * N * np.log(SSE / N)
 
 
-def _ar1_log_likelihood(residuals: np.ndarray, rho: float, runs: list) -> float:
+def _ar1_log_likelihood(residuals: np.ndarray, rho: float, runs: list, block_days: int = 1) -> float:
     """
-    Concentrated Gaussian log-likelihood accounting for AR(1)-correlated residuals
-. `rho` is treated as fixed
-    (estimated once at the DE optimum, not sampled). Each independent run contributes
-    its own `0.5*log(1-rho**2)` term, so the correction scales with the number of runs.
+    Concentrated Gaussian log-likelihood accounting for AR(1)-correlated residuals on the
+    scored rows `runs` (taken together in date order): values d days apart have
+    correlation rho**d, so values on either side of a gap stay related
+    (`ar1_whitened_stats`). `rho` is treated as fixed (estimated once at the DE optimum,
+    not sampled). With weekly or monthly scoring (`block_days` > 1) the block means are
+    treated as independent (a warning says so where this is used).
     """
-    sse_u, N, n_runs = ar1_whitened_stats(residuals, rho, runs)
+    sse_u, N, log_scale = ar1_whitened_stats(residuals, rho, runs, independent=block_days > 1)
     if N == 0:
         return -np.inf
     if sse_u == 0:
         return MCMC_MAX_LOG_LIKELIHOOD
-    return -0.5 * N * np.log(sse_u / N) + 0.5 * n_runs * np.log(1.0 - rho ** 2)
+    return -0.5 * N * np.log(sse_u / N) + log_scale
 
 
-def _least_squares_log_likelihood(residuals: np.ndarray, rho: float, runs: list, block_days: int = 1) -> float:
+def _least_squares_log_likelihood(residuals: np.ndarray, rho: float, runs: list, block_days: int = 1,
+                                  factor: Optional[float] = None) -> float:
     """
     Concentrated least-squares (iid Gaussian) log-likelihood with the effective number of
-    independent observations n_eff in place of n. Its maximum is the least-squares fit; its
-    spread is widened for the autocorrelation of the errors: n_eff = n / factor, with factor the
-    variance of a mean of the scored errors relative to independent ones for daily AR(1) errors
-    with lag-1 correlation rho (`mean_error_variance_factor`). For daily scoring
-    n_eff = n (1 - rho) / (1 + rho); with weekly or monthly scoring each scored value is a block
-    mean (`block_days` days), whose errors are much less correlated from block to block. Equal to
-    `_iid_log_likelihood` when rho = 0.
+    independent observations n_eff = n / factor in place of n. Its maximum is the
+    least-squares fit; its spread is widened for the autocorrelation of the errors: the
+    factor is the variance of a mean of the scored errors relative to independent ones,
+    for daily AR(1) errors with lag-1 correlation rho, given how far apart the scored values
+    are (`scored_error_variance_factor`; with weekly or monthly scoring each scored value is
+    a block mean of `block_days` days). For n consecutive days it is close to
+    (1 + rho) / (1 - rho). Pass `factor` to reuse one computed for the same scored rows.
+    Equal to `_iid_log_likelihood` when rho = 0.
     """
     if not runs:
         return -np.inf
-    e = residuals[np.concatenate(runs)]
+    rows = np.concatenate(runs)
+    e = residuals[rows]
     n = len(e)
     sse = float(np.sum(e ** 2))
     if sse == 0:
         return MCMC_MAX_LOG_LIKELIHOOD
-    if block_days == 1:
-        n_eff = n * (1.0 - rho) / (1.0 + rho)
-    else:
-        n_eff = n / mean_error_variance_factor(rho, block_days)
-    return -0.5 * n_eff * np.log(sse / n)
+    if factor is None:
+        factor = scored_error_variance_factor(rows, rho, block_days)
+    return -0.5 * (n / factor) * np.log(sse / n)
 
 
 def _reflected_walker_init(initial: np.ndarray, scale: np.ndarray, lo: np.ndarray, hi: np.ndarray,
@@ -1217,8 +1220,6 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
                       if likelihood == 'exact' else best_rho)
     # With weekly or monthly scoring each scored value is the mean of a block of days.
     block_days = scoring_block_days(data.time_res)
-    variance_factor = (mean_error_variance_factor(rho_likelihood, block_days)
-                       if noise_model == 'ar1' and likelihood == 'least_squares' else None)
     if noise_model == 'ar1' and likelihood == 'exact' and block_days > 1:
         print(f"Warning: with time_resolution '{data.time_res}' no two scored values are consecutive days, so "
               "the exact AR(1) likelihood treats the scored errors as independent and the parameter intervals "
@@ -1235,9 +1236,13 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     best_sigma = _daily_residual_sigma(data, eval_mask)
 
     # Reused across every likelihood evaluation below: observations (and therefore the
-    # valid/AR(1)-run structure) do not change while theta is being explored, only the
-    # simulated series does.
-    ar1_runs = build_ar1_runs(valid_mask_agg, segments) if noise_model == 'ar1' else None
+    # scored rows and their spacing) do not change while theta is being explored, only the
+    # simulated series does. Every scored value counts, including a block whose middle day
+    # lies in a gap (it was left out of the AR(1) likelihoods); the likelihoods use the
+    # distance in days between the scored values.
+    ar1_runs = [np.flatnonzero(valid_mask_agg)] if noise_model == 'ar1' else None
+    variance_factor = (scored_error_variance_factor(ar1_runs[0], rho_likelihood, block_days)
+                       if noise_model == 'ar1' and likelihood == 'least_squares' else None)
 
     def log_probability(theta):
         p_vals = best_params.copy()
@@ -1258,8 +1263,9 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         if noise_model == 'ar1':
             residuals = data.Twat_mod_agg - data.Twat_obs_agg
             if likelihood == 'least_squares':
-                return _least_squares_log_likelihood(residuals, rho_likelihood, ar1_runs, block_days)
-            return _ar1_log_likelihood(residuals, rho_likelihood, ar1_runs)
+                return _least_squares_log_likelihood(residuals, rho_likelihood, ar1_runs, block_days,
+                                                     variance_factor)
+            return _ar1_log_likelihood(residuals, rho_likelihood, ar1_runs, block_days)
         else:
             mod = data.Twat_mod_agg[valid_mask_agg]
             obs = data.Twat_obs_agg[valid_mask_agg]

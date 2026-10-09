@@ -161,9 +161,25 @@
   `max_plausible_twat` and still be wrong. `CRN` and `EXP` are not affected.
 - **DE-MCMC likelihood: exactly the scored values.** With weekly or monthly
   scoring, `prc` below 1 and gap-tolerant mode, a block whose middle day was
-  itself unscored was scored by the objective but left out of the likelihood.
-  The likelihood now uses the same blocks as the objective. Daily scoring and
+  itself unscored, or fell in a gap between segments, was scored by the
+  objective but left out of the likelihood (in one test, 8 of 123 blocks). The
+  likelihood now uses every block the objective scores. Daily scoring and
   `prc: 1` are unchanged.
+- **DE-MCMC likelihoods use the spacing of the scored days.** Errors d days
+  apart have correlation ρ^d, but both likelihoods assumed the scored days
+  were consecutive. With gappy or sparse measurements the default
+  (`least_squares`) counted too few independent values, so its ranges were too
+  wide (for measurements every other day at ρ = 0.86, about 1.4 times), and
+  `likelihood: "exact"` treated the days on either side of a gap as unrelated,
+  so its ranges were too narrow. Both now use the actual spacing (METHODS §12).
+  For complete daily data the effective number of values changes only by an
+  end-of-record term of about 0.3%.
+- ⚠ **DE-MCMC refuses `objective_function: KGE`.** It found the best fit by
+  KGE but sampled the uncertainty with a least-squares likelihood, so the
+  reported best parameters and their ranges described two different fits,
+  without a message. It now stops with an error suggesting NSE or RMS (which
+  are least squares and agree with the likelihood). KGE remains available for
+  DE, PSO, LATHYP and cross-validation.
 - **LATHYP** started from a best score of −999, so if every sample scored
   lower (NSE can be far below −999), it returned the all-zero start
   parameters. It now keeps the best finite score, and stops with an error if

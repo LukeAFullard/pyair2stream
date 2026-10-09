@@ -5,7 +5,8 @@ import numpy as np
 import pytest
 
 from pyair2stream.optimization import _least_squares_log_likelihood
-from pyair2stream.uncertainty import mean_error_variance_factor, scoring_block_days, weekly_mean_correlation
+from pyair2stream.uncertainty import (mean_error_variance_factor, scored_error_variance_factor, scoring_block_days,
+                                      weekly_mean_correlation)
 
 
 def _ar1_paths(n_paths, n, rho, rng):
@@ -67,13 +68,17 @@ def test_least_squares_likelihood_counts_blocks_with_the_block_factor():
     runs = [np.array([i]) for i in idx]
     n, sse = len(idx), float(np.sum(residuals[idx] ** 2))
     for rho in (0.0, 0.6, 0.93):
-        expected = -0.5 * n / mean_error_variance_factor(rho, 7) * np.log(sse / n)
+        factor = scored_error_variance_factor(idx, rho, 7)
+        assert factor == pytest.approx(mean_error_variance_factor(rho, 7), rel=0.02)    # 100 consecutive weeks
+        expected = -0.5 * n / factor * np.log(sse / n)
         assert _least_squares_log_likelihood(residuals, rho, runs, 7) == pytest.approx(expected)
-    # Daily scoring is unchanged: n_eff = n (1 - rho) / (1 + rho).
+    # Daily scoring: n_eff = n / factor, close to n (1 - rho) / (1 + rho) for consecutive days.
     e = rng.normal(0, 0.4, 500)
     runs = [np.arange(500)]
     rho = 0.8
-    assert _least_squares_log_likelihood(e, rho, runs) == -0.5 * (500 * (1.0 - rho) / (1.0 + rho)) * np.log(np.sum(e ** 2) / 500)
+    factor = scored_error_variance_factor(np.arange(500), rho)
+    assert factor == pytest.approx((1 + rho) / (1 - rho), rel=0.01)
+    assert _least_squares_log_likelihood(e, rho, runs) == pytest.approx(-0.5 * 500 / factor * np.log(np.sum(e ** 2) / 500))
 
 
 def _run_weekly(tmp_path, likelihood):
@@ -100,7 +105,9 @@ def _run_weekly(tmp_path, likelihood):
 def test_weekly_scoring_records_the_block_factor(tmp_path, capsys):
     meta = _run_weekly(tmp_path, "least_squares")
     assert meta["scoring_block_days"] == 7
-    assert meta["likelihood_variance_factor"] == pytest.approx(mean_error_variance_factor(meta["rho"], 7))
+    # From the spacing of the scored weeks (some weeks are not scored with prc 0.6): near the
+    # factor for consecutive weeks.
+    assert meta["likelihood_variance_factor"] == pytest.approx(mean_error_variance_factor(meta["rho"], 7), rel=0.15)
     # Much smaller than the daily factor for the same rho, which would over-widen the posterior.
     assert meta["likelihood_variance_factor"] < 0.5 * (1 + meta["rho"]) / (1 - meta["rho"])
     assert "exact AR(1) likelihood treats" not in capsys.readouterr().out

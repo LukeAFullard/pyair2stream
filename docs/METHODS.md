@@ -550,7 +550,11 @@ A cross-validation run does not also produce a single final calibration.
 ## 12. Parameter and prediction uncertainty (DE-MCMC)
 
 `run_mode: DE-MCMC` first calibrates with DE (§8), then estimates how uncertain
-the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
+the parameters and predictions are, using Markov chain Monte Carlo (MCMC). It
+needs `objective_function` NSE or RMS: both are least squares, so the DE best fit
+is also the most likely value of the likelihood below. A KGE best fit is a
+different point, and the ranges would not describe it, so DE-MCMC refuses KGE.
+The steps:
 
 1. **Prior.** Every parameter value inside the bounds is considered equally
    plausible beforehand; values outside are impossible. Results therefore depend
@@ -562,14 +566,25 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    residuals, limited to 0–0.99; see "Error persistence" at the end of this section), so n days of
    errors carry the information of fewer independent ones.
    - `noise_model: "ar1"` with `likelihood: "least_squares"` (the default):
-     log L = −(n_eff/2)·ln(SSE/n), with n_eff = n·(1−ρ)/(1+ρ), the usual
-     effective number of independent observations for AR(1) errors. Its best
-     value is the least-squares fit, the criterion the original authors
-     calibrated with, and its spread is widened to allow for the autocorrelation.
-   - `noise_model: "ar1"` with `likelihood: "exact"`: the exact AR(1) likelihood.
-     Errors are converted to independent "innovations" (e₀·√(1−ρ²); eₜ − ρ·eₜ₋₁)
-     within each unbroken run of scored days, and
-     log L = −(n/2)·ln(SSE_innovations/n) + (runs/2)·ln(1−ρ²). This weighs
+     log L = −(n_eff/2)·ln(SSE/n), with n_eff = n / F and F the variance of the
+     mean of the n scored errors relative to independent ones:
+     F = 1 + (2/n)·Σ_{i<j} ρ^|tᵢ − tⱼ|, summed over all pairs of scored days
+     tᵢ, tⱼ. Values on either side of a gap are therefore related, but less than
+     consecutive days. For n consecutive days F tends to (1+ρ)/(1−ρ), the usual
+     effective number of independent observations for AR(1) errors
+     (n_eff = n·(1−ρ)/(1+ρ); for a few years of complete data the two differ by
+     about 0.3%); for sparse measurements (say one day a week) F is much
+     smaller, and n_eff closer to n. Its best value is the least-squares fit,
+     the criterion the original authors calibrated with, and its spread is
+     widened to allow for the autocorrelation.
+   - `noise_model: "ar1"` with `likelihood: "exact"`: the exact AR(1) likelihood
+     (the Gaussian density of the scored errors, with correlation ρ^|tᵢ − tⱼ|).
+     Errors are converted to independent "innovations": the first scored day
+     gives e₀·√(1−ρ²), and each later one, d days after the previous scored
+     day, gives (eₜ − ρ^d·eₜ₋d)·√[(1−ρ²)/(1−ρ^2d)]. Then
+     log L = −(n/2)·ln(SSE_innovations/n) + Σ ln(scale factors). Days on either
+     side of a gap are linked through ρ^d rather than treated as independent;
+     for d = 1 this is the usual eₜ − ρ·eₜ₋₁. This weighs
      day-to-day changes in the error far more than its overall level. On real
      rivers, where the model is never exactly right, it moved the parameters away
      from the best fit, to slightly worse and cooler predictions (see below), so
@@ -581,13 +596,15 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    With weekly or monthly scoring (§7) each scored value is the mean of a block
    of m days (m = 7N for `"Nw"`, 30 for `"1m"`), and block means are much less
    correlated from one block to the next than days are. The least-squares
-   likelihood then uses n_eff = n / [1 + 2·r_b/(1 − ρ^m)], with r_b the
-   correlation between the means of adjacent blocks of AR(1) errors (the
-   formula g_m under "Error persistence" below, with m days); for m = 1
-   this is n·(1−ρ)/(1+ρ). The
+   likelihood then uses the same F with block correlations: block means k
+   blocks apart have correlation r_b·ρ^(m(k−1)), with r_b the correlation
+   between the means of adjacent blocks of AR(1) errors (the formula g_m under
+   "Error persistence" below, with m days). For n consecutive blocks
+   F tends to 1 + 2·r_b/(1 − ρ^m); for m = 1 this is (1+ρ)/(1−ρ). The
    daily n_eff applied to block means would make parameter intervals 1.6–4.4
-   times too wide for ρ = 0.5–0.95. The exact AR(1) likelihood needs consecutive
-   scored days; with weekly or monthly scoring it treats the block errors as
+   times too wide for ρ = 0.5–0.95. Every scored value enters both likelihoods,
+   including blocks next to a gap. The exact AR(1) likelihood is a day-scale
+   model; with weekly or monthly scoring it treats the block errors as
    independent and warns, since its intervals are then too narrow if errors
    persist from block to block. Each likelihood replaces the error size by
    its best estimate; this gives the same result as treating the error size as
@@ -766,7 +783,7 @@ where an AR(1) with ρ₁ implies g₇(ρ₁) = 0.25–0.51. So ρ₇ = 0.86–0
 
 | Use | How |
 |---|---|
-| Least-squares likelihood (default) | n_eff = n(1 − ρ)/(1 + ρ) for daily scoring; the block formula of item 2 for weekly or monthly scoring. This sets the width of the posterior, and so of the parameter intervals. |
+| Least-squares likelihood (default) | n_eff = n / F, from the spacing of the scored days (item 2); about n(1 − ρ)/(1 + ρ) for complete daily data, and the block formula of item 2 for weekly or monthly scoring. This sets the width of the posterior, and so of the parameter intervals. |
 | Prediction noise (DE-MCMC band, FORWARD runs) | each simulated series gets eₜ = ρ eₜ₋₁ + σ √(1 − ρ²) zₜ, zₜ standard normal, started from its stationary distribution in each segment |
 | FORWARD runs | ρ is taken from the chain's `_meta.json` (or `uncertainty_options.ar1_rho`), not from the data being predicted |
 | Cross-validation check (§11) | each fold's own σ and ρ |
@@ -1041,7 +1058,7 @@ change one-sided.
 |---|---|---|
 | Missing, repeated, unordered or unreadable dates; text values; missing columns; incomplete `T_air`/`Discharge`; non-positive discharge; no `T_water` measurements; 29 February in a `noleap` file; short record (§2) | loading each file; the validation file before calibration | error |
 | `T_air` or `T_water` outside a plausible range; a validation file shorter than 30 days; validation days that are also calibration days (§2) | loading each file; the validation file before calibration | warning |
-| Invalid version, run mode, integrator, objective, time resolution, `prc`, bounds | loading config | error |
+| Invalid version, run mode, integrator, objective, time resolution, `prc`, bounds; DE-MCMC with KGE (§12) | loading config | error |
 | Stability of the chosen integrator (B vs. limit, §6) | before each user-facing simulation | warning; error if >10% of days exceed it (`stability_error_fraction`), or if a difference can grow more than 100 times over a stretch of days (`stability_max_growth`) |
 | Simulated temperature not finite or above `max_plausible_twat` (60 °C) | after each user-facing simulation | error |
 | Negative relaxation rate B, or a daily simulation that zigzags (§7) | after calibration, before DE-MCMC sampling, FORWARD runs | warning |

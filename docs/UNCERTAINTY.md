@@ -957,7 +957,10 @@ What goes into it:
   the number of days replaced by the **effective number of independent days**.
   Persistent errors carry less information than independent ones (Figure 17):
   on the Mentue, 2,907 measured days count as 221 independent ones. Without
-  that allowance the parameter intervals would be far too narrow. How ρ is
+  that allowance the parameter intervals would be far too narrow. Measurements
+  further apart are less related, and the count allows for the actual spacing:
+  with one measurement a week (at the same ρ = 0.86), about half of them count
+  as independent. How ρ is
   chosen, and what the choice does to these intervals, is in section
   [5](#5-the-models-errors-their-size-and-how-long-they-last).
 
