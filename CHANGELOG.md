@@ -53,6 +53,26 @@
   `scenario.paired_difference_from_files` now refuses two runs with a different
   error model, σ or ρ: the error added to each draw then does not cancel, and
   the difference's spread would include it.
+- **Partial years and months are no longer counted as whole ones.** A record
+  that starts or ends part-way through a year has a partial first or last year
+  and month, which five places treated as whole. One rule now applies
+  throughout: a year, season or month counts only if the record covers all of
+  its days (unmeasured days inside it are fine, as before).
+  - Cross-validation does not hold out a partial year (it is still used for
+    training), with a warning; such a winter-only "year" scored far worse
+    than whole years and pulled the mean scores down. The jackknife counts only
+    whole years as blocks.
+  - The cross-validation check of yearly statistics leaves out a year the
+    held-out dates cover only in part: its season could pass the 80% rule on
+    the few days inside the record, biasing the correction applied to FORWARD
+    results.
+  - `plots.change(by="year")` leaves out partial years, with a warning.
+  - `bias_by_month` counts a month, season or year only if the record covers
+    all of its days (13 days of July counted as a July).
+  - Monthly scoring applies `prc` to the month's calendar length, so a few days
+    of a month at either end of the record are no longer scored as a monthly
+    mean (as in the Fortran, which compared them with the days present; METHODS
+    §17).
 - **Yearly statistics leave out partial years.** `scenario.year_statistics`
   gave a "highest 7-day mean" and a count of warm days for the first and last
   year of a file even when the file covered only part of them (for example a

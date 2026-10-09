@@ -59,3 +59,23 @@ def test_write_bias_by_month_writes_table_and_figure(tmp_path):
     assert (tmp_path / "bias_by_month_test.png").exists()
     saved = pd.read_csv(tmp_path / "bias_by_month_test.csv").set_index("period")
     assert np.isclose(saved.loc["Jul", "bias"], table.set_index("period").loc["Jul", "bias"], atol=1e-4)
+
+
+def test_a_period_counts_only_if_the_record_covers_all_its_days():
+    # A record from 19 July 2001 to 3 March 2004: July 2001 has 13 days, 2001 and 2004 are
+    # partial, and the errors are seasonal (zero over any whole year).
+    days = pd.date_range("2001-07-19", "2004-03-03")
+    obs = np.full(len(days), 10.0)
+    sim = obs + np.sin(2 * np.pi * (days.dayofyear.to_numpy() - 1) / 365.0)
+    table, yearly = bias_by_month(days, obs, sim)
+    table = table.set_index("period")
+    assert table.loc["All year", "n_years"] == 2                  # 2002 and 2003 only
+    assert set(yearly[yearly.period == "Jul"].year) == {2002, 2003}  # not the 13 days of July 2001
+    assert set(yearly[yearly.period == "Jun-Aug"].year) == {2002, 2003}
+    assert set(yearly[yearly.period == "Feb"].year) == {2002, 2003, 2004}
+    assert 2004 not in set(yearly[yearly.period == "Mar"].year)
+    # A noleap record (no 29 February) still has whole Februaries and years.
+    noleap = pd.date_range("2004-01-01", "2005-12-31")
+    noleap = noleap[~((noleap.month == 2) & (noleap.day == 29))]
+    t2, y2 = bias_by_month(noleap, np.full(len(noleap), 10.0), np.full(len(noleap), 10.5))
+    assert t2.set_index("period").loc["All year", "n_years"] == 2

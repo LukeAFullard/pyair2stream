@@ -303,7 +303,7 @@ Qmedia: null                # mean discharge used to scale the flow; needed for 
 run_mode: "DE"              # DE, PSO, LATHYP, DE-MCMC or FORWARD (below)
 objective_function: "NSE"   # the score to optimise: NSE, KGE or RMS (docs/METHODS.md §7)
 time_resolution: "1d"       # score daily values ("1d"), N-week means (e.g. "2w") or monthly means ("1m")
-prc: 1.0                    # weekly/monthly scoring: the share of days in a week or month that must be measured (above 0, at most 1)
+prc: 1.0                    # weekly/monthly scoring: the share of a week's or month's days that must be measured (above 0, at most 1); a month only partly in the file counts its missing days as unmeasured
 random_seed: null           # an integer makes results exactly repeatable
 
 parameter_bounds:           # needed for calibration: 8 values each, for a1..a8
@@ -993,7 +993,9 @@ cross_validation:
 ```
 
 With these defaults, the first two years are always used for calibration
-only. For versions 4, 7 and 8, also set `Qmedia:` (the mean discharge of the
+only. A year the file covers only in part (for example a last year ending in
+March) is also used for calibration only, with a warning: a few months are not a
+test of a year. For versions 4, 7 and 8, also set `Qmedia:` (the mean discharge of the
 file). Then every fold scales discharge the same way. Otherwise the parameters
 also move with each fold's own mean discharge.
 

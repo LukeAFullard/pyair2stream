@@ -223,9 +223,11 @@ a segment, §10).
 directly. With `"Nw"` (N weeks) the record is cut into consecutive blocks of N×7
 days starting on the first day; with `"1m"` into calendar months. A block is used
 only if the fraction of its days with a scored observation is at least `prc`
-(above 0 and at most 1; default 1.0, i.e. every day). As in the Fortran, an
-incomplete month at either end of the record counts only its days in the record,
-while a last, incomplete block of weeks is compared with the full N×7 days. The block's observed value is
+(above 0 and at most 1; default 1.0, i.e. every day). The fraction is of the
+block's full length: a month's calendar days (February 28 in a `noleap`
+record), N×7 days for weeks. So a month or block that the record covers only in
+part, at either end, is scored only if enough of the whole month or block is
+measured. The block's observed value is
 the mean of those observations, and the simulated value is the mean of the
 simulation **on the same days**.
 
@@ -265,8 +267,9 @@ of a cross-validation). A model can score well over the year and still be too
 warm in summer and too cool in spring. For each calendar month, each season
 (December counted with January and February of the same year) and the whole
 year, the daily errors (simulated − measured) are first averaged within each
-year; a month counts in a year if it has at least 10 days with both values (a
-season 30, a year 120). The bias is the mean of these yearly values, with the
+year. A month, season or year counts in a year if the record covers all of
+its days (a record that starts or ends part-way through it does not) and at
+least 10 of a month's days have both values (a season 30, a year 120). The bias is the mean of these yearly values, with the
 95% interval mean ± t₀.₉₇₅,ₙ₋₁ · sd/√n over the n years (none with fewer than
 two). Days are not used as independent values because errors persist from day
 to day and can last a whole season, so an interval from daily values would be
@@ -385,8 +388,10 @@ LATHYP:
    `water_year_start_month`.
 2. The first year (and the next `min_train_years`, default 1) are never held out,
    because the model needs earlier data to start from. Later years become folds
-   (one year each, or blocks of `n_years_per_fold`). Folds with fewer than
-   `min_valid_obs` observations are skipped.
+   (one year each, or blocks of `n_years_per_fold`). A year the record covers
+   only in part (its last year, when it ends part-way through one) is used for
+   training but not held out, with a warning: a few months are not a test of a
+   year. Folds with fewer than `min_valid_obs` observations are skipped.
 3. For each fold: its water-temperature observations are hidden; `Qmedia`
    (unless set with `Qmedia:`) and, in gap-tolerant mode, the day-of-year
    climatology are recomputed without the fold; the model is calibrated on the rest; the full record is simulated; and
@@ -406,8 +411,8 @@ LATHYP:
    mean, the highest 7-day moving mean and the number of days above `threshold`
    (default: the 90th percentile of the measured temperatures) are computed in
    each series and in the measurements, over the days that were measured. A
-   year counts if at least 80% of `season_months` (default: the four warmest
-   months) was measured. For each year and statistic the output gives the
+   year counts if the held-out dates cover all of it and at least 80% of its
+   `season_months` (default: the four warmest months) was measured. For each year and statistic the output gives the
    predicted percentiles, the share of series below the measured value (the
    probability integral transform, PIT, which is uniform between 0 and 1 if the
    predictions are right; Gneiting et al., 2007) and the **deviation**: measured
@@ -474,7 +479,9 @@ interval: the folds share most of their data, so it understates the uncertainty
 
 `cv_results.csv` therefore also gives **jackknife intervals** for the parameters.
 With θᵢ the parameters fitted without block i (m folds), θ̄ their mean, and n the
-number of blocks in the whole record (years, or groups of `n_years_per_fold`):
+number of blocks in the whole record (whole years, or groups of
+`n_years_per_fold`; a partial first or last year is not a block of the same size
+and is not counted):
 
   SE² = (n − 1)/m · Σᵢ (θᵢ − θ̄)²,  interval = θ̄ ± t_(1+L)/2,m−1 · SE,
 
@@ -1139,7 +1146,11 @@ These are deliberate; each is covered by tests.
 - **Time resolution**: an out-of-range index in the Fortran's weekly aggregation
   of the last, partial block is avoided; monthly aggregation accepts only `1m`
   (the Fortran ignores the number of months); a week or month without
-  observations is never scored (with `prc` 0 the Fortran divides by zero).
+  observations is never scored (with `prc` 0 the Fortran divides by zero); and
+  `prc` applies to a month's calendar length, so a month the record covers only
+  in part is not scored as a whole one (the Fortran compares it with the days
+  present; the results differ only for records that start or end part-way
+  through a month).
 - **`0_*.csv`** records every evaluated parameter set (the Fortran's
   `mineff_index` filter is not applied).
 - **Added features** not in the Fortran: gap-tolerant mode, cross-validation,

@@ -547,6 +547,14 @@ def check_nonpositive_discharge(data: CommonData) -> None:
     )
 
 
+def _days_in_month(year: int, month: int, calendar: str = 'standard') -> int:
+    """Length of a calendar month (February: 28 days in a noleap record)."""
+    import calendar as _calendar
+    if month == 2 and calendar == 'noleap':
+        return 28
+    return _calendar.monthrange(year, month)[1]
+
+
 def find_segments(data: CommonData, min_segment_days: int):
     """
     Gap-tolerant mode: the stretches of consecutive days (from index 365 on) with valid air
@@ -819,13 +827,16 @@ def aggregation(data: CommonData) -> None:
         data.I_inf = np.full((n_units, 3), -999, dtype=np.int32)
         n_days = 0
         month_curr = -999
+        full_days = 0   # the calendar length of the current month (prc applies to it, not to the
+                        # days present, so a month the record covers only in part is not scored
+                        # as a whole one); February has 28 days in a noleap record
         count = 0
         tmp = 0.0
 
         for i in range(365, data.n_tot):
             month = data.date[i, 1]
             if month != month_curr:
-                if count > 0 and count >= n_days * data.prc and i != 365:
+                if count > 0 and count >= full_days * data.prc and i != 365:
                     data.I_inf[n_inf - 1, 1] = n_pos - 2
                     data.I_inf[n_inf - 1, 2] = i - int(np.floor(0.5 * n_days)) - 1
                     data.Twat_obs_agg[data.I_inf[n_inf - 1, 2]] = tmp / count
@@ -835,6 +846,7 @@ def aggregation(data: CommonData) -> None:
                         data.I_pos[n_pos - 1 - count : n_pos - 1] = -999
                         n_pos = n_pos - count
                 month_curr = month
+                full_days = _days_in_month(int(data.date[i, 0]), int(month), data.calendar)
                 count = 0
                 n_days = 1
                 tmp = 0.0
@@ -848,7 +860,7 @@ def aggregation(data: CommonData) -> None:
                 count += 1
 
         # Last month
-        if count > 0 and count >= n_days * data.prc:
+        if count > 0 and count >= full_days * data.prc:
             data.I_inf[n_inf - 1, 1] = n_pos - 2
             data.I_inf[n_inf - 1, 2] = data.n_tot - 1 - int(np.floor(0.5 * n_days)) # using data.n_tot - 1 as the last i
             data.Twat_obs_agg[data.I_inf[n_inf - 1, 2]] = tmp / count

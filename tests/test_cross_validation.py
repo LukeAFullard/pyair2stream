@@ -12,7 +12,7 @@ from pyair2stream.cross_validation import (
 def dummy_data(tmp_path):
     data = CommonData()
     data.folder = str(tmp_path)  # calibration runs write their history here, not the working directory
-    n_tot = 365 * 4
+    n_tot = 365 * 4 + 1   # 2010-01-01 to 2013-12-31 (2012 is a leap year): whole years
     data.n_tot = n_tot
     data.date = np.zeros((n_tot, 3), dtype=np.int32)
 
@@ -384,3 +384,23 @@ def test_gap_tolerant_cv_does_not_score_the_unscored_start_of_a_segment(dummy_da
     after_gap = gap[-1] + 1 - np.where(dummy_data.date[:, 0] == 2012)[0][0]
     assert np.all(results["2012"].obs_held_out[after_gap:after_gap + 15] == -999.0)
     assert (dummy_data.Tair[gap] == -999.0).all()       # the real gap is still there
+
+
+def test_a_partial_first_or_last_year_trains_but_is_not_held_out_or_a_block(tmp_path, capsys):
+    # A record from 19 July 2010 to 3 March 2013 (rows 0-364 are the warm-up copy).
+    dates = pd.date_range("2010-07-19", "2013-03-03")
+    data = CommonData()
+    data.folder = str(tmp_path)
+    data.n_tot = 365 + len(dates)
+    data.date = np.full((data.n_tot, 3), -999, dtype=np.int32)
+    data.date[365:, 0], data.date[365:, 1], data.date[365:, 2] = dates.year, dates.month, dates.day
+    data.Twat_obs = np.ones(data.n_tot)
+    config = CVConfig(unit="year", water_year_start_month=1, min_train_years=0, skip_first_year=True)
+    folds = build_folds(data, config)
+    assert [label for label, _ in folds] == ["2011", "2012"]
+    assert "year(s) 2013 are only partly covered by the record" in capsys.readouterr().out
+    assert count_blocks(data, config) == 2           # 2011 and 2012; not the partial 2010 and 2013
+    # Water years from October: 2011 (Oct 2010 - Sep 2011) and 2012 are whole; 2010 and 2013 are not.
+    water = CVConfig(unit="year", water_year_start_month=10, min_train_years=0, skip_first_year=True)
+    assert [label for label, _ in build_folds(data, water)] == ["2011", "2012"]
+    assert count_blocks(data, water) == 2

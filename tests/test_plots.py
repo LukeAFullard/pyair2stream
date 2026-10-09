@@ -71,6 +71,9 @@ def test_change_by_month_and_day_for_one_or_several_scenarios():
 
     ax = plots.change(diff, dates, by="year")
     assert [t.get_text() for t in ax.get_xticklabels()] == ["2020", "2021"]
+    # A year the dates cover only in part is left out of the yearly changes.
+    ax = plots.change(diff[:, 100:], dates[100:], by="year")
+    assert [t.get_text() for t in ax.get_xticklabels()] == ["2021"]
     ax = plots.change(diff, dates, by="day")
     assert np.allclose(ax.get_lines()[-1].get_ydata(), diff[0])
     with pytest.raises(ValueError):

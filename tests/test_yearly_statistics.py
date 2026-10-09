@@ -254,3 +254,20 @@ def test_interval_coverage_holds_at_every_level_when_the_error_model_is_right():
         assert abs(r["daily inside"] - level / 100) < 0.02
         assert abs(r["7-day inside"] - level / 100) < 0.04
     assert cov["days"].iloc[0] == sum(int((f.obs_held_out != -999).sum()) for f in _folds(40))
+
+
+def test_the_check_leaves_out_a_year_the_held_out_dates_cover_only_in_part():
+    # A last year ending on 5 July: its 35 summer days are all measured, but the summer is
+    # mostly outside the record, so the year is not judged on it.
+    folds = _folds(6)
+    last = folds[-1]
+    keep = last.dates_held_out <= pd.Timestamp(f"{last.label}-07-05")
+    folds[-1] = FoldResult(fold_id=last.fold_id, label=last.label, held_out_start=last.held_out_start,
+                           held_out_end=last.dates_held_out[keep][-1], n_obs_held_out=int(keep.sum()),
+                           par_best=last.par_best, nse=np.nan, kge=np.nan, rmse=np.nan,
+                           obs_held_out=last.sim_held_out[keep].copy(),       # every day measured
+                           sim_held_out=last.sim_held_out[keep], dates_held_out=last.dates_held_out[keep],
+                           sigma=last.sigma, rho=last.rho, years_held_out=last.years_held_out[keep])
+    per_year, _ = check_yearly_statistics(folds, threshold=16.0, season_months=[6, 7, 8, 9],
+                                          n_simulations=50, seed=1)
+    assert sorted(set(per_year.year)) == [2000, 2001, 2002, 2003, 2004]

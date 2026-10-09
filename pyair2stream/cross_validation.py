@@ -134,6 +134,16 @@ def assign_year_groups(data: CommonData, water_year_start_month: int = 1) -> np.
     return np.where(months >= water_year_start_month, years + 1, years)
 
 
+def partial_years(data: CommonData, wy: np.ndarray) -> list:
+    """The year labels (of `assign_year_groups`) that the record covers only in part: its
+    first and last year when it starts or ends part-way through one. They are used for
+    training, but are not held out as folds or counted as jackknife blocks."""
+    from .scenario import partial_year_labels
+    rows = np.arange(365, data.n_tot)
+    dates = pd.to_datetime(dict(year=data.date[rows, 0], month=data.date[rows, 1], day=data.date[rows, 2]))
+    return [int(y) for y in partial_year_labels(dates, wy[rows], calendar_years=bool(np.all(wy[rows] == data.date[rows, 0])))]
+
+
 def build_folds(data: CommonData, cv_config: CVConfig) -> list[tuple[str, np.ndarray]]:
     """
     Returns a list of (fold_label, row_indices) tuples -- one per eligible
@@ -160,6 +170,12 @@ def build_folds(data: CommonData, cv_config: CVConfig) -> list[tuple[str, np.nda
 
     first_eligible = cv_config.min_train_years + int(cv_config.skip_first_year)
     eligible_years = unique_years[first_eligible:]
+    # A year the record covers only in part is not a test of a year: it trains, but is not held out.
+    partial = [y for y in partial_years(data, wy) if y in eligible_years]
+    if partial:
+        print(f"Warning: year(s) {', '.join(map(str, partial))} are only partly covered by the record, so they "
+              "are not held out as cross-validation folds (they are still used for training).")
+        eligible_years = [y for y in eligible_years if y not in partial]
 
     if cv_config.unit == "year":
         blocks = [[y] for y in eligible_years]
@@ -461,9 +477,11 @@ JACKKNIFE_LEVEL = 0.90
 
 def count_blocks(data: CommonData, cv_config: CVConfig) -> int:
     """Number of blocks (years, or groups of `n_years_per_fold` years) in the whole record,
-    including the leading years that are never held out."""
+    including the leading years that are never held out. Only whole years count: a year the
+    record covers only in part is not a block of the same size."""
     wy = assign_year_groups(data, cv_config.water_year_start_month)
-    n_years = len([y for y in np.unique(wy) if y != -999])
+    partial = partial_years(data, wy)
+    n_years = len([y for y in np.unique(wy) if y != -999 and y not in partial])
     size = cv_config.n_years_per_fold if cv_config.unit == "n_years" else 1
     return n_years // size
 
@@ -709,7 +727,8 @@ def check_yearly_statistics(results: list[FoldResult], threshold: Optional[float
         {(year, statistic): simulated values}.
     """
     from scipy.stats import binom, t as student_t
-    from .scenario import YEARLY_STATISTICS, year_statistics, pit as pit_of, central_range, inside_range
+    from .scenario import (YEARLY_STATISTICS, year_statistics, pit as pit_of, central_range, inside_range,
+                           partial_year_labels)
     level = float(level)
     if not (0.0 < level < 100.0):
         raise ValueError(f"level must be strictly between 0 and 100 (per cent), got {level}")
@@ -733,12 +752,14 @@ def check_yearly_statistics(results: list[FoldResult], threshold: Optional[float
         measured = np.isfinite(obs_used)
         years = r.years_held_out if r.years_held_out is not None else r.dates_held_out.year.to_numpy()
         in_season = np.isin(r.dates_held_out.month, season_months)
+        # A year the held-out dates cover only in part would be judged on part of its season.
+        partial = partial_year_labels(r.dates_held_out, years, calendar_years=r.years_held_out is None)
         # Partial years are kept: a year counts below if its season was measured.
         sim_stats = year_statistics(ens, r.dates_held_out, threshold, years=years, partial_years="keep")
         obs_stats = year_statistics(obs_used, r.dates_held_out, threshold, years=years, partial_years="keep")
         for year in sorted(sim_stats):
             season = (years == year) & in_season
-            if not season.any() or measured[season].mean() < MIN_SEASON_OBSERVED:
+            if year in partial or not season.any() or measured[season].mean() < MIN_SEASON_OBSERVED:
                 continue
             for name in YEARLY_STATISTICS:
                 value = float(obs_stats[year][name][0])

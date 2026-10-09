@@ -115,33 +115,28 @@ def test_aggregation_monthly_matches_pandas_groupby():
                                     err_msg=f"month window {i} mismatch")
 
 
-def test_trailing_partial_month_accepted_as_full_period():
+def test_partial_months_at_either_end_are_judged_against_the_whole_month():
     """
-    A trailing partial month is accepted as a full month because `prc` is
-    compared against the *partial* period's own day count (`n_days` inside
-    the monthly loop, reset per calendar month), not a full ~30-day month's
-    (`model.py` aggregation, `unit == 'm'` branch). This is Fortran-equivalent
-    and correct-as-ported, but easy to miss -- documented here rather than
-    discovered (docs/audit/08_testing_gaps.md, 8.3).
-
-    4 days into a new month, all present, passes even a demanding
-    `prc=0.9`: 4 >= 4*0.9, even though 4 days is nowhere near 90% of a full
-    calendar month.
+    `prc` is the share of a month's calendar days that must be measured, so a month
+    the record covers only in part is not scored as a whole one. (It was compared
+    with the days present: a 4-day fragment of March passed even prc=0.9, as in the
+    Fortran, which assumed records started on 1 January.)
     """
-    # 2 full months (Jan, Feb 2001 non-leap) plus a 4-day fragment into March.
-    n_tot_raw = 31 + 28 + 4
-    data, dates, values = _build_aggregation_data(n_tot_raw, '1m', prc=0.9)
-
+    # 2 whole months (Jan, Feb 2001) plus a 4-day fragment of March: the fragment is dropped.
+    data, dates, values = _build_aggregation_data(31 + 28 + 4, '1m', prc=0.9)
     aggregation(data)
-
-    # Three windows: Jan, Feb, and the 4-day March fragment -- not dropped.
+    assert data.n_dat == 2
+    assert [data.date[data.I_inf[k, 2]][1] for k in range(2)] == [1, 2]
+    # A record starting on 28 January: its 4 days of January are dropped the same way.
+    data, dates, values = _build_aggregation_data(4 + 28 + 31, '1m', prc=0.9, start='2001-01-28')
+    aggregation(data)
+    assert data.n_dat == 2
+    assert [data.date[data.I_inf[k, 2]][1] for k in range(2)] == [2, 3]
+    # With prc=0.1, 4 of March's 31 days are enough (4 >= 3.1), and the mean is of those days.
+    data, dates, values = _build_aggregation_data(31 + 28 + 4, '1m', prc=0.1)
+    aggregation(data)
     assert data.n_dat == 3
-    last_window_date = data.date[data.I_inf[2, 2]]
-    assert last_window_date[1] == 3  # March
-
-    march_values = values[-4:]
-    actual = data.Twat_obs_agg[data.I_inf[2, 2]]
-    np.testing.assert_allclose(actual, np.mean(march_values), rtol=1e-12)
+    np.testing.assert_allclose(data.Twat_obs_agg[data.I_inf[2, 2]], np.mean(values[-4:]), rtol=1e-12)
 
 
 @pytest.mark.parametrize('time_res', ['1w', '1m'])
