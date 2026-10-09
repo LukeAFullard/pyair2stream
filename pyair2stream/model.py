@@ -28,6 +28,13 @@ STABILITY_LIMITS = {'EUL': 2.0, 'RK2': 2.0, 'RK4': 2.785, 'CRN': np.inf, 'EXP': 
 # replacement for it.
 STABILITY_ERROR_FRACTION = 0.10
 
+# The most that a difference between two simulations (in the start value, by rounding, or from
+# an error in the inputs) may grow over a stretch of consecutive days before a run with an
+# explicit integrator is stopped (`stability_max_growth`; see `largest_growth`). Unlike the share
+# of days above the limit, the growth follows exactly from the B series; examples/
+# 09_integrator_stability compares the two on the Swiss rivers. See USER_GUIDE.md §9.1.
+STABILITY_MAX_GROWTH = 100.0
+
 
 class NumericalDivergenceError(RuntimeError):
     """
@@ -55,14 +62,21 @@ def compute_B_series(data: CommonData) -> np.ndarray:
     themselves floor it (see `check_nonpositive_discharge`), so this reports the B
     that will actually be used, not the raw (possibly non-finite) one.
     """
+    return _relaxation_rate(data, data.Q)
+
+
+def _relaxation_rate(data: CommonData, Q) -> np.ndarray:
+    """B (1/day) for the discharge series `Q`, with the current `data.par`: the formula of
+    `compute_B_series`, which passes `data.Q`. RK4's midpoint stages use the mean discharge
+    of two days (`step_amplification`)."""
     p = data.par
     a3, a4, a8 = p[2], p[3], p[7]
 
     if data.version in (3, 5):
-        return np.full(data.Q.shape, a3, dtype=np.float64)
+        return np.full(np.shape(Q), a3, dtype=np.float64)
 
     with np.errstate(divide='ignore', invalid='ignore'):
-        theta = data.Q / data.Qmedia
+        theta = Q / data.Qmedia
         theta_floor = getattr(data, 'min_theta_floor', None)
         if theta_floor is not None:
             theta = np.where(theta < theta_floor, theta_floor, theta)
@@ -77,16 +91,98 @@ def compute_B_series(data: CommonData) -> np.ndarray:
     return B
 
 
+def step_amplification(data: CommonData) -> np.ndarray:
+    """
+    R_j for j = 0 .. n_tot-2: one step of the current integrator (`data.mod_num`), from
+    day j to day j+1, multiplies a difference between two simulations (in the start
+    value, by rounding, or from an error in the inputs) by R_j. The equation is linear
+    in water temperature, so this is exact, apart from the ice floor (`Tice_cover`).
+
+    Each integrator takes B (`compute_B_series`) from particular days: CRN B_j (its
+    explicit half) and B_j+1 (its implicit half); EXP their mean; EUL B_j+1 (like the
+    Fortran, it takes the inputs of the next day); RK2 B_j and B_j+1; RK4 also B at the
+    mean discharge of the two days (its two midpoint stages). NaN where B is undefined
+    on a day the step uses. With the same B on every day, R is the integrator's
+    stability function at z = -B: |R| <= 1 for every B >= 0 with CRN and EXP, but only
+    up to B = 2 with EUL and RK2, and up to 2.785 with RK4.
+    """
+    B = compute_B_series(data)
+    b0, b1 = B[:-1], B[1:]
+    with np.errstate(all='ignore'):
+        if data.mod_num == 'CRN':
+            return (1.0 - b0 / 2.0) / (1.0 + b1 / 2.0)
+        if data.mod_num == 'EXP':
+            return np.exp(-(b0 + b1) / 2.0)
+        if data.mod_num == 'EUL':
+            return 1.0 - b1
+        if data.mod_num == 'RK2':
+            return 1.0 - b0 / 2.0 - b1 * (1.0 - b0) / 2.0
+        if data.mod_num == 'RK4':
+            if data.version in (3, 5):
+                bm = b0
+            else:
+                bm = _relaxation_rate(data, 0.5 * (data.Q[:-1] + data.Q[1:]))
+            k1 = -b0
+            k2 = -bm * (1.0 + k1 / 2.0)
+            k3 = -bm * (1.0 + k2 / 2.0)
+            k4 = -b1 * (1.0 + k3)
+            return 1.0 + (k1 + 2.0 * k2 + 2.0 * k3 + k4) / 6.0
+    raise ValueError(f"Unknown mod_num {data.mod_num}")
+
+
+def largest_growth(data: CommonData) -> dict:
+    """
+    The largest factor by which a difference between two simulations (in the start
+    value, by rounding, or from an error in the inputs) can grow over a stretch of
+    consecutive days: the largest |product of R_j| (`step_amplification`) over the steps
+    of a stretch that is integrated in one go (the whole record, or each segment in
+    gap-tolerant mode). 1.0 means that no difference ever grows.
+
+    The equation is linear in water temperature, so this follows from the B series
+    exactly (apart from the ice floor), before anything is simulated. It separates
+    stable from unstable runs of the explicit integrators much better than the share of
+    days on which B is above their limit, because a difference grows only while B stays
+    above the limit, and it decays again afterwards (examples/09_integrator_stability).
+    A step whose factor is undefined (NaN B) ends a stretch.
+
+    Returns a dict: 'growth' (inf if it overflows), 'log10_growth', and 'start' and
+    'end', the indices of the first and last day of the stretch (None if nothing grows).
+    """
+    R = step_amplification(data)
+    if data.gap_tolerant and data.segments:
+        segments = [(int(a), int(b)) for a, b in data.segments]
+    else:
+        segments = [(0, data.n_tot - 1)]
+    best, start, end = 0.0, None, None
+    with np.errstate(divide='ignore', invalid='ignore'):
+        for first, last in segments:
+            log_r = np.log10(np.abs(R[first:last]))       # the steps from day `first` to day `last`
+            if log_r.size == 0:
+                continue
+            # A factor of 0 wipes a difference out, and an undefined one ends the stretch.
+            log_r = np.where(np.isfinite(log_r), log_r, -300.0)
+            # The largest sum of log10|R_j| over a run of consecutive steps.
+            s = np.concatenate(([0.0], np.cumsum(log_r)))
+            gain = s - np.minimum.accumulate(s)
+            k = int(np.argmax(gain))
+            if gain[k] > best:
+                best = float(gain[k])
+                start, end = first + int(np.argmin(s[:k + 1])), first + k
+    growth = float('inf') if best > 308.0 else float(10.0 ** best)
+    return {'growth': growth, 'log10_growth': best, 'start': start, 'end': end}
+
+
 def stability_report(data: CommonData) -> dict:
     """
-    Pre-flight stability screening for the explicit integrators.
+    Pre-flight stability check of the current integrator, from the B series.
 
     Computes B = (a3 + a8*theta)/theta**a4 (version-dependent) over the whole
     forcing series and compares it against the current integrator's one-step
-    stability limit. This is a conservative screening heuristic, not an exact
-    verdict: isolated high-theta days often simulate fine because the transient
-    decays before it compounds. Pair it with `check_numerical_divergence`, which
-    catches actual divergence.
+    stability limit: the share of days above it is a screen (isolated high-theta
+    days often simulate fine because the transient decays before it compounds).
+    `max_growth` (`largest_growth`) is exact for this linear equation: how much a
+    difference between two simulations can grow over a stretch of days. Pair them
+    with `check_numerical_divergence`, which catches actual divergence after the run.
     """
     B = compute_B_series(data)
 
@@ -100,8 +196,9 @@ def stability_report(data: CommonData) -> dict:
 
     if not np.any(valid):
         return {
-            'mod_num': data.mod_num, 'limit': limit, 'max_B': None,
+            'mod_num': data.mod_num, 'limit': limit, 'max_B': None, 'min_B': None,
             'frac_exceeding': 0.0, 'n_exceeding': 0, 'n_valid': 0, 'worst': [],
+            'max_growth': 1.0, 'log10_max_growth': 0.0, 'growth_stretch': (None, None),
         }
 
     idx_valid = np.nonzero(valid)[0]
@@ -120,38 +217,78 @@ def stability_report(data: CommonData) -> dict:
         date = tuple(int(x) for x in data.date[i]) if data.date is not None else None
         worst.append({'index': i, 'date': date, 'B': float(B_valid[k])})
 
+    # An unknown integrator has no limit (above) and is not checked.
+    growth = (largest_growth(data) if data.mod_num in STABILITY_LIMITS else
+              {'growth': 1.0, 'log10_growth': 0.0, 'start': None, 'end': None})
     return {
         'mod_num': data.mod_num,
         'limit': limit,
         'max_B': max_B,
+        'min_B': float(np.min(B_valid)),
         'frac_exceeding': frac_exceeding,
         'n_exceeding': n_exceeding,
         'n_valid': n_valid,
         'worst': worst,
+        'max_growth': growth['growth'],
+        'log10_max_growth': growth['log10_growth'],
+        'growth_stretch': (growth['start'], growth['end']),
     }
 
 
-def warn_on_stability(data: CommonData, error_fraction: float = STABILITY_ERROR_FRACTION) -> dict:
+def _day_label(data: CommonData, i) -> str:
+    """A day of the simulation for a message: its date, or its place in the warm-up year."""
+    if i is None:
+        return "?"
+    if data.date is not None and data.date[i, 0] != -999:
+        y, m, d = (int(x) for x in data.date[i])
+        return f"{y:04d}-{m:02d}-{d:02d}"
+    return f"day {i + 1} of the warm-up year" if i < 365 else f"day {i + 1}"
+
+
+def _growth_label(report: dict) -> str:
+    """The largest growth of a stability report, readable at any size."""
+    g, log_g = report['max_growth'], report['log10_max_growth']
+    if not np.isfinite(g) or g >= 1e6:
+        return f"10^{log_g:.0f}"
+    return f"{g:,.0f}" if g >= 100 else f"{g:.1f}"
+
+
+def warn_on_stability(data: CommonData, error_fraction: float = STABILITY_ERROR_FRACTION,
+                      max_growth: float = None) -> dict:
     """
-    Run `stability_report` and print a warning (or raise `NumericalDivergenceError`
-    if too large a fraction of days exceed the limit) before a user-facing
-    simulation.
+    Run `stability_report` before a user-facing simulation. With an explicit integrator
+    (RK4/RK2/EUL), print a warning if B is above its stability limit on some days, or if a
+    difference can grow over some stretch of days; raise `NumericalDivergenceError` if B is
+    above the limit on more than `error_fraction` of the days, or if a difference can grow
+    more than `max_growth` times over a stretch of days (default:
+    `data.stability_max_growth`). CRN and EXP are not checked: for B >= 0 they are stable.
     """
+    if max_growth is None:
+        max_growth = getattr(data, 'stability_max_growth', STABILITY_MAX_GROWTH)
     report = stability_report(data)
 
     if report['max_B'] is None or not np.isfinite(report['limit']):
         return report
 
-    if report['max_B'] > report['limit']:
+    grows = report['max_growth'] > 1.0 + 1e-9
+    if report['max_B'] > report['limit'] or grows:
         worst = report['worst'][0] if report['worst'] else None
-        worst_str = f" Worst day: {worst['date']} (B={worst['B']:.3f})." if worst else ""
+        worst_str = f" Worst day: {_day_label(data, worst['index'])} (B={worst['B']:.3f})." if worst else ""
+        first, last = (_day_label(data, i) for i in report['growth_stretch'])
+        growth_str = (f" From {first} to {last}, a difference in the simulated temperature (from the "
+                      f"start value, rounding or the inputs) can grow {_growth_label(report)} times; the "
+                      f"run stops above stability_max_growth={max_growth:g}." if grows else
+                      " No difference can grow over any stretch of days.")
+        negative = report['min_B'] < 0.0
+        if negative:
+            growth_str += (f" B is negative on some days (lowest {report['min_B']:.3f}), so the "
+                           f"equation itself is unstable there.")
         print(
             f"Warning: {report['n_exceeding']}/{report['n_valid']} days "
             f"({report['frac_exceeding']:.1%}) exceed the {report['mod_num']} stability limit "
-            f"(B > {report['limit']:.3f}); max B = {report['max_B']:.3f}.{worst_str} "
-            f"This is a screening heuristic, not a verdict (see "
-            f"USER_GUIDE.md §9.1) -- consider CRN or EXP, especially for "
-            f"scenario runs on discharge different from the calibration record."
+            f"(B > {report['limit']:.3f}); max B = {report['max_B']:.3f}.{worst_str}{growth_str} "
+            f"Consider CRN or EXP, especially for scenario runs on discharge different from the "
+            f"calibration record (USER_GUIDE.md §9.1)."
         )
         if report['frac_exceeding'] > error_fraction:
             raise NumericalDivergenceError(
@@ -160,6 +297,20 @@ def warn_on_stability(data: CommonData, error_fraction: float = STABILITY_ERROR_
                 f"error_fraction={error_fraction:.0%} threshold. Use CRN or EXP for this run, "
                 f"or raise `stability_error_fraction` in the config if you have verified the "
                 f"simulation is stable (see USER_GUIDE.md §9.1)."
+            )
+        if report['max_growth'] > max_growth:
+            if negative:
+                reason = (f"B is negative on some days (lowest {report['min_B']:.3f}), so the equation "
+                          f"itself is unstable. Narrow parameter_bounds so that B stays positive")
+            else:
+                reason = (f"B stays above the stability limit (B > {report['limit']:.3f}) for too long. "
+                          f"Use CRN or EXP for this run, or raise `stability_max_growth` in the config "
+                          f"if you have verified the simulation")
+            raise NumericalDivergenceError(
+                f"With {report['mod_num']}, a difference in the simulated water temperature (from "
+                f"the start value, rounding or the inputs) can grow {_growth_label(report)} times "
+                f"from {first} to {last}, more than stability_max_growth={max_growth:g}: {reason} "
+                f"(see USER_GUIDE.md §9.1)."
             )
 
     return report

@@ -166,7 +166,7 @@ gives the equation.
 
 ## Going further
 
-Eight worked examples use real data from a Swiss river. Each has a README that
+Nine worked examples use real data from Swiss rivers. Each has a README that
 explains the steps and the results ([examples/README.md](examples/README.md)).
 
 | Example | Question |
@@ -179,6 +179,7 @@ explains the steps and the results ([examples/README.md](examples/README.md)).
 | [06 Cross-validation](examples/06_cross_validation/README.md) | Does the model predict every year well? Which version should I use? Which parameters matter most? |
 | [07 Preparing data](examples/07_preparing_data/README.md) | How do I turn raw logger files into checked daily input files? |
 | [08 Climate](examples/08_climate/README.md) | How much warmer would the river be in a warmer climate? |
+| [09 Integrator stability](examples/09_integrator_stability/README.md) | Why is `CRN` the default, and when do the other integrators fail? |
 
 **Was a temperature limit exceeded?** Examples 01 to 03 show the usual route:
 

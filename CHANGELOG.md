@@ -3,6 +3,23 @@
 ## [0.5.0] - 2026-10-05
 
 ### Added
+- ⚠ **A stricter stability check for RK4, RK2 and EUL.** Before simulating, the
+  package now also works out from the B series how much a difference in the
+  simulated temperature (from the start value, rounding or the inputs) can grow
+  over a stretch of days, and stops the run if it can grow more than
+  `stability_max_growth` times (new setting, default 100). The equation is
+  linear in water temperature, so this follows exactly from B:
+  `model.step_amplification` gives what one step of each integrator does to a
+  difference, and `model.largest_growth` the largest product over a stretch of
+  days; `stability_report` returns it (`max_growth`, `growth_stretch`) and the
+  warning names the stretch. Why: the share of days above the limit (stop
+  above 10%) let through runs that went wrong. With the Swiss rivers' published
+  parameters, `RK2` on the Rhône (version 7, 2015 parameters) was 0.99 °C off
+  the equation with B above its limit on 4.2% of days (a difference could grow
+  800,000 times), and `RK4` with the Mentue's flows doubled 0.50 °C off; the
+  0 °C floor kept both below the 60 °C divergence check
+  ([example 09](examples/09_integrator_stability/README.md)). `CRN` and `EXP`
+  are not affected.
 - **`pyair2stream.run(config)`: run from Python** exactly as the command line
   does, with a settings file or a dict, and get the results back: the best
   parameters, the scores, the warnings and notes, the output folder and its
@@ -197,6 +214,17 @@
   warmer climate (+2 °C air, with and without 20% less summer flow), with paired
   changes and checked and corrected yearly peaks. Example 06 adds a sensitivity
   analysis. The examples index maps tasks to examples.
+- **Example 09: integrator stability.** The B series (`compute_B_series`) of
+  every model version with the 30 published parameter sets of the three Swiss
+  rivers; each integrator's amplification factor, measured through the package;
+  the B-series (Butcher trees) behind the limits 2 and 2.785; every integrator
+  with every parameter set against a fine-step solution, with the package's
+  checks; scenario flows from 0.1 to 3 times the record. It shows that a run
+  can be unstable without blowing up (the 0 °C floor holds it, and only the B
+  check stops it), that some wrong runs are only warned about, that the RK4
+  calibration of the Dischmabach's version 5 (2015) relies on RK4's behaviour
+  just under its limit, and how to compute, from the B series, how much a
+  difference can grow over a stretch of days.
 
 ### Fixed
 - ⚠ **DE calibration could stop a third of the way through, on a worse fit.**
