@@ -77,7 +77,7 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.4), gridspec_kw={"width_rati
 plots.change(diff, dates, by="day", ax=ax1, colors=[plots.PALETTE[1]])
 ax1.set(ylabel="Change from abstraction (°C)", title="Daily effect, 2010-2012")
 bins = np.linspace(min(unpaired.min(), effect.min()), max(unpaired.max(), effect.max()), 40)
-ax2.hist(unpaired, bins=bins, color=plots.GRID, label="not paired")
+ax2.hist(unpaired, bins=bins, color=plots.MUTED, alpha=0.6, label="not paired")
 ax2.hist(effect, bins=bins, color=plots.PALETTE[1], alpha=0.8, label="paired")
 ax2.set(xlabel="Average summer change (°C)", ylabel="Simulations", title="Summer average")
 ax2.legend(frameon=False, fontsize=8)
