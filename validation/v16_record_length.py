@@ -161,8 +161,10 @@ def _figure(df, summary):
     plot_style()
     rivers = list(summary.river.unique())
     fig, axes = plt.subplots(1, len(rivers), figsize=(4.0 * len(rivers), 3.8), sharey=True, squeeze=False)
-    labels = [str(x) for x in LENGTHS] + ["whole period"]
+    station = {name: st for st, name in RIVERS.items()}
     for ax, river in zip(axes[0], rivers):
+        n_years = pd.read_csv(river_csv(station[river], "calibration"), parse_dates=["Date"]).Date.dt.year.nunique()
+        labels = [str(x) for x in LENGTHS] + [f"all\n({n_years})"]
         for version, colour, dx in ((5, ORANGE, -0.08), (8, BLUE, 0.08)):
             sub = df[(df.river == river) & (df.version == version)]
             if sub.empty:
@@ -178,9 +180,12 @@ def _figure(df, summary):
             ax.plot(xs, med, "-", color=colour, lw=1.6, label=f"version {version}")
         simple = summary[(summary.river == river) & (summary.version == 8)]
         if not simple.empty:
-            ax.axhline(simple["simple alternative, median (°C)"].median(), color=LIGHT_GREY, lw=1, ls="--")
+            level = simple["simple alternative, median (°C)"].median()
+            ax.axhline(level, color=LIGHT_GREY, lw=1, ls="--")
+            ax.annotate("simple alternative", (1, level), xycoords=("axes fraction", "data"), xytext=(-2, 3),
+                        textcoords="offset points", ha="right", va="bottom", fontsize=7.5, color=INK2)
         ax.set_xticks(range(len(labels)), labels, fontsize=8)
-        ax.set_xlabel("Years of data used for calibration")
+        ax.set_xlabel("Years of data used for calibration (all: the whole file)")
         ax.set_title(river, fontsize=10)
     axes[0][0].set_ylabel("RMSE on the later years (°C)")
     axes[0][0].legend(fontsize=8, loc="upper right")
