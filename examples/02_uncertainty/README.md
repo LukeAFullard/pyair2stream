@@ -32,6 +32,12 @@ MCMC converged after 6000 steps (at least 50 x the autocorrelation time, split-R
 Interval check: 91.0% of 2907 observed days lie inside the 90% prediction interval.
 ```
 
+The two numbers say whether the sampler has run long enough. The
+autocorrelation time is roughly how many steps it takes to forget where it
+was. Split-Rhat compares the first and second halves of the run: close to 1
+means they agree. You do not need to judge them yourself. The run checks them
+and says whether it converged.
+
 **Check both lines before you use the results.**
 
 - **Converged.** If the sampler has not converged after `mcmc_steps` (default

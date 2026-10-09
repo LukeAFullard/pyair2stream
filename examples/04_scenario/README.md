@@ -7,16 +7,59 @@ we be?
 The same approach works for any change in the inputs: naturalised flows, a dam
 release, or air temperatures from a climate projection.
 
-## The key idea: pair the simulations
+## Paired and not paired
 
-Run the model twice: once on the measured discharge, and once on the reduced
-discharge. Then subtract. Each simulation in the second run must use **the same
-parameter set** as its partner in the first run. The uncertainty the two runs
-share then cancels. What remains is the uncertainty of the *difference*.
+The model is run twice: once with the measured discharge (the **baseline**),
+and once with the reduced discharge (the **abstraction**). The effect of the
+abstraction is the difference between the two. But how the two runs are
+compared matters a great deal.
 
-pyair2stream also gives each pair the same day-to-day model error, which
-cancels too. This assumes the model's error on a given day would be the same in
-both scenarios.
+**Why there are 1,000 simulations.** As example
+[02](../02_uncertainty/README.md) explains, the model's parameters are not
+known exactly: many sets of parameter values fit the calibration years almost
+equally well. Each run here draws 1,000 of these parameter sets. Each one gives
+one **simulation** of 2010–2012, with its own parameter values and its own
+day-to-day model error.
+
+The simulations disagree about how warm the river is. Their average summer
+water temperature ranges from 16.3 to 16.8 °C (90% range). The abstraction
+changes it by only about 0.05 °C, ten times less. To see such a small effect,
+the uncertainty about the river's temperature must be taken out.
+
+**Paired** means that simulation 1 of the abstraction run uses the same
+parameter set, and the same model error, as simulation 1 of the baseline run.
+Simulation 2 is paired with simulation 2, and so on. Each pair is then
+subtracted. Whatever a parameter set gets wrong, it gets wrong in both runs, so
+it cancels. What is left is the effect of the abstraction:
+
+| | Baseline: average summer temperature | Abstraction | Difference |
+|---|---|---|---|
+| Simulation 1 | 16.54 °C | 16.60 °C | +0.06 °C |
+| Simulation 2 | 16.28 °C | 16.30 °C | +0.02 °C |
+| Simulation 3 | 16.58 °C | 16.64 °C | +0.07 °C |
+
+Simulations 2 and 3 disagree by 0.3 °C about the river. But they agree that the
+abstraction warms it a little in summer.
+
+**Not paired** means comparing simulations that used different parameter sets.
+The abstraction of simulation 3 minus the baseline of simulation 2 gives
++0.36 °C. The other way round, it gives −0.28 °C. These numbers mostly show the
+difference between two parameter sets, not the effect of the abstraction. This
+is what you would get by running the two scenarios separately, each with its
+own random parameter sets, and comparing their results.
+
+An everyday comparison: to find out what a diet does, weigh the same people
+before and after it (paired). Weighing one group before and a different group
+after (not paired) mixes the effect with the differences between people.
+
+The last row of the results table shows the cost. There, `run.py` matches the
+simulations of the two runs at random, on purpose. The 90% range of the summer
+change becomes −0.32 to +0.43 °C, so you could not even tell whether the
+abstraction warms or cools the river. It is shown only to make the point:
+always pair.
+
+Pairing assumes that the model's error on a given day would be the same in both
+scenarios.
 
 ## Steps
 
@@ -39,7 +82,8 @@ pyair2stream --config examples/04_scenario/abstraction.yaml   # the same, with 7
 Two settings in [`abstraction.yaml`](abstraction.yaml) matter:
 
 - `reuse_sample_indices_from` points at the baseline run's record of which
-  parameter sets it used. So this run uses exactly the same ones.
+  parameter sets it used. So this run uses exactly the same ones, in the same
+  order: this is what pairs the simulations.
 - `calibration_metadata` keeps the calibration's mean discharge (`Qmedia`). The
   model sees discharge only relative to `Qmedia`. If `Qmedia` were recomputed
   from the reduced flows, the reduction would cancel out. The scenario would
@@ -82,7 +126,8 @@ simulation's average summer change, paired (orange) and not paired (grey).*
   the river follows the air more closely.
 - On single low-flow days, the warming reaches about 0.3 °C.
 - Without pairing (the last row, grey in the figure), the same simulations
-  cannot even tell whether the river gets warmer or colder.
+  cannot even tell whether the river gets warmer or colder (see
+  [Paired and not paired](#paired-and-not-paired)).
 
 ## Limits of this approach
 

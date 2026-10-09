@@ -33,7 +33,9 @@ The settings file, [`config.yaml`](config.yaml), sets:
 
 ## Read the results
 
-Everything is written to `examples/01_quickstart/output/`.
+Everything is written to `examples/01_quickstart/output/`. Start with
+`summary.md`: one page with the settings, the data used, the scores, the
+fitted parameters, every warning, and what each other file is.
 
 | | Calibration (2002–2009) | Validation (2010–2012) |
 |---|---|---|
@@ -49,7 +51,7 @@ than the calibration score, as expected.
 ![Observed and simulated water temperature, 2010-2012](figures/validation.png)
 
 *`validation_DE_NSE_Mentue.png`: measured (black) and simulated (orange) water
-temperature in the validation years. The residuals (measured minus simulated)
+temperature in the validation years. The residuals (simulated minus measured)
 are below. Look for long runs of residuals on one side of zero: they show
 periods the model gets wrong. Here that is early 2012, after the river froze.*
 
