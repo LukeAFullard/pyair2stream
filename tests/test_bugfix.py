@@ -29,7 +29,7 @@ def test_mcmc_autocorr_invalid_json():
     data.station = "test"
     data.series = "test"
     data.time_res = "1d"
-    data.mod_num = "RK4"
+    data.mod_num = "CRN"   # the per-draw RK4 stability check needs real forcing data
     data.model = "version_7"
     data.fun_obj = "NSE"
     data.Tair = np.zeros(3)

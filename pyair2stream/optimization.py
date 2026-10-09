@@ -414,8 +414,8 @@ def _check_ensemble_divergence(n_total: int, excluded: list, on_divergent_draw: 
     and skipping/recording its divergent ones in `excluded`.
 
     `excluded` is a list of `{"draw_index", "chain_row", "params"}` dicts, one per
-    draw excluded as numerically divergent (non-finite or exceeding
-    `max_plausible_twat`)
+    draw excluded as numerically divergent (non-finite, above `max_plausible_twat`,
+    or unstable with an explicit integrator; `model.is_numerically_divergent`).
     `sample_indices` (if given) is the full array of chain rows requested for this
     batch, in order; used to compute `valid_draw_indices` -- the subset that actually survived
     filtering, which is what determines the row alignment of the saved ensemble
@@ -448,15 +448,15 @@ def _check_ensemble_divergence(n_total: int, excluded: list, on_divergent_draw: 
     if n_excluded > 0:
         print(
             f"Warning: {n_excluded}/{n_total} {label} draws ({frac_excluded:.1%}) were "
-            f"excluded from the ensemble as numerically divergent (non-finite or exceeding "
-            f"max_plausible_twat). uncertainty_options.on_divergent_draw='{on_divergent_draw}'."
+            f"excluded from the ensemble as numerically divergent (non-finite, above "
+            f"max_plausible_twat, or unstable with RK4/RK2/EUL). uncertainty_options.on_divergent_draw='{on_divergent_draw}'."
         )
 
     n_valid = n_total - n_excluded
     if n_valid == 0:
         raise NumericalDivergenceError(
-            f"All {n_total} {label} draws diverged (non-finite or exceeded "
-            f"max_plausible_twat); no valid draws remain to build an ensemble/percentile "
+            f"All {n_total} {label} draws diverged (non-finite, above "
+            f"max_plausible_twat, or unstable with RK4/RK2/EUL); no valid draws remain to build an ensemble/percentile "
             f"envelope. See docs/METHODS.md §12."
         )
 
@@ -738,8 +738,8 @@ def forward_mode(data: CommonData) -> None:
                 if on_divergent_draw == 'raise':
                     raise NumericalDivergenceError(
                         f"Forward prediction-interval draw {i} (chain row {chain_row}, "
-                        f"params={params_dict}) diverged (non-finite or exceeded "
-                        f"max_plausible_twat). uncertainty_options.on_divergent_draw='raise'; "
+                        f"params={params_dict}) diverged (non-finite, above "
+                        f"max_plausible_twat, or unstable with RK4/RK2/EUL). uncertainty_options.on_divergent_draw='raise'; "
                         f"set 'drop' (the default) to exclude divergent draws instead. See "
                         f"docs/METHODS.md §12."
                     )
@@ -975,7 +975,9 @@ def LH_mode(data: CommonData, seed: Optional[int] = None) -> None:
     n_run = data.n_run
 
     gbest = np.zeros(n_par, dtype=np.float64)
-    foptim = -999.0
+    # Any finite score beats the start value: a floor such as -999 would keep the all-zero
+    # start if every sample scored below it (NSE can be far below -999 for a poor set).
+    foptim = -np.inf
 
     output_filename = os.path.join(data.folder, f"0_{data.runmode}_{data.fun_obj}_{data.station}_{data.series}_{data.time_res}.csv")
     history = []
@@ -999,7 +1001,7 @@ def LH_mode(data: CommonData, seed: Optional[int] = None) -> None:
         row = list(data.par[:n_par]) + [eff_index, data.current_nse, data.current_r2, data.current_mae]
         history.append(row)
 
-        if fit > foptim:
+        if np.isfinite(fit) and fit > foptim:
             foptim = fit
             gbest[:] = data.par[:n_par]
 
@@ -1008,6 +1010,9 @@ def LH_mode(data: CommonData, seed: Optional[int] = None) -> None:
                 perc = float(i + 1) / float(n_run) * 100.0
                 print(f"Progress: {perc:.1f} %")
 
+    if not np.isfinite(foptim):
+        raise RuntimeError(f"LATHYP: none of the {n_run} parameter sets gave a finite score. "
+                           "Check parameter_bounds and the data.")
     data.par_best = gbest.copy()
     data.finalfit = foptim
     print(f'Calibration efficiency index: {data.finalfit}')
@@ -1175,7 +1180,11 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
               "are too narrow if the errors persist from one block to the next. The default likelihood, "
               "'least_squares', allows for that persistence.")
 
-    valid_mask_agg = (data.Twat_obs_agg != -999.0) & eval_mask
+    # Exactly the values the objective scores (`aggregation`): with weekly or monthly
+    # scoring a block is stored on its middle day, which need not itself be scored
+    # (prc < 1, or a segment's unscored start in gap-tolerant mode).
+    valid_mask_agg = np.zeros(data.n_tot, dtype=bool)
+    valid_mask_agg[data.I_inf[:data.n_dat, 2]] = True
     N = int(np.sum(valid_mask_agg))
     # Daily residual SD at the best fit: the noise level carried to FORWARD runs.
     best_sigma = _daily_residual_sigma(data, eval_mask)
@@ -1305,7 +1314,8 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
             if on_divergent_draw == 'raise':
                 raise NumericalDivergenceError(
                     f"MCMC envelope draw {i} (chain row {chain_row}, params={params_dict}) "
-                    f"diverged (non-finite or exceeded max_plausible_twat). "
+                    f"diverged (non-finite, above max_plausible_twat, or unstable with "
+                    f"RK4/RK2/EUL). "
                     f"uncertainty_options.on_divergent_draw='raise'; set 'drop' (the default) "
                     f"to exclude divergent draws instead. See "
                     f"docs/METHODS.md §12."

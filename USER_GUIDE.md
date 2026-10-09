@@ -224,7 +224,9 @@ expect larger errors in other years, and check the model on validation years.
 **Climate-model data** often uses a 365-day calendar with no leap days, or a
 360-day calendar. Declare it with `calendar: "noleap"` or
 `calendar: "360_day"`. Do not pad such data with invented dates, or the
-seasonal term will drift out of step.
+seasonal term will drift out of step. With these calendars the time of year is
+counted from the first row, so the file must start on the first day of a year
+(a row dated 1 January).
 
 **Building the file from raw data.** pyair2stream has two helpers:
 
@@ -502,7 +504,9 @@ After a calibration, look at these, in this order:
   better than always guessing the average temperature. Above 0.9 is common for
   daily water temperature with this model.
 - **RMSE** (root-mean-square error) and **MAE** (mean absolute error) are in °C.
-  They are the typical size of the daily error.
+  They are the typical size of the error of the scored values: daily values,
+  or weekly or monthly means if `time_resolution` is not `"1d"`. Every score in
+  these files is computed on the scored values.
 - **R²** only measures correlation. It can be high even when the model is
   always too warm. Always check NSE or RMSE too.
 - **AIC and BIC** (lower is better) compare model versions on the same data.

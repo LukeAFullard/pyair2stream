@@ -91,7 +91,7 @@ The checks:
   set `min_theta_floor` (§5) or use gap-tolerant mode.
 - **Calibration and validation files must start on 1 January** (as in the
   Fortran; not required in gap-tolerant mode). FORWARD runs (§13) may start on
-  any day.
+  any day, except with a `noleap` or `360_day` calendar (next item).
 - **At least 365 days**, because the warm-up year (§3) repeats the first year.
   A shorter calibration or FORWARD file is an error; a shorter validation file is
   skipped, with a warning.
@@ -100,8 +100,10 @@ The checks:
   validation score does not test the model on data it was not fitted to.
 - Dates must be real (Gregorian) dates, unless you declare `calendar: "noleap"`
   (365-day years) or `"360_day"` (twelve 30-day months) for climate-model output.
-  With those calendars the dates only label the rows (the time of year is taken
-  from the row position), so only their order is checked.
+  With those calendars the dates only label the rows: the time of year is
+  counted from the row position, with the first row as day 1 of a year. So only
+  the order of the dates is checked, and the file must start on a row dated
+  1 January, in every mode.
 - **Implausible values are reported**, not changed: a warning lists `T_air`
   outside −60 to 60 °C and `T_water` outside −2 to 50 °C. Such values usually
   mean a missing-value code other than blank or `-999` (for example `-99`), which
@@ -248,7 +250,8 @@ any day, or if successive daily changes of the simulation are correlated below
 - **RMS** = root-mean-square error in °C (smaller is better; internally the
   negative is maximised).
 
-**Other reported measures** (in `goodness_of_fit_*.csv` and plot titles): N,
+**Other reported measures** (in `goodness_of_fit_*.csv` and plot titles), on
+the same scored values (daily values, or weekly or monthly means): N,
 NSE, R² (squared correlation between simulated and observed), RMSE, MAE, and
 AIC = n·ln(SSE/n) + 2(k+1) and BIC = n·ln(SSE/n) + (k+1)·ln(n), where SSE is the
 sum of squared errors and k the number of fitted parameters (the +1 is the error
@@ -316,7 +319,9 @@ With `gap_tolerant: true`, `T_air` and `Discharge` may have gaps:
 2. Each segment is simulated **separately**. It starts from the observed water
    temperature on its first day if there is one, otherwise from the average
    observed water temperature for that day of the year in the calibration record
-   (missing days of the year are interpolated).
+   (missing days of the year are interpolated). A FORWARD run uses the averages
+   of its own file, so in gap-tolerant mode that file needs some water
+   temperature measurements.
 3. The first `warmup_drop_days` (default 15) of every segment are simulated but
    **not scored**, so the approximate start value can be forgotten. A
    difference in the start value decays as exp(−∫B dt), so after three
@@ -560,8 +565,9 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    its coverage are for the calibration period; for any other period, including
    validation, use a FORWARD run from the chain (§13).
 6. Any drawn parameter set whose simulation diverges (§15) is excluded and
-   reported; if more than `max_divergent_fraction` (default 10%) diverge, the run
-   stops.
+   reported: not finite, above `max_plausible_twat`, or, with RK4, RK2 or EUL, a
+   difference that can grow more than `stability_max_growth` times (§6). If more
+   than `max_divergent_fraction` (default 10%) diverge, the run stops.
 
 On any single day, iid and AR(1) errors have the same spread, so the daily band
 is about the same width under both. They differ for multi-day quantities (weekly
@@ -941,7 +947,9 @@ computing the difference draw by draw, which gives an uncertainty band for the
 fixed by the chain's content and the draw's row in it, so both runs add the same
 error to the same draw on the same day and it cancels in the difference: the
 band is the parameter uncertainty of the effect. This assumes the model's error
-on a given day would be the same under both scenarios. The validation checks
+on a given day would be the same under both scenarios. In gap-tolerant mode both
+runs restart each segment from the same temperature (§10), so the difference is
+too small for the first few days of each segment. The validation checks
 that the paired difference equals the exact effect where it is known (V8).
 
 ## 14. Sensitivity analysis
@@ -970,7 +978,7 @@ change one-sided.
 | Recomputed objective matches the calibration result | after calibration | error |
 | Discharge outside the calibrated range | FORWARD runs | warning |
 | Segment warm-up too short | gap-tolerant runs | warning |
-| MCMC convergence and diverging draws | DE-MCMC, FORWARD intervals | warning / error |
+| MCMC convergence; draws that diverge or, with RK4/RK2/EUL, are unstable (§12) | DE-MCMC, FORWARD intervals | warning / error |
 | Chain fitted with another model version, integrator or `Qmedia` (§13) | FORWARD intervals | error |
 
 ## 16. Limitations and good practice

@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.5.1] - 2026-10-09
+
+### Fixed
+- **`calendar: "noleap"` or `"360_day"` files must start on the first day of a
+  year.** The time of year is counted from the first row, which is taken as
+  day 1. A FORWARD or gap-tolerant file that started later (for example on
+  1 October, a water year) ran with its seasonal term out of phase, without a
+  message. It is now an error, in every mode (METHODS §2).
+- **Ensemble draws that are unstable with RK4, RK2 or EUL are excluded.** In
+  the DE-MCMC band and FORWARD intervals a draw now also counts as divergent
+  when a difference can grow more than `stability_max_growth` times
+  (`largest_growth`), as the best-fit run already did; such a run can stay below
+  `max_plausible_twat` and still be wrong. `CRN` and `EXP` are not affected.
+- **DE-MCMC likelihood: exactly the scored values.** With weekly or monthly
+  scoring, `prc` below 1 and gap-tolerant mode, a block whose middle day was
+  itself unscored was scored by the objective but left out of the likelihood.
+  The likelihood now uses the same blocks as the objective. Daily scoring and
+  `prc: 1` are unchanged.
+- **LATHYP** started from a best score of −999, so if every sample scored
+  lower (NSE can be far below −999), it returned the all-zero start
+  parameters. It now keeps the best finite score, and stops with an error if
+  no sample has one.
+- The warnings about ρ (too few pairs, ρ at its limit of 0.99) are printed like
+  every other warning, so they now appear in `summary.md` and
+  `RunResult.messages`.
+
+### Documentation
+- METHODS §7 and USER_GUIDE §8: the scores in `goodness_of_fit_*.csv` are
+  computed on the scored values (daily values, or weekly or monthly means).
+- METHODS §10: a gap-tolerant FORWARD run takes the day-of-year averages from
+  its own file. METHODS §13: in gap-tolerant mode a paired difference is too
+  small for the first days of each segment.
+
 ## [0.5.0] - 2026-10-05
 
 ### Added

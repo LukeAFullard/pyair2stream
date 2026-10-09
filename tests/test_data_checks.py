@@ -159,6 +159,17 @@ def test_nonstandard_calendar_checks_only_the_order():
     assert "must have non-decreasing dates" in _errors(df, calendar="noleap")[0]
 
 
+@pytest.mark.parametrize("calendar", ["noleap", "360_day"])
+@pytest.mark.parametrize("period, gap_tolerant", [("scenario", False), ("calibration", True)])
+def test_nonstandard_calendar_must_start_on_the_first_day_of_a_year(calendar, period, gap_tolerant):
+    # The time of year is counted from the first row, so a later start would put the
+    # seasonal term out of phase, even where a standard-calendar file may start on any day.
+    df = _table(start="2001-03-01")
+    assert "must start on the first day of a year" in _errors(df, calendar=calendar, period=period,
+                                                                gap_tolerant=gap_tolerant)[0]
+    assert _errors(df, period=period, gap_tolerant=gap_tolerant) == []
+
+
 # --- A run uses the same checks for every file --------------------------------------------
 
 @pytest.mark.parametrize("period, p, run_mode", [("calibration", "c", "DE"), ("scenario", "c", "FORWARD")])

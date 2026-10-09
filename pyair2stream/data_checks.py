@@ -184,7 +184,13 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                                              f"{dates.iloc[i - 1].date()} on line {_line(i - 1)}."))
 
     if dates is not None and len(dates):
-        if not gap_tolerant and period != 'scenario' and (dates.iloc[0].month, dates.iloc[0].day) != (1, 1):
+        if calendar != 'standard' and (dates.iloc[0].month, dates.iloc[0].day) != (1, 1):
+            # The time of year is counted from the first row, which is taken as day 1.
+            problems.append(Problem('error', f"With calendar: {calendar!r}, the time of year is counted from the "
+                                             f"first row, so the file {source} must start on the first day of a "
+                                             f"year, dated 1 January (it starts on {dates.iloc[0].date()}). Start "
+                                             "the file on the first day of a model year."))
+        elif not gap_tolerant and period != 'scenario' and (dates.iloc[0].month, dates.iloc[0].day) != (1, 1):
             problems.append(Problem('error', f"The time series in {source} must start on January 1st (it starts on "
                                              f"{dates.iloc[0].date()}). Start the file on 1 January: fill in air "
                                              "temperature and discharge and leave T_water blank until your "
