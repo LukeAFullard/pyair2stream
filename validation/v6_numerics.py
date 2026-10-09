@@ -107,7 +107,9 @@ def _analytic_case(version, par, qmedia):
     n = 365 * 6
     csv = os.path.join(WORK, f"v6_analytic_{version}.csv")
     os.makedirs(WORK, exist_ok=True)
-    pd.DataFrame({"Date": pd.date_range("2001-01-01", periods=n, freq="D").strftime("%Y-%m-%d"),
+    dates = pd.date_range("2001-01-01", periods=n + 10, freq="D")
+    dates = dates[~((dates.month == 2) & (dates.day == 29))][:n]      # noleap dates: no 29 February
+    pd.DataFrame({"Date": dates.strftime("%Y-%m-%d"),
                   "T_air": 10.0, "T_water": np.nan, "Discharge": qmedia}).to_csv(csv, index=False)
     a1, a2, a3, a4, a5, a6, a7, a8 = par
     k = a3 + (a8 if version in (7, 8) else 0.0)
