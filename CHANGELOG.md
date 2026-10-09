@@ -99,6 +99,16 @@
   number of days; in gap-tolerant mode it is no longer a gap. A FORWARD run
   counts such days as outside the calibrated flows unless the calibration had
   them too. Versions 4 and 8 are unchanged; negative discharge stays an error.
+- **Gap-tolerant FORWARD runs no longer need water temperature.** Each segment
+  started from the measured water temperature, or from the day-of-year average
+  of the run's own file, so a scenario file without water temperature (a
+  climate scenario, for example) stopped with an error, and one with it started
+  each segment from measurements made under other conditions. A FORWARD run now
+  starts each segment from the temperature at which the equation is at rest
+  under its first day's conditions; measured water temperature is used only to
+  report the fit. Calibration and validation are unchanged. Gap-tolerant output
+  files gain a `warm_up` column marking the unscored first days of each
+  segment.
 - **`Qmedia` must be positive.** A `Qmedia` of zero or below was refused only in
   gap-tolerant mode; otherwise every simulated temperature was NaN and the run
   stopped with an error that blamed the integrator. It is now refused for

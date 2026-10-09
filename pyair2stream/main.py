@@ -117,10 +117,14 @@ def _write_calibration_metadata(data: CommonData) -> None:
 
 
 def _warm_up_column(data: CommonData) -> np.ndarray:
-    """1 on the first warmup_drop_days of a file shorter than a year, which start from the
-    first day's conditions and are not scored (io.read_Tseries), else 0."""
+    """1 on the days that are not scored while the model forgets its start value, else 0:
+    the first warmup_drop_days of each segment in gap-tolerant mode, or of a file shorter
+    than a year (which starts from its first day's conditions, io.read_Tseries)."""
     warm_up = np.zeros(data.n_tot, dtype=int)
-    warm_up[365:365 + data.warmup_drop_days] = 1
+    starts = [start for start, _ in data.segments] if data.gap_tolerant and data.segments else [365]
+    ends = [end for _, end in data.segments] if data.gap_tolerant and data.segments else [data.n_tot - 1]
+    for start, end in zip(starts, ends):
+        warm_up[start:min(start + data.warmup_drop_days, end + 1)] = 1
     return warm_up
 
 
@@ -136,7 +140,7 @@ def forward(data: CommonData) -> None:
         detect_segments(data)
 
     warn_on_stability(data, error_fraction=data.stability_error_fraction)
-    check_segment_warmup(data)
+    check_segment_warmup(data, suggest_shorter=data.runmode != 'FORWARD')
     call_model(data)
     check_numerical_divergence(data, max_plausible_twat=data.max_plausible_twat)
     check_daily_plausibility(data)
@@ -200,7 +204,7 @@ def forward(data: CommonData) -> None:
         cal_df['Tair_gap'] = tair_gap
         cal_df['Q_gap'] = q_gap
         cal_df['segment_id'] = segment_id
-    if data.warmup_from_first_day:
+    if data.warmup_from_first_day or data.gap_tolerant:
         cal_df['warm_up'] = _warm_up_column(data)
 
     # Drop the warm-up block: it is a verbatim copy of year one with sentinel
@@ -298,7 +302,7 @@ def forward(data: CommonData) -> None:
         val_df['Tair_gap'] = val_tair_gap
         val_df['Q_gap'] = val_q_gap
         val_df['segment_id'] = val_segment_id
-    if data.warmup_from_first_day:
+    if data.warmup_from_first_day or data.gap_tolerant:
         val_df['warm_up'] = _warm_up_column(data)
 
     val_df.iloc[365:].to_csv(out_val_path, index=False)  # drop the warm-up block

@@ -534,9 +534,9 @@ def compute_doy_climatology(data: CommonData) -> None:
 
     if np.sum(doy_counts) == 0:
         raise ValueError(
-            "No T_water observations in this file. Gap-tolerant mode starts each segment from "
-            "the observed water temperature, or from its day-of-year average in this file, so "
-            "it needs some observations (docs/METHODS.md §10)."
+            "No T_water observations in this file. A gap-tolerant calibration starts each segment "
+            "from the observed water temperature, or from its day-of-year average in the "
+            "calibration file, so it needs some observations (docs/METHODS.md §10)."
         )
 
     for i in range(366):
@@ -762,7 +762,9 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
                 "the discharge signal. See USER_GUIDE.md §6 (Qmedia)."
             )
         compute_qmedia(data, verbose=True)
-        if data.gap_tolerant and p == 'c':
+        # Segment start values (gap-tolerant mode): a FORWARD run starts each segment from
+        # its first day's conditions (model.equilibrium_temperature), not from measurements.
+        if data.gap_tolerant and p == 'c' and data.runmode != 'FORWARD':
             compute_doy_climatology(data)
 
         if (

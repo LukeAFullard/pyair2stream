@@ -707,9 +707,25 @@ def _run_integration(data: CommonData, segments, p):
         p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], theta_floor
     )
 
+def equilibrium_temperature(data: CommonData, i: int, p: np.ndarray) -> float:
+    """The water temperature at which the equation is at rest under the conditions of row
+    `i` (dTw/dt = A - B*Tw = 0, so A/B), not below `Tice_cover`. With a non-positive B there
+    is no such temperature; the day's air temperature is used instead."""
+    from .model_numba import fast_AB_version
+    theta_floor = data.min_theta_floor if data.min_theta_floor is not None else 0.0
+    A, B = fast_AB_version(data.version, p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8],
+                           data.Tair[i], data.Q[i], data.tt[i], data.Qmedia, theta_floor)
+    start = A / B if B > 0.0 else data.Tair[i]
+    return float(max(start, data.Tice_cover))
+
+
 def call_model_segmented(data: CommonData) -> None:
     """
-    Segmented ODE integration for gap-tolerant mode.
+    Segmented ODE integration for gap-tolerant mode. A calibration or validation starts
+    each segment from its measured water temperature, or else from the calibration's
+    day-of-year average. A FORWARD run starts it from the temperature that matches its
+    first day's conditions (`equilibrium_temperature`): a scenario's start must not come
+    from measurements made under other conditions, and paired runs must start alike.
     """
     data.Twat_mod[:] = -999.0
 
@@ -718,7 +734,9 @@ def call_model_segmented(data: CommonData) -> None:
 
     for start, end in data.segments:
         # Initial Condition
-        if data.Twat_obs[start] != -999.0:
+        if data.runmode == 'FORWARD':
+            data.Twat_mod[start] = equilibrium_temperature(data, start, p)
+        elif data.Twat_obs[start] != -999.0:
             data.Twat_mod[start] = data.Twat_obs[start]
         else:
             # DOY is 0-indexed in array but 1-366 in reality

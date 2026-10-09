@@ -355,12 +355,18 @@ With `gap_tolerant: true`, `T_air` and `Discharge` may have gaps:
    (default 30) are dropped. Zero-flow days left out this way are reported (a
    warning, `Q_gap` and `gaps_summary.txt`); in a FORWARD run they are an
    error, because the scenario's results would silently leave them out.
-2. Each segment is simulated **separately**. It starts from the observed water
-   temperature on its first day if there is one, otherwise from the average
-   observed water temperature for that day of the year in the calibration record
-   (missing days of the year are interpolated). A FORWARD run uses the averages
-   of its own file, so in gap-tolerant mode that file needs some water
-   temperature measurements.
+2. Each segment is simulated **separately**. In a calibration or validation it
+   starts from the observed water temperature on its first day if there is one,
+   otherwise from the average observed water temperature for that day of the
+   year in the calibration record (missing days of the year are interpolated).
+   A FORWARD run starts it from the temperature at which the equation is at rest
+   under the first day's conditions, A/B in dTw/dt = A − B·Tw (§6), not below
+   `Tice_cover`: a scenario's start then follows its own forcing, needs no
+   water-temperature measurements, and is the same for paired runs. Measured
+   water temperature in a FORWARD file is used only to report the fit. As for
+   a short file (§3), the start is approximate (water temperature lags the air,
+   and the first day may be unusual), and its error fades within the unscored
+   days below. In the output files, `warm_up` = 1 marks those days.
 3. The first `warmup_drop_days` (default 15) of every segment are simulated but
    **not scored**, so the approximate start value can be forgotten. A
    difference in the start value decays as exp(−∫B dt), so after three

@@ -516,7 +516,7 @@ After a calibration, look at these, in this order:
 | `summary.html` | the same page for a web browser, with the figures inside it (one file to send) |
 | `filled_water_temperature_<period>.csv` | one row per day of the calibration, validation or `FORWARD` file: `T_water_measured`, `T_water_model`, `T_water_filled` (the measurement where there is one, the model's value otherwise) and `source` (`measured`, `model` or `none`). After `DE-MCMC`, or a `FORWARD` run with intervals, also the model's prediction range (`model_lower_90`, `model_upper_90` for a 90% range). |
 | `1_*.out` | line 1: the 8 fitted parameters; line 2: the calibration score; line 3: the validation score (if run) |
-| `2_*.csv` / `3_*.csv` | one row per day of the calibration / validation file: `Year, Month, Day, Tair, Twat_obs, Twat_mod, Twat_obs_agg, Twat_mod_agg, Q`. `_agg` are the values actually scored; `-999` means none. Gap-tolerant runs add `Tair_gap, Q_gap, segment_id`. |
+| `2_*.csv` / `3_*.csv` | one row per day of the calibration / validation file: `Year, Month, Day, Tair, Twat_obs, Twat_mod, Twat_obs_agg, Twat_mod_agg, Q`. `_agg` are the values actually scored; `-999` means none. Gap-tolerant runs add `Tair_gap, Q_gap, segment_id`. `warm_up` (gap-tolerant runs, and files shorter than a year) is 1 on the unscored days at the start of each segment or file. |
 | `goodness_of_fit_<period>_*.csv` | N, NSE, R² (squared correlation), RMSE, MAE, AIC and BIC, for `calibration` and `validation`. The `full_simulation` file repeats the calibration scores, because only measured days are scored. |
 | `calibration_*.png`, `validation_*.png` | measured and simulated water temperature on the measured days, with the residuals below |
 | `full_simulation_*.png` | the calibration period again, on every day, including days without a measurement |
@@ -694,9 +694,13 @@ it works:
   For versions 4 and 8, a day with zero discharge is also a gap unless
   `min_theta_floor` is set (§9.2). Version 7 simulates it.
 - Segments shorter than `min_segment_days` (default 30) are dropped.
-- Each segment is simulated on its own. It starts from the measured water
-  temperature on its first day, or, if there is none, from the average for
-  that day of the year.
+- Each segment is simulated on its own. In a calibration or validation it
+  starts from the measured water temperature on its first day, or, if there
+  is none, from the calibration's average for that day of the year. A FORWARD
+  (scenario) run starts it from the water temperature that matches the first
+  day's air temperature and flow, so a scenario file needs no water
+  temperature, a scenario's start does not come from measurements made under
+  other conditions, and paired runs start alike.
 - The first `warmup_drop_days` (default 15) of each segment are not scored.
   This gives the model time to forget its approximate starting value. After
   the calibration, the program works out how long the fitted model needs:
