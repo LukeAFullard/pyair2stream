@@ -133,9 +133,9 @@ years. They are the bands in the figure.
 Keep in mind:
 
 - **They are approximate.** In a test with known parameters, these intervals
-  contained the true values 83–94% of the time, for every model version
+  contained the true values 83–95% of the time, for every model version
   ([validation V4](../../validation/REPORT.md#v4)). The MCMC parameter ranges
-  of example 02 did as well or better in that test (97% for version 5, 91% for
+  of example 02 did as well or better in that test (97% for version 5, 93% for
   version 8).
 - **They describe years like those in the record.** Conditions the record does
   not contain, such as much lower summer flows, can need different values.

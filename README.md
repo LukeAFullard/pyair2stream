@@ -225,7 +225,7 @@ A [validation suite](validation/README.md) tests this. Its results are in
   ([V3](validation/REPORT.md#v3)).
 - **Honest uncertainty ranges.** On such data, 90% ranges contain the truth
   about 90% of the time ([V4](validation/REPORT.md#v4)). On real rivers, in
-  years not used for fitting, they held on 85–89.6% of days. So they are
+  years not used for fitting, they held on 85–89% of days. So they are
   slightly too narrow for new years ([V5](validation/REPORT.md#v5)).
 - **Probabilities need the check.** The model can be too warm on the hottest
   days. So uncorrected ranges for yearly peaks held in only 73–92% of years.

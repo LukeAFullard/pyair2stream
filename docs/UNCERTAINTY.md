@@ -270,8 +270,8 @@ weeks' errors correlate 0.52–0.81, about twice what the daily ρ implies
 
 **A single day: almost nothing.** σ is the same, so the range for one day is
 almost the same. On the Swiss rivers, the test was years not used for
-calibration. There, 90% daily ranges held on 85.2–89.6% of days with the weekly
-ρ, and on 84.5–89.1% with the daily ρ ([V5](../validation/REPORT.md#v5)).
+calibration. There, 90% daily ranges held on 85.4–89.3% of days with the weekly
+ρ, and on 84.7–89.6% with the daily ρ ([V5](../validation/REPORT.md#v5)).
 
 **Averages over a week or more: a lot.** Figure 8 shows simulated errors with
 each ρ, made from the same random numbers. Day by day they look alike. Over a
@@ -350,12 +350,12 @@ and below is over-confident.*
   data, V4 and [V9](../validation/REPORT.md#v9)). How often the 90% ranges
   contained the truth:
   - all parameter ranges: 98% with the weekly ρ, 89% with the daily ρ;
-  - the range of the seasonal timing `a7`: 90% against 70%;
-  - the ranges of yearly peaks and counts: 91–96% against 78–90%.
+  - the range of the seasonal timing `a7`: 90% against 67%;
+  - the ranges of yearly peaks and counts: 90–94% against 80–88%.
 - **Real rivers, years not used for calibration** (V5, V9). Daily values: the
   same with both. 90% ranges for 7-day means held 89.1–93.6% of the time with
-  the weekly ρ, against 82.7–87.8% with the daily ρ. Ranges for yearly peaks
-  and counts held in 73–93% of river-years, against 53–87%.
+  the weekly ρ, against 82.7–88.5% with the daily ρ. Ranges for yearly peaks
+  and counts held in 80–93% of river-years, against 53–87%.
 
 ### When to use which
 
@@ -437,7 +437,7 @@ One ρ sets the width of every parameter's range.
 - Parameters whose effect changes slowly over the year (the constant `a1`, the
   seasonal size `a6` and timing `a7`) need the full allowance for slow errors.
   With the daily ρ, the range of `a7` was too narrow: in the test, it contained
-  the truth 70% of the time instead of 90% (V4). With the weekly ρ it held
+  the truth 67% of the time instead of 90% (V4). With the weekly ρ it held
   (90%).
 - Parameters whose effect changes from day to day (`a2`, `a3`) then get ranges
   two to three times wider than they need.
@@ -568,9 +568,9 @@ was **not** calibrated on: a separate validation file, or cross-validation
 
 | Share of days inside the band | 50% | 80% | 90% | 95% | 99% |
 |---|---|---|---|---|---|
-| Synthetic data, model exactly right (V4) | within 1.4 points of the level at every level | | | | |
+| Synthetic data, model exactly right (V4) | within 1.3 points of the level at every level | | | | |
 | Swiss rivers, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.5% | 98.0–98.2% |
-| Swiss rivers, later validation years (V5) | 43–53% | 75–79% | 85–90% | 91–95% | 95–99.6% |
+| Swiss rivers, later validation years (V5) | 43–53% | 75–79% | 85–89% | 91–95% | 95–99.5% |
 | Swiss rivers, the hottest 10% of days by prediction, version 8 (V14) | | 80% | 91% | 95% | |
 | The same, version 5 (no discharge term) (V14) | | 68% | 84% | 92% | |
 
@@ -684,7 +684,7 @@ everything the year could tell the model about the answer.
 Validation [V12](../validation/REPORT.md#v12) checked this on 96 held-out years
 of three Swiss rivers. Hiding the year's air temperature and discharge from the
 calibration as well, or leaving two months unused on each side of the year,
-changed no year's error by more than 0.04 °C, and did not change how often the
+changed no year's error by more than 0.01 °C, and did not change how often the
 ranges held.
 
 ### How to run it
@@ -1022,7 +1022,7 @@ cross-validation with a second `random_seed`.
 ### What the validation shows
 
 On synthetic data with known parameters, the default MCMC intervals (90%)
-contained the true values 91–97% of the time, and the jackknife intervals 83–94%
+contained the true values 93–97% of the time, and the jackknife intervals 83–95%
 ([V4](../validation/REPORT.md#v4)). The parameters published for the Swiss
 rivers (Piccolroaz et al., 2016) lay inside pyair2stream's MCMC intervals for 76
 of 81 values ([V2](../validation/REPORT.md#v2)).
@@ -1104,10 +1104,10 @@ range you quote beside it.
 
 | Share inside the range | 50% | 80% | 90% | 95% | 99% |
 |---|---|---|---|---|---|
-| days, synthetic data (V4) | within 1.4 points of the level at every level | | | | |
+| days, synthetic data (V4) | within 1.3 points of the level at every level | | | | |
 | days, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.5% | 98.0–98.2% |
 | 7-day means, held-out years (V11) | 53–59% | 84–88% | 93–94% | 96–97% | 98.6–99.2% |
-| days, later validation years (V5) | 43–53% | 75–79% | 85–90% | 91–95% | 95–99.6% |
+| days, later validation years (V5) | 43–53% | 75–79% | 85–89% | 91–95% | 95–99.5% |
 | yearly statistics, corrected (V11) | 50–69% | 75–85% | 85–94% | 92–100% | 100% |
 
 ![Stated against achieved coverage on the real rivers: days, summer days and 7-day means.](../validation/figures/V5_levels.png)

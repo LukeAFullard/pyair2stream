@@ -50,14 +50,14 @@
   air temperature and discharge, the standard design (docs/METHODS.md §11 now
   explains why, with references). Over 96 held-out river-years, hiding the
   inputs from the calibration too changed no year's RMSE by more than
-  0.034 °C (against gap-tolerant mode with the inputs kept), and a 60-day
-  buffer around the year by no more than 0.041 °C.
+  0.007 °C (against gap-tolerant mode with the inputs kept), and a 60-day
+  buffer around the year by no more than 0.008 °C.
   Calibrating on earlier years only was as accurate, but its 90% intervals held
   on 87.1% of days against 89.6%: for predictions of future years, quote the
-  later-years tests (V5, V10) as well. ⚠ Jackknife parameter intervals depend
-  on the optimizer: another seed alone changed version 8's jackknife standard
-  errors by a factor of 0.35–1.55; check poorly determined parameters with a
-  second `random_seed`. `validation/run_all.py --only` now keeps the other
+  later-years tests (V5, V10) as well. Jackknife parameter intervals depend a
+  little on the optimizer: another seed alone changed their typical width by a
+  factor of 0.65–1.06 (0.35–1.55 before the DE stopping rule was fixed); check
+  poorly determined parameters with a second `random_seed`. `validation/run_all.py --only` now keeps the other
   checks in `REPORT.md`.
 - Validation V13: the parameters and errors of the first air2stream paper
   (Toffolon and Piccolroaz, 2015), transcribed to
@@ -192,12 +192,15 @@
   temperatures by at most 0.008 °C. Results drawn from MCMC samples moved
   slightly more, because the chain starts from the fit: example 03's
   corrected probabilities went from 0.59/0.33/0.12 to 0.57/0.34/0.14. The
-  examples and their figures are rerun. ⚠ The validation report
-  (validation/REPORT.md) was made before this fix. A rerun with the fix
-  reached V1-V4 before the 2-hour limit for background jobs: V1-V3 gave the same
-  results, and V4's coverages moved by at most 2 percentage points (all still
-  passing). The full suite now takes over 2 hours, so it has to be run in
-  parts (`python validation/run_all.py --only V5 V6 ...`).
+  examples and their figures are rerun. The whole validation suite is rerun
+  with the fix: the same 11 checks pass and the same 4 (V5, V9, V10, V14)
+  miss some criteria, for the same reasons. Most numbers moved by a few
+  tenths of a percentage point. The exceptions show how much the early stop
+  had cost: in V12, the design differences it had seemed to show were mostly
+  optimizer scatter (hiding a held-out year's inputs changed no year's RMSE by
+  more than 0.007 °C, against 0.034 °C before), and in V15 the jackknife
+  intervals are half as wide. The full suite now takes several hours; run it
+  in parts with `--only` where jobs are limited in length.
 - Monthly scoring (`time_resolution: "1m"`) of a 360-day-calendar record longer
   than about 60 years stopped with `IndexError`.
 - Documentation errors: example 02 gave the parameter ranges as 95% ranges

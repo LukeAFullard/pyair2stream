@@ -424,10 +424,10 @@ its inputs, which shape only the first days to weeks of the next year.
 
 Validation V12 tested the alternatives on 96 held-out river-years. Hiding the
 inputs during calibration too (in gap-tolerant mode, where the year then becomes
-a gap) changed no year's RMSE by more than 0.034 °C against the same mode with
-the inputs kept (another optimizer seed alone: 0.017 °C), and a 60-day
+a gap) changed no year's RMSE by more than 0.007 °C against the same mode with
+the inputs kept (another optimizer seed alone: 0.007 °C), and a 60-day
 buffer of unused days on each side of the year (h-block cross-validation;
-Burman et al., 1994) by no more than 0.041 °C; neither changed the coverage of
+Burman et al., 1994) by no more than 0.008 °C; neither changed the coverage of
 the 90% interval or the mean error of the yearly statistics measurably.
 
 **What it does not test.**
@@ -441,7 +441,7 @@ the 90% interval or the mean error of the yearly statistics measurably.
   earlier years, as is usual in hydrology (Coron et al., 2012), but where a
   record changes over time only a test that keeps time order is fully honest
   (Arlot and Celisse, 2010, §8.3). In V12, calibrating on earlier years only
-  predicted as accurately (RMSE 0.787 against 0.786 °C on the same 78 years),
+  predicted as accurately (RMSE 0.787 against 0.785 °C on the same 78 years),
   but its 90% intervals held on 87.1% of days against 89.6%, because the error
   size estimated from earlier years only was smaller. V5 (the later years of
   each record) and V10 (warmer years) are the forward tests: quote them, as
@@ -450,7 +450,7 @@ the 90% interval or the mean error of the yearly statistics measurably.
 Large variation of the parameters between folds means they are poorly determined
 by the data (equifinality). The spread between folds (`std`) is not a confidence
 interval: the folds share most of their data, so it understates the uncertainty
-(in validation V4 it contained the true values only 35–56% of the time).
+(in validation V4 it contained the true values only 35–52% of the time).
 
 `cv_results.csv` therefore also gives **jackknife intervals** for the parameters.
 With θᵢ the parameters fitted without block i (m folds), θ̄ their mean, and n the
@@ -464,9 +464,9 @@ rows are named `jackknife_90_lower` and so on).
 When every block is held out (m = n) this is the standard delete-one-block
 jackknife; the first years are never held out, so the sum over n blocks is
 estimated as n/m times the sum over the m folds. In validation V4 these 90%
-intervals contained the true parameters 83–94% of the time for every version.
+intervals contained the true parameters 83–95% of the time for every version.
 On the same data, the DE-MCMC parameter intervals (§12, default likelihood)
-contained them 97% of the time for version 5 and 91% for version 8. For
+contained them 97% of the time for version 5 and 93% for version 8. For
 versions 4, 7 and 8 set `Qmedia`
 explicitly, so that every fold uses the same discharge scaling.
 
@@ -580,9 +580,9 @@ values at least 90% of the time for both versions (V4). The exact AR(1)
 likelihood's intervals for version 8 contained the truth only about 75% of the
 time: its parameters trade off against each other and that posterior is far from
 normal. The sampler was cross-checked against emcee's stretch move. On three real
-rivers, with the default settings, 90% intervals contained 85–89.6% of daily
-values in years not used for calibration (84.5–89.6% across all settings
-tested), and for 7-day means 89–94%, against 83–88% with `rho_timescale:
+rivers, with the default settings, 90% intervals contained 85–89% of daily
+values in years not used for calibration (84.7–89.6% across all settings
+tested), and for 7-day means 89–94%, against 83–89% with `rho_timescale:
 "daily"` and 39–62% with `iid` (V5). On the same rivers, the parameters published by Piccolroaz et al.
 (2016) lay inside these intervals for every converged run of versions 3–5. For
 versions 7 and 8 on the Mentue and version 8 on the Rhône several lay outside:
@@ -590,14 +590,14 @@ there many parameter combinations fit almost equally well, and the published
 set is not where a least-squares calibration on these data lands (V2).
 
 **At other levels.** On synthetic data the intervals held at every level tested
-(50%, 80%, 90%, 95% and 99%: mean coverage within 1.4 points of the level, V4).
+(50%, 80%, 90%, 95% and 99%: mean coverage within 1.3 points of the level, V4).
 On the Swiss rivers, pooled over 48 years held out by cross-validation per
 version, daily intervals held from 50% to 95% (95% intervals: 94.4–94.5% of
 days), but 99% intervals held only 98.0–98.2%: the model's real errors have
 heavier tails than the normal distribution assumed (V11). In the later
 validation years of V5, whose errors were larger than in calibration, daily
-intervals were narrower than stated, more so at high levels (90%: 85–90%; 95%:
-91–95%; 99%: 95–99.6%). 7-day means held at every level (V11: 96–97% at 95%,
+intervals were narrower than stated, more so at high levels (90%: 85–89%; 95%:
+91–95%; 99%: 95–99.5%). 7-day means held at every level (V11: 96–97% at 95%,
 98.6–99.2% at 99%).
 
 **Where the chain is centred.** With the default least-squares likelihood the
@@ -760,8 +760,8 @@ autocorrelation of its sensitivity and r_e that of the errors.
 With one factor for all parameters, the factor must be large enough for the
 slowest parameter. Validation V4 computes this formula and compares it with the
 measured spread of the estimates; they agree closely. With fast + slow errors,
-ρ₁ made a7's interval about 1.5 times too narrow (measured 1.54; the formula
-predicts 1.59). Its 90% interval contained the truth 70% of the time. The
+ρ₁ made a7's interval about 1.5 times too narrow (measured 1.55; the formula
+predicts 1.59). Its 90% interval contained the truth 67% of the time. The
 weekly ρ gave it the right width (90%). The cost is that the intervals of the
 fast-varying parameters are wider than necessary, by a factor of about two to
 three in V4. That happens with either ρ: it is a property of a single effective
@@ -781,12 +781,12 @@ noisy, and ρ₁ sets the floor. For AR(1) errors, taking the larger changes not
 | Test | Weekly ρ (default) | Daily ρ | Check |
 |---|---|---|---|
 | AR(1) errors, synthetic: ρ estimated; 90% parameter intervals containing the truth | 0.699; 97.3% | 0.691; 97.3% | V4 E, G |
-| Fast + slow errors, synthetic: 90% parameter intervals | 98.0% | 89.3% | V4 H, I |
-| Same, interval of a7 alone | 90% | 70% | V4 H, I |
-| Same, 90% ranges of yearly peaks and counts | 91–96% | 78–90% | V9 A |
-| Real rivers, later years: daily values inside 90% intervals | 85.2–89.6% | 84.5–89.1% | V5 |
-| Same, 7-day means | 89.1–93.6% | 82.7–87.8% | V5 |
-| Same, 90% ranges of yearly peaks and counts | 73–93% | 53–87% | V9 B |
+| Fast + slow errors, synthetic: 90% parameter intervals | 98.0% | 88.7% | V4 H, I |
+| Same, interval of a7 alone | 90% | 67% | V4 H, I |
+| Same, 90% ranges of yearly peaks and counts | 90–94% | 80–88% | V9 A |
+| Real rivers, later years: daily values inside 90% intervals | 85.4–89.3% | 84.7–89.6% | V5 |
+| Same, 7-day means | 89.1–93.6% | 82.7–88.5% | V5 |
+| Same, 90% ranges of yearly peaks and counts | 80–93% | 53–87% | V9 B |
 
 The synthetic fast + slow errors are built like the real ones (60% of the
 variance in a part with ρ = 0.55, 40% in a part with ρ = 0.96). The real-river
@@ -906,7 +906,7 @@ result.
 **What the validation shows** (V9, V11). On synthetic data, where the model and
 its error model are exactly right, the stated probabilities for yearly
 statistics came true as often as stated, and the 90% ranges contained the
-measured value 86–94% of the time (V9 A). On the three Swiss rivers, over 48
+measured value 83–96% of the time (V9 A). On the three Swiss rivers, over 48
 held-out years per version (V11), the uncorrected 90% ranges held in 79–92% of
 years for version 8 and 73–81% for version 5. After the correction they held
 in 85–94% for both versions, within the range expected by chance, and the
@@ -919,7 +919,7 @@ as recommended to genuinely later years (cross-validation of the calibration
 years, then correction of the FORWARD simulations of the validation years; V9
 C, 15 river-years), the correction made the probabilities closer to what
 happened for 5 of 6 version and statistic pairs (version 8's Brier skill score
-against the share of past years rose from 0.08–0.42 to 0.33–0.50), but version
+against the share of past years rose from 0.08–0.43 to 0.35–0.50), but version
 8's 90% ranges for the highest daily mean still held in only 11 of 15
 river-years. Version 5 predicted almost the same peak every year on the Rhône,
 where discharge drives summer temperature; the correction removes its bias, but
@@ -1012,7 +1012,7 @@ change one-sided.
   Q-Q, autocorrelation) and the reported coverage, ideally on validation data.
   Errors are often larger in some seasons than others, so also check coverage
   in the season a limit applies to (on the Swiss rivers, summer coverage of 90%
-  intervals was 84–97%, validation V5).
+  intervals was 83–98%, validation V5).
 - **Converged sampling.** MCMC results are only valid once converged; by
   default the run stops otherwise (§12).
 - **Multi-day quantities** (7-day means, runs of days above a limit) need
@@ -1024,7 +1024,7 @@ change one-sided.
   (`prediction_interval`, `parameter_interval`). On the Swiss rivers daily
   intervals held from 50% to 95%, but 99% daily intervals missed about twice
   as many days as stated (98.0–98.2% held, V11), and in years unlike the
-  calibration years 95% intervals held 91–95% and 99% intervals 95–99.6% (V5).
+  calibration years 95% intervals held 91–95% and 99% intervals 95–99.5% (V5).
   Before reporting a 95% or 99% daily interval, check it at your site with
   `cv_interval_coverage.csv` (§11) and on validation years.
 - **Scenario differences** assume the model's error on a given day would be the

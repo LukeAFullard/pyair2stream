@@ -65,7 +65,7 @@ pyair2stream --config examples/02_uncertainty/predict.yaml
 Interval check: 89.5% of 1095 observed days lie inside the 90% prediction interval.
 ```
 
-That is close to 90%, slightly below. The validation suite found 85–89.6% on
+That is close to 90%, slightly below. The validation suite found 85–89% on
 three Swiss rivers ([V5](../../validation/REPORT.md#v5)). The model's errors
 are somewhat larger in years it has not seen. So the intervals are slightly
 too narrow for new years.

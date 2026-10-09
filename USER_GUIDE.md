@@ -842,7 +842,7 @@ year, and then scores the model on that hidden year. It shows:
 Only the hidden year's water temperatures are hidden. The year is predicted
 from its own air temperature and discharge, like any prediction. This is the
 standard design. Hiding the inputs too changed no year's RMSE by more than
-0.04 °C ([V12](validation/REPORT.md#v12);
+0.01 °C ([V12](validation/REPORT.md#v12);
 [docs/METHODS.md §11](docs/METHODS.md#11-cross-validation) explains why).
 
 Each year is predicted from a calibration that includes later years as well
@@ -911,21 +911,21 @@ The check uses the error settings of `uncertainty_options` (`noise_model`,
 (The level is `uncertainty_options.parameter_interval`, and the row names
 follow it.) They come from how much the parameters move between folds (the
 jackknife, [docs/METHODS.md §11](docs/METHODS.md#11-cross-validation)). In a
-test with known parameters, they contained the true values 83–94% of the time
+test with known parameters, they contained the true values 83–95% of the time
 ([V4](validation/REPORT.md#v4)). Keep in mind:
 
 - Do not use the `std` row as an uncertainty. The folds share most of their
-  data, so it is far too small. It contained the true values only 35–56% of
+  data, so it is far too small. It contained the true values only 35–52% of
   the time.
 - Each interval is for one parameter on its own. Parameters that trade off
   move together, so combining the ends of several intervals gives parameter
   sets that do not fit ([example 06](examples/06_cross_validation/README.md)
   shows this).
-- The intervals also depend on the optimiser's random start. Where parameters
-  trade off, one fold can end on a distant set with almost the same fit.
-  Another `random_seed` alone changed version 8's intervals by a factor of
-  0.35 to 1.55 ([V12](validation/REPORT.md#v12)). For poorly determined
-  parameters, repeat the run with a second seed.
+- The intervals also depend a little on the optimiser's random start. Where
+  parameters trade off, one fold can end on a distant set with almost the same
+  fit. Another `random_seed` alone changed the intervals' typical width by a
+  factor of 0.65 to 1.06 ([V12](validation/REPORT.md#v12)). For poorly
+  determined parameters, repeat the run with a second seed.
 
 Cross-validation runs only with `run_mode` `DE`, `PSO` or `LATHYP`. In other
 run modes it is ignored, with a warning.
@@ -947,7 +947,7 @@ decision, check:
 4. **Uncertainty.** If you report a band, its coverage is close to the level
    you asked for: on validation years, and in the season your limit applies
    to. Bands for new years are usually slightly narrow: 90% bands held on
-   85–89.6% of days on the Swiss rivers ([V5](validation/REPORT.md#v5)).
+   85–89% of days on the Swiss rivers ([V5](validation/REPORT.md#v5)).
    - For 7-day means, runs of warm days and other quantities over several days,
      keep `noise_model: "ar1"` and `rho_timescale: "weekly"` (the defaults).
      Compute them from the saved simulations (§12).
