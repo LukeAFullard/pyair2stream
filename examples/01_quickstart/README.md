@@ -34,8 +34,9 @@ The settings file, [`config.yaml`](config.yaml), sets:
 ## Read the results
 
 Everything is written to `examples/01_quickstart/output/`. Start with
-`summary.md`: one page with the settings, the data used, the scores, the
-fitted parameters, every warning, and what each other file is.
+`summary.md` (or `summary.html`, the same page for a web browser): the
+settings, the data used, the scores, the fitted parameters, every warning, the
+figures, and what each other file is.
 
 | | Calibration (2002–2009) | Validation (2010–2012) |
 |---|---|---|

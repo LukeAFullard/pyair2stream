@@ -2,7 +2,20 @@
 
 ## [0.5.1] - 2026-10-09
 
+### Added
+- **`summary.html`.** Every run now also writes its summary as a web page, with
+  the figures inside it (at screen size), so it opens in any browser and can be
+  sent as one file. `summary.md` now also shows the figures and links each
+  output file.
+
 ### Fixed
+- **Yearly statistics leave out partial years.** `scenario.year_statistics`
+  gave a "highest 7-day mean" and a count of warm days for the first and last
+  year of a file even when the file covered only part of them (for example a
+  record ending in March, whose "yearly peak" was a winter value). Such years
+  are now left out, with a warning; `partial_years="keep"` includes them. The
+  cross-validation check is unchanged: it keeps a year only if its season was
+  measured.
 - ⚠ **Any file may start on any date.** The 1 January start, which the
   Fortran assumed (it counted the time of year from the row number), is no
   longer required for calibration and validation files: the time of year comes

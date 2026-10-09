@@ -23,7 +23,7 @@ def close_figures():
     plt.close("all")
 
 
-def _ensemble(n=200, days=730, seed=0):
+def _ensemble(n=200, days=731, seed=0):    # 2020 (a leap year) and 2021
     rng = np.random.default_rng(seed)
     dates = pd.date_range("2020-01-01", periods=days, freq="D")
     base = 10 + 8 * np.sin(2 * np.pi * (dates.dayofyear.to_numpy() - 110) / 365)

@@ -124,8 +124,9 @@ scores, parameters and warnings ([User Guide §7.2](USER_GUIDE.md#72-from-python
 
 ### 4. Read the results
 
-Start with `summary.md` in the output folder: one page with the settings,
-the data used, the scores, the parameters and every warning. Then these files:
+Start with `summary.md` in the output folder (or `summary.html`, the same page
+for a web browser): the settings, the data used, the scores, the parameters,
+every warning and the figures. Then these files:
 
 | File | What it tells you |
 |---|---|

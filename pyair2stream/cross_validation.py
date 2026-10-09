@@ -733,8 +733,9 @@ def check_yearly_statistics(results: list[FoldResult], threshold: Optional[float
         measured = np.isfinite(obs_used)
         years = r.years_held_out if r.years_held_out is not None else r.dates_held_out.year.to_numpy()
         in_season = np.isin(r.dates_held_out.month, season_months)
-        sim_stats = year_statistics(ens, r.dates_held_out, threshold, years=years)
-        obs_stats = year_statistics(obs_used, r.dates_held_out, threshold, years=years)
+        # Partial years are kept: a year counts below if its season was measured.
+        sim_stats = year_statistics(ens, r.dates_held_out, threshold, years=years, partial_years="keep")
+        obs_stats = year_statistics(obs_used, r.dates_held_out, threshold, years=years, partial_years="keep")
         for year in sorted(sim_stats):
             season = (years == year) & in_season
             if not season.any() or measured[season].mean() < MIN_SEASON_OBSERVED:

@@ -74,6 +74,14 @@ def test_run_returns_the_results_and_writes_summary_and_filled_series(tmp_path, 
         assert heading in summary
     assert f"{result.scores['validation']['RMSE']:.2f}" in summary
 
+    # The same page as HTML, with every figure embedded, and summary.md showing and linking them.
+    page = open(os.path.join(result.output_dir, 'summary.html'), encoding='utf-8').read()
+    assert 'summary.html' in result.files and page.startswith('<!doctype html>')
+    assert '<h2>How well the model fits</h2>' in page and f"{result.scores['validation']['RMSE']:.2f}" in page
+    figures = [f for f in result.files if f.endswith('.png')]
+    assert figures and page.count('<img src="data:image/png;base64,') == len(figures)
+    assert all(f"]({f})" in summary for f in figures)
+
     filled = pd.read_csv(os.path.join(result.output_dir, 'filled_water_temperature_calibration.csv'),
                          parse_dates=['Date'])
     assert len(filled) == 1096

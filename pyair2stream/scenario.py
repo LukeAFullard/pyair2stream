@@ -119,7 +119,8 @@ def exceedance(ensemble: np.ndarray, threshold: float, consecutive_days: int = 1
 YEARLY_STATISTICS = ("highest daily mean", "highest 7-day mean", "days above threshold")
 
 
-def year_statistics(ensemble: np.ndarray, dates, threshold: float, window: int = 7, years=None) -> dict:
+def year_statistics(ensemble: np.ndarray, dates, threshold: float, window: int = 7, years=None,
+                    partial_years: str = "skip") -> dict:
     """
     Three statistics of each year, for each ensemble member (row): the highest daily
     mean, the highest `window`-day moving mean (the day and the `window - 1` days
@@ -138,6 +139,11 @@ def year_statistics(ensemble: np.ndarray, dates, threshold: float, window: int =
     window : int
     years : array-like of int, length n_days, optional
         Year label of each day (for example water years); default: calendar year.
+    partial_years : "skip" (default) or "keep"
+        A record that starts or ends part-way through a year covers only part of
+        its first or last year. Its highest values and its count of days above
+        the threshold would then describe only those days, not the year, so such
+        years are left out, with a warning. "keep" includes them.
 
     Returns
     -------
@@ -146,10 +152,18 @@ def year_statistics(ensemble: np.ndarray, dates, threshold: float, window: int =
         YEARLY_STATISTICS (the moving mean is named "highest 7-day mean" whatever
         `window` is). A statistic with no usable day is NaN.
     """
+    if partial_years not in ("skip", "keep"):
+        raise ValueError(f"partial_years must be 'skip' or 'keep', got {partial_years!r}")
     ens = np.atleast_2d(np.asarray(ensemble, dtype=np.float64))
     labels = np.asarray(pd.DatetimeIndex(dates).year if years is None else years)
+    skipped = partial_year_labels(dates, labels, calendar_years=years is None) if partial_years == "skip" else []
+    if skipped:
+        print(f"Warning: year(s) {', '.join(str(int(y)) for y in skipped)} are only partly covered by the dates, "
+              "so their yearly statistics are left out (partial_years='keep' includes them).")
     out = {}
     for year in np.unique(labels):
+        if year in skipped:
+            continue
         x = ens[:, labels == year]
         ok = np.isfinite(x)
         with np.errstate(invalid="ignore"):
@@ -167,6 +181,35 @@ def year_statistics(ensemble: np.ndarray, dates, threshold: float, window: int =
         out[int(year)] = {YEARLY_STATISTICS[0]: highest, YEARLY_STATISTICS[1]: week,
                           YEARLY_STATISTICS[2]: np.where(ok.any(axis=1), above, np.nan)}
     return out
+
+
+def partial_year_labels(dates, labels, calendar_years: bool = True) -> list:
+    """
+    The year labels that the dates cover only in part. The dates are consecutive days,
+    so only the first and the last year can be partial. A year is whole if the record
+    starts on its first day and ends on its last. The first day of a year is 1 January
+    for calendar years; for other labels (water years) it is the day on which the label
+    changes inside the record. With no such change (one label, not a calendar year), a
+    year is taken as whole if it has at least 365 days.
+    """
+    idx = pd.DatetimeIndex(dates)
+    labels = np.asarray(labels)
+    if len(idx) == 0:
+        return []
+    if calendar_years:
+        start = (1, 1)
+    else:
+        change = np.flatnonzero(labels[1:] != labels[:-1]) + 1
+        start = (idx[change[0]].month, idx[change[0]].day) if len(change) else None
+    if start is None:
+        return [labels[0]] if len(idx) < 365 else []
+    partial = []
+    if (idx[0].month, idx[0].day) != start:
+        partial.append(labels[0])
+    after = idx[-1] + pd.Timedelta(days=1)
+    if (after.month, after.day) != start and labels[-1] not in partial:
+        partial.append(labels[-1])
+    return partial
 
 
 def pit(simulated: np.ndarray, value: float, rng: np.random.Generator) -> float:

@@ -629,7 +629,8 @@ runs = scenario.exceedance(ens, 18.0, consecutive_days=3)           # days in ru
 
 `year_statistics` gives, for each year: the highest daily mean, the highest 7-day
 moving mean (the day and the six before it) and the number of days above a
-threshold. If your standard defines a statistic differently (fixed weeks, a
+threshold. A year the dates cover only in part (at either end of the file)
+is left out, with a warning. If your standard defines a statistic differently (fixed weeks, a
 season, a 30-day mean), compute it the same way: once per series.
 
 ### The probability that a limit was exceeded

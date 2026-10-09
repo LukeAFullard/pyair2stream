@@ -874,7 +874,10 @@ error series. A probability is computed in three steps:
 1. In each series, compute the quantity the limit is defined on.
    `scenario.year_statistics` gives each year's highest daily mean, highest
    7-day moving mean (the day and the six before it) and number of days above a
-   threshold, defined exactly as in the cross-validation check (§11).
+   threshold, defined exactly as in the cross-validation check (§11). A year
+   the dates cover only in part (the first or last year of a file that starts
+   or ends part-way through a year) is left out, with a warning, unless
+   `partial_years="keep"`.
    `scenario.aggregate` gives means (or sums, maxima) over consecutive fixed
    periods, and `scenario.exceedance` counts days above a threshold, optionally
    only in runs of at least k consecutive days (days not simulated count as not

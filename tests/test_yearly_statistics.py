@@ -36,7 +36,7 @@ def test_year_statistics_matches_pandas_rolling_per_member():
     dates = pd.date_range("2005-01-01", periods=800)
     ens = rng.normal(15, 3, (5, len(dates)))
     ens[:, rng.random(len(dates)) < 0.1] = np.nan
-    out = scenario.year_statistics(ens, dates, threshold=18.0)
+    out = scenario.year_statistics(ens, dates, threshold=18.0, partial_years="keep")
     for k in range(5):
         s = pd.Series(ens[k], index=dates)
         for year in (2005, 2006, 2007):
@@ -51,8 +51,30 @@ def test_year_labels_can_be_water_years():
     dates = pd.date_range("2001-01-01", "2002-12-31")
     labels = np.where(dates.month >= 10, dates.year + 1, dates.year)
     out = scenario.year_statistics(np.arange(len(dates), dtype=float), dates, 1e9, years=labels)
-    assert sorted(out) == [2001, 2002, 2003]
+    assert sorted(out) == [2002]                     # Jan-Sep 2001 and Oct-Dec 2002 are partial
     assert out[2002]["highest daily mean"][0] == dates.get_loc(pd.Timestamp("2002-09-30"))
+    kept = scenario.year_statistics(np.arange(len(dates), dtype=float), dates, 1e9, years=labels,
+                                    partial_years="keep")
+    assert sorted(kept) == [2001, 2002, 2003]
+
+
+def test_partial_years_are_left_out_with_a_warning(capsys):
+    dates = pd.date_range("2003-07-19", "2006-03-03")         # starts and ends part-way through a year
+    x = np.where(dates.month == 7, 20.0, 5.0)
+    out = scenario.year_statistics(x, dates, threshold=18.0)
+    assert sorted(out) == [2004, 2005]
+    assert "year(s) 2003, 2006 are only partly covered" in capsys.readouterr().out
+    assert sorted(scenario.year_statistics(x, dates, 18.0, partial_years="keep")) == [2003, 2004, 2005, 2006]
+    whole = pd.date_range("2004-01-01", "2005-12-31")
+    assert scenario.partial_year_labels(whole, whole.year) == []
+    # A noleap series (no 29 February) is still whole; a 360-day year is not a calendar year.
+    noleap = whole[~((whole.month == 2) & (whole.day == 29))]
+    assert scenario.partial_year_labels(noleap, noleap.year) == []
+    one = pd.date_range("2004-10-01", periods=365)
+    assert scenario.partial_year_labels(one, np.full(365, 2005), calendar_years=False) == []
+    assert scenario.partial_year_labels(one[:200], np.full(200, 2005), calendar_years=False) == [2005]
+    with pytest.raises(ValueError):
+        scenario.year_statistics(x, dates, 18.0, partial_years="drop")
 
 
 def test_pit_splits_ties_and_is_uniform_when_right():

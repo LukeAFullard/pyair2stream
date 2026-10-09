@@ -449,7 +449,9 @@ is saved as a PNG and as a PDF.
 **Start with `summary.md`.** Every run writes this one-page summary: the
 settings, the data used, the scores, the parameters (and whether any sits on a
 bound), the uncertainty (after `DE-MCMC` or a `FORWARD` run with intervals),
-every warning and note the run printed, and what each output file is.
+every warning and note the run printed, the figures, and what each output
+file is. `summary.html` is the same page for a web browser, with the figures
+inside it, so it can be sent as one file.
 
 ### What to check first
 
@@ -476,7 +478,8 @@ After a calibration, look at these, in this order:
 
 | File | Contents |
 |---|---|
-| `summary.md` | a one-page summary of the run: settings, data, scores, parameters, uncertainty, warnings and notes, and what each file is |
+| `summary.md` | a one-page summary of the run: settings, data, scores, parameters, uncertainty, warnings and notes, the figures, and what each file is |
+| `summary.html` | the same page for a web browser, with the figures inside it (one file to send) |
 | `filled_water_temperature_<period>.csv` | one row per day of the calibration, validation or `FORWARD` file: `T_water_measured`, `T_water_model`, `T_water_filled` (the measurement where there is one, the model's value otherwise) and `source` (`measured`, `model` or `none`). After `DE-MCMC`, or a `FORWARD` run with intervals, also the model's prediction range (`model_lower_90`, `model_upper_90` for a 90% range). |
 | `1_*.out` | line 1: the 8 fitted parameters; line 2: the calibration score; line 3: the validation score (if run) |
 | `2_*.csv` / `3_*.csv` | one row per day of the calibration / validation file: `Year, Month, Day, Tair, Twat_obs, Twat_mod, Twat_obs_agg, Twat_mod_agg, Q`. `_agg` are the values actually scored; `-999` means none. Gap-tolerant runs add `Tair_gap, Q_gap, segment_id`. |
@@ -831,7 +834,9 @@ not the upper edge of a weekly mean. Set
 
 - `load_ensemble` reads the saved series;
 - `year_statistics` gives each year's highest daily mean, highest 7-day mean
-  and number of days above a threshold, in every series;
+  and number of days above a threshold, in every series. A year the dates
+  cover only in part (at the start or end of the file) is left out, with a
+  warning: its values would describe only those days;
 - `aggregate` gives means, sums or maxima over fixed periods;
 - `exceedance` counts days above a threshold.
 

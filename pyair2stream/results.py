@@ -3,19 +3,24 @@ What a run produced, in one place.
 
 - `RunResult`, returned by `pyair2stream.run`: the best parameters, the scores, the
   warnings and notes the run printed, and the output files.
-- `summary.md`, a one-page summary written into every output folder.
+- `summary.md`, a one-page summary written into every output folder, and the same page as
+  `summary.html`, with the figures in it, to open in a web browser or send as one file.
 - `filled_water_temperature_<period>.csv`: the measured water temperature, with the
   model's values on the days without a measurement (and the prediction range where
   the run made one).
 """
 
+import base64
 import contextlib
 import datetime
 import glob
+import html
 import io
 import json
 import os
+import re
 import sys
+import urllib.parse
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -40,7 +45,7 @@ class RunResult:
         in goodness_of_fit_*.csv; a FORWARD run's are under "forward", a cross-validation
         run's (all held-out days together) under "cross-validation".
     messages: the warnings and notes the run printed, in order.
-    summary: the path of summary.md.
+    summary: the path of summary.md (summary.html, beside it, is the same page with the figures).
     files: every output file, relative to output_dir.
     data: the run's internal state (CommonData), for advanced use.
     """
@@ -204,6 +209,7 @@ def write_filled_series(data: CommonData) -> list:
 
 FILE_DESCRIPTIONS = (
     ("summary.md", "this page"),
+    ("summary.html", "this page with the figures in it, to open in a web browser or send as one file"),
     ("filled_water_temperature_", "the measured water temperature, with the model's values on the days without "
                                   "a measurement (`source` says which), and the prediction range where there is one"),
     ("0_", "every parameter set tried during the calibration, with its score"),
@@ -245,6 +251,19 @@ def _describe(name: str) -> str:
         if base.startswith(prefix) or name.startswith(prefix):
             return text
     return ""
+
+
+# The figures in summary.md and summary.html: the simulations first, then the checks of the
+# errors, then the calibration's diagnostics; any other figure last.
+FIGURE_ORDER = ("calibration_", "validation_", "full_simulation_", "forward_projection", "predicted_vs_measured_",
+                "bias_by_month_", "residual_diagnostics_", "parameter_significance_", "parameter_correlation_",
+                "convergence_", "dottyplots_")
+
+
+def _figure_rank(name: str):
+    base = os.path.basename(name)
+    rank = next((i for i, prefix in enumerate(FIGURE_ORDER) if base.startswith(prefix)), len(FIGURE_ORDER))
+    return rank, name
 
 
 def _period_rows(data: CommonData) -> list:
@@ -374,9 +393,12 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
     lines += [f"- {msg}" for msg in messages] if messages else ["None."]
     lines.append("")
 
-    files = output_files(data.folder)
-    if "summary.md" not in files:
-        files = sorted(files + ["summary.md"])
+    files = sorted(set(output_files(data.folder)) | {"summary.md", "summary.html"})
+    figures = sorted((name for name in files if name.lower().endswith(".png")), key=_figure_rank)
+    if figures:
+        lines += ["## Figures", ""]
+        for name in figures:
+            lines += [f"![{_describe(name) or os.path.basename(name)}]({_href(name)})", ""]
     # A figure saved as .png and .pdf is listed once, with both extensions.
     grouped = {}
     for name in files:
@@ -385,8 +407,8 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
         grouped.setdefault(key, []).append(name)
     lines += ["## Output files", "", "| File | What it is |", "|---|---|"]
     for key, names in grouped.items():
-        shown = f"`{names[0]}`" if len(names) == 1 else f"`{key}` (" + ", ".join(
-            os.path.splitext(n)[1] for n in names) + ")"
+        shown = f"[`{names[0]}`]({_href(names[0])})" if len(names) == 1 else f"`{key}` (" + ", ".join(
+            f"[{os.path.splitext(n)[1]}]({_href(n)})" for n in names) + ")"
         lines.append(f"| {shown} | {_describe(names[0])} |")
     lines += ["", "## Next", "",
               "- How to read these results: USER_GUIDE.md §8.",
@@ -394,4 +416,116 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
     path = os.path.join(data.folder, "summary.md")
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
+    with open(os.path.join(data.folder, "summary.html"), "w", encoding="utf-8") as f:
+        f.write(summary_html(lines, data.folder))
     return path
+
+
+# --- summary.html ------------------------------------------------------------------------------------
+
+FIGURE_WIDTH = 1200     # pixels: figures are saved at 300 dpi; the page holds a smaller copy (256 colours)
+
+_CSS = """
+:root { --fg: #1d2125; --muted: #5b6570; --bg: #ffffff; --line: #d8dde3; --head: #f3f5f7; --link: #0b5cad; }
+@media (prefers-color-scheme: dark) {
+  :root { --fg: #e6e9ec; --muted: #a3acb6; --bg: #16191c; --line: #343a40; --head: #1f2327; --link: #7db7f0; }
+}
+body { font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg);
+       max-width: 1000px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 1.6em; margin: 0 0 4px; } h2 { font-size: 1.2em; margin-top: 2em; border-bottom: 1px solid var(--line); }
+table { border-collapse: collapse; margin: 8px 0; display: block; overflow-x: auto; }
+th, td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; vertical-align: top; }
+th { background: var(--head); } td:has(code) { min-width: 14em; }
+code { font: 0.9em ui-monospace, Menlo, Consolas, monospace; word-break: break-all; }
+a { color: var(--link); }
+figure { margin: 16px 0 28px; } figure img { max-width: 100%; height: auto; background: #fff; }
+figcaption { color: var(--muted); font-size: 0.92em; }
+"""
+
+
+def _href(name: str) -> str:
+    return urllib.parse.quote(name.replace(os.sep, "/"))
+
+
+def _inline(text: str) -> str:
+    """The inline Markdown of summary.md (code, bold, links) as HTML."""
+    out = html.escape(text, quote=False)
+    out = re.sub(r"\[(.+?)\]\(([^)\s]+)\)", lambda m: f'<a href="{html.escape(m.group(2))}">{m.group(1)}</a>', out)
+    out = re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
+    return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", out)
+
+
+def _image_data(path: str) -> Optional[str]:
+    """The figure as a data: URI, at most FIGURE_WIDTH pixels wide and in 256 colours (about a
+    quarter of the size, with no visible loss for line plots); None if it cannot be read."""
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            im = im.convert("RGB")
+            if im.width > FIGURE_WIDTH:
+                im = im.resize((FIGURE_WIDTH, round(im.height * FIGURE_WIDTH / im.width)), Image.LANCZOS)
+            buf = io.BytesIO()
+            im.quantize(256, method=Image.Quantize.MEDIANCUT).save(buf, format="PNG", optimize=True)
+            raw = buf.getvalue()
+    except Exception:  # noqa: BLE001  (a figure that cannot be scaled is embedded as it is)
+        try:
+            with open(path, "rb") as f:
+                raw = f.read()
+        except OSError:
+            return None
+    return "data:image/png;base64," + base64.b64encode(raw).decode("ascii")
+
+
+def _table_html(rows: list) -> str:
+    cells = [[c.strip() for c in row.strip().strip("|").split("|")] for row in rows]
+    head, body = cells[0], [c for c in cells[1:] if not all(set(x) <= set("-: ") for x in c)]
+    out = ["<table>"]
+    if any(head):
+        out.append("<thead><tr>" + "".join(f"<th>{_inline(c)}</th>" for c in head) + "</tr></thead>")
+    out.append("<tbody>")
+    for row in body:
+        tag = "th" if not any(head) and row and row[0] else "td"
+        out.append("<tr>" + "".join(f"<{tag if i == 0 else 'td'}>{_inline(c)}</{tag if i == 0 else 'td'}>"
+                                    for i, c in enumerate(row)) + "</tr>")
+    return "\n".join(out + ["</tbody></table>"])
+
+
+def summary_html(lines: list, folder: str) -> str:
+    """summary.md (its lines) as a self-contained web page, with the figures embedded."""
+    title = lines[0].lstrip("# ").strip() if lines else "pyair2stream run summary"
+    body, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("|"):
+            j = i
+            while j < len(lines) and lines[j].startswith("|"):
+                j += 1
+            body.append(_table_html(lines[i:j]))
+            i = j
+            continue
+        if line.startswith("- "):
+            j = i
+            while j < len(lines) and lines[j].startswith("- "):
+                j += 1
+            body.append("<ul>" + "".join(f"<li>{_inline(x[2:])}</li>" for x in lines[i:j]) + "</ul>")
+            i = j
+            continue
+        figure = re.fullmatch(r"!\[(.*)\]\((.+)\)", line)
+        if figure:
+            name = urllib.parse.unquote(figure.group(2))
+            src = _image_data(os.path.join(folder, name))
+            caption = f"{_inline(figure.group(1))} (<a href=\"{figure.group(2)}\"><code>{html.escape(name)}</code></a>)"
+            if src:
+                body.append(f'<figure><img src="{src}" alt="{html.escape(figure.group(1))}">'
+                            f"<figcaption>{caption}</figcaption></figure>")
+        elif line.startswith("## "):
+            body.append(f"<h2>{_inline(line[3:])}</h2>")
+        elif line.startswith("# "):
+            body.append(f"<h1>{_inline(line[2:])}</h1>")
+        elif line.strip():
+            body.append(f"<p>{_inline(line)}</p>")
+        i += 1
+    return ("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+            f"<title>{html.escape(title)}</title>\n<style>{_CSS}</style>\n</head>\n<body>\n"
+            + "\n".join(body) + "\n</body>\n</html>\n")
