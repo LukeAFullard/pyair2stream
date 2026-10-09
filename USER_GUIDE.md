@@ -136,6 +136,18 @@ depends strongly on its flow. There, the versions without discharge (3–5) did
 hardly better than simple alternatives
 ([V9](validation/REPORT.md#v9), [V10](validation/REPORT.md#v10)).
 
+**Is the model better than a regression?** A regression of water temperature
+on air temperature is quicker to fit. In
+[validation V17](validation/REPORT.md#v17), on 3 Swiss and 23 British Columbia
+rivers, version 8 predicted daily temperatures in new years better than every
+regression on 23 of the 26 rivers. On yearly peaks, the hottest days and the
+2021 heat dome its lead was smaller: it did better than every regression on 14
+of 23 British Columbia rivers. If your question is about peaks or hot spells,
+compare the model with a regression on your own validation years. The best
+regression was usually an S-curve on air temperature averaged over the last
+few days or weeks; a straight line on the day's air temperature was the worst
+on every river.
+
 ### Integrator (`integrator`)
 
 The integrator is the numerical method that steps the equation forward one day
@@ -199,6 +211,13 @@ calibration: several years are better than one. Keep at least one full year
 for validation, preferably two or three. The validation years should include
 the conditions you care about, such as hot summers or low flows. If you cannot
 spare any years, use cross-validation (§13) instead.
+
+**How many years do you need?** On the three Swiss rivers, 3 years of data
+predicted later years almost as well as 7 to 21 years: the median error was at
+most 0.03 °C larger ([validation V16](validation/REPORT.md#v16)). One year was
+often enough too. But an unusual year, such as a heatwave summer, made the
+predictions of other years up to 0.17 °C worse. So with only one or two years,
+expect larger errors in other years, and check the model on validation years.
 
 **Climate-model data** often uses a 365-day calendar with no leap days, or a
 360-day calendar. Declare it with `calendar: "noleap"` or

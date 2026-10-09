@@ -996,6 +996,21 @@ change one-sided.
   hottest days its 90% intervals held on only 83–84% of days, against 91% for
   version 8 (V14). Compare
   versions on validation years or by cross-validation (§11).
+- **Record length.** In V16, calibrations on 3 consecutive years of a Swiss
+  river predicted the later years with a median RMSE at most 0.034 °C above
+  that of the calibration on the whole record (7–21 years). Single years cost
+  0.04–0.06 °C as a median and up to 0.17 °C (version 8). The later years
+  tested were similar to the calibration years; for conditions outside them,
+  see the bullet above and V10.
+- **Compared with regression.** In V17 (3 Swiss and 23 British Columbia
+  rivers), version 8's held-out daily RMSE was below that of the best of four
+  regressions on air temperature (the best chosen on each river after seeing
+  the held-out years) on 23 of 26 rivers: medians 0.74 against 0.89 °C
+  (Switzerland) and 0.96 against 1.17 °C (British Columbia). On yearly peaks,
+  the hottest 10% of days and the 2021 heat dome it was better on 14 of 23
+  British Columbia rivers, and on the Swiss yearly peaks on 1 of 3 (median
+  error 0.58 against 0.60 °C). Version 5 beat the best regression on 18 of 26
+  rivers.
 - **Yearly statistics need the cross-validation check.** Their computation is
   right (V9, synthetic data), but the model can be biased on the hottest days,
   and uncorrected 90% ranges for yearly statistics held in only 73–92% of

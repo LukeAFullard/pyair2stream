@@ -239,6 +239,19 @@ A [validation suite](validation/README.md) tests this. Its results are in
   predicted the warmest years almost as well: at most 0.07 °C worse. The same
   held when it was fitted on the highest-flow years and tested on the
   lowest-flow years ([V10](validation/REPORT.md#v10)).
+- **How many years of data.** Fitted on any 3 consecutive years, the model
+  predicted later years almost as well as when fitted on the whole record (7
+  to 21 years): the median error was at most 0.03 °C larger. One year was often
+  enough, but an unusual year made the predictions up to 0.17 °C worse
+  ([V16](validation/REPORT.md#v16)).
+- **Better than a regression.** In years not used for fitting, version 8
+  predicted daily temperatures better than every regression on air temperature
+  on 23 of 26 rivers. The median error was 0.74 °C against 0.89 °C for the
+  best regression in Switzerland, and 0.96 °C against 1.17 °C in British
+  Columbia. On yearly peaks and the hottest days its lead was smaller. It did
+  better than every regression on 14 of 23 British Columbia rivers. On the
+  Swiss yearly peaks, a straight line on air temperature did about as well
+  ([V17](validation/REPORT.md#v17)).
 - **Where it falls short.** Four checks do not meet all their criteria: V5,
   V9, V10 and V14. The main reasons are:
   - 95% and 99% ranges were too narrow in some years not used for fitting;
@@ -255,7 +268,7 @@ To run the tests and the validation suite (V1 needs `gfortran`):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # about 2 minutes; the full suite takes about 2 hours
+python validation/run_all.py --quick     # about 2 minutes; the full suite takes about 4 hours on 4 cores
 ```
 
 ## Differences from the original Fortran

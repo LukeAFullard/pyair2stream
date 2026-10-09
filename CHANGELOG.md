@@ -97,6 +97,19 @@
   calibrations are far from the best fit: recalibrated, they predict
   2021–2022 with RMSE 0.75 °C instead of 1.09 °C, and 1.10 °C instead of
   1.18 °C.
+- Validation V16: how many years of data a calibration needs. Each Swiss
+  river was calibrated on 1, 2, 3, 5 and 10 consecutive years (up to six
+  placements of each) and on its whole record, and every calibration predicted
+  the same later years. With 3 or more years, version 8's median RMSE was
+  within 0.034 °C of the whole record's; a single unusual year cost up to
+  0.17 °C.
+- Validation V17: air2stream against four regressions of water temperature on
+  air temperature (the day's, averaged, an S-curve, and averaged with
+  discharge), all fitted on the same years, on the 3 Swiss and 23 British
+  Columbia rivers. In held-out years, version 8's daily RMSE was below the
+  best regression's on 23 of 26 rivers (medians 0.74 against 0.89 °C, and 0.96
+  against 1.17 °C). On yearly peaks, the hottest days and the 2021 heat dome
+  its lead was smaller (better on 14 of 23 British Columbia rivers).
 - [docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md): the published
   air2stream results pyair2stream reproduces (Toffolon and Piccolroaz, 2015;
   Piccolroaz et al., 2016; Callahan and Moore, 2025), the errors found in each
