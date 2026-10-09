@@ -16,7 +16,7 @@ data](#climate-model-data) below).
 python examples/08_climate/run.py
 ```
 
-It takes about four minutes. It makes the two scenario files from the measured
+It takes about five minutes. It makes the two scenario files from the measured
 2010–2012 file, then runs:
 
 ```bash
@@ -62,11 +62,11 @@ The change, simulation by simulation (scenario minus baseline):
 
 | Scenario | Change in | Median | 90% range |
 |---|---|---|---|
-| air +2 °C | summer (Jun–Aug) mean | +1.52 °C | +1.48 to +1.56 °C |
-| air +2 °C | winter (Dec–Feb) mean | +1.04 °C | +0.99 to +1.10 °C |
+| air +2 °C | summer (Jun–Aug) mean | +1.52 °C | +1.49 to +1.56 °C |
+| air +2 °C | winter (Dec–Feb) mean | +1.05 °C | +0.99 to +1.10 °C |
 | air +2 °C | whole-year mean | +1.36 °C | +1.32 to +1.40 °C |
 | air +2 °C, 20% less summer flow | summer (Jun–Aug) mean | +1.58 °C | +1.54 to +1.63 °C |
-| air +2 °C, 20% less summer flow | winter (Dec–Feb) mean | +1.04 °C | +0.99 to +1.10 °C |
+| air +2 °C, 20% less summer flow | winter (Dec–Feb) mean | +1.05 °C | +0.99 to +1.10 °C |
 
 ![Monthly mean change in water temperature for both scenarios](figures/monthly_change.png)
 
@@ -96,9 +96,9 @@ all three runs.
 
 | Year | P(7-day mean > 20 °C): as measured | air +2 °C | air +2 °C, less summer flow | Days above 18 °C: as measured | air +2 °C | air +2 °C, less summer flow |
 |---|---|---|---|---|---|---|
-| 2010 | 0.59 | 1.00 | 1.00 | 31 (23 to 39) | 51 (42 to 60) | 52 (43 to 61) |
-| 2011 | 0.33 | 0.99 | 0.99 | 19 (12 to 27) | 41 (33 to 50) | 42 (34 to 51) |
-| 2012 | 0.12 | 0.96 | 0.98 | 25 (16 to 34) | 57 (44 to 69) | 59 (46 to 71) |
+| 2010 | 0.57 | 1.00 | 1.00 | 31 (22 to 39) | 51 (42 to 60) | 51 (43 to 61) |
+| 2011 | 0.34 | 0.99 | 0.99 | 19 (11 to 28) | 41 (33 to 50) | 42 (34 to 51) |
+| 2012 | 0.14 | 0.95 | 0.97 | 25 (16 to 34) | 57 (43 to 70) | 59 (45 to 72) |
 
 *Days above 18 °C: median, with the 90% range in brackets.*
 
@@ -109,8 +109,8 @@ all three runs.
 
 **Reading it.** The year's highest 7-day mean rises by 1.6 °C (90% range 1.56 to
 1.65 °C). In 2010–2012, a 20 °C limit was exceeded in one year of three (P =
-0.12 to 0.59). With 2 °C warmer air, it would be exceeded almost every year (P =
-0.96 to 1.00). The number of days above 18 °C would roughly double.
+0.14 to 0.57). With 2 °C warmer air, it would be exceeded almost every year (P =
+0.95 to 1.00). The number of days above 18 °C would roughly double.
 
 ## Climate-model data
 

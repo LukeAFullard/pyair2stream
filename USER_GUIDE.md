@@ -89,9 +89,9 @@ It takes under a minute. After a banner, you should see:
 mean, TSS and standard deviation (calibration)
 9.73069 96513.81949 5.76298
 Pop. Size (particles) = 50, Max Generations (runs) = 100
-DE Finished. Best internal negated objective: -0.985672
+DE Finished. Best internal negated objective: -0.987657
 L-BFGS-B Finished. Best internal negated objective: -0.987927
-Efficiency Index in calibration 0.9879266378568211
+Efficiency Index in calibration 0.9879265649786034
 Consistency check passed.
 mean, TSS and standard deviation (validation)
 9.67611 37744.04425 5.87375
@@ -136,6 +136,18 @@ On the three Swiss rivers tested, versions 7 and 8 predicted unseen years best
 depends strongly on its flow. There, the versions without discharge (3–5) did
 hardly better than simple alternatives
 ([V9](validation/REPORT.md#v9), [V10](validation/REPORT.md#v10)).
+
+**Is the model better than a regression?** A regression of water temperature
+on air temperature is quicker to fit. In
+[validation V17](validation/REPORT.md#v17), on 3 Swiss and 23 British Columbia
+rivers, version 8 predicted daily temperatures in new years better than every
+regression on 23 of the 26 rivers. On yearly peaks, the hottest days and the
+2021 heat dome its lead was smaller: it did better than every regression on 14
+of 23 British Columbia rivers. If your question is about peaks or hot spells,
+compare the model with a regression on your own validation years. The best
+regression was usually an S-curve on air temperature averaged over the last
+few days or weeks; a straight line on the day's air temperature was the worst
+on every river.
 
 ### Integrator (`integrator`)
 
@@ -201,6 +213,13 @@ calibration: several years are better than one. Keep at least one full year
 for validation, preferably two or three. The validation years should include
 the conditions you care about, such as hot summers or low flows. If you cannot
 spare any years, use cross-validation (§13) instead.
+
+**How many years do you need?** On the three Swiss rivers, 3 years of data
+predicted later years almost as well as 7 to 21 years: the median error was at
+most 0.03 °C larger ([validation V16](validation/REPORT.md#v16)). One year was
+often enough too. But an unusual year, such as a heatwave summer, made the
+predictions of other years up to 0.17 °C worse. So with only one or two years,
+expect larger errors in other years, and check the model on validation years.
 
 **Climate-model data** often uses a 365-day calendar with no leap days, or a
 360-day calendar. Declare it with `calendar: "noleap"` or
@@ -280,6 +299,7 @@ parameter_bounds:           # needed for calibration: 8 values each, for a1..a8
 optimization:
   n_run: 100                # DE: the most generations; PSO: iterations; LATHYP: samples
   n_particles: 50           # DE: population = n_particles x 8; PSO: number of particles
+  tol: 0.001                # DE only: stop early once the population's scores agree this closely
   c1: 2.0                   # PSO only: pull towards each particle's own best
   c2: 2.0                   # PSO only: pull towards the swarm's best
   wmax: 0.9                 # PSO only: starting inertia
@@ -383,36 +403,54 @@ relative to, or use full paths.
 
 ### 7.2 From Python
 
-The command line is the simplest way to run pyair2stream. To run it from a
-Python script, call the same command:
+`pyair2stream.run` does exactly what the command line does, and returns the
+results:
 
 ```python
-import subprocess
-subprocess.run(["pyair2stream", "--config", "config.yaml"], check=True)
+import pyair2stream
+
+result = pyair2stream.run("config.yaml")          # or a dict with the same keys
+result.scores["validation"]["RMSE"]               # the validation RMSE, °C
+result.parameters                                 # {"a1": ..., "a8": ...}: the best fit
+result.messages                                   # the warnings and notes the run printed
+result.output_dir, result.summary                 # the output folder and its summary.md
 ```
 
-For more control, you can call the calibration steps directly:
+- `config` can be the path of a settings file, or a dict with the same keys.
+  A dict is handy for loops: change one setting, run again.
+- `verbose=False` runs without printing. The warnings and notes are still in
+  `result.messages` and in `summary.md`.
+- Errors raise exceptions: for example a `ValueError` naming the file, column
+  and line of a problem in the data.
+- `result.scores` has the scores of `goodness_of_fit_*.csv`, under
+  `"calibration"` and `"validation"`. A `FORWARD` run's are under `"forward"`,
+  a cross-validation run's (all held-out days together) under
+  `"cross-validation"`.
+- `result.data` holds the run's internal state, for advanced use.
+
+For example, to compare model versions:
 
 ```python
-from pyair2stream.io import read_calibration, read_Tseries
-from pyair2stream.model import aggregation, statis
-from pyair2stream.optimization import DE_mode
+import yaml, pyair2stream
 
-data = read_calibration(config_file="config.yaml")
-read_Tseries(data, "c")        # load the calibration data
-aggregation(data)
-statis(data)
-DE_mode(data, seed=42)         # sets data.par_best and data.finalfit
-print(data.par_best, data.finalfit)
+base = yaml.safe_load(open("config.yaml"))
+for version in (5, 8):
+    cfg = {**base, "version": version,
+           "paths": {**base["paths"], "output_dir": f"output/version{version}"}}
+    r = pyair2stream.run(cfg, verbose=False)
+    print(version, round(r.scores["validation"]["RMSE"], 3))
 ```
-
-This calibrates only. It does not validate or write the output files.
 
 ## 8. Understanding the output files
 
 All files go to `output_dir`. Their names include the run mode, the score
 (objective), the station, the series label and the time resolution. Every plot
 is saved as a PNG and as a PDF.
+
+**Start with `summary.md`.** Every run writes this one-page summary: the
+settings, the data used, the scores, the parameters (and whether any sits on a
+bound), the uncertainty (after `DE-MCMC` or a `FORWARD` run with intervals),
+every warning and note the run printed, and what each output file is.
 
 ### What to check first
 
@@ -439,6 +477,8 @@ After a calibration, look at these, in this order:
 
 | File | Contents |
 |---|---|
+| `summary.md` | a one-page summary of the run: settings, data, scores, parameters, uncertainty, warnings and notes, and what each file is |
+| `filled_water_temperature_<period>.csv` | one row per day of the calibration, validation or `FORWARD` file: `T_water_measured`, `T_water_model`, `T_water_filled` (the measurement where there is one, the model's value otherwise) and `source` (`measured`, `model` or `none`). After `DE-MCMC`, or a `FORWARD` run with intervals, also the model's prediction range (`model_lower_90`, `model_upper_90` for a 90% range). |
 | `1_*.out` | line 1: the 8 fitted parameters; line 2: the calibration score; line 3: the validation score (if run) |
 | `2_*.csv` / `3_*.csv` | one row per day of the calibration / validation file: `Year, Month, Day, Tair, Twat_obs, Twat_mod, Twat_obs_agg, Twat_mod_agg, Q`. `_agg` are the values actually scored; `-999` means none. Gap-tolerant runs add `Tair_gap, Q_gap, segment_id`. |
 | `goodness_of_fit_<period>_*.csv` | N, NSE, R² (squared correlation), RMSE, MAE, AIC and BIC, for `calibration` and `validation`. The `full_simulation` file repeats the calibration scores, because only measured days are scored. |
@@ -510,6 +550,7 @@ After a calibration, look at these, in this order:
 | `paired_difference_from_files: ... differs` | The two scenario runs did not use the same parameter sets ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `The MCMC chain ... was fitted with ...` | The FORWARD run's model version, integrator or `Qmedia` differs from the chain's calibration. Use `paths.calibration_metadata` from that calibration ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `Warning: warmup_drop_days=... is shorter than` | Gap-tolerant mode: increase `warmup_drop_days` as the message suggests ([§10](#10-gap-tolerant-mode)). |
+| `Note: the calibrated model forgets its restart within about ... days` | Gap-tolerant mode: a shorter warm-up would score more measured days. Set the values it gives and calibrate again ([§10](#10-gap-tolerant-mode)). |
 | (no message) Good overall scores, but `bias_by_month_*.png` shows the model too warm or too cool in some months | A score over the whole year can hide an error in one season. Compare model versions ([§4](#4-choosing-a-model-version-and-integrator)). Where discharge drives the summer temperature, use version 7 or 8. If an error remains in the season of your limit, report it. A model that is too warm overstates the chance that a warm-water limit was exceeded; one that is too cool understates it. |
 
 ### 9.1 Numerical stability and the choice of integrator
@@ -595,19 +636,39 @@ it works:
   temperature on its first day, or, if there is none, from the average for
   that day of the year.
 - The first `warmup_drop_days` (default 15) of each segment are not scored.
-  This gives the model time to forget its approximate starting value. The
-  program warns if 15 days is too short for your fitted model.
+  This gives the model time to forget its approximate starting value. After
+  the calibration, the program works out how long the fitted model needs:
+  about three relaxation times, 3/B days (B is defined in §9.1). It warns if
+  the warm-up is shorter. If it is much longer and that costs many measured
+  days, a note gives a shorter warm-up and how many more days it would score.
 - The record does not need to start on 1 January.
-- Water temperature measurements inside a gap are not used.
+- Water temperature measurements inside a gap are not used. The model gives no
+  water temperatures inside a gap.
+
+When to use it. [Example 05](examples/05_gaps/README.md) tests this on the
+Mentue:
+
+- **Long gaps (weeks to a year): use gap-tolerant mode.** It changed the
+  calibrated model least, for every gap from a month to a year. Even a whole
+  missing year changed the predictions for other years by at most 0.07 °C.
+  Filling a gap of a quarter to a year with a straight line changed them by
+  0.10 to 1.14 °C on average. Filling it with the seasonal average changed them
+  by 0.06 to 0.12 °C.
+- **Many short gaps: shorten the warm-up.** With the default 15 days,
+  scattered gaps throw away much more data than their share. With 5% of days
+  missing at random, only about a third of the measured days were scored. The
+  Mentue forgets its restart within 4 days. With a 4-day warm-up, three
+  quarters were scored, and the predictions changed by 0.03 °C. So run once
+  with the defaults, and if the run prints a note, use its values. On 26 rivers,
+  the suggested warm-up was 2–11 days.
+- **Do not set the warm-up to 0.** The first days after each restart start
+  from the measured water temperature, so the fit looks better than it is.
+- **Gaps on one day in five or more:** even a short warm-up scores only about
+  a quarter of the record. Fill single missing days instead, from a nearby
+  station or by interpolating over a day or two.
 
 Be aware:
 
-- **Scattered gaps throw away much more data than their share suggests.** With
-  5% of days missing at random, only about a third of the measurements could
-  be scored ([validation V7](validation/REPORT.md#v7)). Few stretches without a
-  gap reach 30 days. So fill short gaps instead, from a nearby station or by
-  interpolating over a day or two. Keep gap-tolerant mode for long gaps.
-  [Example 05](examples/05_gaps/README.md) compares the two.
 - **Check how much data was used** in `gaps_summary.txt` and in the console
   warnings.
 - **Scores are not directly comparable with scores on a complete record.** Gaps
@@ -842,7 +903,7 @@ year, and then scores the model on that hidden year. It shows:
 Only the hidden year's water temperatures are hidden. The year is predicted
 from its own air temperature and discharge, like any prediction. This is the
 standard design. Hiding the inputs too changed no year's RMSE by more than
-0.04 °C ([V12](validation/REPORT.md#v12);
+0.01 °C ([V12](validation/REPORT.md#v12);
 [docs/METHODS.md §11](docs/METHODS.md#11-cross-validation) explains why).
 
 Each year is predicted from a calibration that includes later years as well
@@ -911,21 +972,21 @@ The check uses the error settings of `uncertainty_options` (`noise_model`,
 (The level is `uncertainty_options.parameter_interval`, and the row names
 follow it.) They come from how much the parameters move between folds (the
 jackknife, [docs/METHODS.md §11](docs/METHODS.md#11-cross-validation)). In a
-test with known parameters, they contained the true values 83–94% of the time
+test with known parameters, they contained the true values 83–95% of the time
 ([V4](validation/REPORT.md#v4)). Keep in mind:
 
 - Do not use the `std` row as an uncertainty. The folds share most of their
-  data, so it is far too small. It contained the true values only 35–56% of
+  data, so it is far too small. It contained the true values only 35–52% of
   the time.
 - Each interval is for one parameter on its own. Parameters that trade off
   move together, so combining the ends of several intervals gives parameter
   sets that do not fit ([example 06](examples/06_cross_validation/README.md)
   shows this).
-- The intervals also depend on the optimiser's random start. Where parameters
-  trade off, one fold can end on a distant set with almost the same fit.
-  Another `random_seed` alone changed version 8's intervals by a factor of
-  0.35 to 1.55 ([V12](validation/REPORT.md#v12)). For poorly determined
-  parameters, repeat the run with a second seed.
+- The intervals also depend a little on the optimiser's random start. Where
+  parameters trade off, one fold can end on a distant set with almost the same
+  fit. Another `random_seed` alone changed the intervals' typical width by a
+  factor of 0.65 to 1.06 ([V12](validation/REPORT.md#v12)). For poorly
+  determined parameters, repeat the run with a second seed.
 
 Cross-validation runs only with `run_mode` `DE`, `PSO` or `LATHYP`. In other
 run modes it is ignored, with a warning.
@@ -947,7 +1008,7 @@ decision, check:
 4. **Uncertainty.** If you report a band, its coverage is close to the level
    you asked for: on validation years, and in the season your limit applies
    to. Bands for new years are usually slightly narrow: 90% bands held on
-   85–89.6% of days on the Swiss rivers ([V5](validation/REPORT.md#v5)).
+   85–89% of days on the Swiss rivers ([V5](validation/REPORT.md#v5)).
    - For 7-day means, runs of warm days and other quantities over several days,
      keep `noise_model: "ar1"` and `rho_timescale: "weekly"` (the defaults).
      Compute them from the saved simulations (§12).

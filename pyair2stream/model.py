@@ -400,6 +400,20 @@ def check_segment_warmup(data: CommonData) -> None:
             f"segment may still reflect its approximate restart temperature; consider "
             f"warmup_drop_days: {needed}. See USER_GUIDE.md §10."
         )
+        return
+    # The opposite case: with many gaps, a warm-up much longer than the model needs throws
+    # away measurements. Say how many a warm-up of `needed` days (and pieces of at least
+    # twice that) would score.
+    min_segment = min(2 * needed, data.min_segment_days)
+    now = scored_days(data, data.segments, data.warmup_drop_days)
+    shorter = scored_days(data, find_segments(data, min_segment)[0], needed)
+    if shorter - now >= max(30, 0.05 * now):
+        print(
+            f"Note: the calibrated model forgets its restart within about {needed} days. "
+            f"warmup_drop_days: {needed} and min_segment_days: {min_segment} would score "
+            f"{shorter} measured days instead of {now}. Consider them and calibrate again; "
+            f"see USER_GUIDE.md §10."
+        )
 
 
 def _divergence_bad_mask(Twat_mod: np.ndarray, max_plausible_twat: float) -> np.ndarray:

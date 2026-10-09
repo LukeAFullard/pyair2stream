@@ -17,9 +17,9 @@ version,statistic,level,years,uncorrected,corrected,accepted
 8,days above threshold,50%,48,54%,58%,not judged
 8,days above threshold,80%,48,85%,79%,65%-94%
 8,days above threshold,90%,48,92%,94%,77%-100%
-8,days above threshold,95%,48,94%,96%,85%-100%
+8,days above threshold,95%,48,96%,96%,85%-100%
 8,days above threshold,99%,48,98%,100%,not judged
-8,highest 7-day mean,50%,48,46%,65%,not judged
+8,highest 7-day mean,50%,48,44%,65%,not judged
 8,highest 7-day mean,80%,48,79%,85%,65%-94%
 8,highest 7-day mean,90%,48,85%,88%,77%-100%
 8,highest 7-day mean,95%,48,94%,94%,85%-100%

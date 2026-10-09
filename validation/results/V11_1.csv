@@ -3,5 +3,5 @@ version,statistic,years,inside 50% range,"inside 50% range, corrected",accepted 
 5,highest 7-day mean,48,23%,69%,31%-69%,73%,92%,77%-100%,0.31,0.5
 5,highest daily mean,48,40%,54%,31%-69%,81%,85%,77%-100%,0.4,0.49
 8,days above threshold,48,54%,58%,31%-69%,92%,94%,77%-100%,0.52,0.48
-8,highest 7-day mean,48,46%,65%,31%-69%,85%,88%,77%-100%,0.38,0.49
+8,highest 7-day mean,48,44%,65%,31%-69%,85%,88%,77%-100%,0.38,0.49
 8,highest daily mean,48,42%,50%,31%-69%,79%,85%,77%-100%,0.51,0.49

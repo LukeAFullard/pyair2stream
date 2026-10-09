@@ -10,8 +10,11 @@ the people and the code that produced the results are independent of the model's
 whole simulated series can be compared day by day, not only its error.
 """
 
+import glob
+import hashlib
 import json
 import os
+import pickle
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
@@ -29,6 +32,36 @@ DROUGHT = ("2022-09-01", "2022-10-31")
 QUICK_STATIONS = ("07EA004", "08GA077")
 MCMC_WALKERS, MCMC_STEPS = 32, 100000       # part D: run until converged, at most this many steps (V2 part F:
                                             # 20,000; poorly determined parameters need longer chains here)
+CACHE = os.path.join(WORK, "v15_cache")      # each station's results, so that an interrupted run can resume
+
+
+def _code_fingerprint():
+    """A hash of the package's and the validation suite's code. Saved results are reused only by
+    exactly the same code."""
+    h = hashlib.sha256()
+    for pattern in (os.path.join(REPO, "pyair2stream", "**", "*.py"), os.path.join(REPO, "validation", "*.py")):
+        for name in sorted(glob.glob(pattern, recursive=True)):
+            h.update(os.path.relpath(name, REPO).encode())
+            with open(name, "rb") as f:
+                h.update(f.read())
+    return h.hexdigest()[:16]
+
+
+def _resumable(job):
+    """Run one station's job, `(function, (station, quick))`, or reuse its result saved by an earlier,
+    interrupted run of the same code. Returns (result, reused)."""
+    fn, args = job
+    st, quick = args
+    path = os.path.join(CACHE, f"{fn.__name__}_{st}_{'quick' if quick else 'full'}_{_code_fingerprint()}.pkl")
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return pickle.load(f), True
+    out = fn(args)
+    os.makedirs(CACHE, exist_ok=True)
+    with open(path + ".tmp", "wb") as f:
+        pickle.dump(out, f)
+    os.replace(path + ".tmp", path)          # a run stopped mid-write leaves no partial result
+    return out, False
 
 
 def _load():
@@ -224,10 +257,16 @@ def run(ctx) -> Result:
     with Timer() as t:
         with ProcessPoolExecutor(max_workers=ctx.workers) as ex:
             # The MCMC runs are the longest: start them all first.
-            futures_d = [ex.submit(fn, (st, ctx.quick)) for fn in (_mcmc, _jackknife) for st in stations]
-            outs = list(ex.map(_station, [(st, ctx.quick) for st in stations]))
-            found = {(kind, st): r for kind, st, r in (f.result() for f in futures_d)}
+            futures_d = [ex.submit(_resumable, (fn, (st, ctx.quick))) for fn in (_mcmc, _jackknife) for st in stations]
+            station_runs = list(ex.map(_resumable, [(_station, (st, ctx.quick)) for st in stations]))
+            d_runs = [f.result() for f in futures_d]
     res.seconds = t.seconds
+    outs = [out for out, _ in station_runs]
+    found = {(kind, st): r for (kind, st, r), _ in d_runs}
+    reused = sum(was for _, was in station_runs + d_runs)
+    if reused:
+        res.notes.append(f"{reused} of {len(station_runs) + len(d_runs)} station jobs were reused from an earlier, "
+                         f"interrupted run of exactly the same code; the run time covers only this run.")
     series = pd.DataFrame([r for o in outs for r in o["series"]])
     de = pd.DataFrame([o["de"] for o in outs])
     series["regime"] = series.station.map(info["regime"])

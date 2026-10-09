@@ -18,7 +18,7 @@ for each year.
 python examples/06_cross_validation/run.py
 ```
 
-It takes about two minutes. It runs [`version5.yaml`](version5.yaml)
+It takes about three minutes. It runs [`version5.yaml`](version5.yaml)
 and [`version8.yaml`](version8.yaml), then the sensitivity analysis at the end
 of this page. The first two are ordinary DE settings files for
 the Mentue's 2002–2009 record, with a `cross_validation` block:
@@ -84,14 +84,14 @@ the best-fit parameters move when the data change. For version 8:
 
 | Year held out | a1 | a2 | a3 | a4 | a5 | a6 | a7 | a8 |
 |---|---|---|---|---|---|---|---|---|
-| 2004 | 0.926 | 0.652 | 0.769 | 0.069 | 2.476 | 1.647 | 0.601 | 0.260 |
-| 2005 | 0.888 | 0.681 | 0.800 | 0.061 | 2.687 | 1.748 | 0.601 | 0.278 |
-| 2006 | 0.850 | 0.669 | 0.783 | 0.047 | 2.782 | 1.783 | 0.595 | 0.289 |
-| 2007 | 0.874 | 0.639 | 0.757 | 0.071 | 2.767 | 1.991 | 0.603 | 0.282 |
-| 2008 | 0.878 | 0.629 | 0.741 | 0.078 | 2.340 | 1.550 | 0.601 | 0.244 |
-| 2009 | 0.847 | 0.659 | 0.773 | −0.036 | 2.629 | 1.709 | 0.602 | 0.272 |
+| 2004 | 0.925 | 0.651 | 0.769 | 0.069 | 2.475 | 1.645 | 0.601 | 0.260 |
+| 2005 | 0.888 | 0.681 | 0.800 | 0.061 | 2.686 | 1.748 | 0.601 | 0.278 |
+| 2006 | 0.850 | 0.669 | 0.784 | 0.047 | 2.783 | 1.784 | 0.595 | 0.290 |
+| 2007 | 0.874 | 0.639 | 0.757 | 0.071 | 2.767 | 1.992 | 0.603 | 0.282 |
+| 2008 | 0.877 | 0.629 | 0.741 | 0.078 | 2.340 | 1.550 | 0.601 | 0.244 |
+| 2009 | 0.849 | 0.659 | 0.774 | −0.035 | 2.630 | 1.710 | 0.602 | 0.272 |
 | **mean** | 0.877 | 0.655 | 0.771 | 0.048 | 2.613 | 1.738 | 0.600 | 0.271 |
-| **90% interval** | 0.736–1.018 | 0.562–0.748 | 0.672–0.870 | −0.159–0.255 | 1.767–3.460 | 1.013–2.463 | 0.588–0.613 | 0.190–0.352 |
+| **90% interval** | 0.741–1.013 | 0.562–0.748 | 0.671–0.870 | −0.158–0.255 | 1.765–3.462 | 1.012–2.464 | 0.587–0.614 | 0.190–0.352 |
 
 ![Parameters fitted without each year, and their 90% intervals](figures/parameters_by_fold.png)
 
@@ -111,7 +111,7 @@ the best-fit parameters move when the data change. For version 8:
     stays between 0.845 and 0.854. Its 90% interval is ±2%, against ±13–14% for
     `a2` and `a3` themselves.
   - `a5/a8` is the temperature the discharge terms pull the water towards. It
-    stays between 9.5 and 9.8 °C. Its interval is ±5%, against ±30–32% for
+    stays between 9.5 and 9.8 °C. Its interval is ±4%, against ±30–32% for
     `a5` and `a8`.
 
   The data fix these combinations well. That is why the predictions change so
@@ -133,9 +133,9 @@ years. They are the bands in the figure.
 Keep in mind:
 
 - **They are approximate.** In a test with known parameters, these intervals
-  contained the true values 83–94% of the time, for every model version
+  contained the true values 83–95% of the time, for every model version
   ([validation V4](../../validation/REPORT.md#v4)). The MCMC parameter ranges
-  of example 02 did as well or better in that test (97% for version 5, 91% for
+  of example 02 did as well or better in that test (97% for version 5, 93% for
   version 8).
 - **They describe years like those in the record.** Conditions the record does
   not contain, such as much lower summer flows, can need different values.

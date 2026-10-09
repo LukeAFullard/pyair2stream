@@ -20,13 +20,13 @@ temperature should fall inside it.
 pyair2stream --config examples/02_uncertainty/calibrate.yaml
 ```
 
-This takes one to two minutes. [`calibrate.yaml`](calibrate.yaml) is example
+This takes about two minutes. [`calibrate.yaml`](calibrate.yaml) is example
 01's settings file with `run_mode: "DE-MCMC"` and an `uncertainty_options`
 block. After the calibration, the sampler runs in blocks of 1,000 steps until
 its results are stable. Then it reports:
 
 ```
-  6000 steps: max autocorrelation time 34.7, max split-Rhat 1.0097
+  6000 steps: max autocorrelation time 35.4, max split-Rhat 1.0077
 MCMC converged after 6000 steps (at least 50 x the autocorrelation time, split-Rhat below 1.01).
 ...
 Interval check: 91.0% of 2907 observed days lie inside the 90% prediction interval.
@@ -62,10 +62,10 @@ pyair2stream --config examples/02_uncertainty/predict.yaml
 2010–2012 have measurements, so it also reports how many fall inside:
 
 ```
-Interval check: 89.3% of 1095 observed days lie inside the 90% prediction interval.
+Interval check: 89.5% of 1095 observed days lie inside the 90% prediction interval.
 ```
 
-That is close to 90%, slightly below. The validation suite found 85–89.6% on
+That is close to 90%, slightly below. The validation suite found 85–89% on
 three Swiss rivers ([V5](../../validation/REPORT.md#v5)). The model's errors
 are somewhat larger in years it has not seen. So the intervals are slightly
 too narrow for new years.
@@ -102,9 +102,9 @@ Keep the defaults. In short:
 
 `output/calibration/parameter_significance_DE-MCMC_Mentue.csv` lists each
 parameter's mean and 90% range. The ranges lie around the best fit in
-`calibration_metadata.json`, but not always evenly. For example, `a5` is 2.55
-in the best fit and 3.00 on average in the chain, with a 90% range of 2.03 to
-4.15.
+`calibration_metadata.json`, but not always evenly. For example, `a5` is 2.54
+in the best fit and 3.01 on average in the chain, with a 90% range of 2.02 to
+4.24.
 
 In a test with known parameters, such 90% ranges contained the true value at
 least 90% of the time ([V4](../../validation/REPORT.md#v4)). In that test

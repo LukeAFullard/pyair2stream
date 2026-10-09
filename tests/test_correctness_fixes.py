@@ -263,6 +263,30 @@ def test_de_keeps_de_solution_if_polish_is_worse(tmp_path, monkeypatch):
     assert not np.allclose(data.par_best[:3], 0.001)
 
 
+def test_de_stopping_tolerance_is_tight_and_configurable(tmp_path, monkeypatch):
+    # SciPy's default tol=0.01 let DE stop a third of the way through, once the population's
+    # NSE values agreed to within ~0.01, and the polish then ended on a worse fit.
+    _csv(tmp_path / 'cal.csv')
+    seen = {}
+    real = optimization.differential_evolution
+
+    def spy(*args, **kw):
+        seen['tol'] = kw.get('tol')
+        return real(*args, **kw)
+
+    monkeypatch.setattr(optimization, 'differential_evolution', spy)
+    data = _load(tmp_path, version=3)
+    assert data.de_tol == 1e-3
+    aggregation(data)
+    statis(data)
+    DE_mode(data, seed=3)
+    assert seen['tol'] == 1e-3
+    data = _load(tmp_path, version=3, optimization={'n_run': 3, 'n_particles': 3, 'tol': 1e-5})
+    assert data.de_tol == 1e-5
+    with pytest.raises(ValueError, match='optimization.tol'):
+        _load(tmp_path, version=3, optimization={'n_run': 3, 'n_particles': 3, 'tol': -1})
+
+
 def test_mcmc_reproducible_across_processes(tmp_path):
     _csv(tmp_path / 'cal.csv', n_days=730)
     script = textwrap.dedent(f"""
@@ -393,3 +417,24 @@ def test_segment_warmup_warning_when_relaxation_is_slow(tmp_path, capsys):
     data.par[2] = 1.0  # B = 1/day -> 3 days needed: no warning
     check_segment_warmup(data)
     assert 'warmup_drop_days' not in capsys.readouterr().out
+
+
+def test_segment_warmup_note_when_many_gaps_and_warmup_is_long(tmp_path, capsys):
+    from pyair2stream.model import check_segment_warmup, scored_days
+    df = _csv(tmp_path / 'cal.csv')
+    df.loc[df.index % 40 == 20, 'T_air'] = np.nan          # a one-day gap every 40 days
+    df.to_csv(tmp_path / 'cal.csv', index=False)
+    data = _load(tmp_path, version=3, gap_tolerant=True, warmup_drop_days=15, min_segment_days=30)
+    data.par[:] = [0.5, 0.5, 1.0, 0, 0, 0, 0, 0]          # B = 1/day -> 3 days needed
+    capsys.readouterr()
+    check_segment_warmup(data)
+    out = capsys.readouterr().out
+    assert 'warmup_drop_days: 3 and min_segment_days: 6' in out
+    assert 'Warning' not in out
+    # What the note promises is what those settings score.
+    shorter = _load(tmp_path, version=3, gap_tolerant=True, warmup_drop_days=3, min_segment_days=6)
+    assert f'would score {scored_days(shorter, shorter.segments, 3)} measured days' in out
+    shorter.par[:] = data.par
+    capsys.readouterr()
+    check_segment_warmup(shorter)                            # already short: no note
+    assert capsys.readouterr().out == ''

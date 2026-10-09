@@ -5,6 +5,7 @@ This module handles parsing user YAML configurations, allocating internal arrays
 and reading/validating the input CSV time series data (forcing and observations).
 """
 
+import copy
 import os
 import json
 import re
@@ -50,17 +51,24 @@ def _season_months(values):
     return sorted(set(months))
 
 
-def read_calibration(config_file: str = 'config.yaml') -> CommonData:
+class SettingsFileNotFoundError(FileNotFoundError):
+    """The settings (YAML) file does not exist."""
+
+
+def read_calibration(config_file='config.yaml') -> CommonData:
     """
-    Reads the calibration configuration from a YAML file and initializes the CommonData.
+    Reads the calibration configuration from a YAML file (or a dict with the same
+    keys) and initializes the CommonData.
     """
     data = CommonData()
 
-    if not os.path.exists(config_file):
-        raise FileNotFoundError(f"Configuration file not found: {config_file}\nPlease refer to USER_GUIDE.md for instructions on how to create a configuration file.")
-
-    with open(config_file, 'r') as f:
-        config = yaml.safe_load(f)
+    if isinstance(config_file, dict):
+        config = copy.deepcopy(config_file)
+    else:
+        if not os.path.exists(config_file):
+            raise SettingsFileNotFoundError(f"Configuration file not found: {config_file}\nPlease refer to USER_GUIDE.md for instructions on how to create a configuration file.")
+        with open(config_file, 'r') as f:
+            config = yaml.safe_load(f)
 
     # Note: Using config.get() with defaults where appropriate, but strict mapping
     # to original inputs if they must be present.
@@ -292,6 +300,11 @@ def read_calibration(config_file: str = 'config.yaml') -> CommonData:
 
     opt_config = config.get('optimization') or {}
     data.n_run = int(opt_config.get('n_run', opt_config.get('n_runs', 100)))
+    # DE stops once its population's scores agree to within `tol` (relative). SciPy's default
+    # (0.01) stopped some calibrations a third of the way through, on a worse fit.
+    data.de_tol = float(opt_config.get('tol', 1e-3))
+    if not data.de_tol >= 0:
+        raise ValueError(f"optimization.tol must be zero or positive, got {data.de_tol}")
     # Accepted for compatibility with Fortran-style configs but not used: the
     # 0_*.csv history always records every evaluated parameter set.
     data.mineff_index = np.float64(config.get('mineff_index', 0.0))
