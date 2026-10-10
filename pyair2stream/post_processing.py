@@ -9,6 +9,7 @@ simulated series to CSV format.
 import os
 import numpy as np
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
@@ -211,11 +212,23 @@ def _envelope_on_dates(data: CommonData, dates) -> pd.DataFrame:
     return None
 
 
+# The fonts of the run's own figures, set for those figures only: a script that runs
+# pyair2stream.run keeps its own matplotlib settings.
+RUN_FIGURE_STYLE = {'font.family': 'serif',
+                    'font.serif': ['Times New Roman'] + list(matplotlib.rcParamsDefault['font.serif']),
+                    'font.size': 10, 'axes.labelsize': 10}
+
+
 def post_process(data: CommonData, toll: float = None):
     """
     Analyzes and plots the results of the pyair2stream simulation.
     Replicates post_processing.m
     """
+    with plt.rc_context(RUN_FIGURE_STYLE):
+        return _post_process(data, toll)
+
+
+def _post_process(data: CommonData, toll: float = None):
     if toll is None:
         # Acceptability threshold for the dotty-plot "good parameter set" region.
         # RMS is an unbounded error metric (lower = better), so `eff <= toll` with
@@ -238,12 +251,6 @@ def post_process(data: CommonData, toll: float = None):
     blue = '#0072B2'
     light_blue = '#56B4E9'
     black = '#000000'
-
-    # Set fonts
-    plt.rcParams['font.family'] = 'serif'
-    plt.rcParams['font.serif'] = ['Times New Roman'] + plt.rcParams['font.serif']
-    plt.rcParams['font.size'] = 10
-    plt.rcParams['axes.labelsize'] = 10
 
     # Output paths
     file_0 = os.path.join(data.folder, f"0_{data.runmode}_{data.fun_obj}_{data.station}_{data.series}_{data.time_res}.csv")

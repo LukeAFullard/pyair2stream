@@ -119,8 +119,10 @@ too narrow for new years.
 
 ![Prediction interval and observations, summer 2010](figures/interval_summer_2010.png)
 
-*The 90% interval (shaded) and the measured temperature for summer 2010. Red
-points fall outside it.*
+*The 90% interval (shaded) and the measured temperature for summer 2010, drawn
+with `pyair2stream.plots.prediction_range(..., outside=True)`. A measurement
+outside the interval would be marked with a cross; in this summer, all 122 fell
+inside. Spring 2011 (step 4) has some.*
 
 ## Step 3: check the interval on held-out years, and measure the margins
 
@@ -136,7 +138,9 @@ model version, `Qmedia`, error model and level as step 1. It hides each year in
 turn, predicts it from the other years, and records how far each measurement
 fell outside the hidden year's interval. This takes about a minute and a half.
 
-It writes `output/check/cv_conformal_margins.csv`. For days, 7-day means and
+It writes `output/check/cv_conformal_margins.csv`, and draws it in
+`cv_interval_coverage.png` (the shares inside, without and with the margins, at
+every level). For days, 7-day means and
 30-day means, and for the 50%, 80%, 90% and 95% intervals, it gives the
 **margin**: the amount to add to both edges of the interval so that it would
 have held as stated in the hidden years. The margin is the 90th percentile (for
@@ -203,12 +207,15 @@ lower, upper = scenario.conformal_range(means[:, 29:], 90, margin, floor=0.0)   
 
 ![Interval with and without the conformal margin](figures/interval_conformal.png)
 
-*Left: spring 2011, the months of 2010–2012 in which the margin changed most.
-The shaded band is step 2's 90% interval; the dashed lines are the widened
-interval of step 4. Orange points are inside only with the margin; red points
-are outside both. Right: for every level, the share of 2010–2012 values inside,
-without (grey) and with (blue) the margins; on the dotted line an interval
-holds exactly.*
+*Left: spring 2011, the months of 2010–2012 in which the margin changed most
+(`plots.prediction_range` with `margin=` and `outside=True`). The shaded band
+is step 2's 90% interval; the dashed lines are the widened interval of step 4.
+Open squares are inside only with the margin; crosses are outside both. Right:
+for every level, the share of 2010–2012 values inside, without (open markers,
+dashed) and with (filled markers) the margins, for days, 7-day and 30-day means
+(`plots.coverage`); on the dotted line an interval holds exactly. The
+cross-validation of step 3 draws the same figure for its held-out years,
+`cv_interval_coverage.png`.*
 
 **What it shows.** On this river the interval nearly held already, so the
 margin is small: the 90% interval for days becomes 0.12 °C wider and holds on

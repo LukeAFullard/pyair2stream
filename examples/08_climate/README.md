@@ -91,8 +91,8 @@ The change, simulation by simulation (scenario minus baseline):
 
 ![Monthly mean change in water temperature for both scenarios](figures/monthly_change.png)
 
-*The monthly mean change: the median of the 1,000 paired simulations (dot) and
-their 90% range (bar). The dashed line is the change in air temperature. Drawn
+*The monthly mean change: the median of the 1,000 paired simulations (marker,
+one shape per scenario) and their 90% range (bar). The dashed line is the change in air temperature. Drawn
 with `plots.change(diffs, dates, by="month", reference=2)`.*
 
 **Reading it.**
@@ -126,9 +126,9 @@ all three runs.
 
 ![The year's highest 7-day mean in 1,000 simulations, for each year and scenario](figures/yearly_peaks.png)
 
-*Each year's highest 7-day mean: the median of the 1,000 simulations (dot) and
-their 90% range (bar), corrected as in example 03. Grey: as measured; blue and
-orange: the two scenarios. The number above each bar is the share of the
+*Each year's highest 7-day mean: the median of the 1,000 simulations (marker)
+and their 90% range (bar), corrected as in example 03. Grey circles: as
+measured; blue squares and orange triangles: the two scenarios. The number above each bar is the share of the
 simulations above the 20 °C limit (dashed). Drawn with
 `plots.yearly_statistic`.*
 

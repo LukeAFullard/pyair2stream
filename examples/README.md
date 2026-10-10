@@ -37,7 +37,8 @@ shows. Each step can also be run from a terminal with
 | Decide whether a temperature limit was exceeded | 03 |
 | Compare a change in flow with the present | 04 |
 | Project a warmer climate | 08 |
-| Plot a prediction range, a scenario change or a yearly peak against a limit (`pyair2stream.plots`) | 03, 04, 08 |
+| Plot a prediction range, a scenario change or a yearly peak against a limit (`pyair2stream.plots`) | 02, 03, 04, 08 |
+| Plot a cross-validation: scores by year, parameters by year, interval coverage (`pyair2stream.plots`) | 06, 02 |
 | Choose a model version; see which parameters matter | 06 |
 | Choose an integrator; check that a scenario run is numerically stable | 09 |
 

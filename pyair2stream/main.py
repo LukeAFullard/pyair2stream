@@ -37,6 +37,28 @@ JACKKNIFE_NOTE = (
 CONFORMAL_FILE = "cv_conformal_margins.csv"
 
 
+def save_figure(ax, folder: str, name: str) -> None:
+    """Save the figure of `ax` as `<name>.png` and `<name>.pdf` in `folder`, and close it."""
+    import matplotlib.pyplot as plt
+    for ext in ("png", "pdf"):
+        ax.figure.savefig(os.path.join(folder, f"{name}.{ext}"), dpi=300, bbox_inches="tight")
+    plt.close(ax.figure)
+
+
+def write_cv_figures(data: CommonData, table: pd.DataFrame) -> None:
+    """cv_error_by_fold.png (the score of each held-out year) and cv_parameters_by_fold.png (the
+    parameters fitted without each year, with their jackknife intervals), from cv_results.csv."""
+    from . import plots
+    from .cross_validation import count_folds
+    try:   # the figures are extras: a problem with them must not lose the cross-validation
+        if count_folds(table) >= 1:
+            save_figure(plots.cv_by_fold(table), data.folder, "cv_error_by_fold")
+        if count_folds(table) >= 2:
+            save_figure(plots.cv_parameters(table), data.folder, "cv_parameters_by_fold")
+    except Exception as err:  # noqa: BLE001
+        print(f"Warning: the cross-validation figures could not be drawn: {err!r}")
+
+
 def write_conformal_margins(data: CommonData, folds, level: float) -> None:
     """Write cv_conformal_margins.csv: the margins that widen the prediction intervals to the
     held-out years' coverage (docs/METHODS.md §13), with the settings a FORWARD run that uses them
@@ -55,6 +77,11 @@ def write_conformal_margins(data: CommonData, folds, level: float) -> None:
     table["noise_model"] = noise_model
     table["rho_timescale"] = options.get('rho_timescale', DEFAULT_RHO_TIMESCALE)
     table.to_csv(os.path.join(data.folder, CONFORMAL_FILE), index=False)
+    from . import plots
+    try:
+        save_figure(plots.coverage(table), data.folder, "cv_interval_coverage")
+    except Exception as err:  # noqa: BLE001
+        print(f"Warning: the figure of the interval coverage could not be drawn: {err!r}")
     print(f"Conformal margins of the {level:g}% interval (forward_options.conformal_margins; share of held-out "
           "values inside without, and with a margin set by the other years):")
     names = {1: "days", 7: "7-day means", 30: "30-day means"}
@@ -412,6 +439,7 @@ def _run(config, t1: float) -> CommonData:
                       "fold uses the same discharge scaling; otherwise the parameters also move with it.")
             df, folds = cross_validate(data, data.runmode, return_folds=True)
             df.to_csv(os.path.join(data.folder, "cv_results.csv"), index=False)
+            write_cv_figures(data, df)
             # Mean error by month and season over the held-out years (out of sample).
             dates, obs, sim = held_out_series(folds)
             if np.isfinite(obs - sim).any():

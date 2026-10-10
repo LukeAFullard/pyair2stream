@@ -549,7 +549,7 @@ After a calibration, look at these, in this order:
 | `sensitivity_*` | §11 |
 | `MCMC_*`, `parameter_significance_*`, `parameter_correlation_*` | §11 |
 | `Forward_Prediction_*`, `forward_projection.png` | §12 |
-| `cv_results.csv`, `cv_bias_by_month.*`, `cv_yearly_statistics*.csv`, `cv_interval_coverage.csv`, `cv_conformal_margins.csv` | §13 |
+| `cv_results.csv`, `cv_error_by_fold.*`, `cv_parameters_by_fold.*`, `cv_bias_by_month.*`, `cv_yearly_statistics*.csv`, `cv_interval_coverage.*`, `cv_conformal_margins.csv` | §13 |
 
 ### Reading the scores
 
@@ -1109,7 +1109,10 @@ arrays:
 
 - `prediction_range` draws the median of the simulations and their range, day
   by day. With `window=7` it draws 7-day means, computed in each simulation
-  first. It can add the measurements and a limit.
+  first. It can add the measurements and a limit. `outside=True` marks the
+  measurements outside the range with crosses. `margin=` (a conformal margin)
+  adds the widened range as dashed lines; measurements inside only that range
+  are then marked with open squares.
 - `change` draws the difference between two scenarios: day by day
   (`by="day"`), or each month or year's mean change (`by="month"`,
   `by="year"`). Give it a dict to compare several scenarios.
@@ -1132,9 +1135,13 @@ ax = plots.change({"abstraction": diff}, dates, by="month")       # diff from pa
 ```
 
 Each function returns the matplotlib Axes it drew on. To combine figures, pass
-your own (`ax=`). Each range is 90% wide by default (`level=`). Examples
-[03](examples/03_compliance/README.md), [04](examples/04_scenario/README.md)
-and [08](examples/08_climate/README.md) make their figures this way.
+your own (`ax=`). Each range is 90% wide by default (`level=`). Several
+scenarios, windows or runs differ in marker shape, line style or hatching as
+well as in colour, so the figures can be read without colour. Examples
+[02](examples/02_uncertainty/README.md), [03](examples/03_compliance/README.md),
+[04](examples/04_scenario/README.md) and [08](examples/08_climate/README.md)
+make their figures this way. The cross-validation figures (`coverage`,
+`cv_by_fold`, `cv_parameters`) are in §13.
 
 ## 13. Cross-validation
 
@@ -1194,6 +1201,14 @@ A cross-validation run writes these files instead of the usual outputs:
   confidence intervals (`jackknife_se`, `jackknife_90_lower`,
   `jackknife_90_upper`; see below). Large differences in the parameters between years mean the data
   do not pin them down well.
+- **`cv_error_by_fold.png`**: the RMSE on each hidden year, with the RMSE of
+  all hidden days together as a dashed line. A year far worse than the others
+  is one the model does not represent well.
+- **`cv_parameters_by_fold.png`**: each parameter fitted without each hidden
+  year, and its jackknife interval, as a difference from the mean of the folds
+  in % of its value. Dots far apart, or a wide band, mean the data fix that
+  parameter poorly. A parameter whose interval includes zero is listed above
+  the plot instead (a percentage of a value that may be zero means nothing).
 - **`cv_bias_by_month.csv`** and **`.png`**: the mean error by month and season
   over the hidden years. A seasonal bias shows up here, in years the model did
   not see.
@@ -1217,6 +1232,19 @@ A cross-validation run writes these files instead of the usual outputs:
   (`inside_before`) and with a margin from the other hidden years only
   (`inside_after`), and the settings it was made with. Used by
   `forward_options.conformal_margins` (§12).
+- **`cv_interval_coverage.png`**: `cv_conformal_margins.csv` drawn. For each
+  level, the share of hidden values inside the band, without (open markers)
+  and with (filled markers) the margins, for days, 7-day and 30-day means. On
+  the diagonal a band holds as stated; below it, too rarely.
+
+The same figures can be drawn, or combined, from Python with
+`pyair2stream.plots`: `cv_by_fold("cv_results.csv")` (or a dict of several
+runs' files, to compare model versions year by year),
+`cv_parameters("cv_results.csv")` (with `combinations=` for ratios of
+parameters, which need `n_blocks`, the number of years in the whole record),
+and `coverage("cv_conformal_margins.csv")`. Example
+[06](examples/06_cross_validation/README.md) uses the first two, example
+[02](examples/02_uncertainty/README.md) the third.
 
 Settings for the yearly statistics:
 

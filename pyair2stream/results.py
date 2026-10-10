@@ -274,6 +274,11 @@ FILE_DESCRIPTIONS = (
     ("cv_interval_coverage.csv", "cross-validation: how often the intervals held, at several levels"),
     ("cv_conformal_margins.csv", "cross-validation: the margins that widen the intervals to the held-out years' "
                                  "coverage (forward_options.conformal_margins)"),
+    ("cv_interval_coverage", "cross-validation: how often the intervals held in the held-out years at each "
+                             "level, for days and 7- and 30-day means, without and with the conformal margins"),
+    ("cv_error_by_fold", "cross-validation: the score (RMSE) on each held-out year"),
+    ("cv_parameters_by_fold", "cross-validation: the parameters fitted without each year, and their jackknife "
+                              "intervals"),
     ("sensitivity", "the sensitivity analysis"),
 )
 
@@ -290,7 +295,8 @@ def _describe(name: str) -> str:
 # errors, then the calibration's diagnostics; any other figure last.
 FIGURE_ORDER = ("calibration_", "validation_", "full_simulation_", "forward_projection", "predicted_vs_measured_",
                 "bias_by_month_", "residual_diagnostics_", "parameter_significance_", "parameter_correlation_",
-                "convergence_", "dottyplots_")
+                "convergence_", "dottyplots_", "cv_error_by_fold", "cv_interval_coverage", "cv_bias_by_month",
+                "cv_parameters_by_fold")
 
 
 def _figure_rank(name: str):
