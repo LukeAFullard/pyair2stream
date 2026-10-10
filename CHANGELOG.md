@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.5.1] - 2026-10-09
 
 ### Added
 - **Optional conformal margins for prediction intervals.** Where the
@@ -29,10 +29,6 @@
   7-day means and 92.1% of 30-day means in 2021–2022, and on 89.5%, 89.3% and
   88.8% in held-out years. On the 3 Swiss rivers, where they already held, the
   margins were small and the intervals kept holding (88.9–89.8%). V19 passes.
-
-## [0.5.1] - 2026-10-09
-
-### Added
 - **`summary.html`.** Every run now also writes its summary as a web page, with
   the figures inside it (at screen size), so it opens in any browser and can be
   sent as one file. `summary.md` now also shows the figures and links each
