@@ -63,8 +63,8 @@ are meant to be used together:
 | DE-MCMC parameter intervals | How precisely do the calibration data fix each parameter? | calibration | `run_mode: DE-MCMC` | `parameter_significance_*.csv`; the samples in `MCMC_chain_*.csv` | §12 |
 | DE-MCMC prediction band | What range of daily water temperature do the parameter uncertainty and the model's own error give, and how often did it contain the measurements? | calibration only | `run_mode: DE-MCMC` | `MCMC_envelopes_*.csv`; coverage in `MCMC_chain_*_meta.json` | §12 |
 | FORWARD prediction intervals | The same range for any other period or scenario, from the chain; probabilities that a limit was exceeded; differences between scenarios | any period | `run_mode: FORWARD` with `forward_options.enable_prediction_intervals` | `Forward_Prediction_Envelopes_*.csv`, `Forward_Prediction_Ensemble_*.npz` and `_meta.json`; `pyair2stream.scenario` | §13 |
-| Cross-validation scores | How well does a calibration predict years it was not fitted to? | each held-out year | `cross_validation.enabled: true` with DE, PSO or LATHYP | `cv_results.csv`, `cv_bias_by_month.*` | §11 |
-| Cross-validated interval coverage | Did intervals of each level hold in the held-out years? | held-out years | as above | `cv_interval_coverage.csv` | §11 |
+| Cross-validation scores | How well does a calibration predict years it was not fitted to? | each held-out year | `cross_validation.enabled: true` with DE, PSO or LATHYP | `cv_results.csv`, `cv_error_by_fold.*`, `cv_parameters_by_fold.*`, `cv_bias_by_month.*` | §11 |
+| Cross-validated interval coverage | Did intervals of each level hold in the held-out years? | held-out years | as above | `cv_interval_coverage.csv`; `cv_interval_coverage.*` (figure, from `cv_conformal_margins.csv`) | §11 |
 | Cross-validated check of yearly statistics | Did the ranges of yearly peaks and counts hold, and is the model biased in them? | held-out years | as above | `cv_yearly_statistics*.csv` | §11 |
 | Cross-validated correction | Corrects the yearly statistics of FORWARD simulations for that bias | the years predicted | `scenario.correct_statistic` | your own script | §13 |
 | Jackknife parameter intervals | A second, independent estimate of the parameters' uncertainty, from how they change between folds | calibration years | as for cross-validation | `jackknife_*` rows of `cv_results.csv` | §11 |
@@ -492,7 +492,10 @@ LATHYP:
 4. `cv_results.csv` lists each fold's scores and parameters, plus the mean and
    standard deviation across folds and "pooled" scores over all held-out days;
    `cv_bias_by_month.*` gives the mean error by month and season over the
-   held-out days (§7).
+   held-out days (§7). `cv_error_by_fold.*` draws each fold's RMSE, and
+   `cv_parameters_by_fold.*` each fold's parameters with the jackknife intervals
+   (below), as a difference from the mean of the folds in % of it; a
+   parameter whose interval includes zero is listed, not drawn.
 5. **Check of yearly statistics** (`cv_yearly_statistics.csv` and
    `cv_yearly_statistics_summary.csv`). For each held-out year, 1,000 series are
    made from the fold's simulation plus random error from the fold's own error
@@ -523,6 +526,10 @@ LATHYP:
    simulations, the margin that would have made each interval hold in the
    held-out years, for days and 7-day and 30-day means, and how well it held
    in each year when set from the other years only. Optional; see §13.
+   `cv_interval_coverage.*` draws the shares inside without and with the
+   margins against the stated level. No band for chance is drawn: the values of
+   a year are not independent (errors last several days), so a binomial band
+   would be far too narrow.
 
 Every range in items 5 to 7 is reported at `uncertainty_options.prediction_interval`
 (default 90%), and coverage at 50%, 80%, 90% and 95% as well.

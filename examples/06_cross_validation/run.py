@@ -8,10 +8,10 @@ import os
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 import pyair2stream
+from pyair2stream import plots
 from pyair2stream.cross_validation import jackknife_rows
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -68,34 +68,23 @@ lo, hi = (jackknife_rows(a4[:, None], n_years)[k]["p1"] for k in (1, 2))
 print(f"  a4 (close to zero; not shown as %): folds {a4.min():.3f} to {a4.max():.3f}, "
       f"interval {lo:.3f} to {hi:.3f}")
 
-fig, ax = plt.subplots(figsize=(8, 4.4))
-blue = "#2a78d6"
-for k, (name, dev, lo, hi) in enumerate(rows):
-    y = len(rows) - 1 - k + (0 if "/" in name else 0.6)      # a gap between parameters and ratios
-    ax.plot([lo, hi], [y, y], color=blue, alpha=0.3, lw=7, solid_capstyle="round",
-            label="90% jackknife interval" if k == 0 else None)
-    ax.scatter(dev, np.full(len(dev), y), s=34, color=blue, edgecolor="white", linewidth=1.2, zorder=3,
-               label=f"fitted without one year ({len(dev)} folds)" if k == 0 else None)
-    ax.text(-62, y, name, ha="right", va="center", fontsize=8.5, color="#0b0b0b")
-ax.axvline(0, color="#8a8984", lw=1)
-ax.set(xlim=(-60, 60), yticks=[], xlabel="Difference from the mean of the folds (% of its value)",
-       title="Version 8 on the Mentue: how firmly the data fix each parameter")
-for side in ("left", "right", "top"):
-    ax.spines[side].set_visible(False)
-ax.legend(frameon=False, fontsize=8, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.16))
-os.makedirs(os.path.join(HERE, "figures"), exist_ok=True)
-fig.savefig(os.path.join(HERE, "figures", "parameters_by_fold.png"), dpi=130, bbox_inches="tight")
+# The figures, with the plotting helpers in pyair2stream.plots (a cross-validation run also draws
+# them for itself: cv_parameters_by_fold.png and cv_error_by_fold.png in its output folder).
+FIG = os.path.join(HERE, "figures")
+os.makedirs(FIG, exist_ok=True)
+names = {"a1": "a1  constant", "a2": "a2  air temperature", "a3": "a3  relaxation",
+         "a5": "a5  discharge term: constant", "a6": "a6  discharge term: seasonal amplitude",
+         "a7": "a7  discharge term: seasonal timing", "a8": "a8  discharge term: relaxation"}
+ratios = {"a2/a3  water warming per °C of air": lambda p: p["a2"] / p["a3"],
+          "a5/a8  temperature the discharge terms pull to": lambda p: p["a5"] / p["a8"]}
+ax = plots.cv_parameters(results[8], combinations=ratios, n_blocks=n_years, labels=names)
+ax.figure.suptitle("Version 8 on the Mentue: how firmly the data fix each parameter", x=0.02, ha="left", y=1.02)
+ax.figure.savefig(os.path.join(FIG, "parameters_by_fold.png"), dpi=130, bbox_inches="tight")
+plt.close(ax.figure)
 
-years = results[5][results[5].fold.str.isdigit()].fold
-fig, ax = plt.subplots(figsize=(6, 3.2))
-for k, v in enumerate(VERSIONS):
-    r = results[v][results[v].fold.str.isdigit()]
-    ax.bar(np.arange(len(r)) + (k - 0.5) * 0.38, r.RMSE, 0.38, label=f"version {v}")
-ax.set_xticks(np.arange(len(years)), years)
-ax.set(xlabel="Year held out", ylabel="RMSE on that year (°C)", title="Mentue, leave-one-year-out")
-ax.legend(frameon=False)
-os.makedirs(os.path.join(HERE, "figures"), exist_ok=True)
-fig.savefig(os.path.join(HERE, "figures", "rmse_by_year.png"), dpi=130, bbox_inches="tight")
+ax = plots.cv_by_fold({f"version {v}": results[v] for v in VERSIONS})
+ax.figure.savefig(os.path.join(FIG, "rmse_by_year.png"), dpi=130, bbox_inches="tight")
+plt.close(ax.figure)
 
 # Which parameters change the simulated temperature most? A single calibration of version 8,
 # then each parameter moved up and down by 1% of its bound range, one at a time.
@@ -108,7 +97,7 @@ print("\nMean change in simulated water temperature (°C) when the parameter mov
 print(sens[["parameter", "per_1pct", "Status"]].round(3).to_string(index=False))
 
 fig, ax = plt.subplots(figsize=(6, 3.2))
-ax.barh(sens.parameter[::-1], sens.per_1pct[::-1], color=blue)
+ax.barh(sens.parameter[::-1], sens.per_1pct[::-1], color=plots.PALETTE[0])
 ax.set(xlabel="Mean change in water temperature (°C)\nwhen the parameter moves by 1% of its bound range",
        title="Version 8 on the Mentue: local sensitivity")
 for side in ("right", "top"):

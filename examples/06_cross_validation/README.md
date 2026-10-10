@@ -98,6 +98,10 @@ Each run writes:
 
 ![RMSE on each held-out year](figures/rmse_by_year.png)
 
+*Drawn with `pyair2stream.plots.cv_by_fold`. Each cross-validation run also
+draws its own, `cv_error_by_fold.png`. The dashed lines are the scores of all
+held-out days together.*
+
 **Reading it.**
 
 - **Every year is predicted to within 0.9 °C.** 2007 is the hardest year for
@@ -130,6 +134,11 @@ the best-fit parameters move when the data change. For version 8:
 | **90% interval** | 0.742–1.033 | 0.564–0.749 | 0.674–0.871 | −0.144–0.265 | 1.720–3.465 | 1.061–2.387 | 0.590–0.612 | 0.185–0.354 |
 
 ![Parameters fitted without each year, and their 90% intervals](figures/parameters_by_fold.png)
+
+*Drawn with `pyair2stream.plots.cv_parameters`, with the two ratios added
+(`combinations=`). Each cross-validation run draws the same figure, without
+the ratios, as `cv_parameters_by_fold.png`. `a4` is not drawn: its interval
+includes zero, so a percentage of it means nothing.*
 
 **Reading it.**
 

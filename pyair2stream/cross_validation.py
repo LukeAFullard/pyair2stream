@@ -496,6 +496,12 @@ def count_blocks(data: CommonData, cv_config: CVConfig) -> int:
     return n_years // size
 
 
+def count_folds(table: pd.DataFrame) -> int:
+    """The number of held-out folds in a cv_results table (not its summary rows)."""
+    fold = table.fold.astype(str)
+    return int((~fold.isin(("mean", "std", "pooled")) & ~fold.str.startswith("jackknife")).sum())
+
+
 def jackknife_rows(par: np.ndarray, n_blocks: int, level: float = JACKKNIFE_LEVEL) -> list[dict]:
     """
     Delete-one-block jackknife intervals for the parameters, from the m folds' fitted

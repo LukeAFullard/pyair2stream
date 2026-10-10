@@ -3,6 +3,20 @@
 ## [0.5.1] - 2026-10-09
 
 ### Added
+- **Cross-validation figures.** A cross-validation run now also draws
+  `cv_error_by_fold.png` (the RMSE on each held-out year),
+  `cv_parameters_by_fold.png` (the parameters fitted without each year, with
+  their jackknife intervals) and `cv_interval_coverage.png` (how often the
+  intervals held at each level, without and with the conformal margins), each
+  also as `.pdf`. `pyair2stream.plots.cv_by_fold`, `plots.cv_parameters` and
+  `plots.coverage` draw them from the csv files, for one run or to compare
+  several. `plots.prediction_range` gains `outside=True` (marks the measurements
+  outside the range) and `margin=` (draws the range widened by a conformal
+  margin). Examples 02 and 06 draw their figures with them.
+- **Figures readable without colour.** In `pyair2stream.plots`, several
+  scenarios, windows or runs now differ in marker shape, line style or hatching
+  as well as in colour, and measurements outside a range are crosses, not only
+  red points. The titles say "Marker: median" instead of "Dot: median".
 - **Optional conformal margins for prediction intervals.** Where the
   cross-validation shows that intervals held less often than stated at a site,
   they can now be widened by how far the held-out years' measurements fell
@@ -52,6 +66,10 @@
   (`validation/reports/V15_long_chain.md`).
 
 ### Fixed
+- **A run no longer changes the caller's matplotlib settings.** The run's own
+  figures set a serif font through `matplotlib.rcParams`, so a script that called
+  `pyair2stream.run` drew its own figures in that font afterwards. The fonts are
+  now set for the run's figures only (`plt.rc_context`).
 - **Prediction ranges no longer go below the ice floor.** The random error
   was added to each simulated series without the floor (`Tice_cover`) that the
   simulation itself applies, so in winter the lower edge of a 90% band could

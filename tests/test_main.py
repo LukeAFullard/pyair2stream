@@ -186,7 +186,10 @@ class TestMain(unittest.TestCase):
         data.std_obs = 2.0
 
         mock_read_cal.return_value = data
-        mock_df = pd.DataFrame({'fold': [1], 'NSE': [0.9]})
+        mock_df = pd.DataFrame({'fold': ['2010', '2011', 'mean', 'pooled'], 'n_obs_held_out': [365, 365, 730, 730],
+                                'NSE': [0.9, 0.8, 0.85, 0.86],
+                                'KGE': [0.9, 0.8, 0.85, 0.86], 'RMSE': [0.3, 0.4, 0.35, 0.36],
+                                **{f'p{i}': [1.0, 1.1, 1.05, np.nan] for i in range(1, 9)}})
         # One held-out year with a known error: +0.5 °C in July, -0.2 °C otherwise.
         from pyair2stream.cross_validation import FoldResult
         days = pd.date_range("2011-01-01", "2011-12-31")
@@ -217,6 +220,10 @@ class TestMain(unittest.TestCase):
         self.assertLess(per_year.loc["highest 7-day mean", "deviation"], -0.4)
         coverage = pd.read_csv(os.path.join(data.folder, "cv_interval_coverage.csv"))
         self.assertEqual(list(coverage.level), [50.0, 80.0, 90.0, 95.0])
+        # The figures: the score of each held-out year, and the parameters of each fold.
+        for name in ("cv_error_by_fold", "cv_parameters_by_fold"):
+            for ext in ("png", "pdf"):
+                self.assertTrue(os.path.exists(os.path.join(data.folder, f"{name}.{ext}")), f"{name}.{ext}")
 
 if __name__ == '__main__':
     unittest.main()

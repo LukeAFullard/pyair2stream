@@ -140,9 +140,9 @@ Dashed: the 20 °C limit.*
 
 ![Each year's highest 7-day mean, corrected and not, against the limit](figures/peak_7day_mean.png)
 
-*Each year's highest 7-day mean: the median of the 1,000 simulations (dot) and
-their 90% range (bar), not corrected (grey) and corrected (blue). Black:
-measured. The number above each bar is the chance that the limit was
+*Each year's highest 7-day mean: the median of the 1,000 simulations (marker)
+and their 90% range (bar), not corrected (grey circles) and corrected (blue
+squares). Black dash: measured. The number above each bar is the chance that the limit was
 exceeded.*
 
 **Reading it.**
