@@ -83,7 +83,15 @@ repository's top folder**, because the paths in its settings file start there
 pyair2stream --config examples/01_quickstart/config.yaml
 ```
 
-It takes under a minute. After a banner, you should see, among other lines:
+or, in Python ([§7.2](#72-from-python)):
+
+```python
+import pyair2stream
+result = pyair2stream.run("examples/01_quickstart/config.yaml")
+```
+
+It takes under a minute. You should see, among other lines (the command line
+also prints a banner first):
 
 ```
 mean, TSS and standard deviation (calibration)

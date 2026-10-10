@@ -3,12 +3,10 @@ Run example 03: the probability that a temperature limit was exceeded.
 
     python examples/03_compliance/run.py
 
-Steps 1-3 are the three pyair2stream commands in the README. Step 4, the
+Steps 1-3 are the three `pyair2stream.run` calls in the README. Step 4, the
 analysis, is below: it uses every simulated series, not the daily interval.
 """
 import os
-import subprocess
-import sys
 
 import matplotlib
 matplotlib.use("Agg")
@@ -16,6 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+import pyair2stream
 from pyair2stream import plots, scenario
 
 LIMIT_7DAY = 20.0      # °C, illustrative limit on the 7-day mean water temperature
@@ -27,23 +26,23 @@ YEARS = (2010, 2011, 2012)
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 OUT = os.path.join(HERE, "output")
+os.chdir(REPO)      # the paths in the settings files are relative to the repository's top folder
 
 # Steps 1-3: calibrate with uncertainty, simulate 2010-2012 1000 times, and check the
 # yearly statistics by cross-validation of the calibration years.
-for step in ("calibrate", "predict", "check"):
-    subprocess.run([sys.executable, "-m", "pyair2stream.main", "--config", f"examples/03_compliance/{step}.yaml"],
-                   cwd=REPO, check=True)
+results = {step: pyair2stream.run(f"examples/03_compliance/{step}.yaml") for step in ("calibrate", "predict", "check")}
 
 # Step 4. `ens` holds 1000 simulated series (rows) of daily water temperature, each
 # with its own parameters and its own model error; `dates` labels the columns.
-ens, dates = scenario.load_ensemble(os.path.join(OUT, "prediction", "Forward_Prediction_Ensemble_Mentue_c_1d.npz"))
+prediction, check_dir = results["predict"].output_dir, results["check"].output_dir
+ens, dates = scenario.load_ensemble(os.path.join(prediction, "Forward_Prediction_Ensemble_Mentue_c_1d.npz"))
 stats = scenario.year_statistics(ens, dates, threshold=WARM_DAY)    # each year's statistics, per simulation
 
 # The cross-validation check: how far the measured statistic was from the predicted median
 # in each held-out calibration year (measured minus median).
-check = pd.read_csv(os.path.join(OUT, "check", "cv_yearly_statistics.csv"))
+check = pd.read_csv(os.path.join(check_dir, "cv_yearly_statistics.csv"))
 deviations = {name: check.loc[check.statistic == name, "deviation"] for name in scenario.YEARLY_STATISTICS}
-print("\n" + pd.read_csv(os.path.join(OUT, "check", "cv_yearly_statistics_summary.csv"))[
+print("\n" + pd.read_csv(os.path.join(check_dir, "cv_yearly_statistics_summary.csv"))[
     ["statistic", "n_years", f"share_inside_{LEVEL:g}", "mean_deviation", "mean_deviation_ci95_lower",
      "mean_deviation_ci95_upper"]].round(2).to_string(index=False))
 

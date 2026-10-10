@@ -3,15 +3,13 @@ Run example 02 and refresh the figure its README shows.
 
     python examples/02_uncertainty/run.py
 
-Runs the four steps the README describes (the same as the four pyair2stream
-commands), prints the checks to make before trusting the results, draws the
-prediction interval for the summer of 2010, and compares the interval with and
-without the conformal margins of step 3.
+Runs the four steps the README describes with `pyair2stream.run` (each the same
+as a `pyair2stream --config` command), prints the checks to make before
+trusting the results, draws the prediction interval for the summer of 2010, and
+compares the interval with and without the conformal margins of step 3.
 """
 import json
 import os
-import subprocess
-import sys
 
 import matplotlib
 matplotlib.use("Agg")
@@ -19,26 +17,26 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+import pyair2stream
 from pyair2stream import scenario
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-OUT = os.path.join(HERE, "output")
+os.chdir(REPO)      # the paths in the settings files are relative to the repository's top folder
 
-for step in ("calibrate", "predict", "check", "predict_conformal"):
-    subprocess.run([sys.executable, "-m", "pyair2stream.main", "--config", f"examples/02_uncertainty/{step}.yaml"],
-                   cwd=REPO, check=True)
+results = {step: pyair2stream.run(f"examples/02_uncertainty/{step}.yaml")
+           for step in ("calibrate", "predict", "check", "predict_conformal")}
 
 # Check 1: did the MCMC converge? Check 2: does the interval contain about 90% of observations?
-cal = json.load(open(os.path.join(OUT, "calibration", "MCMC_chain_Mentue_c_1d_meta.json")))
-pred = json.load(open(os.path.join(OUT, "prediction", "Forward_Prediction_Ensemble_Mentue_c_1d_meta.json")))
+cal = json.load(open(os.path.join(results["calibrate"].output_dir, "MCMC_chain_Mentue_c_1d_meta.json")))
+pred = json.load(open(os.path.join(results["predict"].output_dir, "Forward_Prediction_Ensemble_Mentue_c_1d_meta.json")))
 print(f"\nConverged: {cal['converged']} after {cal['steps_run']} steps "
       f"(autocorrelation time {cal['max_autocorr_time']:.0f} steps, split-Rhat {cal['max_split_rhat']:.3f})")
 print(f"Share of observed days inside the 90% interval: calibration years {cal['interval_coverage']:.1%}, "
       f"validation years {pred['interval_coverage']:.1%}")
 
 # Figure: one summer of the validation years.
-env = pd.read_csv(os.path.join(OUT, "prediction", "Forward_Prediction_Envelopes_Mentue_c_1d.csv"))
+env = pd.read_csv(os.path.join(results["predict"].output_dir, "Forward_Prediction_Envelopes_Mentue_c_1d.csv"))
 env["Date"] = pd.to_datetime(env[["Year", "Month", "Day"]])
 obs = pd.read_csv(os.path.join(REPO, "data", "switzerland", "MAH_2369_validation.csv"), parse_dates=["Date"])
 d = env.merge(obs, on="Date")
@@ -58,7 +56,7 @@ fig.savefig(os.path.join(HERE, "figures", "interval_summer_2010.png"), dpi=130, 
 
 
 # Steps 3 and 4: the conformal margins, and their effect on the 2010-2012 intervals.
-margins = scenario.read_conformal_margins(os.path.join(OUT, "check", "cv_conformal_margins.csv"))
+margins = scenario.read_conformal_margins(os.path.join(results["check"].output_dir, "cv_conformal_margins.csv"))
 print("\nConformal margins from the 8 held-out years (step 3), 90% interval:")
 names = {1: "days", 7: "7-day means", 30: "30-day means"}
 for r in margins[margins.level == 90].itertuples():
@@ -66,7 +64,8 @@ for r in margins[margins.level == 90].itertuples():
           f"without, {r.inside_after:.1%} with a margin from the other years")
 
 # The same 1,000 series as step 2 (same chain, seed and settings), saved by step 4.
-ens, dates = scenario.load_ensemble(os.path.join(OUT, "prediction_conformal", "Forward_Prediction_Ensemble_Mentue_c_1d.npz"))
+conformal_dir = results["predict_conformal"].output_dir
+ens, dates = scenario.load_ensemble(os.path.join(conformal_dir, "Forward_Prediction_Ensemble_Mentue_c_1d.npz"))
 measured = obs.set_index("Date").T_water.reindex(dates).to_numpy(float)
 rows = []
 for window, what in names.items():
@@ -86,7 +85,7 @@ print("\n2010-2012, share of measured values inside the interval, without and wi
 print(effect.to_string(index=False, float_format=lambda x: f"{x:.3f}"))
 
 # Figure: spring 2011, the months of 2010-2012 in which the margin changed most, with and without it.
-env_c = pd.read_csv(os.path.join(OUT, "prediction_conformal", "Forward_Prediction_Envelopes_Mentue_c_1d.csv"))
+env_c = pd.read_csv(os.path.join(conformal_dir, "Forward_Prediction_Envelopes_Mentue_c_1d.csv"))
 env_c["Date"] = pd.to_datetime(env_c[["Year", "Month", "Day"]])
 d = env_c.merge(obs, on="Date")
 d = d[(d.Date >= "2011-03-01") & (d.Date <= "2011-06-30")]

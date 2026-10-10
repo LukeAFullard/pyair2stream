@@ -318,6 +318,10 @@
 - METHODS §10 and §13: how a gap-tolerant FORWARD run starts each segment
   (at rest under its first day's conditions), and what that means for a
   paired difference in the first days of a segment.
+- Examples 01–08 run their steps from Python with `pyair2stream.run` instead
+  of starting the command line, and use the result it returns (scores, output
+  folder; example 05 catches the `ValueError` of a run that stops on bad data).
+  Their READMEs show the Python calls; the command line still does the same.
 
 ## [0.5.0] - 2026-10-05
 

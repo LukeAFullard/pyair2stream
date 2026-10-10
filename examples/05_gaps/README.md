@@ -22,7 +22,8 @@ python examples/05_gaps/run.py          # about two minutes
 python examples/05_gaps/gap_study.py    # the test of gap-tolerant mode: about ten minutes
 ```
 
-`run.py` runs four calibrations and draws the figures of the first sections.
+`run.py` runs four calibrations with `pyair2stream.run` and draws the figures
+of the first sections.
 `gap_study.py` runs about 130 calibrations and draws the figures of
 [When does gap-tolerant mode work?](#when-does-gap-tolerant-mode-work)
 
@@ -40,8 +41,18 @@ A run would STOP on this data:
     31 day(s) have no value (first: 2003-04-19, line 475). Fill them, or set gap_tolerant: true.
 ```
 
-A real run on this file stops with the same message, before it calibrates. The
-full report, with the missing data and the usable stretches, is in
+A real run on this file stops with the same message, before it calibrates. In
+Python the run raises a `ValueError` with that message, so a script can catch
+it:
+
+```python
+try:
+    pyair2stream.run(settings)       # a settings file, or a dict with the same keys
+except ValueError as err:
+    print(err)                       # what is wrong, in which file, on which line
+```
+
+The full report, with the missing data and the usable stretches, is in
 `output/data_check.txt`.
 
 ## Missing water temperature: nothing to do

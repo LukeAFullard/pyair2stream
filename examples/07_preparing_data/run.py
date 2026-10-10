@@ -11,12 +11,11 @@ Run example 07: from raw logger files to checked daily input files.
 2. Merges them into one daily file with pyair2stream.merge_timeseries.
 3. Checks it with pyair2stream.analyze_timeseries, fills the short air temperature gaps, and
    checks it again.
-4. Splits it into a calibration and a validation file and runs the model on them.
+4. Splits it into a calibration and a validation file and runs the model on them
+   with pyair2stream.run.
 Writes the README's figures to figures/.
 """
 import os
-import subprocess
-import sys
 
 import matplotlib
 matplotlib.use("Agg")
@@ -29,6 +28,7 @@ import pyair2stream
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
+os.chdir(REPO)      # the paths in the settings file are relative to the repository's top folder
 OUT = os.path.join(HERE, "output")
 RAW = os.path.join(OUT, "raw")
 FIG = os.path.join(HERE, "figures")
@@ -107,9 +107,7 @@ for col in ("T_air", "T_water", "Discharge"):
 dates = pd.to_datetime(filled.Date)
 filled[dates.dt.year <= 2009].to_csv(os.path.join(OUT, "calibration.csv"), index=False)
 filled[dates.dt.year >= 2010].to_csv(os.path.join(OUT, "validation.csv"), index=False)
-subprocess.run([sys.executable, "-m", "pyair2stream.main", "--config", "examples/07_preparing_data/config.yaml"],
-               cwd=REPO, check=True)
-fit = pd.read_csv(os.path.join(OUT, "model", "goodness_of_fit_validation_DE_NSE_Mentue.csv"), index_col="Metric").Value
+fit = pyair2stream.run("examples/07_preparing_data/config.yaml").scores["validation"]
 print(f"\nValidation 2010-2012 on the prepared files: NSE {fit['NSE']:.3f}, RMSE {fit['RMSE']:.2f} °C")
 
 # --- Figures ---------------------------------------------------------------------------------------

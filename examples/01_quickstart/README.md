@@ -10,13 +10,24 @@ calibrated (fitted) on 2002–2009 and tested on 2010–2012.
 
 ## Run it
 
-From the repository's top folder:
+From the repository's top folder, in Python:
 
-```bash
-pyair2stream --config examples/01_quickstart/config.yaml
+```python
+import pyair2stream
+
+result = pyair2stream.run("examples/01_quickstart/config.yaml")
+result.scores["validation"]       # the validation scores: NSE 0.982, RMSE 0.78 °C, ...
+result.parameters                 # the fitted parameters a1 ... a8
+result.output_dir                 # where the files were written
 ```
 
-It takes under a minute. Near the end, the console shows:
+From a terminal, `pyair2stream --config examples/01_quickstart/config.yaml`
+does exactly the same. [`run.py`](run.py) runs it and refreshes the figure
+below.
+
+The paths in the settings file are relative to the folder you run from (here
+the repository's top folder). The run takes under a minute. Near the end, it
+prints:
 
 ```
 DE Finished. Best internal negated objective: -0.987594
@@ -45,7 +56,7 @@ figures, and what each other file is.
 | Mean absolute error | 0.49 °C | 0.55 °C |
 
 These come from `goodness_of_fit_calibration_*.csv` and
-`goodness_of_fit_validation_*.csv`. **The validation score is the one that
+`goodness_of_fit_validation_*.csv`, and are in `result.scores`. **The validation score is the one that
 matters**, because the model has not seen those years. It is a little worse
 than the calibration score, as expected.
 
@@ -83,6 +94,8 @@ explains every file.
 2. Point `paths` at your files. The format is in USER_GUIDE
    [§5](../../USER_GUIDE.md#5-preparing-your-own-data).
 3. Change the names.
+4. Run `pyair2stream.run("your_config.yaml")`. USER_GUIDE
+   [§7.2](../../USER_GUIDE.md#72-from-python) lists what the result holds.
 
 Keep some years back for validation.
 

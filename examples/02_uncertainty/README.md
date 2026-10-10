@@ -39,10 +39,23 @@ did not see (step 2 below), because only that shows whether it holds.
 [docs/UNCERTAINTY.md](../../docs/UNCERTAINTY.md) explains each part in plain
 words (§4, §6 and §11).
 
-## Step 1: calibrate with uncertainty
+## Run it
+
+Run the four steps below in Python, from the repository's top folder, after
+`import pyair2stream`. Each returns its result: the scores, the warnings and
+the output folder (`.output_dir`). From a terminal,
+`pyair2stream --config <settings file>` does the same.
+[`run.py`](run.py) runs all four, prints the checks below and draws the
+figures (about four minutes):
 
 ```bash
-pyair2stream --config examples/02_uncertainty/calibrate.yaml
+python examples/02_uncertainty/run.py
+```
+
+## Step 1: calibrate with uncertainty
+
+```python
+calibrate = pyair2stream.run("examples/02_uncertainty/calibrate.yaml")
 ```
 
 This takes about two minutes. [`calibrate.yaml`](calibrate.yaml) is example
@@ -77,8 +90,8 @@ Both are also recorded in `output/calibration/MCMC_chain_Mentue_c_1d_meta.json`
 
 ## Step 2: predict other years
 
-```bash
-pyair2stream --config examples/02_uncertainty/predict.yaml
+```python
+predict = pyair2stream.run("examples/02_uncertainty/predict.yaml")
 ```
 
 [`predict.yaml`](predict.yaml) is a `FORWARD` run on the 2010–2012 data. It:
@@ -111,8 +124,8 @@ points fall outside it.*
 
 ## Step 3: check the interval on held-out years, and measure the margins
 
-```bash
-pyair2stream --config examples/02_uncertainty/check.yaml
+```python
+check = pyair2stream.run("examples/02_uncertainty/check.yaml")
 ```
 
 Steps 1 and 2 found the interval slightly narrow in new years. A
@@ -145,8 +158,8 @@ the margins are small, because the interval already almost held.
 
 ## Step 4: predict again, with the margin
 
-```bash
-pyair2stream --config examples/02_uncertainty/predict_conformal.yaml
+```python
+predict_conformal = pyair2stream.run("examples/02_uncertainty/predict_conformal.yaml")
 ```
 
 [`predict_conformal.yaml`](predict_conformal.yaml) is step 2's run with one

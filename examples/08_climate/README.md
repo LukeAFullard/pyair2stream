@@ -19,13 +19,18 @@ python examples/08_climate/run.py
 It takes about five minutes. It makes the two scenario files from the measured
 2010–2012 file, then runs:
 
-```bash
-pyair2stream --config examples/08_climate/calibrate.yaml      # calibrate with uncertainty (as example 02)
-pyair2stream --config examples/08_climate/baseline.yaml       # 1,000 simulations, as measured
-pyair2stream --config examples/08_climate/warmer.yaml         # the same, with the air 2 °C warmer
-pyair2stream --config examples/08_climate/warmer_drier.yaml   # 2 °C warmer, and 20% less flow in June-September
-pyair2stream --config examples/08_climate/check.yaml          # cross-validation, to check the yearly peaks (as example 03)
+```python
+import pyair2stream
+
+results = {}
+results["calibrate"] = pyair2stream.run("examples/08_climate/calibrate.yaml")        # calibrate with uncertainty (as example 02)
+results["baseline"] = pyair2stream.run("examples/08_climate/baseline.yaml")          # 1,000 simulations, as measured
+results["warmer"] = pyair2stream.run("examples/08_climate/warmer.yaml")              # the same, with the air 2 °C warmer
+results["warmer_drier"] = pyair2stream.run("examples/08_climate/warmer_drier.yaml")  # 2 °C warmer, 20% less flow in June-September
+results["check"] = pyair2stream.run("examples/08_climate/check.yaml")                # cross-validation, to check the yearly peaks (as example 03)
 ```
+
+From a terminal, `pyair2stream --config <settings file>` does the same.
 
 Two settings in [`warmer.yaml`](warmer.yaml) and
 [`warmer_drier.yaml`](warmer_drier.yaml) matter:

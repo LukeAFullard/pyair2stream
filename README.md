@@ -42,7 +42,8 @@ Run this from the repository's top folder:
 pyair2stream --config examples/01_quickstart/config.yaml
 ```
 
-It takes under a minute. It fits the model to 2002–2009 data from the Mentue, a
+or, in Python, `pyair2stream.run("examples/01_quickstart/config.yaml")`. It
+takes under a minute. It fits the model to 2002–2009 data from the Mentue, a
 small Swiss river. Then it tests the model on 2010–2012, years the fit did not
 use. The results and plots go to `examples/01_quickstart/output/`. The
 [example's README](examples/01_quickstart/README.md) explains them.

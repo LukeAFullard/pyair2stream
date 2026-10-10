@@ -37,9 +37,20 @@ python examples/06_cross_validation/run.py
 ```
 
 It takes about three minutes. It runs [`version5.yaml`](version5.yaml)
-and [`version8.yaml`](version8.yaml), then the sensitivity analysis at the end
-of this page. The first two are ordinary DE settings files for
-the Mentue's 2002–2009 record, with a `cross_validation` block:
+and [`version8.yaml`](version8.yaml) with `pyair2stream.run`, then the
+sensitivity analysis at the end of this page:
+
+```python
+import pyair2stream
+
+for v in (5, 8):
+    result = pyair2stream.run(f"examples/06_cross_validation/version{v}.yaml")
+    result.scores["cross-validation"]     # all held-out days together: NSE, KGE, RMSE
+```
+
+[`version5.yaml`](version5.yaml) and [`version8.yaml`](version8.yaml) are
+ordinary DE settings files for the Mentue's 2002–2009 record, with a
+`cross_validation` block:
 
 ```yaml
 cross_validation:

@@ -1498,10 +1498,12 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 Mentue. `python examples/03_compliance/run.py` runs these three steps, then
 computes the statistics, the correction and the table:
 
-```bash
-pyair2stream --config examples/03_compliance/calibrate.yaml   # DE-MCMC on 2002-2009: parameters, σ, ρ
-pyair2stream --config examples/03_compliance/predict.yaml     # FORWARD on 2010-2012: 1,000 series
-pyair2stream --config examples/03_compliance/check.yaml       # cross-validation of 2002-2009
+```python
+import pyair2stream
+
+pyair2stream.run("examples/03_compliance/calibrate.yaml")   # DE-MCMC on 2002-2009: parameters, σ, ρ
+pyair2stream.run("examples/03_compliance/predict.yaml")     # FORWARD on 2010-2012: 1,000 series
+pyair2stream.run("examples/03_compliance/check.yaml")       # cross-validation of 2002-2009
 ```
 
 | Year | P(7-day mean > 20 °C), corrected | uncorrected | Measured highest 7-day mean |
