@@ -85,6 +85,21 @@ def _counts(ens, obs, levels=LEVELS):
     return {lev: (0 if n == 0 else int(round(share[lev] * n)), n) for lev in levels}
 
 
+def _error_diagnostics(err, sigma, rho):
+    """How the errors of a period compare with the error model (sigma, rho) it was predicted with: their
+    RMSE, and their mean in units of the standard deviation the error model gives a mean of that many
+    days (z; about 1 in size if the error model describes how errors persist over the period)."""
+    from pyair2stream.uncertainty import scored_error_variance_factor
+    err = np.asarray(err, float)
+    pos = np.flatnonzero(np.isfinite(err))
+    if len(pos) < 2:
+        return None
+    e = err[pos]
+    sd_mean = sigma * np.sqrt(scored_error_variance_factor(pos, rho) / len(pos))
+    return {"n": len(pos), "sigma": float(sigma), "rmse": float(np.sqrt(np.mean(e ** 2))),
+            "mean": float(np.mean(e)), "sd_mean": float(sd_mean), "z": float(np.mean(e) / sd_mean)}
+
+
 # --- (A) Later years: DE-MCMC on the calibration years, FORWARD on 2021-2022 -------------------
 
 def _later_years(args):
@@ -127,11 +142,13 @@ def _later_years(args):
     counts["summer days"] = _counts(ens[:, summer], obs[summer])
     counts["heat-dome days"] = _counts(ens[:, heat], obs[heat])
     ok = np.isfinite(obs)
+    best = np.asarray(fdata.Twat_mod[365:], float)
+    diag = _error_diagnostics(np.where(ok, best - obs, np.nan), float(meta["sigma"]), float(meta["rho"]))
     lo, hi = np.percentile(ens[:, ok], [5, 95], axis=0)
     median = np.median(ens[:, ok], axis=0)
     return {"station": st, "rho_timescale": rho, "converged": bool(meta["converged"]),
             "steps": int(meta["steps_run"]), "rho": float(meta["rho"]), "sigma": float(meta["sigma"]),
-            "counts": counts, "width": float(np.mean(hi - lo)), "centre bias": float(np.mean(median - obs[ok]))}
+            "counts": counts, "diagnostics": diag, "width": float(np.mean(hi - lo)), "centre bias": float(np.mean(median - obs[ok]))}
 
 
 # --- (B) Held-out years of the calibration period: leave-one-year-out cross-validation ----------
@@ -203,6 +220,13 @@ def _held_out_years(args):
         by_rho = _fold_rhos(cfg, tag, folds)
     out = {"station": st, "folds": len(folds), "counts": {}, "years": [], "rho": {},
            "folds raised": int(sum(w.rho > d.rho for w, d in zip(by_rho["weekly"], by_rho["daily"])))}
+    out["diagnostics"] = []
+    for f in by_rho["weekly"]:
+        obs = np.where(f.obs_held_out == -999.0, np.nan, f.obs_held_out)
+        sim = np.where(f.sim_held_out == -999.0, np.nan, f.sim_held_out)
+        d = _error_diagnostics(sim - obs, f.sigma, f.rho)
+        if d is not None:
+            out["diagnostics"].append({"fold": f.label, **d})
     for rho, fl in by_rho.items():
         out["rho"][rho] = float(np.mean([f.rho for f in fl]))
         out["counts"][rho] = {what: _window_coverage(fl, w) for what, w in WINDOWS.items()}
@@ -404,7 +428,7 @@ def run(ctx) -> Result:
     def _fmt(df):
         df = df.copy()
         for c in df.columns:
-            if c.endswith("%") or ", uncorrected" in c or ", corrected" in c:
+            if (c.endswith("%") or ", uncorrected" in c or ", corrected" in c) and not c.startswith("mean PIT"):
                 df[c] = df[c].map(lambda x: "" if pd.isna(x) else f"{x:.1%}")
         return df
     by_station = []
@@ -447,6 +471,64 @@ def run(ctx) -> Result:
         tables=[("B. Pooled over every held-out year", _fmt(pooled_b)),
                 ("B. Yearly statistics, share of held-out years inside the central range", _fmt(yearly)),
                 ("B. By station, 90% intervals", pd.DataFrame(by_station_b))]))
+
+    # Why intervals miss: held-out errors against the error model they were predicted with
+    from scipy.stats import norm
+    diag_a = [r["diagnostics"] for r in a if r["rho_timescale"] == "weekly" and r["station"] in pooled_stations
+              and r["diagnostics"]]
+    diag_b = [d for r in b for d in r["diagnostics"]]
+
+    def _ratio(ds):
+        return float(np.sqrt(sum(d["rmse"] ** 2 * d["n"] for d in ds) / sum(d["sigma"] ** 2 * d["n"] for d in ds)))
+
+    def _rms_z(ds):
+        return float(np.sqrt(np.mean([d["z"] ** 2 for d in ds])))
+    diag_rows = []
+    for part, ds in (("A. later years (2021-2022), converged stations", diag_a), ("B. held-out years", diag_b)):
+        if ds:
+            r_ = _ratio(ds)
+            diag_rows.append({"part": part, "periods": len(ds), "held-out RMSE / sigma": round(r_, 2),
+                              "90% coverage this ratio alone gives": f"{2 * norm.cdf(norm.ppf(0.95) / r_) - 1:.1%}",
+                              "size of each period's mean error / what the error model allows (RMS of z)":
+                                  round(_rms_z(ds), 2),
+                              "periods with |z| > 2": f"{sum(abs(d['z']) > 2 for d in ds)} of {len(ds)} "
+                                                      f"(error model: about 5%)"})
+    diag_station = []
+    for r in b:
+        ds = r["diagnostics"]
+        if ds:
+            diag_station.append({"station": r["station"], "held-out years": len(ds),
+                                 "training sigma (°C)": round(float(np.mean([d["sigma"] for d in ds])), 3),
+                                 "held-out RMSE (°C)": round(float(np.sqrt(np.mean([d["rmse"] ** 2 for d in ds]))), 3),
+                                 "held-out RMSE / sigma": round(_ratio(ds), 2),
+                                 "yearly mean errors (°C)": " ".join(f"{d['mean']:+.2f}" for d in ds),
+                                 "SD the error model gives a yearly mean (°C)":
+                                     round(float(np.mean([d["sd_mean"] for d in ds])), 2),
+                                 "RMS of z": round(_rms_z(ds), 2)})
+    if diag_rows:
+        res.sections.append(Section(
+            "C. Why intervals miss: the errors of new periods against the error model",
+            "For each predicted period (part A: 2021-2022 at each station; part B: each held-out year), the RMSE of "
+            "the best fit against the measurements, divided by the sigma the period was predicted with (from the "
+            "calibration or training years), and the period's mean error divided by the standard deviation the "
+            "error model (sigma, rho) gives the mean of that many days (z). If the error model described the new "
+            "periods, the ratio would be about 1, and z would be about 1 in size (|z| > 2 in about 5% of periods). "
+            "Added after the first full run to explain its result; not part of the criterion.",
+            tables=[("C. Pooled", pd.DataFrame(diag_rows)), ("C. By station, held-out years", pd.DataFrame(diag_station))]))
+        if diag_b:
+            ratio_b, z_b = _ratio(diag_b), _rms_z(diag_b)
+            big = sum(abs(d["z"]) > 2 for d in diag_b)
+            text = (f"Section C compares the errors of new periods with the error model. In the held-out years the daily errors "
+                    f"were {ratio_b:.2f} times the size of the training years' residuals, which alone brings a 90% "
+                    f"interval down to about {2 * norm.cdf(norm.ppf(0.95) / ratio_b) - 1:.0%}; and the size of each "
+                    f"year's mean error was {z_b:.1f} times what the error model allows a yearly mean ({big} of "
+                    f"{len(diag_b)} years with |z| > 2, against about 5% expected).")
+            if z_b > 1.5:
+                text += (" The model's error shifts from one year to the next by more than errors that persist for "
+                         "weeks produce. A single rho, however it is chosen, cannot describe that, and sigma "
+                         "estimated from the calibration years does not include it.")
+            text += " On the Swiss rivers, on which the error model was developed, held-out daily 90% intervals held on 90% of days (V11)."
+            res.notes.append(text)
 
     w_a, d_a = _get(pooled_a, "weekly", "30-day means", 90), _get(pooled_a, "daily", "30-day means", 90)
     w_b, d_b = _get(pooled_b, "weekly", "30-day means", 90), _get(pooled_b, "daily", "30-day means", 90)
