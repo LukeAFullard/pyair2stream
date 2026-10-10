@@ -273,9 +273,10 @@ def _draw_rng(chain_hash: str, chain_row: int) -> np.random.Generator:
     return np.random.default_rng([int(chain_hash[:16], 16), int(chain_row)])
 
 
-def _noisy_member(Twat_mod: np.ndarray, noise: np.ndarray) -> np.ndarray:
-    """One ensemble member: simulation plus residual noise, NaN where not simulated (gaps)."""
-    member = Twat_mod + noise
+def _noisy_member(Twat_mod: np.ndarray, noise: np.ndarray, ice_floor: float) -> np.ndarray:
+    """One ensemble member: simulation plus residual noise, never below the ice floor
+    (Tice_cover, as the simulation itself), NaN where not simulated (gaps)."""
+    member = np.maximum(Twat_mod + noise, ice_floor)
     member[Twat_mod == -999.0] = np.nan
     return member
 
@@ -803,7 +804,7 @@ def forward_mode(data: CommonData) -> None:
             else:
                 noise = draw_rng.normal(0, sigma, data.n_tot)
 
-            ensemble_simulations.append(_noisy_member(data.Twat_mod, noise))
+            ensemble_simulations.append(_noisy_member(data.Twat_mod, noise, data.Tice_cover))
 
         # `sample_indices` is passed through so `valid_draw_indices` (the chain
         # rows that actually survived divergence filtering, in order -- not the
@@ -1388,7 +1389,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         else:
             noise = rng.normal(0, sigma_iter, data.n_tot)
 
-        ensemble_simulations.append(_noisy_member(data.Twat_mod, noise))
+        ensemble_simulations.append(_noisy_member(data.Twat_mod, noise, data.Tice_cover))
 
     # `sample_indices` is passed through so `valid_draw_indices` (the chain rows
     # that actually survived divergence filtering, in order) ends up in the

@@ -315,3 +315,53 @@ def generate_ar1_noise(n_tot: int, sigma: float, rho: float, segments: list, rng
         noise[start:end+1] = scipy.signal.lfilter([1.0], [1.0, -rho], epsilon)
 
     return noise
+
+
+# --- Seasonal error size ---------------------------------------------------------------------------
+
+SIGMA_MONTH_MIN_DAYS = 30        # a month's error size is measured if it has at least this many scored days
+_DAYS_IN_MONTH = np.array([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31], dtype=np.float64)
+_MONTH_START = np.concatenate([[0.0], np.cumsum(_DAYS_IN_MONTH)[:-1]])
+_MONTH_MIDDLE = _MONTH_START + _DAYS_IN_MONTH / 2.0
+
+
+def _year_position(months: np.ndarray, days: np.ndarray) -> np.ndarray:
+    """Position of each date in a 365-day year (0 at the start of 1 January), at the middle of the day;
+    29 February counts as the end of 28 February."""
+    months = np.asarray(months, dtype=np.int64)
+    days = np.minimum(np.asarray(days, dtype=np.float64), _DAYS_IN_MONTH[months - 1])
+    return _MONTH_START[months - 1] + days - 0.5
+
+
+def monthly_sigma_factors(residuals: np.ndarray, months: np.ndarray, days: np.ndarray,
+                          min_days: int = SIGMA_MONTH_MIN_DAYS):
+    """
+    The size of the model's daily errors in each calendar month, relative to its size over the
+    whole year, from the residuals of the scored days (with their months and days of the month).
+    Each month's factor is its root-mean-square residual; a month with fewer than `min_days`
+    scored days is interpolated from the nearest measured months on either side (around the
+    year). The factors are scaled so that `daily_sigma_factor` has a mean square of 1 over the
+    scored days: the errors then have the same overall size as with a constant sigma, spread
+    differently over the year. Returns 12 factors (all 1.0 when fewer than two months are
+    measured) and the number of scored days in each month.
+    """
+    e = np.asarray(residuals, dtype=np.float64)
+    months = np.asarray(months, dtype=np.int64)
+    counts = np.bincount(months - 1, minlength=12)[:12]
+    measured = counts >= min_days
+    if len(e) == 0 or not np.any(e != 0.0) or measured.sum() < 2:
+        return np.ones(12), counts
+    rms = np.full(12, np.nan)
+    for m in np.flatnonzero(measured):
+        rms[m] = np.sqrt(np.mean(e[months == m + 1] ** 2))
+    known = np.flatnonzero(measured)
+    factors = np.interp(np.arange(12), known, rms[known], period=12)
+    scale = np.sqrt(np.mean(daily_sigma_factor(factors, months, days) ** 2))
+    return factors / scale, counts
+
+
+def daily_sigma_factor(factors: np.ndarray, months: np.ndarray, days: np.ndarray) -> np.ndarray:
+    """The error-size factor of each date: the monthly factors placed at the middle of their months
+    and interpolated linearly between them, around the year, so the error size changes smoothly."""
+    pos = _year_position(months, days)
+    return np.interp(pos, _MONTH_MIDDLE, np.asarray(factors, dtype=np.float64), period=365.0)

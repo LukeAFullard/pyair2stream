@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import pandas as pd
 import scipy.signal
 from pyair2stream.uncertainty import estimate_ar1_rho, generate_ar1_noise, MIN_PAIRS_FOR_RHO_ESTIMATE
 
@@ -204,3 +205,23 @@ def test_likelihood_option_is_validated(tmp_path):
         else:
             with pytest.raises(ValueError, match="likelihood"):
                 read_calibration(str(path))
+
+
+def test_monthly_sigma_factors():
+    from pyair2stream.uncertainty import daily_sigma_factor, monthly_sigma_factors
+    dates = pd.date_range("2001-01-01", "2004-12-31")
+    rng = np.random.default_rng(0)
+    size = np.where(dates.month.isin([6, 7, 8]), 2.0, 1.0)
+    e = rng.normal(size=len(dates)) * size
+    factors, counts = monthly_sigma_factors(e, dates.month, dates.day)
+    assert counts.sum() == len(dates)
+    # Summer twice the rest of the year; overall mean square of the daily factor is 1.
+    assert factors[6] / factors[0] == pytest.approx(2.0, rel=0.1)
+    assert np.mean(daily_sigma_factor(factors, dates.month, dates.day) ** 2) == pytest.approx(1.0)
+    # A month with too few scored days is interpolated from its neighbours.
+    keep = dates.month != 4
+    f2, c2 = monthly_sigma_factors(e[keep], dates.month[keep], dates.day[keep])
+    assert c2[3] == 0 and min(f2[2], f2[4]) <= f2[3] <= max(f2[2], f2[4])
+    # Fewer than two measured months: constant.
+    one = dates.month == 5
+    assert monthly_sigma_factors(e[one], dates.month[one], dates.day[one])[0].tolist() == [1.0] * 12
