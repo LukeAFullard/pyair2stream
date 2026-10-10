@@ -203,7 +203,7 @@ extra step, which you must justify.
 |---|---|
 | prepare data, choose settings, run the model and read the results | [USER_GUIDE.md](USER_GUIDE.md) |
 | follow a worked example | [examples/](examples/README.md) |
-| understand the uncertainty ranges and probabilities | [docs/UNCERTAINTY.md](docs/UNCERTAINTY.md) |
+| understand the uncertainty ranges and probabilities, and which tool answers which question | [docs/UNCERTAINTY.md](docs/UNCERTAINTY.md) (start with §1) and [User Guide §11](USER_GUIDE.md#which-tool-for-which-question) |
 | know exactly what the software computes, and its limits | [docs/METHODS.md](docs/METHODS.md) (read §16 before using results for a decision) |
 | see the evidence that it works | [validation/REPORT.md](validation/REPORT.md) |
 | see which published results it reproduces, and the errors found in them | [docs/PUBLISHED_RESULTS.md](docs/PUBLISHED_RESULTS.md) |
@@ -230,10 +230,10 @@ A [validation suite](validation/README.md) tests this. Its results are in
 - **Finds a known answer.** On data made by the model from known parameters,
   the fitted model predicts other years to within 0.04 °C
   ([V3](validation/REPORT.md#v3)).
-- **Honest uncertainty ranges.** On such data, 90% ranges contain the truth
-  about 90% of the time ([V4](validation/REPORT.md#v4)). On real rivers, in
-  years not used for fitting, they held on 85–89% of days. So they are
-  slightly too narrow for new years ([V5](validation/REPORT.md#v5)).
+- **Uncertainty ranges close to their stated level.** On such data, 90% ranges
+  contain the truth about 90% of the time ([V4](validation/REPORT.md#v4)). On
+  real rivers, in years not used for fitting, they held on 85–89% of days. So
+  they are slightly too narrow for new years ([V5](validation/REPORT.md#v5)).
 - **Probabilities need the check.** The model can be too warm on the hottest
   days. So uncorrected ranges for yearly peaks held in only 73–92% of years.
   The cross-validation check and correction brought this to 85–94%
@@ -241,7 +241,9 @@ A [validation suite](validation/README.md) tests this. Its results are in
 - **Warmer and lower-flow years.** Fitted on the coolest years, the model
   predicted the warmest years almost as well: at most 0.07 °C worse. The same
   held when it was fitted on the highest-flow years and tested on the
-  lowest-flow years ([V10](validation/REPORT.md#v10)).
+  lowest-flow years. It beat both simple alternatives in 10 of 12 cases; the
+  two others are version 5 on the Rhône ([V10](validation/REPORT.md#v10),
+  which does not pass: see below).
 - **How many years of data.** Fitted on any 3 consecutive years, the model
   predicted later years almost as well as when fitted on the whole record (7
   to 21 years): the median error was at most 0.03 °C larger. One year was often
@@ -255,15 +257,23 @@ A [validation suite](validation/README.md) tests this. Its results are in
   better than every regression on 14 of 23 British Columbia rivers. On the
   Swiss yearly peaks, a straight line on air temperature did about as well
   ([V17](validation/REPORT.md#v17)).
-- **Where it falls short.** Four checks do not meet all their criteria: V5,
-  V9, V10 and V14. The main reasons are:
-  - 95% and 99% ranges were too narrow in some years not used for fitting;
-  - version 5 (no discharge) does poorly on the Rhône, a river whose summer
-    temperature depends on its flow;
-  - on the hottest days of the three Swiss rivers, version 5's 90% ranges held
-    on only 84% of days. Version 8's held on 91%.
+- **Where it falls short.** Four of the 17 checks do not meet all their
+  criteria:
+  - V5: daily 95% and 99% ranges were too narrow on some rivers in years not
+    used for fitting (95% ranges held on 91–95% of days, 99% ranges on
+    95–99.5%);
+  - V9: for version 5 (no discharge), the probability that a yearly peak
+    exceeded a limit was no better than going by how often past years
+    exceeded it. Version 8's probabilities were better;
+  - V10: version 5 did not beat the simple alternatives on the Rhône, a river
+    whose summer temperature depends on its flow, and in one case its
+    uncertainty run did not converge;
+  - V14: on the hottest days of the three Swiss rivers, version 5's 90% ranges
+    held on only 83–84% of days. Version 8's held on 91%.
 
-  The report gives the details.
+  Most of these point to version 5 on a flow-driven river, and to ranges above
+  90%. The report gives the details. Check your own results on years not used
+  for fitting ([User Guide §14](USER_GUIDE.md#14-checklist-for-results-that-support-a-decision)).
 
 To run the tests and the validation suite (V1 needs `gfortran`):
 
