@@ -326,12 +326,20 @@ def _save_ensemble_npz(data: CommonData, ensemble_simulations: np.ndarray, filen
 
 def _export_ensemble_outputs(data: CommonData, ensemble_simulations: np.ndarray, prediction_interval: float,
                               env_filename: str, ensemble_filename: Optional[str] = None,
-                              save_ensemble: bool = False) -> dict:
+                              save_ensemble: bool = False, conformal: Optional[dict] = None) -> dict:
     """
     Write the percentile envelope CSV and, if requested, the raw ensemble npz (both
     post-warm-up). Returns the interval's empirical coverage (see `_interval_coverage`).
+    With `conformal` (`_conformal_margin_for_run`), the envelope also gets the interval
+    widened by the conformal margin (Twat_mod_lower_conformal, Twat_mod_upper_conformal).
     """
+    from .scenario import widen_range
     env_df = _percentile_envelope(data, ensemble_simulations, prediction_interval)
+    if conformal is not None:
+        lo, hi = widen_range(env_df['Twat_mod_lower'].to_numpy(), env_df['Twat_mod_upper'].to_numpy(),
+                             conformal['margin'], floor=data.Tice_cover)
+        env_df['Twat_mod_lower_conformal'] = lo
+        env_df['Twat_mod_upper_conformal'] = hi
     env_df.iloc[365:].to_csv(env_filename, index=False)  # drop the warm-up block
     print(f"Saved predictive uncertainty envelopes to {env_filename}")
 
@@ -340,10 +348,58 @@ def _export_ensemble_outputs(data: CommonData, ensemble_simulations: np.ndarray,
             raise ValueError("save_ensemble is True but no ensemble_filename was provided.")
         _save_ensemble_npz(data, ensemble_simulations, ensemble_filename)
 
-    return _interval_coverage(data, env_df, prediction_interval)
+    coverage = _interval_coverage(data, env_df, prediction_interval)
+    if conformal is not None:
+        widened = _interval_coverage(data, env_df.assign(Twat_mod_lower=env_df['Twat_mod_lower_conformal'],
+                                                         Twat_mod_upper=env_df['Twat_mod_upper_conformal']),
+                                     prediction_interval, label="conformal ")
+        coverage.update({f"conformal_{k}": v for k, v in widened.items()})
+    return coverage
 
 
-def _interval_coverage(data: CommonData, env_df: pd.DataFrame, prediction_interval: float) -> dict:
+def _conformal_margin_for_run(data: CommonData, path: str, level: float, noise_model: str,
+                              rho_timescale: Optional[str]) -> dict:
+    """
+    The conformal margin of single days at `level` from `cv_conformal_margins.csv`
+    (forward_options.conformal_margins), after checking that the file was made for this
+    river's model and error model: the margin measures how often that model's intervals
+    missed, so it applies to no other (docs/METHODS.md §13).
+    """
+    from .scenario import read_conformal_margins
+    table = read_conformal_margins(path)
+    first = table.iloc[0]
+    problems = []
+    if int(first['version']) != int(data.version):
+        problems.append(f"model version {int(first['version'])} (this run: {int(data.version)})")
+    if str(first['noise_model']) != noise_model:
+        problems.append(f"noise_model '{first['noise_model']}' (this run: '{noise_model}')")
+    if rho_timescale is not None and str(first['rho_timescale']) != rho_timescale:
+        problems.append(f"rho_timescale '{first['rho_timescale']}' (this run's rho: '{rho_timescale}')")
+    overrides = [k for k, opts in (('residual_sigma', data.forward_options), ('ar1_rho', data.uncertainty_options or {}))
+                 if opts.get(k) is not None]
+    if overrides:
+        problems.append(f"this run overrides the error model ({', '.join(overrides)})")
+    if problems:
+        raise ValueError(f"forward_options.conformal_margins: {path} was made with " + "; ".join(problems) +
+                         ". The margins measure the misses of the intervals of one model and error model, so they "
+                         "apply only to runs with the same (docs/METHODS.md §13).")
+    station = f"{data.station}_{data.series}"
+    if str(first['station']) != station:
+        print(f"Note: the conformal margins in {path} were made for station '{first['station']}', and this run is "
+              f"'{station}'. They apply only to the river and calibration whose cross-validation made them.")
+    rows = table[(table.window_days == 1) & np.isclose(table.level, level)]
+    if rows.empty:
+        raise ValueError(f"forward_options.conformal_margins: {path} has no margin for single days at the "
+                         f"{level:g}% level (uncertainty_options.prediction_interval). Rerun the cross-validation "
+                         "with the same prediction_interval.")
+    r = rows.iloc[0]
+    print(f"Conformal margin of the {level:g}% interval: {float(r['margin']):+.3f} degC, from {int(r['held_out_years'])} "
+          f"held-out years ({path}).")
+    return {"path": path, "sha256": _hash_file(path), "level": float(level), "margin": float(r['margin']),
+            "held_out_years": int(r['held_out_years']), "inside_after": float(r['inside_after'])}
+
+
+def _interval_coverage(data: CommonData, env_df: pd.DataFrame, prediction_interval: float, label: str = "") -> dict:
     """
     Share of observed, scored days whose observation lies inside the prediction
     interval. For a well-calibrated X% interval this should be close to X%; a much
@@ -359,7 +415,7 @@ def _interval_coverage(data: CommonData, env_df: pd.DataFrame, prediction_interv
     obs = data.Twat_obs[m]
     coverage = float(np.mean((obs >= lo[m]) & (obs <= hi[m])))
     print(f"Interval check: {coverage:.1%} of {n} observed days lie inside the "
-          f"{prediction_interval:g}% prediction interval.")
+          f"{prediction_interval:g}% {label}prediction interval.")
     return {"interval_coverage": coverage, "interval_coverage_n_days": n}
 
 
@@ -761,6 +817,14 @@ def forward_mode(data: CommonData) -> None:
                 rho_used = 0.0
                 rho_was_measured = False
 
+        prediction_interval = uncertainty_options.get('prediction_interval', 90.0)
+        conformal = None
+        if data.forward_options.get('conformal_margins'):
+            conformal = _conformal_margin_for_run(
+                data, data.forward_options['conformal_margins'], prediction_interval, noise_model,
+                (sidecar_timescale or uncertainty_options.get('rho_timescale', DEFAULT_RHO_TIMESCALE))
+                if noise_model == 'ar1' else None)
+
         ensemble_simulations = []
         excluded_draws = []
         n_par = N_PAR
@@ -826,11 +890,11 @@ def forward_mode(data: CommonData) -> None:
 
         ensemble_simulations = np.array(ensemble_simulations)
 
-        prediction_interval = uncertainty_options.get('prediction_interval', 90.0)
         env_filename = os.path.join(data.folder, f"Forward_Prediction_Envelopes_{data.station}_{data.series}_{data.time_res}.csv")
         ensemble_filename = os.path.join(data.folder, f"Forward_Prediction_Ensemble_{data.station}_{data.series}_{data.time_res}.npz")
         save_ensemble = bool(uncertainty_options.get('save_ensemble', False))
-        coverage = _export_ensemble_outputs(data, ensemble_simulations, prediction_interval, env_filename, ensemble_filename, save_ensemble)
+        coverage = _export_ensemble_outputs(data, ensemble_simulations, prediction_interval, env_filename,
+                                            ensemble_filename, save_ensemble, conformal=conformal)
 
         # Sidecar metadata for the forward prediction-interval ensemble (the
         # FORWARD-mode equivalent of MCMC_chain_*_meta.json), named to pair with the
@@ -857,6 +921,7 @@ def forward_mode(data: CommonData) -> None:
             "residual_sigma": sigma,
             "rho": float(rho_used),
             "rho_measured": rho_was_measured,
+            "conformal_margins": conformal,
         }
         with open(meta_filename, 'w') as f:
             json.dump(meta_data, f, indent=2, allow_nan=False)

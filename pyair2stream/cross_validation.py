@@ -698,6 +698,95 @@ def check_interval_coverage(results: list[FoldResult], levels=COVERAGE_LEVELS, e
     return pd.DataFrame(rows)
 
 
+# --------------------------------------------------------------------------
+# Conformal margins: widen intervals by the held-out years' misses (docs/METHODS.md §13)
+# --------------------------------------------------------------------------
+
+CONFORMAL_WINDOWS = (1, 7, 30)      # days, 7-day means, 30-day means
+MIN_CONFORMAL_YEARS = 3             # held-out periods needed to estimate a margin
+
+
+def _conformal_scores(results: list[FoldResult], levels, windows, noise_model: str, n_simulations: int,
+                      seed: Optional[int]) -> dict:
+    """{(window, level): [scores of each held-out period]}. A value's score is how far it lies outside
+    the central `level`% range of its fold's simulations (negative inside): max(lower - y, y - upper).
+    The simulations are those of `check_interval_coverage` (same seed, same series)."""
+    scores = {(w, lev): [] for w in windows for lev in levels}
+    for r in results:
+        if r.dates_held_out is None or not np.isfinite(r.sigma):
+            continue
+        rng = np.random.default_rng(None if seed is None else [int(seed), int(r.fold_id), 7])
+        obs, ens = _fold_ensemble(r, noise_model, n_simulations, rng)
+        for w in windows:
+            o = pd.Series(obs).rolling(w).mean().to_numpy() if w > 1 else obs
+            e = pd.DataFrame(ens.T).rolling(w).mean().to_numpy().T if w > 1 else ens
+            ok = np.isfinite(o)
+            for lev in levels:
+                if not ok.any():
+                    scores[(w, lev)].append(np.array([]))
+                    continue
+                lo, hi = np.percentile(e[:, ok], [50 - lev / 2, 50 + lev / 2], axis=0)
+                scores[(w, lev)].append(np.maximum(lo - o[ok], o[ok] - hi))
+    return scores
+
+
+def conformal_margin(scores_by_period, level: float) -> float:
+    """
+    The margin (°C) to add to both ends of a central `level`% range so that it would have
+    contained `level`% of the held-out values: the `level`% quantile of their scores, with
+    every held-out period (normally a year) given the same total weight, so that a year with
+    more measured days does not count more. Periods without values are ignored; NaN if none
+    is left.
+    """
+    parts = [np.asarray(s, dtype=np.float64) for s in scores_by_period if len(s)]
+    if not parts:
+        return float("nan")
+    s = np.concatenate(parts)
+    w = np.concatenate([np.full(len(p), 1.0 / len(p)) for p in parts]) / len(parts)
+    order = np.argsort(s, kind="stable")
+    s, w = s[order], w[order]
+    k = int(np.searchsorted(np.cumsum(w), level / 100.0 - 1e-12))
+    return float(s[min(k, len(s) - 1)])
+
+
+def conformal_margins(results: list[FoldResult], levels=COVERAGE_LEVELS, extra_level: Optional[float] = None,
+                      windows=CONFORMAL_WINDOWS, noise_model: str = "ar1", n_simulations: int = CHECK_SIMULATIONS,
+                      seed: Optional[int] = None) -> pd.DataFrame:
+    """
+    Split conformal margins of the prediction intervals, from the held-out years of a
+    cross-validation (docs/METHODS.md §13).
+
+    For each level (%) and each averaging window (1: single days; 7 and 30: moving means of
+    that many days, all measured), every held-out value is scored by how far it fell outside
+    the central range of its fold's simulations (as in `check_interval_coverage`). The margin
+    is the `level`% quantile of these scores, each held-out year weighted equally
+    (`conformal_margin`). Adding it to both ends of a range would have made it contain
+    `level`% of the held-out values; a negative margin narrows the range.
+
+    Columns: window_days, level, margin (°C), held_out_years, values, inside_before (share of
+    held-out values inside the range without the margin) and inside_after (the same with a
+    margin computed from the other held-out years only, so each year is judged with a margin
+    it did not help to set: the out-of-sample check of the margin). No rows if fewer than
+    MIN_CONFORMAL_YEARS held-out periods have values.
+    """
+    levels = sorted(set(levels) | ({float(extra_level)} if extra_level is not None else set()))
+    scores = _conformal_scores(results, levels, windows, noise_model, n_simulations, seed)
+    rows = []
+    for w in windows:
+        for lev in levels:
+            per = [s for s in scores[(w, lev)] if len(s)]
+            if len(per) < MIN_CONFORMAL_YEARS:
+                continue
+            n = sum(len(s) for s in per)
+            after = sum(int(np.sum(s <= conformal_margin(per[:j] + per[j + 1:], lev))) for j, s in enumerate(per))
+            rows.append({"window_days": int(w), "level": float(lev), "margin": conformal_margin(per, lev),
+                         "held_out_years": len(per), "values": n,
+                         "inside_before": float(sum(int(np.sum(s <= 0)) for s in per) / n),
+                         "inside_after": float(after / n)})
+    return pd.DataFrame(rows, columns=["window_days", "level", "margin", "held_out_years", "values",
+                                       "inside_before", "inside_after"])
+
+
 def check_yearly_statistics(results: list[FoldResult], threshold: Optional[float] = None,
                             season_months: Optional[list] = None, noise_model: str = "ar1",
                             level: float = 90.0, n_simulations: int = CHECK_SIMULATIONS,

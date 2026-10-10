@@ -148,7 +148,22 @@ def _later_years(args):
     median = np.median(ens[:, ok], axis=0)
     return {"station": st, "rho_timescale": rho, "converged": bool(meta["converged"]),
             "steps": int(meta["steps_run"]), "rho": float(meta["rho"]), "sigma": float(meta["sigma"]),
-            "counts": counts, "diagnostics": diag, "width": float(np.mean(hi - lo)), "centre bias": float(np.mean(median - obs[ok]))}
+            "counts": counts, "diagnostics": diag, "width": float(np.mean(hi - lo)), "centre bias": float(np.mean(median - obs[ok])),
+            "ranges": _ranges(ens, obs, dates)}
+
+
+def _ranges(ens, obs, dates):
+    """For V19: the measured values and the central ranges of the simulations at every level, for days
+    and moving means (NaN where a value is not measured or not simulated), and the dates."""
+    out = {"dates": pd.DatetimeIndex(dates)}
+    for what, w in WINDOWS.items():
+        e, o = _rolling(ens, w), _rolling(obs, w)[0] if w > 1 else np.asarray(obs, float)
+        ok = np.isfinite(o) & np.all(np.isfinite(e), axis=0)
+        lo, hi = np.full((len(LEVELS), len(o)), np.nan), np.full((len(LEVELS), len(o)), np.nan)
+        for i, lev in enumerate(LEVELS):
+            lo[i, ok], hi[i, ok] = np.percentile(e[:, ok], [50 - lev / 2, 50 + lev / 2], axis=0)
+        out[what] = {"obs": np.where(ok, o, np.nan), "lower": dict(zip(LEVELS, lo)), "upper": dict(zip(LEVELS, hi))}
+    return out
 
 
 # --- (B) Held-out years of the calibration period: leave-one-year-out cross-validation ----------
@@ -219,6 +234,7 @@ def _held_out_years(args):
         _, folds = cross_validate(data, "DE", return_folds=True)
         by_rho = _fold_rhos(cfg, tag, folds)
     out = {"station": st, "folds": len(folds), "counts": {}, "years": [], "rho": {},
+           "fold results": by_rho["weekly"],          # for V19
            "folds raised": int(sum(w.rho > d.rho for w, d in zip(by_rho["weekly"], by_rho["daily"])))}
     out["diagnostics"] = []
     for f in by_rho["weekly"]:
