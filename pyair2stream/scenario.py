@@ -302,6 +302,61 @@ def central_range(values: np.ndarray, level: float, axis=None):
     return lo, hi
 
 
+CONFORMAL_COLUMNS = ("station", "version", "window_days", "level", "margin", "held_out_years", "values",
+                     "inside_before", "inside_after", "noise_model", "rho_timescale")
+
+
+def read_conformal_margins(path: str) -> pd.DataFrame:
+    """Read `cv_conformal_margins.csv`, written by a cross-validation (docs/METHODS.md §13)."""
+    table = pd.read_csv(path)
+    missing = [c for c in CONFORMAL_COLUMNS if c not in table.columns]
+    if missing or table.empty:
+        raise ValueError(f"{path} is not a conformal-margins file written by a cross-validation "
+                         f"(cv_conformal_margins.csv): {'missing columns ' + ', '.join(missing) if missing else 'no rows'}.")
+    return table
+
+
+def conformal_margin(path_or_table, level: float, window_days: int = 1) -> float:
+    """
+    The conformal margin (°C) of the central `level`% range of single days (`window_days=1`)
+    or of means of 7 or 30 days, from `cv_conformal_margins.csv` (a path or the table read
+    by `read_conformal_margins`). Use the 30-day margin for calendar months.
+    """
+    table = read_conformal_margins(path_or_table) if isinstance(path_or_table, str) else path_or_table
+    rows = table[(table.window_days == int(window_days)) & np.isclose(table.level, float(level))]
+    if rows.empty:
+        have = sorted(set(zip(table.window_days, table.level)))
+        raise ValueError(f"No conformal margin for {window_days}-day values at the {level:g}% level; the file has "
+                         + ", ".join(f"{w}-day {lev:g}%" for w, lev in have) + ".")
+    return float(rows.margin.iloc[0])
+
+
+def widen_range(lower, upper, margin: float, floor=None):
+    """
+    A range widened by `margin` at both ends (narrowed if it is negative, never past its
+    midpoint), and never below `floor` (normally Tice_cover, which no simulated value goes
+    below). Returns (lower, upper).
+    """
+    lower = np.asarray(lower, dtype=np.float64) - margin
+    upper = np.asarray(upper, dtype=np.float64) + margin
+    mid = (lower + upper) / 2
+    crossed = lower > upper
+    lower, upper = np.where(crossed, mid, lower), np.where(crossed, mid, upper)
+    if floor is not None:
+        lower, upper = np.maximum(lower, floor), np.maximum(upper, floor)
+    return lower, upper
+
+
+def conformal_range(values: np.ndarray, level: float, margin: float, axis=0, floor=None):
+    """
+    The central `level`% range of `values` (`central_range`), widened by the conformal
+    `margin` (`conformal_margin`, for the same level and the same averaging window as the
+    values: single days, 7-day or 30-day means) (`widen_range`). Returns (lower, upper).
+    """
+    lo, hi = central_range(values, level, axis=axis)
+    return widen_range(lo, hi, margin, floor=floor)
+
+
 def inside_range(pit_value, level: float):
     """Whether a PIT value (`pit`) lies inside the central `level`% range."""
     return np.abs(np.asarray(pit_value, dtype=np.float64) - 0.5) <= level / 200.0
@@ -357,7 +412,9 @@ def paired_difference(ens_a: np.ndarray, ens_b: np.ndarray) -> np.ndarray:
     The residual noise added to each draw is fixed by the draw's chain row, so the
     same draw carries the same noise in both runs and it cancels here: the spread of
     the difference is the parameter uncertainty of the effect. This assumes the
-    model's error on a given day would be the same under both scenarios.
+    model's error on a given day would be the same under both scenarios. On days a
+    member is held at the ice floor (`Tice_cover`) in one run only, the noise does
+    not cancel exactly.
 
     This only checks `.shape` -- it has no way to detect two ensembles that happen
     to have the same shape but were drawn from different (or differently-ordered,

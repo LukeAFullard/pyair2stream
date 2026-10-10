@@ -3,6 +3,32 @@
 ## [0.5.1] - 2026-10-09
 
 ### Added
+- **Optional conformal margins for prediction intervals.** Where the
+  cross-validation shows that intervals held less often than stated at a site,
+  they can now be widened by how far the held-out years' measurements fell
+  outside them (split conformal prediction, each held-out year weighted
+  equally; docs/METHODS.md §13). A cross-validation run writes
+  `cv_conformal_margins.csv` (margins for days, 7-day and 30-day means at each
+  level, with an out-of-sample check of each margin, `inside_after`). A FORWARD
+  run with `forward_options.conformal_margins` adds the widened daily interval
+  to its envelope file (`Twat_mod_lower_conformal`, `Twat_mod_upper_conformal`),
+  to `filled_water_temperature_forward.csv` and to its figure, and records the
+  margin in its `_meta.json`; it refuses a file made with another model version,
+  error model or ρ time scale. `scenario.conformal_margin`,
+  `scenario.conformal_range` and `scenario.widen_range` apply the margins to
+  7-day and 30-day means. Off unless set: results without it are unchanged.
+- **Validation V18: prediction intervals on 23 independent rivers.** On the
+  British Columbia rivers, which played no part in developing the error model,
+  90% intervals held on 86.9% of days, 87.0% of 7-day means and 84.8% of
+  30-day means in 2021–2022, and on 86.3%, 86.2% and 82.3% in 160 held-out
+  years: too narrow, because the errors of new years were larger than those of
+  the calibration years. V18 does not pass. The default weekly ρ did better over
+  30 days than ρ from consecutive days (84.8% against 81.9%).
+- **Validation V19: conformal margins on 26 rivers.** With the margins, 90%
+  intervals on the British Columbia rivers held on 90.7% of days, 90.7% of
+  7-day means and 92.1% of 30-day means in 2021–2022, and on 89.5%, 89.3% and
+  88.8% in held-out years. On the 3 Swiss rivers, where they already held, the
+  margins were small and the intervals kept holding (88.9–89.8%). V19 passes.
 - **`summary.html`.** Every run now also writes its summary as a web page, with
   the figures inside it (at screen size), so it opens in any browser and can be
   sent as one file. `summary.md` now also shows the figures and links each
@@ -258,6 +284,8 @@
   `RunResult.messages`.
 
 ### Removed
+- Six Python wheel files committed to the repository root by mistake (about
+  29 MB); `*.whl` is now ignored.
 - ⚠ **`calendar: "360_day"`.** It never worked: a file with genuine 360-day
   dates (30 February) was refused when its dates were read, and relabelling
   the rows with ordinary dates put months and years out of step with the
@@ -267,6 +295,17 @@
   to the standard calendar first; USER_GUIDE §5 shows how with xarray.
 
 ### Documentation
+- "Differs from zero" (`Significantly_Diff_From_Zero`) is described as what it
+  is: zero lies outside the central 95% credible interval, the Bayesian
+  counterpart of a 5%-level test, not a p-value.
+- Paired scenario differences: the random error does not cancel exactly on days
+  a series is held at `Tice_cover` in one run only (METHODS §13, User Guide §12).
+- METHODS §11: the yearly-statistics summary reports the 50%, 80%, 90% and 95%
+  ranges and `prediction_interval`, not only 50% and 90%. METHODS §8: a PSO
+  particle at a bound is not scored in that iteration.
+- Corrected the 60-day row of the ρ table in METHODS §12 (0.61–0.68) and the
+  weekly-ρ summary in UNCERTAINTY §5 (within 17%, not 10–15%).
+- README: the Fortran comparison tests need `gfortran` and the submodule.
 - Validation suite rerun on 0.5.1: 12 of 17 checks pass (V4, V5, V9, V10 and
   V14 do not). README, USER_GUIDE, METHODS, UNCERTAINTY, PUBLISHED_RESULTS and
   validation/README quote the new numbers.
@@ -279,6 +318,10 @@
 - METHODS §10 and §13: how a gap-tolerant FORWARD run starts each segment
   (at rest under its first day's conditions), and what that means for a
   paired difference in the first days of a segment.
+- Examples 01–08 run their steps from Python with `pyair2stream.run` instead
+  of starting the command line, and use the result it returns (scores, output
+  folder; example 05 catches the `ValueError` of a run that stops on bad data).
+  Their READMEs show the Python calls; the command line still does the same.
 
 ## [0.5.0] - 2026-10-05
 

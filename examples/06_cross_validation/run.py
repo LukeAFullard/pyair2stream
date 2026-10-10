@@ -4,8 +4,6 @@ Run example 06: leave-one-year-out cross-validation of model versions 5 and 8.
     python examples/06_cross_validation/run.py
 """
 import os
-import subprocess
-import sys
 
 import matplotlib
 matplotlib.use("Agg")
@@ -13,17 +11,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+import pyair2stream
 from pyair2stream.cross_validation import jackknife_rows
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 VERSIONS = (5, 8)
+os.chdir(REPO)      # the paths in the settings files are relative to the repository's top folder
 
 results = {}
 for v in VERSIONS:
-    subprocess.run([sys.executable, "-m", "pyair2stream.main", "--config",
-                    f"examples/06_cross_validation/version{v}.yaml"], cwd=REPO, check=True)
-    results[v] = pd.read_csv(os.path.join(HERE, "output", f"version{v}", "cv_results.csv"))
+    result = pyair2stream.run(f"examples/06_cross_validation/version{v}.yaml")
+    results[v] = pd.read_csv(os.path.join(result.output_dir, "cv_results.csv"))
 
 # Error on each held-out year, and over all held-out days together ("pooled").
 table = pd.DataFrame({"held-out year": results[5].fold})
@@ -100,9 +99,8 @@ fig.savefig(os.path.join(HERE, "figures", "rmse_by_year.png"), dpi=130, bbox_inc
 
 # Which parameters change the simulated temperature most? A single calibration of version 8,
 # then each parameter moved up and down by 1% of its bound range, one at a time.
-subprocess.run([sys.executable, "-m", "pyair2stream.main", "--config", "examples/06_cross_validation/sensitivity.yaml"],
-               cwd=REPO, check=True)
-sens = pd.read_csv(os.path.join(HERE, "output", "sensitivity", "sensitivity_DE_NSE_Mentue.csv"))
+result = pyair2stream.run("examples/06_cross_validation/sensitivity.yaml")
+sens = pd.read_csv(os.path.join(result.output_dir, "sensitivity_DE_NSE_Mentue.csv"))
 sens = sens[sens.Status.isin(["Active", "Bounded"])].assign(parameter=lambda d: "a" + d.Parameter.str[4:])
 # The index is in degC per full bound range; per 1% of the range it is easier to read.
 sens = sens.assign(per_1pct=sens.Sensitivity_Index / 100).sort_values("per_1pct", ascending=False)

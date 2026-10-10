@@ -7,12 +7,15 @@ Rhône and the Dischmabach. Examples 01 to 03 build on each other, so start with
 them. The others can be read in any order.
 
 Run them from the repository's top folder. Each example's `run.py` runs all of
-its steps and redraws the figures its README shows.
+its steps from Python, with `pyair2stream.run` (USER_GUIDE
+[§7.2](../USER_GUIDE.md#72-from-python)), and redraws the figures its README
+shows. Each step can also be run from a terminal with
+`pyair2stream --config <settings file>`.
 
 | Example | Question | Time |
 |---|---|---|
 | [01 Quickstart](01_quickstart/README.md) | Can the model reproduce this river, also in years it was not fitted to? | under 1 min |
-| [02 Uncertainty](02_uncertainty/README.md) | What range of temperatures should we expect, and does that range hold? | about 2 min |
+| [02 Uncertainty](02_uncertainty/README.md) | What range of temperatures should we expect, and does that range hold? How can a range that holds too rarely be widened (conformal margins)? | about 4 min |
 | [03 Compliance](03_compliance/README.md) | How likely is it that a temperature limit was exceeded? Do such probabilities hold in years the model was not fitted to? | about 4 min |
 | [04 Scenario](04_scenario/README.md) | What difference would taking 30% of the flow make? | 2–3 min |
 | [05 Gaps](05_gaps/README.md) | What should I do about missing water temperature, air temperature or discharge? When does gap-tolerant mode work? | about 2 min (the gap study: about 10 min) |
@@ -30,6 +33,7 @@ its steps and redraws the figures its README shows.
 | Fit the model and check it predicts well | 01, 06 |
 | Fill gaps in a water temperature record | 05 (and 02 for a range) |
 | Give a prediction with an uncertainty range | 02 |
+| Check a range on held-out years, and widen it if it held too rarely | 02 |
 | Decide whether a temperature limit was exceeded | 03 |
 | Compare a change in flow with the present | 04 |
 | Project a warmer climate | 08 |

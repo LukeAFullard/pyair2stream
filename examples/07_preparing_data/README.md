@@ -145,7 +145,14 @@ filled[dates.dt.year >= 2010].to_csv("validation.csv", index=False)
 ```
 
 [`config.yaml`](config.yaml) is example 01's settings file pointing at these
-files. On 2010–2012, the model predicts with NSE 0.982 and RMSE 0.78 °C, the
+files. Run it from the repository's top folder:
+
+```python
+result = pyair2stream.run("examples/07_preparing_data/config.yaml")
+result.scores["validation"]       # NSE, RMSE, ...
+```
+
+On 2010–2012, the model predicts with NSE 0.982 and RMSE 0.78 °C, the
 same as example [01](../01_quickstart/README.md) on the original data.
 
 ## In short

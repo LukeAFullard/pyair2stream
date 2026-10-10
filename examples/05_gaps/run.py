@@ -12,8 +12,6 @@ Writes the tables to output/ and the README's figures to figures/. gap_study.py 
 gaps, scattered gaps and shorter warm-ups.
 """
 import os
-import subprocess
-import sys
 
 import matplotlib
 matplotlib.use("Agg")
@@ -31,11 +29,7 @@ OUT = os.path.join(HERE, "output")
 FIG = os.path.join(HERE, "figures")
 os.makedirs(OUT, exist_ok=True)
 os.makedirs(FIG, exist_ok=True)
-
-
-def pyair2stream_run(config):
-    subprocess.run([sys.executable, "-m", "pyair2stream.main", "--config", f"examples/05_gaps/{config}"],
-                   cwd=REPO, check=True)
+os.chdir(REPO)      # the paths in the settings files are relative to the repository's top folder
 
 
 def daily_output(folder, name):
@@ -58,20 +52,22 @@ summary, report = pyair2stream.analyze_timeseries(gappy, version=8, source="gapp
 open(os.path.join(OUT, "data_check.txt"), "w").write(report)
 print("\n" + report.split("--- Missing Data")[0])
 
-# The same check, in a real run in the standard mode: it stops before calibrating.
+# The same check, in a real run in the standard mode: it stops before calibrating. The
+# settings are filled.yaml's, changed in Python and passed to the run as a dict.
 cfg = yaml.safe_load(open(os.path.join(HERE, "filled.yaml")))
 cfg["paths"].update(input_data="examples/05_gaps/output/gappy_calibration.csv",
                     output_dir="examples/05_gaps/output/standard")
-yaml.safe_dump(cfg, open(os.path.join(OUT, "standard.yaml"), "w"))
-run = subprocess.run([sys.executable, "-m", "pyair2stream.main", "--config", "examples/05_gaps/output/standard.yaml"],
-                     cwd=REPO, capture_output=True, text=True)
-print("Standard mode on the gappy record:", (run.stderr.strip().splitlines() or ["?"])[-1])
+try:
+    pyair2stream.run(cfg, verbose=False)
+    print("Standard mode on the gappy record: the run did not stop (unexpected).")
+except ValueError as err:     # a problem in the data stops the run with a ValueError naming it
+    print("Standard mode on the gappy record stops:", err)
 
 # --- 2. Missing water temperature: nothing to do, and the model fills the gap ----------------
 hidden = (cal.Date >= "2006-07-01") & (cal.Date <= "2006-08-31")
 cal.assign(T_water=cal.T_water.mask(hidden)).to_csv(os.path.join(OUT, "water_gaps_calibration.csv"), index=False,
                                                      date_format="%Y-%m-%d")
-pyair2stream_run("water_gaps.yaml")
+pyair2stream.run("examples/05_gaps/water_gaps.yaml")
 sim = daily_output("water_gaps", "2_DE_NSE_Mentue_cc_1d.csv").Twat_mod
 truth = cal.set_index("Date").T_water
 err = (sim - truth)[hidden.to_numpy()]
@@ -123,9 +119,9 @@ plt.close(fig)
 
 rows = []
 for mode in ("filled", "gap_tolerant"):
-    pyair2stream_run(f"{mode}.yaml")
-    c = pd.read_csv(os.path.join(OUT, mode, "2_DE_NSE_Mentue_cc_1d.csv"))
-    fit = pd.read_csv(os.path.join(OUT, mode, "goodness_of_fit_validation_DE_NSE_Mentue.csv"), index_col="Metric").Value
+    result = pyair2stream.run(f"examples/05_gaps/{mode}.yaml")
+    c = pd.read_csv(os.path.join(result.output_dir, "2_DE_NSE_Mentue_cc_1d.csv"))
+    fit = result.scores["validation"]
     rows.append({"approach": mode, "days scored in calibration": int((c.Twat_obs_agg != -999).sum()),
                  "validation NSE": round(fit["NSE"], 3), "validation RMSE (°C)": round(fit["RMSE"], 3)})
 table = pd.DataFrame(rows)

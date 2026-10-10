@@ -227,6 +227,9 @@ def write_filled_series(data: CommonData) -> list:
             band = _read_daily(rng)
             out[f"model_lower_{level:g}"] = band.Twat_mod_lower.reindex(out.index).round(3)
             out[f"model_upper_{level:g}"] = band.Twat_mod_upper.reindex(out.index).round(3)
+            if "Twat_mod_lower_conformal" in band:
+                out[f"model_lower_{level:g}_conformal"] = band.Twat_mod_lower_conformal.reindex(out.index).round(3)
+                out[f"model_upper_{level:g}_conformal"] = band.Twat_mod_upper_conformal.reindex(out.index).round(3)
         target = os.path.join(data.folder, f"filled_water_temperature_{period}.csv")
         out.to_csv(target, date_format="%Y-%m-%d")
         written.append(target)
@@ -269,6 +272,8 @@ FILE_DESCRIPTIONS = (
     ("cv_bias_by_month", "cross-validation: the mean error in each month over the held-out years"),
     ("cv_yearly_statistics", "cross-validation: the check of yearly peaks and counts"),
     ("cv_interval_coverage.csv", "cross-validation: how often the intervals held, at several levels"),
+    ("cv_conformal_margins.csv", "cross-validation: the margins that widen the intervals to the held-out years' "
+                                 "coverage (forward_options.conformal_margins)"),
     ("sensitivity", "the sensitivity analysis"),
 )
 

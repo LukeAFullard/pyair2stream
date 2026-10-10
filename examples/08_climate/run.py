@@ -3,17 +3,15 @@ Run example 08: a warmer climate, with and without less summer flow.
 
     python examples/08_climate/run.py
 
-Calibrates with uncertainty on 2002-2009, simulates 2010-2012 1,000 times as measured
-(baseline) and with two changes (the air 2 degC warmer; and the air 2 degC warmer with 20%
-less discharge in June-September), using the same parameter sets in every run, and
-compares them simulation by simulation. A cross-validation of 2002-2009 checks and corrects
-the yearly peaks (as in example 03). Writes the tables to output/ and the README's figures
+Runs five steps with pyair2stream.run. Calibrates with uncertainty on 2002-2009,
+simulates 2010-2012 1,000 times as measured (baseline) and with two changes (the air
+2 degC warmer; and the air 2 degC warmer with 20% less discharge in June-September),
+using the same parameter sets in every run, and compares them simulation by simulation.
+A cross-validation of 2002-2009 checks and corrects the yearly peaks (as in example 03). Writes the tables to output/ and the README's figures
 to figures/.
 """
 import json
 import os
-import subprocess
-import sys
 
 import matplotlib
 matplotlib.use("Agg")
@@ -21,6 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+import pyair2stream
 from pyair2stream import plots, scenario
 
 WARMING = 2.0          # degC added to the air temperature on every day
@@ -40,11 +39,7 @@ OUT = os.path.join(HERE, "output")
 FIG = os.path.join(HERE, "figures")
 os.makedirs(OUT, exist_ok=True)
 os.makedirs(FIG, exist_ok=True)
-
-
-def run(config):
-    subprocess.run([sys.executable, "-m", "pyair2stream.main", "--config", f"examples/08_climate/{config}"],
-                   cwd=REPO, check=True)
+os.chdir(REPO)      # the paths in the settings files are relative to the repository's top folder
 
 
 # --- The scenario inputs: the measured 2010-2012 file, changed. Water temperature is removed:
@@ -56,13 +51,13 @@ dry = measured.Date.dt.month.isin(DRY_MONTHS)
 warmer.assign(Discharge=measured.Discharge.where(~dry, measured.Discharge * FLOW_KEPT)).to_csv(
     os.path.join(OUT, "warmer_drier_input.csv"), index=False, date_format="%Y-%m-%d")
 
-for config in ("calibrate.yaml", "baseline.yaml", "warmer.yaml", "warmer_drier.yaml", "check.yaml"):
-    run(config)
+results = {step: pyair2stream.run(f"examples/08_climate/{step}.yaml")
+           for step in ("calibrate", "baseline", "warmer", "warmer_drier", "check")}
 
 ensemble = "Forward_Prediction_Ensemble_Mentue_c_1d.npz"
 ens, dates = {}, None
 for s in SCENARIOS:
-    ens[s], dates = scenario.load_ensemble(os.path.join(OUT, s, ensemble))
+    ens[s], dates = scenario.load_ensemble(os.path.join(results[s].output_dir, ensemble))
 
 # --- How far outside the calibrated conditions are the scenarios? --------------------------------
 cal = pd.read_csv(os.path.join(REPO, "data", "switzerland", "MAH_2369_calibration.csv"), parse_dates=["Date"])
@@ -77,7 +72,7 @@ print(f"Mean summer air temperature: 2010-2012 {measured.T_air[summer].mean():.1
 
 # The model's own sensitivity to air temperature: at the balance, a 1 degC warmer air raises the
 # water temperature by a2 / (a3 + a8 * theta) (version 8; theta = discharge / mean discharge).
-meta = json.load(open(os.path.join(OUT, "calibration", "calibration_metadata.json")))
+meta = json.load(open(os.path.join(results["calibrate"].output_dir, "calibration_metadata.json")))
 a2, a3, a8 = meta["par_best"][1], meta["par_best"][2], meta["par_best"][7]
 theta_summer = float((measured.Discharge[summer] / meta["qmedia"]).median())
 print(f"Balance sensitivity a2/(a3 + a8*theta): {a2 / a3:.2f} at very low flow, {a2 / (a3 + a8):.2f} at mean flow, "
@@ -87,7 +82,8 @@ print(f"Balance sensitivity a2/(a3 + a8*theta): {a2 / a3:.2f} at very low flow, 
 rows, diffs = [], {}
 months = dates.month
 for s in ("warmer", "warmer_drier"):
-    diff = scenario.paired_difference_from_files(os.path.join(OUT, s, ensemble), os.path.join(OUT, "baseline", ensemble))
+    diff = scenario.paired_difference_from_files(os.path.join(results[s].output_dir, ensemble),
+                                                 os.path.join(results["baseline"].output_dir, ensemble))
     diffs[NAMES[s]] = diff
     for label, mask in (("summer (Jun-Aug) mean", np.isin(months, (6, 7, 8))),
                         ("winter (Dec-Feb) mean", np.isin(months, (12, 1, 2))),
@@ -101,7 +97,7 @@ change_table.to_csv(os.path.join(OUT, "changes.csv"), index=False)
 print("\n" + change_table.to_string(index=False))
 
 # --- Yearly peaks and warm days, checked and corrected by cross-validation (example 03) --------
-check = pd.read_csv(os.path.join(OUT, "check", "cv_yearly_statistics.csv"))
+check = pd.read_csv(os.path.join(results["check"].output_dir, "cv_yearly_statistics.csv"))
 dev = {name: check.loc[check.statistic == name, "deviation"] for name in scenario.YEARLY_STATISTICS}
 stats = {s: scenario.year_statistics(ens[s], dates, threshold=WARM_DAY) for s in SCENARIOS}
 rows, peaks = [], {}

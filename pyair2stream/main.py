@@ -34,6 +34,35 @@ JACKKNIFE_NOTE = (
 )
 
 
+CONFORMAL_FILE = "cv_conformal_margins.csv"
+
+
+def write_conformal_margins(data: CommonData, folds, level: float) -> None:
+    """Write cv_conformal_margins.csv: the margins that widen the prediction intervals to the
+    held-out years' coverage (docs/METHODS.md §13), with the settings a FORWARD run that uses them
+    must share (forward_options.conformal_margins)."""
+    from .config import DEFAULT_NOISE_MODEL, DEFAULT_RHO_TIMESCALE
+    from .cross_validation import MIN_CONFORMAL_YEARS, conformal_margins
+    options = data.uncertainty_options or {}
+    noise_model = options.get('noise_model', DEFAULT_NOISE_MODEL)
+    table = conformal_margins(folds, extra_level=level, noise_model=noise_model, seed=data.random_seed)
+    if table.empty:
+        print(f"Conformal margins: fewer than {MIN_CONFORMAL_YEARS} held-out years have measurements, "
+              f"so no margins are written.")
+        return
+    table.insert(0, "version", int(data.version))
+    table.insert(0, "station", f"{data.station}_{data.series}")
+    table["noise_model"] = noise_model
+    table["rho_timescale"] = options.get('rho_timescale', DEFAULT_RHO_TIMESCALE)
+    table.to_csv(os.path.join(data.folder, CONFORMAL_FILE), index=False)
+    print(f"Conformal margins of the {level:g}% interval (forward_options.conformal_margins; share of held-out "
+          "values inside without, and with a margin set by the other years):")
+    names = {1: "days", 7: "7-day means", 30: "30-day means"}
+    for r in table[table.level == level].to_dict("records"):
+        print(f"  {names.get(r['window_days'], str(r['window_days']) + '-day means')}: margin "
+              f"{r['margin']:+.2f} degC; inside {r['inside_before']:.1%} without, {r['inside_after']:.1%} with")
+
+
 def write_yearly_statistics_check(data: CommonData, folds) -> None:
     """Write cv_yearly_statistics.csv and cv_yearly_statistics_summary.csv: did the predicted
     ranges of yearly statistics hold in the held-out years (docs/METHODS.md §11)?"""
@@ -49,6 +78,7 @@ def write_yearly_statistics_check(data: CommonData, folds) -> None:
     print("Prediction intervals in the held-out years (share of measured days / 7-day means inside):")
     for r in coverage.to_dict("records"):
         print(f"  {r['level']:g}% interval: days {r['daily inside']:.1%}, 7-day means {r['7-day inside']:.1%}")
+    write_conformal_margins(data, folds, level)
     per_year, summary = check_yearly_statistics(
         folds, threshold=cv.threshold, season_months=cv.season_months,
         noise_model=options.get('noise_model', DEFAULT_NOISE_MODEL), level=level, seed=data.random_seed)

@@ -42,7 +42,8 @@ Run this from the repository's top folder:
 pyair2stream --config examples/01_quickstart/config.yaml
 ```
 
-It takes under a minute. It fits the model to 2002–2009 data from the Mentue, a
+or, in Python, `pyair2stream.run("examples/01_quickstart/config.yaml")`. It
+takes under a minute. It fits the model to 2002–2009 data from the Mentue, a
 small Swiss river. Then it tests the model on 2010–2012, years the fit did not
 use. The results and plots go to `examples/01_quickstart/output/`. The
 [example's README](examples/01_quickstart/README.md) explains them.
@@ -174,7 +175,7 @@ explains the steps and the results ([examples/README.md](examples/README.md)).
 | Example | Question |
 |---|---|
 | [01 Quickstart](examples/01_quickstart/README.md) | Does the model reproduce this river, also in years it was not fitted to? |
-| [02 Uncertainty](examples/02_uncertainty/README.md) | What range of temperatures should we expect, and does that range hold? |
+| [02 Uncertainty](examples/02_uncertainty/README.md) | What range of temperatures should we expect, and does that range hold? How is a range that holds too rarely widened? |
 | [03 Compliance](examples/03_compliance/README.md) | How likely is it that a temperature limit was exceeded? |
 | [04 Scenario](examples/04_scenario/README.md) | What difference would taking 30% of the flow make? |
 | [05 Gaps](examples/05_gaps/README.md) | What should I do about missing data? |
@@ -237,7 +238,15 @@ A [validation suite](validation/README.md) tests this. Its results are in
   settings, 90% parameter ranges contained the true values 92–97% of the time
   ([V4](validation/REPORT.md#v4)). On real rivers, in years not used for
   fitting, 90% ranges held on 85–90% of days. So they are slightly too narrow
-  for new years ([V5](validation/REPORT.md#v5)).
+  for new years ([V5](validation/REPORT.md#v5)). On 23 rivers in British
+  Columbia, which played no part in developing the error model, they held on
+  87% of days and 85% of 30-day means ([V18](validation/REPORT.md#v18)).
+- **An optional widening for sites where ranges hold too rarely.** The
+  cross-validation measures how far the years it held out fell outside their
+  ranges, and a margin of that size can widen the ranges (conformal margins).
+  On the British Columbia rivers, 90% ranges then held on 91% of days and 92%
+  of 30-day means. On the Swiss rivers, where they already held, the margins
+  were small and the ranges kept holding ([V19](validation/REPORT.md#v19)).
 - **Probabilities need the check.** The model can be too warm on the hottest
   days. So ranges for yearly peaks read straight from the simulations
   (uncorrected) held in only 73–92% of years. The correction shifts every
@@ -265,7 +274,7 @@ A [validation suite](validation/README.md) tests this. Its results are in
   yearly peaks, and on 16 of 23 for the hottest days. On the Swiss yearly
   peaks, a straight line on air temperature did about as well
   ([V17](validation/REPORT.md#v17)).
-- **Where it falls short.** Five of the 17 checks do not meet all their
+- **Where it falls short.** Six of the 19 checks do not meet all their
   criteria:
   - V4: on made-up data, 90% ranges held on 87–88% of days instead of about
     90%. About 3% of the made-up values are below 0 °C, and no range goes
@@ -282,13 +291,20 @@ A [validation suite](validation/README.md) tests this. Its results are in
     whose summer temperature depends on its flow, and in one case its
     uncertainty run did not converge;
   - V14: on the hottest days of the three Swiss rivers, version 5's 90% ranges
-    held on only 83–84% of days. Version 8's held on 91%.
+    held on only 83–84% of days. Version 8's held on 91%;
+  - V18: on the British Columbia rivers, without the conformal margins, 90%
+    ranges held on 85–87% of days, 7-day and 30-day means in later years, and
+    82–86% in held-out years; 95% ranges on 92%. Corrected 90% ranges of the
+    highest daily mean and of days above a threshold held in 81% and 76% of
+    held-out years.
 
   Apart from V4, most of these point to version 5 on a flow-driven river, and
   to ranges above 90%. The report gives the details. Check your own results on
   years not used for fitting ([User Guide §14](USER_GUIDE.md#14-checklist-for-results-that-support-a-decision)).
 
-To run the tests and the validation suite (V1 needs `gfortran`):
+To run the tests and the validation suite (the Fortran comparison tests and V1
+need `gfortran` and the submodule; without them those tests fail rather than
+skip, so a passing run always means the Fortran comparison ran):
 
 ```bash
 git submodule update --init --recursive

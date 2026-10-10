@@ -86,11 +86,15 @@ It takes two to three minutes. First it makes the scenario's input file: the
 measured file with the discharge multiplied by 0.7. It removes the water
 temperature, because that was not measured under the scenario. Then it runs:
 
-```bash
-pyair2stream --config examples/04_scenario/calibrate.yaml     # calibrate with uncertainty, as in example 02
-pyair2stream --config examples/04_scenario/baseline.yaml      # 1,000 simulations with the measured discharge
-pyair2stream --config examples/04_scenario/abstraction.yaml   # the same, with 70% of the discharge
+```python
+import pyair2stream
+
+calibrate = pyair2stream.run("examples/04_scenario/calibrate.yaml")       # calibrate with uncertainty, as in example 02
+baseline = pyair2stream.run("examples/04_scenario/baseline.yaml")         # 1,000 simulations with the measured discharge
+abstraction = pyair2stream.run("examples/04_scenario/abstraction.yaml")   # the same, with 70% of the discharge
 ```
+
+From a terminal, `pyair2stream --config <settings file>` does the same.
 
 Two settings in [`abstraction.yaml`](abstraction.yaml) matter:
 

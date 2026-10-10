@@ -362,7 +362,7 @@ values). The search maximises the objective function (§7).
 - **`PSO`** — Particle Swarm Optimisation as in the Fortran: `n_particles`
   particles, `n_run` iterations, inertia decreasing linearly from `wmax` to
   `wmin`, attraction weights `c1`, `c2`. A particle that reaches a bound stops
-  there. The search stops early once 90% of particles have converged on the best
+  there and is not scored in that iteration (as in the Fortran). The search stops early once 90% of particles have converged on the best
   position.
 - **`LATHYP`** — `n_run` Latin-hypercube samples of the bounds; the best is kept.
   This explores the parameter space rather than optimising it.
@@ -506,8 +506,9 @@ LATHYP:
    predicted percentiles, the share of series below the measured value (the
    probability integral transform, PIT, which is uniform between 0 and 1 if the
    predictions are right; Gneiting et al., 2007) and the **deviation**: measured
-   minus predicted median. The summary gives the share of years inside the 50%
-   and 90% ranges, the shares expected by chance (95% binomial range), and the
+   minus predicted median. The summary gives the share of years inside the central
+   50%, 80%, 90% and 95% ranges and the range at `prediction_interval`, the
+   shares expected by chance (95% binomial range), and the
    mean deviation with its 95% confidence interval. Parameter uncertainty is not
    included (each fold has one parameter set), so these ranges are slightly
    narrower than a FORWARD run's (§13). Set `threshold` and `season_months` to
@@ -518,8 +519,12 @@ LATHYP:
    simulations, the share of measured held-out days, and of 7-day moving means,
    inside the central 50%, 80%, 90% and 95% ranges and at `prediction_interval`.
    It shows whether intervals at the level you report held at your site.
+7. **Conformal margins** (`cv_conformal_margins.csv`). From the same
+   simulations, the margin that would have made each interval hold in the
+   held-out years, for days and 7-day and 30-day means, and how well it held
+   in each year when set from the other years only. Optional; see §13.
 
-Every range in items 5 and 6 is reported at `uncertainty_options.prediction_interval`
+Every range in items 5 to 7 is reported at `uncertainty_options.prediction_interval`
 (default 90%), and coverage at 50%, 80%, 90% and 95% as well.
 
 **What is hidden, and why.** A fold hides the held-out year's measured water
@@ -784,8 +789,9 @@ and median), `MCMC_ensemble_*.npz` (every simulated series, with
 `save_ensemble: true`), and the
 parameter summary `parameter_significance_*.csv` (posterior mean, standard
 deviation, central credible interval at `parameter_interval`, default 90%, and
-whether zero lies outside the central 95%: a test at the usual 5% level,
-whatever the interval's level).
+whether zero lies outside the central 95% credible interval, whatever the
+interval's level). This is the Bayesian counterpart of a test at the 5% level,
+not a p-value: it says 95% of the posterior lies on one side of zero.
 Excluding zero only means something for parameters where zero means "no
 effect" (`a2`, `a4`, `a5`, `a6`, `a8`). It says nothing about `a1`, `a3` or the
 seasonal timing `a7`.
@@ -899,7 +905,7 @@ divided by that of the real errors (six cases: three rivers, versions 5 and
 | 7 | 0.94–0.98 | 1.00 | 1.09–1.17 | 1.09–1.26 |
 | 14 | 0.84–0.90 | 0.90–0.94 | 1.08–1.17 | 1.09–1.38 |
 | 30 | 0.70–0.77 | 0.75–0.81 | 1.02–1.11 | 1.07–1.46 |
-| 60 | 0.60–0.68 | 0.65–0.73 | 0.94–1.07 | 1.07–1.46 |
+| 60 | 0.61–0.68 | 0.65–0.73 | 0.94–1.07 | 1.07–1.46 |
 | 90 | 0.58–0.70 | 0.62–0.76 | 0.91–1.15 | 1.16–1.42 |
 
 In variance terms, ρ₁ understates the variance of 30–90-day mean errors by a
@@ -1127,6 +1133,80 @@ river-years. Version 5 predicted almost the same peak every year on the Rhône,
 where discharge drives summer temperature; the correction removes its bias, but
 not its inability to follow the years.
 
+**Widening the intervals to the misses of held-out years (optional conformal
+margins).** Where the cross-validation shows that the intervals held less often
+than stated at a site (`cv_interval_coverage.csv`, §11), they can be widened by
+how far the held-out years' measurements fell outside them. This is split
+conformal prediction (Vovk et al., 2005; Lei et al., 2018), in the form that
+adjusts an existing interval (conformalized quantile regression; Romano et al.,
+2019):
+
+1. A cross-validation of the calibration years (§11) writes
+   `cv_conformal_margins.csv`. From the simulations of item 6 of §11, each
+   measured held-out value y, with central L% range [lower, upper] in its
+   fold's simulations, gets the **score** s = max(lower − y, y − upper): how
+   far it lay outside the range (negative inside). The **margin** at level L is
+   the L% quantile of the scores, every held-out year carrying the same total
+   weight (each of its n values 1/n), so a year with more measured days does not
+   count more. Margins are given for days and for 7-day and 30-day moving means
+   (all days measured), at 50%, 80%, 90% and 95% and at `prediction_interval`.
+   With fewer than 3 held-out years no margins are written.
+2. The widened interval is [lower − margin, upper + margin], never below
+   `Tice_cover`. A negative margin narrows the interval (never past its
+   middle). A FORWARD run with `forward_options.conformal_margins` set to the
+   file adds the widened daily interval at `prediction_interval` to its
+   envelope file (`Twat_mod_lower_conformal`, `Twat_mod_upper_conformal`) next
+   to the unwidened one, and records the file, its SHA-256 and the margin in
+   its `_meta.json`. It refuses a file made with another model version, error
+   model (`noise_model`) or ρ time scale, or a run that overrides σ or ρ: a
+   margin measures the misses of one model and error model. A different
+   station name gives a note.
+3. For 7-day or 30-day means, apply the margin of the same window and level to
+   the range of the saved simulations' means: `scenario.conformal_range(means,
+   L, scenario.conformal_margin(path, L, window_days))` (for calendar months,
+   use the 30-day margin).
+
+The file's column `inside_after` checks the margin out of sample: each held-out
+year judged with a margin from the other years only. Quote it with the margin.
+
+*Why it is valid, and when it is not.* Split conformal intervals contain a new
+value with probability at least L if the calibration cases and the new case are
+exchangeable (Vovk et al., 2005). Daily values of one year are not, so the units
+here are whole years, and the misses of a predicted year are assumed to be like
+those of the held-out years. For dependent data whose behaviour does not change
+over time, the coverage of split conformal intervals approaches L as the
+calibration record grows, at a rate set by the dependence (Oliveira et al.,
+2024). It is not guaranteed for a short record: the margin from 5 years is
+uncertain, and the exact finite-sample version needs at least L/(1 − L) units
+(9 years for 90%, 19 for 95%), so it is not used. If the model's errors change
+over time (a changing catchment, a warmer climate), past misses do not describe
+future ones, as for every other method here. The margin is the same all year,
+so check coverage in the season of a limit (V19 reports summer). It comes from
+fold simulations without parameter uncertainty and is added to a FORWARD range
+that includes it, so it errs slightly wide. It does not apply to scenario
+differences (the error cancels there, below) or to yearly statistics, for which
+the bias correction above is the method: within one river, a 90% margin for a
+yearly value would need at least 9 held-out years.
+
+*What the validation shows* (V18, V19). On the 23 British Columbia rivers, which
+played no part in developing the error model, 90% intervals without margins
+held on 86.9% of days, 87.0% of 7-day means and 84.8% of 30-day means in
+2021–2022 (V18). With the margins (median 0.21 °C for days) they held on
+90.7%, 90.7% and 92.1%, and 95% intervals on 95.6% of days (against 92.0%), at
+a cost of 0.35 °C of width (3.13 against 2.78 °C); in summer 88.8% (83.4%
+without), and on the days of the 2021 heat dome 86.0% (81.6%). In the 160
+held-out years, each with a margin from the river's other years, 90% intervals
+held on 89.5% of days, 89.3% of 7-day means and 88.8% of 30-day means (86.3%,
+86.2% and 82.3% without). On the 3 Swiss rivers, where the intervals already
+held, the margins were small (median 0.07 °C for days, −0.03 °C for 7-day
+means) and kept them holding: in the later years 88.9% of days, 89.5% of 7-day
+means and 89.8% of 30-day means (87.8%, 91.4% and 89.9% without); in the
+held-out years 89.8%, 89.6% and 89.6%. Pooled coverage is right; single rivers
+still vary. With the margins, 90% intervals held on 77–96% of the later-year
+days of the converged British Columbia rivers. 99% intervals with the margins
+held on 98.9% of later-year days in British Columbia but 97.0% in Switzerland:
+a 99% margin rests on the few largest misses, and is uncertain.
+
 **Comparing two scenarios** (for example observed versus naturalised flow): run
 FORWARD once per scenario from the same chain with `save_ensemble: true`, and
 for the second run set `forward_options.reuse_sample_indices_from` to the first
@@ -1138,7 +1218,10 @@ difference draw by draw, which gives an uncertainty band for the
 fixed by the chain's content and the draw's row in it, so both runs add the same
 error to the same draw on the same day and it cancels in the difference: the
 band is the parameter uncertainty of the effect. This assumes the model's error
-on a given day would be the same under both scenarios. In gap-tolerant mode each
+on a given day would be the same under both scenarios. The cancellation is not
+exact on days when a member is raised to the ice floor `Tice_cover` in one run
+but not the other (near-freezing water); there the difference is smaller than
+the simulated effect. In gap-tolerant mode each
 run starts a segment at the equilibrium temperature A/B of its own first day's
 conditions (§10), so the two runs start it at different temperatures: on a
 segment's first day the difference is the equilibrium (steady-state) response
@@ -1251,7 +1334,11 @@ change one-sided.
   `noise_model: "ar1"` and must be computed from the saved simulations. Even
   then their intervals were somewhat narrow on real rivers (§12).
 - **Intervals for new years are slightly optimistic**: σ is estimated on the
-  calibration years, and errors are usually somewhat larger in other years.
+  calibration years, and errors are usually somewhat larger in other years. On
+  the British Columbia rivers 90% intervals held on about 87% of days and 85%
+  of 30-day means in later years (V18). Check coverage at your site by
+  cross-validation; where it is short, the conformal margins (§13) widen the
+  intervals by the held-out years' misses (V19).
 - **Choose the level knowing its record.** Any level can be set
   (`prediction_interval`, `parameter_interval`). On the Swiss rivers daily
   intervals held from 50% to 95%, but 99% daily intervals missed about twice
@@ -1291,7 +1378,10 @@ published errors of Toffolon and Piccolroaz (2015), computed with RK4, also
 reproduced, and their parameters returned by calibration with RK4 (V13); and
 prediction intervals on the hottest days (V14); and the simulations published
 by an independent group for 23 rivers in British Columbia, reproduced day by day
-(V15). V4, V5, V9, V10 and V14 do not pass all their criteria; the report says
+(V15); predictions from short records (V16); a comparison with regressions on
+air temperature (V17); prediction intervals on the British Columbia rivers,
+which played no part in developing the error model (V18); and the conformal
+margins on all 26 rivers (V19). V4, V5, V9, V10, V14 and V18 do not pass all their criteria; the report says
 where and why. V4 fails only because about 3% of its synthetic values are below
 0 °C, which no interval can contain since intervals are kept at or above
 `Tice_cover`; real water does not go below freezing, and V5, on real data, shows
@@ -1375,6 +1465,17 @@ These are deliberate; each is covered by tests.
 - Glahn, H. R. and Lowry, D. A. (1972). The use of model output statistics
   (MOS) in objective weather forecasting. *Journal of Applied Meteorology*, 11,
   1203–1211.
+- Vovk, V., Gammerman, A. and Shafer, G. (2005). *Algorithmic Learning in a
+  Random World*. Springer, New York.
+- Lei, J., G'Sell, M., Rinaldo, A., Tibshirani, R. J. and Wasserman, L. (2018).
+  Distribution-free predictive inference for regression. *Journal of the
+  American Statistical Association*, 113, 1094–1111.
+- Romano, Y., Patterson, E. and Candès, E. (2019). Conformalized quantile
+  regression. *Advances in Neural Information Processing Systems*, 32,
+  3543–3553.
+- Oliveira, R. I., Orenstein, P., Ramos, T. and Romano, J. V. (2024). Split
+  conformal prediction and non-exchangeable data. *Journal of Machine Learning
+  Research*, 25(225), 1–38.
 - Gneiting, T., Balabdaoui, F. and Raftery, A. E. (2007). Probabilistic
   forecasts, calibration and sharpness. *Journal of the Royal Statistical
   Society B*, 69, 243–268.

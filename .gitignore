@@ -36,3 +36,6 @@ validation/work/
 # top folder so validation/reports/ is not ignored
 /research_notes/
 /reports/
+
+# Downloaded wheels
+*.whl

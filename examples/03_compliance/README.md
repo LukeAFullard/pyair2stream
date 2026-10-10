@@ -55,11 +55,16 @@ python examples/03_compliance/run.py
 It takes about four minutes. It runs these three steps, then the analysis
 below:
 
-```bash
-pyair2stream --config examples/03_compliance/calibrate.yaml    # calibrate with uncertainty, as in example 02
-pyair2stream --config examples/03_compliance/predict.yaml      # 1,000 simulations of 2010-2012
-pyair2stream --config examples/03_compliance/check.yaml        # cross-validation of 2002-2009
+```python
+import pyair2stream
+
+calibrate = pyair2stream.run("examples/03_compliance/calibrate.yaml")   # calibrate with uncertainty, as in example 02
+predict = pyair2stream.run("examples/03_compliance/predict.yaml")       # 1,000 simulations of 2010-2012
+check = pyair2stream.run("examples/03_compliance/check.yaml")           # cross-validation of 2002-2009
 ```
+
+Each call returns its result; `predict.output_dir` is the folder of its files.
+From a terminal, `pyair2stream --config <settings file>` does the same.
 
 [`predict.yaml`](predict.yaml) sets `save_ensemble: true`. This keeps all
 1,000 simulated series

@@ -307,6 +307,13 @@ def read_calibration(config_file='config.yaml') -> CommonData:
         )
 
     data.forward_options = config.get('forward_options') or {}
+    conformal_path = data.forward_options.get('conformal_margins')
+    if conformal_path:
+        if not os.path.exists(conformal_path):
+            raise FileNotFoundError(f"forward_options.conformal_margins file not found: {conformal_path}")
+        if not data.forward_options.get('enable_prediction_intervals', False):
+            print("Warning: forward_options.conformal_margins is set but enable_prediction_intervals is not, "
+                  "so there is no interval to widen; the margins are not used.")
 
     # Parse uncertainty_options
     uncertainty_options = config.get('uncertainty_options') or {}

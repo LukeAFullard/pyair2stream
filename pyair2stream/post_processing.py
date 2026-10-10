@@ -174,8 +174,8 @@ def parameter_summary(chain_df: pd.DataFrame, level: float = 90.0) -> pd.DataFra
     """
     Posterior mean, SD and central `level`% credible interval of each parameter in a
     DE-MCMC chain (`uncertainty_options.parameter_interval`). 'Significantly_Diff_From_Zero'
-    is a test at the conventional 5% level, whatever `level` is: zero lies outside the
-    central 95% of the chain.
+    is True when zero lies outside the central 95% credible interval of the chain, whatever
+    `level` is: the Bayesian counterpart of a 5%-level test, not a p-value.
     """
     rows = []
     for col in chain_df.columns:
@@ -678,6 +678,10 @@ def post_process(data: CommonData, toll: float = None):
             ax.set_title(f"Forward projection with {pi_val:g}% prediction interval")
             l_env = [ax.fill_between(dates, band['Twat_mod_lower'].values, band['Twat_mod_upper'].values,
                                      color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')]
+            if 'Twat_mod_lower_conformal' in band:
+                l_env += ax.plot(dates, band['Twat_mod_lower_conformal'].values, '--', color='green', linewidth=0.8,
+                                 label=f'{pi_val:g}% interval with conformal margin')
+                ax.plot(dates, band['Twat_mod_upper_conformal'].values, '--', color='green', linewidth=0.8)
         else:
             ax.set_title("Forward projection")
 
@@ -697,6 +701,7 @@ def post_process(data: CommonData, toll: float = None):
             pi_val = (data.uncertainty_options or {}).get('prediction_interval', 90.0)
             proxy = mpatches.Patch(color='green', alpha=0.3, label=f'{pi_val:g}% Prediction Interval')
             lines.append(proxy)
+            lines += l_env[1:]          # the conformal interval's line, if any
 
         labels = [l.get_label() for l in lines]
         ax.legend(lines, labels, loc='lower left', fontsize='small')
