@@ -50,10 +50,10 @@ block. After the calibration, the sampler runs in blocks of 1,000 steps until
 its results are stable. Then it reports:
 
 ```
-  6000 steps: max autocorrelation time 35.4, max split-Rhat 1.0077
+  6000 steps: max autocorrelation time 34.9, max split-Rhat 1.0090
 MCMC converged after 6000 steps (at least 50 x the autocorrelation time, split-Rhat below 1.01).
 ...
-Interval check: 91.0% of 2907 observed days lie inside the 90% prediction interval.
+Interval check: 91.1% of 2907 observed days lie inside the 90% prediction interval.
 ```
 
 The two numbers say whether the sampler has run long enough. The
@@ -95,10 +95,10 @@ pyair2stream --config examples/02_uncertainty/predict.yaml
 2010–2012 have measurements, so it also reports how many fall inside:
 
 ```
-Interval check: 89.5% of 1095 observed days lie inside the 90% prediction interval.
+Interval check: 89.1% of 1095 observed days lie inside the 90% prediction interval.
 ```
 
-That is close to 90%, slightly below. The validation suite found 85–89% on
+That is close to 90%, slightly below. The validation suite found 85–90% on
 three Swiss rivers ([V5](../../validation/REPORT.md#v5)). The model's errors
 are somewhat larger in years it has not seen. So the intervals are slightly
 too narrow for new years.
@@ -117,8 +117,8 @@ Keep the defaults. In short:
   day, the alternative `"iid"` (independent errors) gives about the same
   interval. But for anything over several days (7-day means, a run of days
   above a limit), `"iid"` gives intervals that are far too narrow. On the Swiss
-  rivers, its 90% intervals for 7-day means held only 39–62% of the time,
-  against 89–94% with `"ar1"` ([V5](../../validation/REPORT.md#v5)).
+  rivers, its 90% intervals for 7-day means held only 39–59% of the time,
+  against 87–93% with `"ar1"` ([V5](../../validation/REPORT.md#v5)).
 - **`likelihood`** is left at its default, `"least_squares"`. It keeps the band
   centred on the best fit. The alternative, `"exact"`, centred this example's
   band about 0.04 °C cooler. It also gave lower probabilities of exceeding a
@@ -148,9 +148,9 @@ Keep the defaults. In short:
 
 `output/calibration/parameter_significance_DE-MCMC_Mentue.csv` lists each
 parameter's mean and 90% range. The ranges lie around the best fit in
-`calibration_metadata.json`, but not always evenly. For example, `a5` is 2.54
-in the best fit and 3.01 on average in the chain, with a 90% range of 2.02 to
-4.24.
+`calibration_metadata.json`, but not always evenly. For example, `a5` is 2.55
+in the best fit and 3.02 on average in the chain, with a 90% range of 2.03 to
+4.25.
 
 In a test with known parameters, such 90% ranges, made with the default
 settings used here, contained the true value at least 90% of the time

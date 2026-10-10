@@ -19,9 +19,9 @@ pyair2stream --config examples/01_quickstart/config.yaml
 It takes under a minute. Near the end, the console shows:
 
 ```
-DE Finished. Best internal negated objective: -0.987657
+DE Finished. Best internal negated objective: -0.987594
 L-BFGS-B Finished. Best internal negated objective: -0.987927
-Efficiency Index in calibration 0.9879265649786034
+Efficiency Index in calibration 0.9879266370887719
 Consistency check passed.
 ```
 
