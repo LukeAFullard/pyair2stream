@@ -12,7 +12,7 @@ repository.
 |---|---|---|---|---|---|
 | Toffolon and Piccolroaz (2015) | 3 Swiss | RK4 | errors: all 30, within rounding. Parameters: its own calibration returns the published values in all 15 cases | the Rhône's calibration and validation periods are misprinted | [V13](../validation/REPORT.md#v13) |
 | Piccolroaz et al. (2016) | 3 of 38 Swiss (the 3 distributed) | Crank–Nicolson | errors: all 30, to 0.0005 °C. Parameters: returned by calibration in 11 of 15 cases (the other 4 trade off along flat valleys); 76 of 81 published values inside pyair2stream's 90% intervals | optimiser settings not stated; in 4 of 15 cases the published parameters are not the best fit; validation discharge scaling not stated | [V2](../validation/REPORT.md#v2) |
-| Callahan and Moore (2025) | 23 in British Columbia | Crank–Nicolson | simulated series: 45 of 46, day by day, to 0.00013 °C. Parameters: returned by calibration at none of 23 stations; where the MCMC converged (17 stations), 122 of 136 published values inside its 90% intervals | one station's calibration record read with its seasonal cycle ten months out of phase; two stations' published calibrations far from the best fit | [V15](../validation/REPORT.md#v15) |
+| Callahan and Moore (2025) | 23 in British Columbia | Crank–Nicolson | simulated series: 45 of 46, day by day, to 0.00013 °C. Parameters: returned by calibration at none of 23 stations; where the MCMC converged (17 stations), 122 of 136 published values inside its 90% intervals. pyair2stream's calibration fits 23 of 23 stations at least as well (mean RMSE 0.86 against 0.95 °C) and predicts 2021–2022 better on average (0.97 against 1.05 °C) | one station's calibration record read with its seasonal cycle ten months out of phase; two stations' published calibrations far from the best fit | [V15](../validation/REPORT.md#v15) |
 
 The errors listed do not affect what pyair2stream computes: in every case the
 published numbers are reproduced once the publication's actual procedure is
@@ -138,9 +138,27 @@ Crank–Nicolson scheme and each period's own mean discharge as `Qmedia`. The
 errors in the paper's heat-dome (25 June to 2 July) and drought (1 September
 to 31 October) windows therefore follow; for example, the mean RMSE over the
 23 stations in the 2021 heat dome is 1.42 °C, from the published series and
-from pyair2stream's alike. pyair2stream's calibration fits each station's
-calibration years at least as well as the published parameters (by 0 to
-0.15 °C, apart from the station below).
+from pyair2stream's alike.
+
+**pyair2stream's own calibration fits at least as well as the published one,
+at every station.** Each station was calibrated by pyair2stream (differential
+evolution, RMSE objective, the authors' parameter ranges, the same calibration
+years) and compared with the published parameters on the same days (V15 part
+C). Lower RMSE is better.
+
+| | pyair2stream better | the same | pyair2stream worse | mean RMSE, published → pyair2stream |
+|---|---|---|---|---|
+| Calibration years (fitted) | 22 stations, by 0.005 to 0.15 °C (0.74 °C at 08GA077, whose record was misread, below) | 1 (08NK002) | none | 0.95 → 0.86 °C |
+| 2021–2022 (not used by either calibration) | 17 stations, by up to 0.48 °C | 1 (08NK002) | 5 stations, by at most 0.05 °C | 1.05 → 0.97 °C |
+
+Without 08GA077 the means are 0.92 → 0.86 °C and 1.04 → 0.97 °C. A better
+fit to the calibration years does not guarantee a better prediction of other
+years, and at the 5 stations where it is worse the difference is small. Together
+with the day-by-day reproduction above, this shows both halves of the method
+working: the model computes what the published model computes, and the
+calibration finds parameters that fit at least as well. Where the DE-MCMC did
+not converge (below), that concerns the width of the parameter intervals, not
+the calibration.
 
 **Parameters.** pyair2stream's calibration returns the published parameter
 values (each within 1% of its range) at none of the 23 stations, although it
