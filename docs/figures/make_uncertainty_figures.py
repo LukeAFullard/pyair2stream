@@ -401,7 +401,7 @@ def u11_correction():
     ax.set_xlabel("Year held out (calibrated on the others)")
     ax.set_ylabel("Measured minus predicted\nmedian, highest 7-day mean (°C)")
     ax.set_title("Step 1, the check: the model puts the peak too high", fontsize=9)
-    ax.legend(fontsize=7.5, loc="upper right")
+    ax.legend(fontsize=7.5, loc="lower right")
     ax = axes[1]
     bins = np.arange(17.5, 22.51, 0.2)
     ax.hist(peak, bins=bins, color=LIGHT_GREY, alpha=0.9, label=f"uncorrected: P(> 20 °C) = {np.mean(peak > 20):.2f}")

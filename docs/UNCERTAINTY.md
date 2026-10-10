@@ -333,7 +333,7 @@ their median.*
 | 7 days | 0.94–0.98 | 1.00 | 1.09–1.17 | 1.09–1.26 |
 | 14 days | 0.84–0.90 | 0.90–0.94 | 1.08–1.17 | 1.09–1.38 |
 | 30 days | 0.70–0.77 | 0.75–0.81 | 1.02–1.11 | 1.07–1.46 |
-| 60 days | 0.60–0.68 | 0.65–0.73 | 0.94–1.07 | 1.07–1.46 |
+| 60 days | 0.61–0.68 | 0.65–0.73 | 0.94–1.07 | 1.07–1.46 |
 | 90 days | 0.58–0.70 | 0.62–0.76 | 0.91–1.15 | 1.16–1.42 |
 
 *The typical error of an average, as each choice gives it, divided by the real
@@ -922,12 +922,12 @@ and the Dischmabach's too low.*
    Student t variable, the standard allowance for a mean estimated from few
    values). With few years the corrected range is therefore wider.
 
-![Left: deviations of eight held-out years, mean -0.65 °C with its 95% interval. Right: the 2011 highest 7-day mean before and after correction; the probability of exceeding 20 °C falls from 0.77 to 0.33; the measured value was 19.8 °C.](figures/U11_correction.png)
+![Left: deviations of eight held-out years, mean -0.65 °C with its 95% interval. Right: the 2011 highest 7-day mean before and after correction; the probability of exceeding 20 °C falls from 0.77 to 0.35; the measured value was 19.8 °C.](figures/U11_correction.png)
 
 *Figure 15. Example 03. Left: in the eight held-out years of 2002–2009 the
 measured highest 7-day mean was on average 0.65 °C below the prediction (95%
 interval 0.26–1.05 °C). Right: corrected, the probability that 2011 exceeded a
-20 °C limit falls from 0.77 to 0.33; the measured value was 19.8 °C, below the
+20 °C limit falls from 0.77 to 0.35; the measured value was 19.8 °C, below the
 limit.*
 
 ### When to use it
@@ -1006,11 +1006,11 @@ one scenario warm makes the other warm too. Pairing the two runs, so that series
 number k uses the same parameter set and the same daily error in both, cancels
 everything they share. What remains is the uncertainty of the difference.
 
-![Left: the June-August mean under both scenarios, two overlapping wide histograms. Right: the paired difference is +0.00 to +0.05 °C; an unpaired difference would be -0.56 to +0.58 °C.](figures/U12_paired.png)
+![Left: the June-August mean under both scenarios, two overlapping wide histograms. Right: the paired difference is +0.00 to +0.05 °C; an unpaired difference would be -0.52 to +0.59 °C.](figures/U12_paired.png)
 
 *Figure 16. Example 04. Left: each scenario's June–August 2011 mean, with a
 90% range 0.8 °C wide. Right: the change, paired, is 0.00 to +0.05 °C (90% range);
-subtracting unpaired series would give −0.56 to +0.58 °C and suggest that the
+subtracting unpaired series would give −0.52 to +0.59 °C and suggest that the
 change could go either way.*
 
 ### How to run it
