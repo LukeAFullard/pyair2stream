@@ -15,6 +15,35 @@ yearly peak or a count of days must first be computed within each simulated
 series. The probability is then the share of series above the limit. The upper
 edge of the daily band is not the upper edge of the weekly peak.
 
+## Which uncertainty methods, and why
+
+The answer combines four of the package's tools, each for a reason:
+
+1. **A DE-MCMC chain** (step 1, as in example [02](../02_uncertainty/README.md)):
+   the parameter sets that fit 2002–2009, and the size and persistence of the
+   model's daily errors.
+2. **A FORWARD run that keeps every simulation** (step 2): 1,000 simulated
+   series of 2010–2012, each with its own parameter set and its own lasting
+   daily error. The yearly statistics are computed in each series; the
+   probability is the share of series above the limit.
+3. **Cross-validation** (step 3): the same statistics, predicted for each of
+   2002–2009 with that year hidden from the calibration. It shows whether the
+   stated ranges hold in years the model was not fitted to, and whether the
+   model is biased in the statistic. Unlike step 2, each hidden year uses one
+   best-fit parameter set, not a chain.
+4. **The cross-validated correction** (step 4): each simulated statistic is
+   shifted by the model's average error in that statistic in the hidden years,
+   with an allowance for the uncertainty of that average (8 years). It is
+   applied whatever the check finds, so the result cannot steer the method.
+
+Why the correction is needed: the model is fitted to the whole year, and on
+some rivers it puts the summer peak systematically too high or too low. Random
+error cannot fix that. Over many held-out years, uncorrected ranges for yearly
+statistics held less often than stated, corrected ones about as stated
+([V11](../../validation/REPORT.md#v11)).
+[docs/UNCERTAINTY.md](../../docs/UNCERTAINTY.md) explains each step in plain
+words (§7, §8 and §9), and §16 walks through this example.
+
 ## Steps
 
 Run everything with one command, from the repository's top folder:
@@ -122,6 +151,12 @@ exceeded.*
 
 Report such results as probabilities with ranges, together with the check. Do
 not report them as a yes or no.
+
+**What it does not mean.** A probability of 0.57 does not say the limit was
+exceeded; it says the model cannot tell, and how far it leans. The probability
+is for daily mean temperatures computed from the measured air temperature and
+discharge, with the model and its error as checked here; it does not cover
+errors in those inputs, or a limit defined in another way (see below).
 
 ## Limits of this approach
 

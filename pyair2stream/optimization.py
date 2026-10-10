@@ -22,7 +22,7 @@ from .model import (
     call_model, funcobj, aggregation, statis, warn_on_stability, check_numerical_divergence,
     is_numerically_divergent, NumericalDivergenceError, check_daily_plausibility,
 )
-from .uncertainty import (estimate_rho, estimate_ar1_rho, generate_ar1_noise, ar1_whitened_stats,
+from .uncertainty import (estimate_rho, estimate_ar1_rho, rho_measured, generate_ar1_noise, ar1_whitened_stats,
                           scored_error_variance_factor, scoring_block_days)
 
 # A near-perfect-fit MCMC log-likelihood is capped at this large but finite value rather
@@ -711,6 +711,7 @@ def forward_mode(data: CommonData) -> None:
             noise_model = chain_noise_model
             print(f"Using noise_model '{noise_model}' carried from calibration run {sidecar_path}")
         rho_used = 0.0
+        rho_was_measured = None   # not applicable to iid noise
 
         if noise_model == 'ar1':
             ar1_rho_override = uncertainty_options.get('ar1_rho')
@@ -719,22 +720,26 @@ def forward_mode(data: CommonData) -> None:
             # interval does not depend on the data being predicted and two scenario runs
             # use the same noise (their paired difference then cancels it exactly).
             sidecar_rho = None
+            sidecar_rho_measured = True
             sidecar_timescale = None
             if os.path.exists(sidecar_path):
                 try:
                     with open(sidecar_path, 'r') as f:
                         sidecar = json.load(f)
                     sidecar_rho = sidecar.get('rho')
+                    sidecar_rho_measured = sidecar.get('rho_measured', True)
                     # Chains written before rho_timescale existed (0.4.1 and earlier) used consecutive days.
                     sidecar_timescale = sidecar.get('rho_timescale', 'daily')
                 except Exception as e:
                     print(f"Warning: Failed to read rho from sidecar {sidecar_path} ({e}).")
             if ar1_rho_override is not None:
                 rho_used = ar1_rho_override
+                rho_was_measured = True   # set by the user, who must justify it
                 print(f"Note: this run uses ar1_rho = {rho_used:g}, as set in uncertainty_options, not the "
                       f"chain's {sidecar_rho if sidecar_rho is not None else 'unrecorded value'}.")
             elif sidecar_rho is not None:
                 rho_used = float(sidecar_rho)
+                rho_was_measured = bool(sidecar_rho_measured)
                 print(f"Using rho={rho_used:.4f} carried from calibration run {sidecar_path}")
                 rho_timescale = uncertainty_options.get('rho_timescale', DEFAULT_RHO_TIMESCALE)
                 if sidecar_timescale != rho_timescale:
@@ -748,11 +753,13 @@ def forward_mode(data: CommonData) -> None:
                 rho_timescale = uncertainty_options.get('rho_timescale', DEFAULT_RHO_TIMESCALE)
                 rho_used = estimate_rho(data.Twat_mod, data.Twat_obs, eval_mask_for_rho, segments_for_rho,
                                         rho_timescale)
+                rho_was_measured = rho_measured(data.Twat_obs, eval_mask_for_rho, segments_for_rho)
                 print(f"Using rho={rho_used:.4f} estimated ({rho_timescale}) from this run's own residuals "
                       "(no rho recorded with the chain).")
             else:
                 print("Warning: No residuals available to estimate rho; falling back to rho=0.0 (equivalent to iid)")
                 rho_used = 0.0
+                rho_was_measured = False
 
         ensemble_simulations = []
         excluded_draws = []
@@ -849,6 +856,7 @@ def forward_mode(data: CommonData) -> None:
             "noise_model": noise_model,
             "residual_sigma": sigma,
             "rho": float(rho_used),
+            "rho_measured": rho_was_measured,
         }
         with open(meta_filename, 'w') as f:
             json.dump(meta_data, f, indent=2, allow_nan=False)
@@ -1218,6 +1226,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
 
     rho_timescale = uncertainty_options.get('rho_timescale', DEFAULT_RHO_TIMESCALE)
     best_rho = estimate_rho(data.Twat_mod, data.Twat_obs, eval_mask, segments, rho_timescale)
+    best_rho_measured = rho_measured(data.Twat_obs, eval_mask, segments) if noise_model == 'ar1' else None
     # The exact AR(1) likelihood removes the day-to-day correlation (e_t - rho * e_{t-1}), a
     # day-scale operation, so it always uses the correlation of consecutive days. rho_timescale
     # sets the rho of the simulated prediction noise and of the least-squares effective sample size.
@@ -1419,6 +1428,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         "qmedia": float(data.Qmedia),
         **fit_settings(data),
         "rho": best_rho,
+        "rho_measured": best_rho_measured,
         "rho_timescale": rho_timescale,
         "rho_likelihood": rho_likelihood,
         "scoring_block_days": block_days,

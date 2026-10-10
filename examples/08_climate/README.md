@@ -39,6 +39,22 @@ Two settings in [`warmer.yaml`](warmer.yaml) and
 The scenario files have no water temperature: it was not measured under these
 conditions.
 
+**The uncertainty methods, and why.** Two questions, two treatments:
+
+- **How much warmer?** This is a change, so it is computed as a paired
+  difference, as in example [04](../04_scenario/README.md): the DE-MCMC chain
+  gives 1,000 parameter sets, every run uses the same ones with the same daily
+  errors, and each scenario simulation is subtracted from its baseline twin.
+  What the runs share cancels, and the range is the parameter uncertainty of
+  the change.
+- **Would the limit be exceeded?** This is about a yearly statistic, so it is
+  computed in each simulated series and corrected for the model's bias in the
+  yearly peaks, measured by cross-validation of 2002–2009, as in example
+  [03](../03_compliance/README.md). The same correction is applied to every
+  run, so it does not change the difference between them.
+
+[docs/UNCERTAINTY.md](../../docs/UNCERTAINTY.md) explains both (§7 to §10).
+
 ## Step 1: is the scenario inside what the model has seen?
 
 A scenario warmer than any calibration year asks the model to extrapolate. The
@@ -123,8 +139,10 @@ change:
 
 - run `FORWARD` directly on the climate model's daily series, with
   `calibration_metadata` from your calibration, as here;
-- if the model uses a 365-day calendar, declare it with `calendar: "noleap"`;
-  convert a 360-day calendar to the standard one first (USER_GUIDE
+- if the model uses a 365-day calendar, declare it with `calendar: "noleap"`.
+  The file then needs real dates without 29 February: a file with 29 February
+  rows is refused, unless `drop_29_february: true` removes them (with a
+  warning). Convert a 360-day calendar to the standard one first (USER_GUIDE
   [§5](../../USER_GUIDE.md#5-preparing-your-own-data));
 - climate models are biased. Adjust their air temperature and discharge to the
   measured ones first (bias correction). Or use them as a change applied to the
@@ -146,6 +164,9 @@ change:
 - **Stay near the calibrated conditions.** Check how far the scenario goes
   beyond the calibration years (step 1). Discharge outside the calibrated range
   gives a warning.
+- **What it does not mean.** "P = 0.95 to 1.00" is the probability under this
+  delta change and this model, with the error the model had in 2002–2009. It
+  is not a forecast of the future climate.
 
 ## Next
 

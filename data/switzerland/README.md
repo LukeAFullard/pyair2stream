@@ -35,8 +35,8 @@ used by the examples (`examples/`) and the validation suite (`validation/`).
   these files, 1984–2004 and 2005–2013 (`docs/PUBLISHED_RESULTS.md`).
 
 Units: air and water temperature in °C (daily means). Discharge is a daily
-mean whose unit the files do not state; its magnitudes (mean about 1.5 for the
-Mentue and Dischmabach, 106 for the Rhône) are consistent with FOEN's standard
+mean whose unit the files do not state; its magnitudes (calibration-period mean about 1.5 for
+the Mentue and Dischmabach, 106 for the Rhône) are consistent with FOEN's standard
 m³/s. The unit does not affect results, since only the ratio to the mean
 discharge enters the model. Air temperature and discharge are complete. Water temperature has a few gaps
 (Dischmabach: 2,197 of 2,557 calibration days observed).

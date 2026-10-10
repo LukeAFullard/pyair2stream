@@ -4,9 +4,12 @@ authors:
   - family-names: "Fullard"
     given-names: "Luke"
 title: "pyair2stream"
+type: software
 version: "0.5.1"
 date-released: "2026-10-09"
+license: CC-BY-SA-3.0
 url: "https://github.com/LukeAFullard/pyair2stream"
+repository-code: "https://github.com/LukeAFullard/pyair2stream"
 # TODO: add a software DOI once a Zenodo archive is created for this
 # repository (Zenodo's GitHub integration mints one per tagged release).
 preferred-citation:

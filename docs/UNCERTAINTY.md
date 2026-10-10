@@ -18,7 +18,7 @@ examples 03 and 04, so anyone can redraw them.
 
 1. [Start here: which tool answers your question](#1-start-here-which-tool-answers-your-question)
 2. [Where uncertainty comes from](#2-where-uncertainty-comes-from)
-3. [Ten words you will meet](#3-ten-words-you-will-meet)
+3. [Words you will meet](#3-words-you-will-meet)
 4. [How pyair2stream builds its uncertainty, in seven steps](#4-how-pyair2stream-builds-its-uncertainty-in-seven-steps)
 5. [The model's errors: their size and how long they last](#5-the-models-errors-their-size-and-how-long-they-last)
 6. [Daily prediction intervals](#6-daily-prediction-intervals)
@@ -39,15 +39,38 @@ examples 03 and 04, so anyone can redraw them.
 
 ## 1. Start here: which tool answers your question
 
-| Your question | Use | Check before you report it | Section |
-|---|---|---|---|
-| How far could a daily prediction be from the truth? | the daily prediction interval (`DE-MCMC`, then `FORWARD` with intervals) | its coverage on years not used for calibration | [6](#6-daily-prediction-intervals) |
-| What range for a weekly or monthly mean, or for a run of warm days? | statistics computed in each of the 1,000 simulated series (`save_ensemble: true`) | the 7-day coverage in `cv_interval_coverage.csv` | [7](#7-weekly-means-yearly-peaks-days-above-a-limit) |
-| How likely is it that a yearly limit was exceeded (highest daily mean, highest 7-day mean, days above a threshold)? | the share of simulated series above the limit, **corrected** by cross-validation | `cv_yearly_statistics_summary.csv` | [7](#7-weekly-means-yearly-peaks-days-above-a-limit), [8](#8-testing-on-years-the-model-has-not-seen-cross-validation), [9](#9-correcting-yearly-statistics-for-the-models-bias) |
-| What difference would a change in flow or climate make? | the paired difference of two scenario runs | that both runs used the same parameter sets | [10](#10-comparing-two-scenarios) |
-| How precisely do the data fix the model's parameters? | MCMC parameter intervals; jackknife intervals from cross-validation | convergence; no parameter on a bound | [11](#11-how-well-are-the-parameters-known) |
-| Is the model too warm or too cool in some season? | mean error by month and season | whether its 95% interval excludes zero | [12](#12-mean-error-by-month-and-season) |
-| Should I report 90%, 95% or 99%? | `uncertainty_options.prediction_interval` | the coverage at that level | [13](#13-choosing-the-level-90-95-or-99) |
+pyair2stream has two kinds of uncertainty tool, and they work together.
+
+- **Tools that make ranges.** A `DE-MCMC` run calibrates the model, then
+  measures how uncertain its parameters are and how large and how persistent
+  its daily errors are. From these, 1,000 simulated series are made: by the
+  `DE-MCMC` run itself for the calibration years, and by a `FORWARD` run for
+  any other period or scenario. Every range and probability is read from these
+  series.
+- **Tools that check ranges.** Cross-validation is a separate run
+  (`run_mode: "DE"` with `cross_validation: enabled: true`). It hides each
+  year in turn, predicts it, and records whether ranges made the same way held
+  in that year. It also gives the correction for yearly statistics
+  (section [9](#9-correcting-yearly-statistics-for-the-models-bias)) and a
+  second, independent set of parameter intervals (the jackknife).
+
+A range you report comes from the first kind. The evidence that it can be
+trusted at your site comes from the second.
+
+| Your question | Method | Run mode or setting | Output file | How well it held in the validation | Section |
+|---|---|---|---|---|---|
+| How far could a daily prediction be from the truth? | daily prediction interval | calibration years: `DE-MCMC`; any other period: `FORWARD` with `enable_prediction_intervals: true` | `MCMC_envelopes_*.csv`; `Forward_Prediction_Envelopes_*.csv` | 90% bands: 90% of days in held-out years (V11); 85–89% in later years (V5) | [6](#6-daily-prediction-intervals) |
+| What range for a weekly or monthly mean, or a run of warm days? | the statistic computed in each simulated series | `save_ensemble: true`, then `scenario.aggregate`, `scenario.exceedance` | `MCMC_ensemble_*.npz`; `Forward_Prediction_Ensemble_*.npz` | 90% ranges for 7-day means: 89–94% (V5) | [7](#7-weekly-means-yearly-peaks-days-above-a-limit) |
+| How likely is it that a yearly limit was exceeded (highest daily mean, highest 7-day mean, days above a threshold)? | share of simulated series above the limit, **corrected** by cross-validation | `scenario.year_statistics`, then `scenario.correct_statistic` | the `.npz` above, and `cv_yearly_statistics.csv` | corrected 90% ranges: 85–94% of held-out years; uncorrected 73–92% (V11) | [7](#7-weekly-means-yearly-peaks-days-above-a-limit), [9](#9-correcting-yearly-statistics-for-the-models-bias) |
+| What difference would a change in flow or climate make? | paired difference of two scenario runs | two `FORWARD` runs, the second with `reuse_sample_indices_from`; `scenario.paired_difference_from_files` | the two `Forward_Prediction_Ensemble_*.npz` | equal to the exact effect (V8) | [10](#10-comparing-two-scenarios) |
+| Did the ranges hold at my site? | cross-validation check | `cross_validation: enabled: true`, `run_mode: "DE"` | `cv_interval_coverage.csv`, `cv_yearly_statistics_summary.csv` | this is the test | [8](#8-testing-on-years-the-model-has-not-seen-cross-validation) |
+| How precisely do the data fix the model's parameters? | MCMC parameter intervals; jackknife intervals | `DE-MCMC`; cross-validation | `parameter_significance_*.csv`; rows `jackknife_*` of `cv_results.csv` | 90% intervals contained the true values 93–97% (MCMC) and 83–95% (jackknife) of the time (V4) | [11](#11-how-well-are-the-parameters-known) |
+| Is the model too warm or too cool in some season? | mean error by month and season | every run with measurements; cross-validation | `bias_by_month_*.csv`; `cv_bias_by_month.csv` | | [12](#12-mean-error-by-month-and-season) |
+| Should I report 90%, 95% or 99%? | the level of every range | `uncertainty_options.prediction_interval`, `parameter_interval` | | 99% daily bands held on only 98.0–98.2% of days (V11) | [13](#13-choosing-the-level-90-95-or-99) |
+| Which parameter changes the simulation most? | sensitivity analysis (**not** an uncertainty range) | `sensitivity_analysis: true` | `sensitivity_*.csv`, `.png` | | [11](#11-how-well-are-the-parameters-known) |
+
+The "V" numbers refer to the checks of the
+[validation report](../validation/REPORT.md).
 
 > **The three rules that matter most**
 >
@@ -94,7 +117,7 @@ example by running several input scenarios.
 
 ---
 
-## 3. Ten words you will meet
+## 3. Words you will meet
 
 | Word | Meaning |
 |---|---|
@@ -102,12 +125,15 @@ example by running several input scenarios.
 | **Bias** | the average error. A model can have a small error overall and still be biased in summer. |
 | **σ** (sigma) | the typical size of the daily error (the root-mean-square error, in °C). |
 | **Persistence**, **ρ** (rho) | how much an error carries over from one day to the next: 0 means each day's error is new, near 1 means errors last for weeks. |
+| **Chain** | the thousands of parameter sets that `DE-MCMC` collects (`MCMC_chain_*.csv`), each consistent with the data. |
+| **Likelihood** | the rule that scores how well a parameter set explains the measurements. It sets how wide the parameter ranges are (section [11](#11-how-well-are-the-parameters-known)). |
 | **Ensemble** | the 1,000 simulated series a run produces, each with its own parameter set and its own daily errors. |
 | **Interval**, **range**, **level** | a band that should contain the truth with a stated chance: a 90% interval should miss about 1 value in 10. |
 | **Coverage** | the share of measured values that actually fell inside the interval. For a trustworthy 90% interval it is close to 90%. |
 | **Probability of exceedance** | the share of simulated series in which a statistic (say the year's highest 7-day mean) is above the limit. |
 | **Held-out year** | a year whose measurements were hidden from the calibration, so the model can be tested on it. |
 | **PIT** | where a measured value falls among the simulations: 0.3 means 30% of the simulations were below it (section [8](#8-testing-on-years-the-model-has-not-seen-cross-validation)). |
+| **Jackknife** | a way to turn the spread of the parameters fitted in the cross-validation folds into an interval, allowing for the data the folds share (section [11](#11-how-well-are-the-parameters-known)). |
 
 ---
 
@@ -119,6 +145,8 @@ example by running several input scenarios.
 
 1. **Calibrate.** Differential Evolution finds the parameters that fit the
    measured water temperature best (`run_mode: "DE-MCMC"` starts with this).
+   Use `objective_function` NSE or RMS: DE-MCMC refuses KGE, because its
+   ranges are measured around the least-squares fit, which a KGE fit is not.
 2. **Parameter uncertainty.** MCMC (Markov chain Monte Carlo) then collects
    thousands of parameter sets, each in proportion to how well it fits
    (section [11](#11-how-well-are-the-parameters-known)).
@@ -126,8 +154,10 @@ example by running several input scenarios.
    are measured (section [5](#5-the-models-errors-their-size-and-how-long-they-last)).
 4. **1,000 simulated series.** A `FORWARD` run draws 1,000 parameter sets,
    simulates each, and adds a random error series of size σ and persistence ρ to
-   each one. Each series is one plausible version of what the water temperature
-   was (or will be).
+   each one (the `DE-MCMC` run does the same for the calibration years). Like
+   the simulation itself, each series is kept at or above `Tice_cover`. Each
+   series is one plausible version of what the water temperature was (or will
+   be).
 5. **Your statistic.** Whatever your question is about, a daily value, a 7-day
    mean, a yearly peak or a count of days, is computed in each of the 1,000
    series. The spread across series is its uncertainty; the share above a limit
@@ -320,8 +350,8 @@ Reading it:
   too.
 
 **The parameter ranges: wider.** ρ also sets how much information the
-calibration contains. With persistent errors, n measured days count as only
-n(1 − ρ)/(1 + ρ) independent ones (Figure 17, section 11). With the weekly ρ,
+calibration contains. With persistent errors, n consecutive measured days count
+as only n(1 − ρ)/(1 + ρ) independent ones (Figure 17, section 11). With the weekly ρ,
 the Mentue's 2,907 days count as about 220 instead of about 520. So the
 parameter ranges are about 1.5 times wider than with the daily ρ (1.5–1.8 times
 on the three rivers).
@@ -369,9 +399,20 @@ and below is over-confident.*
 | You know ρ from another source (expert use) | `uncertainty_options.ar1_rho` in a `FORWARD` run |
 
 The weekly estimate needs at least 140 pairs of complete 7-day windows a week
-apart: about 21 complete weeks of daily measurements. With fewer, or with
-measurements only every other day, the daily value is used, with a warning. A
-few years of daily measurements give thousands of pairs.
+apart: about 21 complete weeks of daily measurements. With fewer, the daily
+value is used, with a warning. A few years of daily measurements give
+thousands of pairs.
+
+The daily value in turn needs at least 30 pairs of consecutive measured days.
+With fewer, for example with measurements only every other day or once a week,
+ρ is set to 0 (no persistence), with the warning `Falling back to rho=0.0`;
+`summary.md` then marks ρ as **not measured** in its uncertainty table, and
+the `_meta.json` files record `rho_measured: false`.
+Then the parameter ranges are too narrow, and so are the ranges for anything
+longer than a day. Such data cannot show how long the errors last. If you
+must use them, say so, and set `uncertainty_options.ar1_rho` in the `FORWARD`
+run from a site with daily measurements (expert use; the parameter ranges of
+the `DE-MCMC` run are not changed by it).
 
 ### How to set it and check it
 
@@ -492,9 +533,14 @@ two, say so.
   distribution allows. This hardly matters up to 95% intervals, but matters at
   99% (section [13](#13-choosing-the-level-90-95-or-99)).
 - **The same size all year.** Real errors differ by season: on the Swiss
-  rivers, by up to about a factor of two between months. The error model uses
-  one size for the whole year. Check the coverage in the season of your limit:
-  validation V5 reports summer coverage separately.
+  rivers, the monthly sizes were 0.7–1.5 times the yearly one, in no common
+  pattern. The error model uses one size for the whole year. A size that
+  changes with the month was tested by cross-validation and not adopted: for
+  version 8 its 90% intervals held less often on the hottest days and for the
+  yearly peak, with no better result overall
+  ([METHODS §12](METHODS.md#12-parameter-and-prediction-uncertainty-de-mcmc)).
+  Check the coverage in the season of your limit: validation V5 reports summer
+  coverage separately, and V14 the hottest days.
 - **The past errors are assumed to describe the future ones.** In years unlike
   the calibration years, errors are often somewhat larger (section
   [6](#6-daily-prediction-intervals)).
@@ -523,10 +569,26 @@ value on a stated share of days, for example 90%.
 
 ### How it is made
 
-1. 1,000 parameter sets are drawn from the MCMC chain.
-2. The model is run with each, and an AR(1) error series (σ, ρ) is added.
+1. 1,000 parameter sets are drawn from the MCMC chain (`forward_options.n_samples`
+   in a `FORWARD` run).
+2. The model is run with each, and an AR(1) error series (σ, ρ) is added. Each
+   series is then kept at or above `Tice_cover`, as the simulation itself is,
+   so in winter the lower edge does not fall below the ice floor.
 3. On each day, the band runs from the 5th to the 95th percentile of the 1,000
    values (for a 90% band; the level is `uncertainty_options.prediction_interval`).
+
+Two runs make this band, for different periods:
+
+| | `DE-MCMC` run | `FORWARD` run with intervals |
+|---|---|---|
+| Period | the calibration file only | any file: validation years, a scenario, a projection |
+| σ | each parameter set's own daily root-mean-square error | the best fit's, from the chain's `_meta.json` |
+| ρ, error model | measured on the calibration (`rho_timescale`) | taken from the chain's `_meta.json` |
+| Band | `MCMC_envelopes_*.csv` | `Forward_Prediction_Envelopes_*.csv` |
+| Every series (`save_ensemble: true`) | `MCMC_ensemble_*.npz` | `Forward_Prediction_Ensemble_*.npz` |
+| Coverage and settings | `MCMC_chain_*_meta.json` | `Forward_Prediction_Ensemble_*_meta.json` |
+
+A validation file in a `DE-MCMC` run gets no band: run `FORWARD` on it.
 
 ### When to use it
 
@@ -554,14 +616,16 @@ uncertainty_options:
   save_ensemble: true            # keep the 1,000 series (needed for section 7)
 ```
 
-Outputs: `Forward_Prediction_Envelopes_*.csv` (lower, median and upper value of
-each day) and, with `save_ensemble`, `Forward_Prediction_Ensemble_*.npz` (every
-series).
+Outputs: `Forward_Prediction_Envelopes_*.csv` (columns `Twat_mod_lower`,
+`Twat_mod_p50` and `Twat_mod_upper` for each day) and, with `save_ensemble`,
+`Forward_Prediction_Ensemble_*.npz` (every series). The `FORWARD` run stops if
+the chain was fitted with another model version, integrator, `Qmedia`,
+`Tice_cover` or `min_theta_floor`: hence `paths.calibration_metadata`.
 
 ### How to read it
 
 The run reports its **coverage**: the share of measured days inside the band
-(in the console and the `_meta.json`). On the calibration years it is close to
+(in the console, `summary.md`, and `interval_coverage` in the `_meta.json`). On the calibration years it is close to
 the stated level almost automatically, because σ and ρ were measured there.
 What counts is the coverage on years the model
 was **not** calibrated on: a separate validation file, or cross-validation
@@ -572,7 +636,7 @@ was **not** calibrated on: a separate validation file, or cross-validation
 | Share of days inside the band | 50% | 80% | 90% | 95% | 99% |
 |---|---|---|---|---|---|
 | Synthetic data, model exactly right (V4) | within 1.3 points of the level at every level | | | | |
-| Swiss rivers, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.5% | 98.0–98.2% |
+| Swiss rivers, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.6% | 98.0–98.2% |
 | Swiss rivers, later validation years (V5) | 43–53% | 75–79% | 85–89% | 91–95% | 95–99.5% |
 | Swiss rivers, the hottest 10% of days by prediction, version 8 (V14) | | 80% | 91% | 95% | |
 | The same, version 5 (no discharge term) (V14) | | 68% | 84% | 92% | |
@@ -631,8 +695,20 @@ runs = scenario.exceedance(ens, 18.0, consecutive_days=3)           # days in ru
 `year_statistics` gives, for each year: the highest daily mean, the highest 7-day
 moving mean (the day and the six before it) and the number of days above a
 threshold. A year the dates cover only in part (at either end of the file)
-is left out, with a warning. If your standard defines a statistic differently (fixed weeks, a
-season, a 30-day mean), compute it the same way: once per series.
+is left out, with a warning (`partial_years="keep"` includes it). If your
+standard defines a statistic differently (fixed weeks, a season, a 30-day
+mean), compute it the same way: once per series.
+
+`aggregate` gives no value (NaN) for a week or month that the dates cover only
+in part, or that has days without a simulated value, with a warning: a 3-day
+mean is not a 7-day mean. `min_days=N` accepts a period with at least N days;
+`return_periods=True` also returns the first day of each period. `exceedance`
+counts a day without a value as not above the threshold, with a warning.
+
+In a file shorter than a year, and in each segment in gap-tolerant mode, the
+first `warmup_drop_days` days (default 15) are the model settling from its
+starting point. They are marked `warm_up = 1` in the run's output series, but
+not in the `.npz`. Leave them out of your statistic.
 
 ### The probability that a limit was exceeded
 
@@ -644,7 +720,8 @@ points to know:
 - **It has a small sampling error.** With 1,000 series it is precise to about
   ±0.03 (95%), because it is a share counted from a finite number of series.
   If the answer is close to a decision threshold, run more series
-  (`forward_options.n_samples`).
+  (`forward_options.n_samples`; at most the number of parameter sets in the
+  chain).
 - **It does not depend on the interval level you choose** (section [13](#13-choosing-the-level-90-95-or-99)):
   only the reported ranges do.
 
@@ -664,8 +741,17 @@ percentiles, is a basic property of probability.
 ### What it is
 
 The model is calibrated with one year hidden, then asked to predict that year.
-This is repeated for every whole year in turn. Each prediction is honest, because the year's measurements played
-no part in it.
+This is repeated for every whole year in turn, the first one included (the
+defaults since version 0.5.1). A first or last year that the record covers
+only in part is used for calibration but not held out: a few months are not a
+test of a year. Each prediction is honest, because the year's measurements
+played no part in it.
+
+Each held-out year gets one calibration (one best-fit parameter set, found by
+DE, PSO or LATHYP), not a full MCMC. Its error size σ and persistence ρ are
+measured on the years used for that calibration only, exactly as `DE-MCMC`
+measures them, and 1,000 simulated series of the held-out year are made from
+them, as a `FORWARD` run would make them.
 
 ### Why
 
@@ -697,20 +783,34 @@ Qmedia: 1.4915                 # your calibration's mean discharge (here the Men
 cross_validation:
   enabled: true
   threshold: 18                # °C: the threshold of your question, for "days above threshold"
+                               #   (default: the 90th percentile of the held-out measurements)
   season_months: [6, 7, 8, 9]  # a year counts if 80% of these months was measured (default: the 4 warmest)
+  # unit: "n_years"            # hold out blocks of n_years_per_fold years instead of single years
+  # water_year_start_month: 10 # years from October to September (default 1: calendar years)
+  # skip_first_year: false     # the default; true never holds out the first year
+  # min_train_years: 0         # the default; N never holds out N further first years
+  # min_valid_obs: 10          # the default; a year with fewer measured days is not held out
 uncertainty_options:
   prediction_interval: 90      # the level you intend to report
+  # noise_model and rho_timescale: as for DE-MCMC (keep the defaults)
 ```
+
+Cross-validation runs only with `run_mode` `DE`, `PSO` or `LATHYP`; with
+`DE-MCMC` or `FORWARD` the block is ignored, with a warning. A
+cross-validation run writes only the files below, not a calibration: run the
+`DE-MCMC` calibration separately. Excluding first years with
+`skip_first_year` or `min_train_years` removes test years only; every fold is
+still calibrated on all the years it does not hold out.
 
 ### What it writes, and how to read each
 
 | File | What it tells you |
 |---|---|
-| `cv_results.csv` | the error (RMSE, NSE, KGE) in each held-out year, and the parameters fitted without it; jackknife parameter intervals (section [11](#11-how-well-are-the-parameters-known)) |
+| `cv_results.csv` | one row per held-out year: its error (RMSE, NSE, KGE) and the parameters fitted without it. Then rows `mean`, `std` (spread between folds; **not** an uncertainty), `pooled` (the scores over all held-out days together) and `jackknife_se`, `jackknife_90_lower`, `jackknife_90_upper` (parameter intervals; the number follows `parameter_interval`; section [11](#11-how-well-are-the-parameters-known)) |
 | `cv_bias_by_month.csv` / `.png` | the mean error by month and season in the held-out years (section [12](#12-mean-error-by-month-and-season)) |
-| `cv_interval_coverage.csv` | the share of held-out days, and of 7-day means, inside the interval at 50%, 80%, 90%, 95% and your level |
-| `cv_yearly_statistics.csv` | for each held-out year and yearly statistic: the measured value, the predicted median and range, the PIT and the deviation (measured minus predicted median) |
-| `cv_yearly_statistics_summary.csv` | for each statistic: how often the ranges held at each level, the range expected by chance, and the mean deviation with its 95% interval |
+| `cv_interval_coverage.csv` | the share of held-out days (`daily inside`), and of 7-day means (`7-day inside`), inside the interval at 50%, 80%, 90%, 95% and your level. Close to the level: the daily ranges hold. Days are not independent, so no range expected by chance is given |
+| `cv_yearly_statistics.csv` | for each held-out year and yearly statistic: the measured value, the predicted `median` and range (`lower`, `upper`), the `pit`, whether it was `inside`, and the `deviation` (measured minus predicted median), which the correction of section [9](#9-correcting-yearly-statistics-for-the-models-bias) uses |
+| `cv_yearly_statistics_summary.csv` | for each statistic: how often the ranges held at each level (`share_inside_90` and so on), the range expected by chance (`expected_inside_90_low`, `_high`), and the `mean_deviation` with its 95% interval |
 
 ### The PIT: where the measured value falls
 
@@ -816,18 +916,19 @@ and the Dischmabach's too low.*
    Student t variable, the standard allowance for a mean estimated from few
    values). With few years the corrected range is therefore wider.
 
-![Left: deviations of seven held-out years, mean -0.65 °C with its 95% interval. Right: the 2011 highest 7-day mean before and after correction; the probability of exceeding 20 °C falls from 0.77 to 0.34; the measured value was 19.8 °C.](figures/U11_correction.png)
+![Left: deviations of eight held-out years, mean -0.65 °C with its 95% interval. Right: the 2011 highest 7-day mean before and after correction; the probability of exceeding 20 °C falls from 0.77 to 0.33; the measured value was 19.8 °C.](figures/U11_correction.png)
 
-*Figure 15. Example 03. Left: in the seven held-out years of 2003–2009 the
+*Figure 15. Example 03. Left: in the eight held-out years of 2002–2009 the
 measured highest 7-day mean was on average 0.65 °C below the prediction (95%
-interval 0.20–1.10 °C). Right: corrected, the probability that 2011 exceeded a
-20 °C limit falls from 0.77 to 0.34; the measured value was 19.8 °C, below the
+interval 0.26–1.05 °C). Right: corrected, the probability that 2011 exceeded a
+20 °C limit falls from 0.77 to 0.33; the measured value was 19.8 °C, below the
 limit.*
 
 ### When to use it
 
 For every **yearly** statistic (a peak, a count of days above a threshold) when
-cross-validation is available with at least 5 held-out years, and **always**, not
+cross-validation is available with at least 5 held-out years (`correct_statistic`
+refuses fewer than 3), and **always**, not
 only when the check finds a bias. Deciding afterwards would let the result steer
 the method. Report the corrected probability and range, and give the
 uncorrected ones and the check alongside for transparency.
@@ -846,7 +947,8 @@ p_exceeded = (peak_corrected > 20.0).mean()
 ```
 
 The statistic, threshold and season must be defined the same way in the check
-and in the question.
+and in the question. The check keeps a year only if 80% of its season was
+measured; set `season_months` to the season of your limit.
 
 ### What the validation shows
 
@@ -911,8 +1013,10 @@ change could go either way.*
 2. Run scenario B from the same chain with `save_ensemble: true` and
    `forward_options.reuse_sample_indices_from:` set to scenario A's
    `Forward_Prediction_Ensemble_*_meta.json`.
-3. `diff = scenario.paired_difference_from_files(path_b, path_a)` refuses to
-   subtract runs that did not use the same parameter sets.
+3. `diff = scenario.paired_difference_from_files(path_b, path_a)` gives B minus
+   A, one row per series. It refuses two runs that did not use the same chain
+   and parameter sets (including those left out as divergent), the same error
+   model, σ and ρ, the same dates, or that simulated different days.
 
 Both runs must use the calibration's `Qmedia` (`paths.calibration_metadata`):
 recomputing it from the scenario's flows would cancel the flow change.
@@ -920,9 +1024,11 @@ recomputing it from the scenario's flows would cancel the flow change.
 ### Limits
 
 The band shows **parameter uncertainty only**. Pairing assumes the model's error
-on a given day would have been the same under both scenarios. A scenario far
-outside the calibrated flows (the run warns when more than 1% of days are) is an
-extrapolation.
+on a given day would have been the same under both scenarios. On a day when a
+series is held at `Tice_cover` in one scenario and not in the other (water near
+freezing), the error does not cancel exactly. Days whose flow lies outside the
+calibrated flows are an extrapolation: the `FORWARD` run reports every such
+day, with their number, the first date and the number of zero-flow days.
 
 ### What it rests on
 
@@ -958,16 +1064,39 @@ What goes into it:
   Persistent errors carry less information than independent ones (Figure 17):
   on the Mentue, 2,907 measured days count as 221 independent ones. Without
   that allowance the parameter intervals would be far too narrow. Measurements
-  further apart are less related, and the count allows for the actual spacing:
-  with one measurement a week (at the same ρ = 0.86), about half of them count
-  as independent. How ρ is
-  chosen, and what the choice does to these intervals, is in section
-  [5](#5-the-models-errors-their-size-and-how-long-they-last).
+  further apart are less related, and the count allows for the actual spacing
+  of the scored days (errors d days apart are taken to correlate ρ^d): with one
+  measurement a week, at the same ρ = 0.86, about half of them would count as
+  independent. (But ρ itself can only be measured from consecutive days:
+  section [5](#5-the-models-errors-their-size-and-how-long-they-last).) Every
+  scored day, week or month enters the likelihood. How ρ is chosen, and what
+  the choice does to these intervals, is in section
+  [5](#5-the-models-errors-their-size-and-how-long-they-last). The other
+  likelihoods are described below.
 
 ![Independent days per day measured fall from 1 at rho 0 towards 0 as rho approaches 1; at rho 0.86, 2907 days count as 221.](figures/U14_effective_n.png)
 
 *Figure 17. The effective sample size: with errors that persist (ρ = 0.86), 2,907
 days carry about as much information as 221 independent ones.*
+
+### Three ways to score a parameter set
+
+Two settings choose the likelihood. Keep the defaults.
+
+| Setting | What it assumes | Evidence | Use it |
+|---|---|---|---|
+| `noise_model: "ar1"`, `likelihood: "least_squares"` (the defaults) | errors persist (ρ); least squares with the effective number of independent days | 90% parameter intervals held the truth 93–97% of the time (V4); the band stays centred on the best fit (V5) | always |
+| `noise_model: "ar1"`, `likelihood: "exact"` | errors persist; the exact AR(1) likelihood, which weighs day-to-day changes of the error more than its level, and always uses the daily ρ | version 8's 90% parameter intervals held the truth only 74% of the time (V4); on real rivers it moved the band by up to 0.11 °C, cooler in that case (V5). With weekly or monthly scoring it treats the scores as independent, with a warning | only to compare |
+| `noise_model: "iid"` | every day's error is new | parameter intervals far too narrow with persistent errors (67%, V4); 90% ranges for 7-day means held only 39–62% of the time (V5) | not for decisions |
+
+The error model chosen here is recorded in the chain's `_meta.json`, and
+`FORWARD` runs use it too (section [6](#6-daily-prediction-intervals)).
+
+With weekly or monthly scoring (`time_resolution` `"1w"` or `"1m"`), the
+default likelihood counts the block means and allows for how they persist from
+block to block. Keep `a2` and `a3` at or above 0 in `parameter_bounds` then: a
+weekly mean can hide a simulation that zigzags from day to day, and the run
+warns when it finds one (V4, cases J and K).
 
 ### Has it converged?
 
@@ -976,18 +1105,25 @@ plausible region thoroughly. pyair2stream checks two standard diagnostics: the
 run must be at least 50 times longer than the **autocorrelation time** (how many
 steps it takes the walk to produce a new, independent sample), and **split-R̂**
 (whether different walkers and different halves of the run agree) must be below
-1.01. If not, the run stops with an error by default (`strict_convergence`),
-because unconverged results are not valid. Try more steps (`mcmc_steps`), or a
-simpler model version: a posterior that will not settle usually means the data
-cannot pin down all the parameters.
+1.01. The walk runs in blocks of 1,000 steps (at least 2,000) until both hold,
+or until `optimization.mcmc_steps` (default 20,000) is reached. The first part
+of the walk (the larger of 30% of the steps and 5 autocorrelation times) is
+discarded as burn-in. The diagnostics are in `MCMC_chain_*_meta.json`
+(`converged`, `max_autocorr_time`, `max_split_rhat`). If the walk has not
+converged, the run stops with an error by default (`strict_convergence: true`)
+and gives no prediction interval, because unconverged results are not valid.
+Try more steps (`mcmc_steps`), or a simpler model version: a posterior that
+will not settle usually means the data cannot pin down all the parameters.
 
 ### Parameter intervals
 
 `parameter_significance_*.csv` gives each parameter's mean, standard deviation
 and central interval at `uncertainty_options.parameter_interval` (default 90%),
-and whether zero lies outside its central 95% (a test at the usual 5% level;
-meaningful only for parameters where zero means "no effect": `a2`, `a4`, `a5`,
-`a6`, `a8`).
+and whether zero lies outside its central 95% (`Significantly_Diff_From_Zero`:
+a test at the usual 5% level whatever the interval's level; meaningful only
+for parameters where zero means "no effect": `a2`, `a4`, `a5`, `a6`, `a8`).
+`parameter_correlation_*.png` shows how the parameters move together, and
+`MCMC_chain_*.csv` holds every parameter set collected.
 
 ![Left: a2 and a3 from the chain lie along a narrow diagonal (correlation 0.99). Right: the histogram of a7 with its 90% interval 0.590 to 0.613.](figures/U13_parameters.png)
 
@@ -1011,23 +1147,47 @@ Read parameter intervals with care:
 ### Jackknife intervals from cross-validation
 
 Cross-validation fits the parameters once per held-out year. `cv_results.csv`
-turns their spread into approximate intervals (the delete-one-year jackknife,
-`jackknife_90_lower`/`upper`; level `parameter_interval`). Do **not** use the
-`std` row as an uncertainty: the folds share most of their data, so it is far
-too small.
+turns their spread into approximate intervals (the delete-one-year jackknife):
+the rows `jackknife_se` (standard error) and `jackknife_90_lower`,
+`jackknife_90_upper` (the number follows `parameter_interval`). The interval is
+the mean of the folds ± a Student t value times the standard error. The
+standard error is about √(n − 1) times the spread between folds, for n years,
+because each fold shares all but one year with the others. Only whole years count as blocks.
+
+Do **not** use the `std` row as an uncertainty. It is only the spread between
+folds, which share most of their data, so it is far too small: in V4 the
+fold mean ± 1.645 × `std` contained the true values only 35–52% of the time.
 
 The jackknife intervals depend on the optimizer too. Where parameters trade
 off, one fold can end on a distant parameter set with almost the same fit, and
 widen the interval. In [V12](../validation/REPORT.md#v12), another optimizer
-seed alone changed version 8's jackknife standard errors by a factor of 0.35 to
-1.55. For poorly determined parameters, treat them as indicative and repeat the
+seed alone changed the jackknife standard errors by a factor of 0.65 to 1.06
+(median over the parameters, for each river and version). For poorly
+determined parameters, treat them as indicative and repeat the
 cross-validation with a second `random_seed`.
+
+**MCMC or jackknife?** They answer the same question from different
+calculations: the MCMC intervals from the likelihood of one calibration, the
+jackknife from how much the best fit moves when a year is left out. Report the
+MCMC intervals (from the converged chain) and use the jackknife as a
+cross-check. Where they disagree strongly, the parameter is poorly determined;
+rely on predictions instead.
+
+### Sensitivity analysis is not an uncertainty
+
+`sensitivity_analysis: true` moves each parameter up and down, one at a time,
+around the best fit, and reports the mean change in simulated water
+temperature (`sensitivity_*.csv` and `.png`). It shows which parameters the
+simulation responds to most, near the best fit. It says nothing about how well
+the data fix the parameters, and gives no range or probability.
 
 ### What the validation shows
 
 On synthetic data with known parameters, the default MCMC intervals (90%)
 contained the true values 93–97% of the time, and the jackknife intervals 83–95%
-([V4](../validation/REPORT.md#v4)). The parameters published for the Swiss
+([V4](../validation/REPORT.md#v4)). With `likelihood: "exact"`, version 8's
+MCMC intervals contained them only 74% of the time: do not quote those as
+confidence statements. The parameters published for the Swiss
 rivers (Piccolroaz et al., 2016) lay inside pyair2stream's MCMC intervals for 76
 of 81 values ([V2](../validation/REPORT.md#v2)).
 
@@ -1062,9 +1222,13 @@ exceeded.
 
 ### How it is computed
 
-The errors are first averaged within each year (a month counts in a year if at
-least 10 of its days were measured), then the bias is the mean of those yearly
-values, with interval mean ± t × standard deviation / √(number of years). Days
+The error is simulated minus measured: positive means the model is too warm.
+The errors are first averaged within each year. A month counts in a year if
+the record covers all its days and at least 10 of them were measured (a
+season, 30; the whole year, 120); the unscored warm-up days are left out. Then
+the bias is the mean of those yearly values, with interval
+mean ± t × standard deviation / √(number of years); it needs at least two
+years. Days
 are not used as independent values, because errors persist for days to weeks
 and an interval from days would be far too narrow.
 
@@ -1109,7 +1273,7 @@ range you quote beside it.
 | Share inside the range | 50% | 80% | 90% | 95% | 99% |
 |---|---|---|---|---|---|
 | days, synthetic data (V4) | within 1.3 points of the level at every level | | | | |
-| days, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.5% | 98.0–98.2% |
+| days, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.6% | 98.0–98.2% |
 | 7-day means, held-out years (V11) | 53–59% | 84–88% | 93–94% | 96–97% | 98.6–99.2% |
 | days, later validation years (V5) | 43–53% | 75–79% | 85–89% | 91–95% | 95–99.5% |
 | yearly statistics, corrected (V11) | 50–69% | 75–85% | 85–94% | 92–100% | 100% |
@@ -1142,7 +1306,10 @@ one).*
 
 | Message | Meaning | What to do |
 |---|---|---|
+| `run_mode DE-MCMC cannot be used with objective_function KGE` | the ranges are measured around the least-squares fit, which a KGE fit is not | `objective_function: "NSE"` or `"RMS"` |
 | `MCMC did not converge within ... steps` | the parameter sets are not yet a reliable sample | more `mcmc_steps`, or a simpler model version; never use unconverged results for a decision |
+| `Only ... pairs of complete 7-day windows ...` | too few complete weeks of measurements for the weekly ρ; the daily ρ is used | expect ranges for multi-week quantities to be too narrow; check them by cross-validation |
+| `Only ... valid residual pairs ... Falling back to rho=0.0` | too few consecutive measured days to measure persistence at all (section [5](#5-the-models-errors-their-size-and-how-long-they-last)) | the parameter ranges and every multi-day range are too narrow; do not use them for a decision without saying so |
 | `... draws were excluded as numerically divergent` | some parameter sets make the simulation blow up (usually with an explicit integrator) | use `CRN` (the default); check `parameter_bounds` |
 | `rho reached its upper limit of 0.99` | errors persist for months: a systematic error | look at the mean error by month; consider another model version |
 | `the exact AR(1) likelihood treats the scored errors as independent` | with weekly or monthly scoring that likelihood ignores persistence | keep the default `likelihood: "least_squares"` |
@@ -1166,10 +1333,10 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 
 | Question | pyair2stream's answer |
 |---|---|
-| Is the method tested? | The [validation suite](../validation/REPORT.md) runs 15 checks with stated pass criteria, through the same code a user runs: identical results to the original Fortran, reproduction of the published results, recovery of known truths, coverage of intervals at several levels, and performance on three real rivers. Failures are reported, not hidden. |
+| Is the method tested? | The [validation suite](../validation/REPORT.md) runs 17 checks with stated pass criteria, through the same code a user runs: identical results to the original Fortran, reproduction of the published results, recovery of known truths, coverage of intervals at several levels, and performance on real rivers in Switzerland and British Columbia. Failures are reported, not hidden: the report marks each check PASS or FAIL, and says which criterion was missed. |
 | Is its error rate known? | Yes, as coverage at each level (section [13](#13-choosing-the-level-90-95-or-99)), on synthetic data and real rivers, and at your own site through cross-validation. |
 | Does it rest on published methods? | Each component does (table below). The combination, and three approximations, are pyair2stream's own and documented as such. |
-| Can the result be reproduced? | With `random_seed`, every run gives identical results. Each run records its settings (`calibration_metadata.json`, `_meta.json` with σ, ρ, the chain's content hash and the parameter sets used), and a FORWARD run refuses a chain from a different calibration. |
+| Can the result be reproduced? | With `random_seed`, every run gives identical results. Each run records its settings (`calibration_metadata.json`, `_meta.json` with σ, ρ, the chain's content hash and the parameter sets used), and a FORWARD run refuses a chain fitted with another model version, integrator, `Qmedia`, `Tice_cover` or `min_theta_floor`. |
 
 ### What each component rests on
 
@@ -1205,11 +1372,11 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 ### How to word a result
 
 > The model, calibrated on 2002–2009 and checked by leave-one-year-out
-> cross-validation (7 held-out years), gives a probability of 0.34 that the
+> cross-validation (8 held-out years), gives a probability of 0.33 that the
 > highest 7-day mean water temperature in 2011 exceeded 20 °C (90% range for
 > that statistic 18.8–20.8 °C), after correcting for the model's average error
-> in that statistic in the held-out years (−0.65 °C, 95% interval −1.10 to
-> −0.20 °C). Uncorrected, the probability would be 0.77. pyair2stream 0.5.0,
+> in that statistic in the held-out years (−0.65 °C, 95% interval −1.05 to
+> −0.26 °C). Uncorrected, the probability would be 0.77. pyair2stream 0.5.1,
 > commit `<sha>`, random seed 42.
 
 ### Checklist before you report
@@ -1241,13 +1408,13 @@ pyair2stream --config examples/03_compliance/check.yaml       # cross-validation
 | Year | P(7-day mean > 20 °C), corrected | uncorrected | Measured highest 7-day mean |
 |---|---|---|---|
 | 2010 | 0.57 | 0.92 | 21.0 °C (exceeded) |
-| 2011 | 0.34 | 0.77 | 19.8 °C (not exceeded) |
+| 2011 | 0.33 | 0.77 | 19.8 °C (not exceeded) |
 | 2012 | 0.14 | 0.51 | 19.6 °C (not exceeded) |
 
 The check found that the model put the yearly peak 0.65 °C too high in the
 held-out years. Corrected, the probabilities matched what happened better (Brier
 score, the mean squared difference between probability and outcome; Brier,
-1950: 0.11 against 0.29), and all three measured values lay inside the corrected 90%
+1950: 0.10 against 0.29), and all three measured values lay inside the corrected 90%
 ranges.
 
 ---
@@ -1258,6 +1425,8 @@ ranges.
 |---|---|---|
 | Reading a weekly mean, a yearly peak or a count of days off the daily band | the band's edges are not the edges of those statistics (Figure 11) | compute the statistic in each series (section [7](#7-weekly-means-yearly-peaks-days-above-a-limit)) |
 | `noise_model: "iid"` for multi-day quantities | errors that are new every day average out, so ranges are far too narrow (Figure 5) | keep `"ar1"` |
+| Quoting the coverage of the `DE-MCMC` band as evidence | on the calibration years it is close to the level almost by construction | the coverage on held-out or later years (sections [6](#6-daily-prediction-intervals), [8](#8-testing-on-years-the-model-has-not-seen-cross-validation)) |
+| Reading the sensitivity analysis as an uncertainty | it shows how the simulation responds to a parameter, not how well the data fix it | MCMC or jackknife intervals (section [11](#11-how-well-are-the-parameters-known)) |
 | Reporting an uncorrected probability for a yearly statistic | the model can be biased at the peaks (Figure 14) | check and correct (sections [8](#8-testing-on-years-the-model-has-not-seen-cross-validation), [9](#9-correcting-yearly-statistics-for-the-models-bias)) |
 | Correcting only when the check shows a bias | the result then steers the method | always correct yearly statistics |
 | Calling 8 of 10 years inside a 90% range a failure | chance alone gives 7–10 (Figure 13) | compare with the range expected by chance |

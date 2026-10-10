@@ -169,7 +169,7 @@ def read_calibration(config_file='config.yaml') -> CommonData:
     _check_choice('integrator', data.mod_num, VALID_INTEGRATORS)
     if data.mod_num in ('RK4', 'RK2', 'EUL'):
         print(f"Note: integrator {data.mod_num} is kept to reproduce the original Fortran. With a "
-              "one-day step it can be inaccurate even when stable (by up to about 1 degC for EUL); "
+              "one-day step it can be inaccurate even when stable (for EUL by 0.7-0.9 degC RMS on the Swiss rivers, more on single days); "
               "use CRN (the default) unless you need Fortran-identical results (USER_GUIDE §9.1).")
     data.runmode = config.get('run_mode', 'DE')
     if data.runmode == 'DE-CV-MCMC':
@@ -600,7 +600,7 @@ def precheck_validation(data: CommonData) -> None:
         raise FileNotFoundError(f"Missing validation data file: {filename}")
     checked = check_table(pd.read_csv(filename), filename, period='validation', version=data.version,
                           gap_tolerant=data.gap_tolerant, calendar=data.calendar,
-                              drop_29_february=data.drop_29_february,
+                          drop_29_february=data.drop_29_february,
                           min_theta_floor=data.min_theta_floor)
     checked.raise_first_error()
     checked.print_warnings()

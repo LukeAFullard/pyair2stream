@@ -13,6 +13,23 @@ calibrates on the others, and predicts the hidden year. Then it repeats this
 for each year. Each of these calibrations, with one year hidden, is called a
 **fold**.
 
+**The uncertainty methods, and why.** This example uses two:
+
+- **Cross-validation** for the predictions. Each year is predicted from a
+  calibration that never saw its water temperatures (its air temperature and
+  discharge, the model's inputs, are kept). So the error on the hidden years
+  is an honest measure of how well the model predicts a year it was not
+  fitted to.
+- **The jackknife** for the parameters. The folds share most of their years,
+  so the spread of their parameters is far too small to be an uncertainty. The
+  jackknife scales it up to account for that overlap, and gives approximate
+  90% confidence intervals for the parameters.
+
+Neither gives a prediction interval. For that, use DE-MCMC and a `FORWARD` run
+(example [02](../02_uncertainty/README.md)).
+[docs/UNCERTAINTY.md](../../docs/UNCERTAINTY.md) explains cross-validation in
+§8 and the jackknife in §11.
+
 ## Run it
 
 ```bash
@@ -198,6 +215,18 @@ the simulated water temperature (`output/sensitivity/sensitivity_*.csv`):
 - A low sensitivity does not mean a poorly fixed parameter. `a7` changes the
   simulation little per 1% of its range (3.7 days), yet the data fix it within
   ±1%, because it shifts the whole yearly cycle.
+
+## What the results mean, and what they do not
+
+- The held-out errors mean: in a year like 2002–2009, with measured air
+  temperature and discharge, expect a typical daily error of about 0.7 °C,
+  and up to 0.9 °C in an unusual year.
+- They do not show how the model does in conditions the record does not
+  contain (a much drier or warmer year), or with inputs that are themselves
+  uncertain (a climate scenario, a borrowed air-temperature record).
+- Each year is predicted from the other years, later ones included. For
+  predictions of the future, a test on later years only (example
+  [01](../01_quickstart/README.md)) is the stricter one.
 
 ## When to use it
 

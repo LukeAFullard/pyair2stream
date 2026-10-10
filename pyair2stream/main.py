@@ -280,7 +280,12 @@ def forward(data: CommonData) -> None:
     out_val_path = os.path.join(data.folder, f"3_{data.runmode}_{data.fun_obj}_{data.station}_{data.series}v_{data.time_res}.csv")
 
     val_tair_gap = np.where(data.Tair == -999.0, 1, 0)
-    val_q_gap = np.where(data.Q == -999.0, 1, 0)
+    # As for the calibration: zero-flow days that versions 4/8 (without min_theta_floor) cannot
+    # simulate are gaps too.
+    val_q_zero = np.zeros(data.n_tot, dtype=bool)
+    if not zero_flow_ok(data.version, data.min_theta_floor):
+        val_q_zero = (data.Q != -999.0) & (data.Q <= 0.0)
+    val_q_gap = np.where((data.Q == -999.0) | val_q_zero, 1, 0)
     val_segment_id = np.full(data.n_tot, -999)
     if data.gap_tolerant and data.segments:
         for idx, (start, end) in enumerate(data.segments):

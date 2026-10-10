@@ -105,6 +105,7 @@ class TestOptimization(unittest.TestCase):
         self.assertEqual(sidecar_data['noise_model_used_for_this_run'], 'iid')
         self.assertEqual(sidecar_data['mcmc_seed'], 42)
         self.assertTrue('rho' in sidecar_data)
+        self.assertIsNone(sidecar_data['rho_measured'])      # iid noise does not use rho
 
         env_iid = pd.read_csv(env_path)
 
@@ -115,6 +116,7 @@ class TestOptimization(unittest.TestCase):
         with open(sidecar_path, 'r') as f:
             sidecar_data = json.load(f)
         self.assertEqual(sidecar_data['noise_model_used_for_this_run'], 'ar1')
+        self.assertFalse(sidecar_data['rho_measured'])     # 10 measured days: too few pairs
 
         env_ar1 = pd.read_csv(env_path)
         # AR(1) will have a different width, typically wider or more structured, we just ensure it generated successfully

@@ -42,10 +42,12 @@ python validation/run_all.py --only V2 V6
 ```
 
 With `--only`, the other checks keep their reports from the earlier run.
-`REPORT.md` then names the run each report comes from. Since the DE stopping
-rule was tightened (0.5.0), V2 and V4 take about an hour each. Where jobs are
-limited in length, run the suite in parts with `--only`. V15, the longest
-check, saves each station's results in `work/v15_cache/` as it goes. If it is
+`REPORT.md` then names the run each report comes from. In the committed
+report (4 cores), the full suite took about 4 hours: V15 about an hour and a
+half, V2 about an hour, V4 about half an hour, V9 and V12 about a quarter of an
+hour each, and every other check under 10 minutes (each check's report gives
+its run time). Where jobs are limited in length, run the suite in parts with
+`--only`. V15, the longest check, saves each station's results in `work/v15_cache/` as it goes. If it is
 stopped, running it again reuses them, but only if the code of the package
 and of the suite is exactly the same; its report then says how many were
 reused.
@@ -72,7 +74,8 @@ A rerun of the full suite reproduced every other table exactly.
 
 **The quick run** (`--quick`, also run by CI) checks that every check runs. It
 uses only a few replicates or years, which is too few to judge coverage. So in
-the quick run, V4, V5 and V14 report their coverage without judging it.
+the quick run, V4 and V14 report their coverage without judging it, and V5
+leaves out its interval part (B).
 
 ## Data
 

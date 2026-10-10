@@ -93,6 +93,19 @@ def test_a_calibration_says_so_and_marks_and_counts_the_days(tmp_path):
     assert "of which zero or negative discharge (treated as gaps; set min_theta_floor to simulate them): 25" in gaps
 
 
+def test_a_validation_marks_the_days_in_q_gap_too(tmp_path):
+    val = _table(start="2004-01-01")
+    val.to_csv(tmp_path / "val.csv", index=False)
+    cfg = _config(tmp_path)
+    c = yaml.safe_load(open(cfg))
+    c["paths"]["validation_data"] = str(tmp_path / "val.csv")
+    open(cfg, "w").write(yaml.safe_dump(c))
+    result = pyair2stream.run(cfg, verbose=False)
+    sim = pd.read_csv([os.path.join(result.output_dir, f) for f in result.files if f.startswith("3_")][0])
+    assert (sim.Q_gap.iloc[DRY] == 1).all() and (sim.Twat_mod.iloc[DRY] == -999).all()
+    assert sim.Q_gap.sum() == 25
+
+
 def test_counting_functions_warn_about_days_without_a_value(capsys):
     ens = np.full((3, 10), 20.0)
     ens[:, 4:6] = np.nan

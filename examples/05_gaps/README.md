@@ -30,8 +30,8 @@ python examples/05_gaps/gap_study.py    # the test of gap-tolerant mode: about t
 
 A run checks every file before it calibrates anything. You can make the same
 check yourself first, with `pyair2stream.analyze_timeseries`. Here, three weeks
-(July 2005) and ten single days of air temperature have been removed. The
-report starts with what a run would do:
+(July 2005) and ten single days of air temperature have been removed. Near
+its top, the report says what a run would do:
 
 ```
 --- Checks a run would make (calibration file, version 8, gap_tolerant false) ---
@@ -73,7 +73,10 @@ still predicted other years to within 0.06 °C of the truth
 Every run writes the filled record for you:
 `filled_water_temperature_calibration.csv` in the output folder. It has the
 measured value where there is one and the model's value elsewhere, and a
-`source` column says which (`measured` or `model`). After a `DE-MCMC` run, or
+`source` column says which (`measured` or `model`; `none` inside a gap where
+the model did not run). In gap-tolerant mode, a `warm_up` column marks the
+first days of each stretch, where the model is still settling and its values
+are less reliable. After a `DE-MCMC` run, or
 a `FORWARD` run with intervals (as in example
 [02](../02_uncertainty/README.md)), it also has the 90% range of each day's
 value.
@@ -147,9 +150,11 @@ changes of a few hundredths of a degree.)
 
 ### After a gap, how long must the warm-up be?
 
-After a gap, gap-tolerant mode restarts the model from the measured water
-temperature of the first day. If there is none, it uses the average for that
-day of the year. How long does the model take to forget this restart? The test
+After a gap, a gap-tolerant calibration or validation run restarts the model
+from the measured water temperature of the first day. If there is none, it
+uses the average for that calendar date. (A gap-tolerant `FORWARD` run, which
+may have no water temperature, starts each stretch instead from the
+temperature at which the model's equation is at rest on its first day.) How long does the model take to forget this restart? The test
 restarted the model on every day of the record. It then followed the
 difference from a run without the restart:
 
