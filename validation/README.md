@@ -52,6 +52,10 @@ stopped, running it again reuses them, but only if the code of the package
 and of the suite is exactly the same; its report then says how many were
 reused.
 
+`v15_long_chain.py` is not part of the suite: it reruns V15's DE-MCMC for one
+station with a higher step limit (`python validation/v15_long_chain.py 08KH006
+--steps 500000`, about half an hour) and writes `reports/V15_long_chain.md`.
+
 V1 needs `gfortran` and the Fortran source (`git submodule update --init`).
 Without them, V1 is reported as not run.
 

@@ -181,7 +181,9 @@ station's calibration years give two 90% intervals for every parameter.
   sampler had not converged after 100,000 steps: split-R̂ stayed at
   1.012–2.22, above the 1.01 required. There the parameters are very poorly
   determined by the data, or distinct parameter sets fit about equally well.
-  The jackknife intervals there contain 8 of 48 published values.
+  The jackknife intervals there contain 8 of 48 published values. Run again
+  with a limit of 500,000 steps, station 08KH006 converged after 127,000
+  (below); the counts above are from V15's 100,000-step runs.
 - The published `a4` lies at or within 0.04 of its lower bound, −1, at 14 of
   the 23 stations: many of the published calibrations stopped on that bound.
 
@@ -201,13 +203,16 @@ the predictions, which part A reproduces, are what the model provides.
   fits its calibration years with RMSE 0.72 °C instead of 0.87 °C, and
   predicts 2021–2022 with 0.76 °C instead of the published 1.09 °C.
 - At station 08KH006 (Quesnel River near Quesnel), the DE-MCMC did not
-  converge within 100,000 steps (split-R̂ 1.014, just above the 1.01
-  required), so its intervals are not counted above. The 90% range of its
-  unconverged samples still excludes 7 of the 8 published values, and the
-  jackknife intervals exclude 6. For example, `a5` is 4.30, where that range
-  is 0.09 to 2.22 and the best fit 0.06. Recalibrated, the station fits its
-  calibration years with RMSE 1.05 °C instead of 1.15 °C, and predicts
-  2021–2022 with 1.08 °C instead of 1.18 °C.
+  converge within V15's 100,000 steps (split-R̂ 1.014, just above the 1.01
+  required). Run again with the same settings and a limit of 500,000 steps,
+  it converged after 127,000 (split-R̂ 1.0097; [V15 supplement](../validation/reports/V15_long_chain.md)).
+  Its 90% DE-MCMC intervals exclude 7 of the 8 published values, as at
+  08HA002, and the jackknife intervals exclude 6. For example, `a5` is 4.30,
+  where the 90% interval is 0.09 to 2.13 and the best fit 0.06. Recalibrated,
+  the station fits its calibration years with RMSE 1.05 °C instead of
+  1.15 °C, and predicts 2021–2022 with 1.08 °C instead of 1.18 °C. At every
+  other station whose sampler converged, at least 7 of the 8 published values
+  lie inside the intervals.
 
 The dataset does not record how the published calibrations were made
 (objective, parameter ranges, optimiser and its settings), so why they stopped

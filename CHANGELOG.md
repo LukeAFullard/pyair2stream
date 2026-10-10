@@ -18,6 +18,12 @@
   so. The chain's and the FORWARD run's `_meta.json` now record
   `rho_measured`, and `summary.md` marks ρ as not measured in its uncertainty
   table. A FORWARD run carries the flag over from the chain.
+- **Validation: a longer DE-MCMC run for one British Columbia station.**
+  `validation/v15_long_chain.py` reruns V15's sampler for one station with a
+  higher step limit. Station 08KH006, not converged within V15's 100,000
+  steps, converged after 127,000; 7 of its 8 published parameter values lie
+  outside the 90% intervals, as the unconverged run suggested
+  (`validation/reports/V15_long_chain.md`).
 
 ### Fixed
 - **Prediction ranges no longer go below the ice floor.** The random error
