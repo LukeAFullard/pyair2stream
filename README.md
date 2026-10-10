@@ -123,6 +123,9 @@ pyair2stream --config config.yaml
 The paths in the settings file are relative to the folder you run this from.
 From Python, `pyair2stream.run("config.yaml")` does the same and returns the
 scores, parameters and warnings ([User Guide §7.2](USER_GUIDE.md#72-from-python)).
+For several steps from one settings file (calibrate, check, predict, compare
+scenarios), `pyair2stream.Model` runs each step and passes its files on
+([User Guide §7.3](USER_GUIDE.md#73-several-steps-pyair2streammodel)).
 
 ### 4. Read the results
 

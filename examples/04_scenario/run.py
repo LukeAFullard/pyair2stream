@@ -3,8 +3,8 @@ Run example 04: the effect of abstracting 30% of the flow, with its uncertainty.
 
     python examples/04_scenario/run.py
 
-Makes the scenario's input file, runs the three steps in the README with
-`pyair2stream.run`, then computes the paired difference between the two scenarios.
+Makes the scenario's input, runs the three steps in the README with
+pyair2stream.Model, then computes the paired difference between the two scenarios.
 """
 import os
 
@@ -25,25 +25,23 @@ WARM_DAY = 18.0        # °C, illustrative threshold for counting warm days
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 OUT = os.path.join(HERE, "output")
-os.chdir(REPO)      # the paths in the settings files are relative to the repository's top folder
+os.chdir(REPO)      # the paths in the settings file are relative to the repository's top folder
 
 # The scenario's input: the measured file with less discharge. Water temperature is
 # removed: it was not measured under this scenario.
-os.makedirs(OUT, exist_ok=True)
-measured = pd.read_csv(os.path.join(REPO, "data", "switzerland", "MAH_2369_validation.csv"))
-measured.assign(Discharge=measured.Discharge * FLOW_KEPT, T_water=np.nan).to_csv(
-    os.path.join(OUT, "abstraction_input.csv"), index=False)
+validation = "data/switzerland/MAH_2369_validation.csv"
+measured = pd.read_csv(validation)
+abstraction = measured.assign(Discharge=measured.Discharge * FLOW_KEPT, T_water=np.nan)
 
-results = {step: pyair2stream.run(f"examples/04_scenario/{step}.yaml")
-           for step in ("calibrate", "baseline", "abstraction")}
+m = pyair2stream.Model("examples/04_scenario/settings.yaml")
+m.calibrate()                                                          # with uncertainty, as in example 02
+m.predict(validation, name="baseline")                                 # 1,000 simulations, measured discharge
+m.predict(abstraction, name="abstraction", paired_with="baseline")    # the same parameter sets, 70% of the flow
 
-ensemble = "Forward_Prediction_Ensemble_Mentue_c_1d.npz"
-base_file = os.path.join(results["baseline"].output_dir, ensemble)
-abst_file = os.path.join(results["abstraction"].output_dir, ensemble)
 # Abstraction minus baseline, simulation by simulation (checks both used the same parameter sets).
-diff = scenario.paired_difference_from_files(abst_file, base_file)
-base, dates = scenario.load_ensemble(base_file)
-abst, _ = scenario.load_ensemble(abst_file)
+diff = m.difference("abstraction", "baseline")
+base, dates = m.ensemble("baseline")
+abst, _ = m.ensemble("abstraction")
 summer = np.isin(dates.month, SUMMER)
 winter = np.isin(dates.month, WINTER)
 

@@ -18,9 +18,12 @@ from .pre_analysis import analyze_timeseries
 
 
 def __getattr__(name):
-    # `run` and `RunResult` load the model and the optimizers, so they are imported on first
+    # `run`, `RunResult` and `Model` load the model and the optimizers, so they are imported on first
     # use: `import pyair2stream` stays quick for the data-preparation tools above.
     if name in ("run", "RunResult"):
         from . import main, results
         return main.run if name == "run" else results.RunResult
+    if name == "Model":
+        from .workflow import Model
+        return Model
     raise AttributeError(f"module 'pyair2stream' has no attribute '{name}'")

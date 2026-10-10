@@ -1,0 +1,23 @@
+# Example 02: the model's settings, shared by every step (run.py: pyair2stream.Model).
+# Each step writes the settings it ran with to output/<step>.yaml.
+project_name: "uncertainty"
+station_name: "Mentue"
+series: "c"
+time_resolution: "1d"
+version: 8
+integrator: "CRN"
+objective_function: "NSE"
+run_mode: "DE"             # the optimizer; with uncertainty, calibrate() adds MCMC sampling (DE-MCMC)
+random_seed: 42
+
+paths:
+  input_data: "data/switzerland/MAH_2369_calibration.csv"       # 2002-2009: the calibration data
+  output_dir: "examples/02_uncertainty/output"                  # one folder per step in it
+
+parameter_bounds:
+  min: [-5, -5, -5, -1, 0,  0,  0, -1]
+  max: [15, 1.5, 5,  1, 20, 10, 1,  5]
+
+uncertainty_options:
+  noise_model: "ar1"       # the default: model errors persist from day to day (see README)
+  prediction_interval: 90  # per cent

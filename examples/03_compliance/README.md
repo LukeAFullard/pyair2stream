@@ -58,27 +58,29 @@ below:
 ```python
 import pyair2stream
 
-calibrate = pyair2stream.run("examples/03_compliance/calibrate.yaml")   # calibrate with uncertainty, as in example 02
-predict = pyair2stream.run("examples/03_compliance/predict.yaml")       # 1,000 simulations of 2010-2012
-check = pyair2stream.run("examples/03_compliance/check.yaml")           # cross-validation of 2002-2009
+m = pyair2stream.Model("examples/03_compliance/settings.yaml")     # the settings shared by every step
+m.calibrate()                                                       # calibrate with uncertainty, as in example 02
+m.predict("data/switzerland/MAH_2369_validation.csv", name="prediction")   # 1,000 simulations of 2010-2012
+m.check()                                                           # cross-validation of 2002-2009
 ```
 
-Each call returns its result; `predict.output_dir` is the folder of its files.
-From a terminal, `pyair2stream --config <settings file>` does the same.
+[`settings.yaml`](settings.yaml) holds the settings once; the Model passes the
+calibration's files to the other steps, as in example
+[02](../02_uncertainty/README.md). Each step's settings are written to
+`output/<step>.yaml`, and each call returns its result (`.output_dir` is the
+folder of its files).
 
-[`predict.yaml`](predict.yaml) sets `save_ensemble: true`. This keeps all
-1,000 simulated series
-(`output/prediction/Forward_Prediction_Ensemble_Mentue_c_1d.npz`). Each series
+The prediction keeps all 1,000 simulated series (`save_ensemble`, on by
+default; `output/prediction/Forward_Prediction_Ensemble_Mentue_c_1d.npz`). Each series
 has its own parameters and its own day-to-day model error.
 `noise_model: "ar1"` makes those errors last from day to day, as real ones do.
 With `"iid"`, the 7-day means would be far too certain
 ([V5](../../validation/REPORT.md#v5)).
 
-[`check.yaml`](check.yaml) tests the same statistics on years the model was not
-calibrated on. It hides each of 2002–2009 in turn and calibrates on the
+`check` tests the same statistics on years the model was not calibrated on. It hides each of 2002–2009 in turn and calibrates on the
 others. For each hidden year, it records where the measured statistic fell
 among 1,000 simulations (`output/check/cv_yearly_statistics.csv`). It uses the
-same 18 °C threshold as the question.
+same 18 °C threshold as the question (`cross_validation` in `settings.yaml`).
 
 The analysis in [`run.py`](run.py) is a few lines:
 
@@ -86,12 +88,11 @@ The analysis in [`run.py`](run.py) is a few lines:
 import pandas as pd
 from pyair2stream import scenario
 
-out = "examples/03_compliance/output"
-ens, dates = scenario.load_ensemble(f"{out}/prediction/Forward_Prediction_Ensemble_Mentue_c_1d.npz")
+ens, dates = m.ensemble("prediction")                           # the 1,000 series, and their dates
 stats = scenario.year_statistics(ens, dates, threshold=18)     # each year's statistics, in every simulation
 peak = stats[2010]["highest 7-day mean"]                        # one value per simulation
 
-check = pd.read_csv(f"{out}/check/cv_yearly_statistics.csv")
+check = pd.read_csv("examples/03_compliance/output/check/cv_yearly_statistics.csv")
 dev = check[check.statistic == "highest 7-day mean"].deviation  # measured minus predicted median, per hidden year
 peak_c = scenario.correct_statistic(peak, dev, seed=2010)       # corrected for the model's bias
 p_exceeded = (peak_c > 20).mean()                               # share of simulations above the limit: 0.54

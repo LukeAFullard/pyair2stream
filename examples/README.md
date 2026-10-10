@@ -7,10 +7,13 @@ Rhône and the Dischmabach. Examples 01 to 03 build on each other, so start with
 them. The others can be read in any order.
 
 Run them from the repository's top folder. Each example's `run.py` runs all of
-its steps from Python, with `pyair2stream.run` (USER_GUIDE
-[§7.2](../USER_GUIDE.md#72-from-python)), and redraws the figures its README
-shows. Each step can also be run from a terminal with
-`pyair2stream --config <settings file>`.
+its steps from Python and redraws the figures its README shows. Examples 02,
+03, 04 and 08 have one `settings.yaml` and run their steps with
+`pyair2stream.Model` (USER_GUIDE
+[§7.3](../USER_GUIDE.md#73-several-steps-pyair2streammodel)), which writes the
+settings of each step to `output/<step>.yaml`; the others call
+`pyair2stream.run` (USER_GUIDE [§7.2](../USER_GUIDE.md#72-from-python)). Each
+step can also be run from a terminal with `pyair2stream --config <settings file>`.
 
 | Example | Question | Time |
 |---|---|---|

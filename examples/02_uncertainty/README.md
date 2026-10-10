@@ -41,12 +41,25 @@ words (§4, §6 and §11).
 
 ## Run it
 
-Run the four steps below in Python, from the repository's top folder, after
-`import pyair2stream`. Each returns its result: the scores, the warnings and
-the output folder (`.output_dir`). From a terminal,
-`pyair2stream --config <settings file>` does the same.
-[`run.py`](run.py) runs all four, prints the checks below and draws the
-figures (about four minutes):
+The four steps below are four calls on one `pyair2stream.Model`, made from
+[`settings.yaml`](settings.yaml): the station, model version, seed, parameter
+bounds, error model and level, and the calibration data. The Model passes each
+step's files on to the next (the calibration's parameters, `Qmedia` and MCMC
+sample; the cross-validation's margins), so no path is typed twice. Run them in
+Python from the repository's top folder:
+
+```python
+import pyair2stream
+
+m = pyair2stream.Model("examples/02_uncertainty/settings.yaml")
+```
+
+Each step is an ordinary run in its own folder of `output/`, and returns its
+result (scores, warnings, `.output_dir`). Each step's settings are written
+first, to `output/<step>.yaml`, and run from that file: it is the record of the
+step, and `pyair2stream --config examples/02_uncertainty/output/check.yaml`
+runs that step again from a terminal. [`run.py`](run.py) runs all four, prints
+the checks below and draws the figures (about four minutes):
 
 ```bash
 python examples/02_uncertainty/run.py
@@ -55,12 +68,12 @@ python examples/02_uncertainty/run.py
 ## Step 1: calibrate with uncertainty
 
 ```python
-calibrate = pyair2stream.run("examples/02_uncertainty/calibrate.yaml")
+calibration = m.calibrate()
 ```
 
-This takes about two minutes. [`calibrate.yaml`](calibrate.yaml) is example
-01's settings file with `run_mode: "DE-MCMC"` and an `uncertainty_options`
-block. After the calibration, the sampler runs in blocks of 1,000 steps until
+This takes about two minutes. It runs `DE-MCMC` (`output/calibration.yaml`):
+example 01's calibration, then MCMC sampling, with the `uncertainty_options` of
+`settings.yaml`. After the calibration, the sampler runs in blocks of 1,000 steps until
 its results are stable. Then it reports:
 
 ```
@@ -91,10 +104,10 @@ Both are also recorded in `output/calibration/MCMC_chain_Mentue_c_1d_meta.json`
 ## Step 2: predict other years
 
 ```python
-predict = pyair2stream.run("examples/02_uncertainty/predict.yaml")
+prediction = m.predict("data/switzerland/MAH_2369_validation.csv", name="prediction")
 ```
 
-[`predict.yaml`](predict.yaml) is a `FORWARD` run on the 2010–2012 data. It:
+This is a `FORWARD` run on the 2010–2012 data (`output/prediction.yaml`). It:
 
 - takes the fitted parameters and the discharge scaling (`Qmedia`) from step 1's
   `calibration_metadata.json`. It stops if the chain was fitted with another
@@ -127,14 +140,14 @@ inside. Spring 2011 (step 4) has some.*
 ## Step 3: check the interval on held-out years, and measure the margins
 
 ```python
-check = pyair2stream.run("examples/02_uncertainty/check.yaml")
+m.check()
 ```
 
 Steps 1 and 2 found the interval slightly narrow in new years. A
 cross-validation measures this before any new year is seen, and measures by how
-much to widen it. [`check.yaml`](check.yaml) is a `DE` run with
-`cross_validation: enabled: true` on the same 2002–2009 data, with the same
-model version, `Qmedia`, error model and level as step 1. It hides each year in
+much to widen it. `check` is a `DE` run with `cross_validation: enabled: true`
+on the same 2002–2009 data (`output/check.yaml`), with the same model version,
+`Qmedia` (taken from step 1), error model and level as step 1. It hides each year in
 turn, predicts it from the other years, and records how far each measurement
 fell outside the hidden year's interval. This takes about a minute and a half.
 
@@ -163,13 +176,13 @@ the margins are small, because the interval already almost held.
 ## Step 4: predict again, with the margin
 
 ```python
-predict_conformal = pyair2stream.run("examples/02_uncertainty/predict_conformal.yaml")
+m.predict("data/switzerland/MAH_2369_validation.csv", name="prediction_conformal", conformal=True)
 ```
 
-[`predict_conformal.yaml`](predict_conformal.yaml) is step 2's run with one
-more line, `forward_options.conformal_margins`, pointing at step 3's file (and
-`save_ensemble: true`, for the means below). It draws the same 1,000 series as
-step 2. The interval file now also has the widened interval
+This is step 2's run with one more setting, `forward_options.conformal_margins`,
+pointing at step 3's file (`output/prediction_conformal.yaml`). It draws the
+same 1,000 series as step 2, and keeps them (`save_ensemble`, on by default),
+for the means below. The interval file now also has the widened interval
 (`Twat_mod_lower_conformal`, `Twat_mod_upper_conformal`), never below the ice
 floor, and the run reports both:
 
@@ -188,11 +201,9 @@ range of the saved series' moving means, as you would for your own question:
 ```python
 from pyair2stream import scenario
 
-ens, dates = scenario.load_ensemble("examples/02_uncertainty/output/prediction_conformal/"
-                                    "Forward_Prediction_Ensemble_Mentue_c_1d.npz")
+ens, dates = m.ensemble("prediction_conformal")                           # the 1,000 series, and their dates
 means = pd.DataFrame(ens.T).rolling(30).mean().to_numpy().T              # 30-day moving means, in each series
-margin = scenario.conformal_margin("examples/02_uncertainty/output/check/cv_conformal_margins.csv",
-                                   90, window_days=30)
+margin = scenario.conformal_margin(m.margins(), 90, window_days=30)
 lower, upper = scenario.conformal_range(means[:, 29:], 90, margin, floor=0.0)   # floor: Tice_cover
 ```
 

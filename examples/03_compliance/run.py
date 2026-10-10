@@ -3,7 +3,7 @@ Run example 03: the probability that a temperature limit was exceeded.
 
     python examples/03_compliance/run.py
 
-Steps 1-3 are the three `pyair2stream.run` calls in the README. Step 4, the
+Steps 1-3 are the three pyair2stream.Model calls in the README. Step 4, the
 analysis, is below: it uses every simulated series, not the daily interval.
 """
 import os
@@ -18,24 +18,26 @@ import pyair2stream
 from pyair2stream import plots, scenario
 
 LIMIT_7DAY = 20.0      # °C, illustrative limit on the 7-day mean water temperature
-WARM_DAY = 18.0        # °C, illustrative threshold for counting warm days (also in check.yaml)
+WARM_DAY = 18.0        # °C, illustrative threshold for counting warm days (also in settings.yaml)
 LEVEL = 90.0           # % width of the reported ranges, e.g. 95 (a level other than 50, 80, 90 or 95 also
-                       # needs uncertainty_options.prediction_interval in check.yaml)
+                       # needs uncertainty_options.prediction_interval in settings.yaml)
 YEARS = (2010, 2011, 2012)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 OUT = os.path.join(HERE, "output")
-os.chdir(REPO)      # the paths in the settings files are relative to the repository's top folder
+os.chdir(REPO)      # the paths in the settings file are relative to the repository's top folder
 
 # Steps 1-3: calibrate with uncertainty, simulate 2010-2012 1000 times, and check the
 # yearly statistics by cross-validation of the calibration years.
-results = {step: pyair2stream.run(f"examples/03_compliance/{step}.yaml") for step in ("calibrate", "predict", "check")}
+m = pyair2stream.Model("examples/03_compliance/settings.yaml")
+m.calibrate()
+m.predict("data/switzerland/MAH_2369_validation.csv", name="prediction")
+check_dir = m.check().output_dir
 
 # Step 4. `ens` holds 1000 simulated series (rows) of daily water temperature, each
 # with its own parameters and its own model error; `dates` labels the columns.
-prediction, check_dir = results["predict"].output_dir, results["check"].output_dir
-ens, dates = scenario.load_ensemble(os.path.join(prediction, "Forward_Prediction_Ensemble_Mentue_c_1d.npz"))
+ens, dates = m.ensemble("prediction")
 stats = scenario.year_statistics(ens, dates, threshold=WARM_DAY)    # each year's statistics, per simulation
 
 # The cross-validation check: how far the measured statistic was from the predicted median
