@@ -1,0 +1,3 @@
+part,periods,held-out RMSE / sigma,90% coverage this ratio alone gives,size of each period's mean error / what the error model allows (RMS of z),periods with |z| > 2
+"A. later years (2021-2022), converged stations",17,1.14,85.1%,2.13,7 of 17 (error model: about 5%)
+B. held-out years,160,1.11,86.1%,1.97,43 of 160 (error model: about 5%)

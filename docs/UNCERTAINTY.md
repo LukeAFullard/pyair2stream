@@ -63,7 +63,7 @@ trusted at your site comes from the second.
 | What range for a weekly or monthly mean, or a run of warm days? | the statistic computed in each simulated series | `save_ensemble: true`, then `scenario.aggregate`, `scenario.exceedance` | `MCMC_ensemble_*.npz`; `Forward_Prediction_Ensemble_*.npz` | 90% ranges for 7-day means: 87–93% (V5) | [7](#7-weekly-means-yearly-peaks-days-above-a-limit) |
 | How likely is it that a yearly limit was exceeded (highest daily mean, highest 7-day mean, days above a threshold)? | share of simulated series above the limit, **corrected** by cross-validation | `scenario.year_statistics`, then `scenario.correct_statistic` | the `.npz` above, and `cv_yearly_statistics.csv` | corrected 90% ranges: 85–94% of held-out years; uncorrected 73–92% (V11) | [7](#7-weekly-means-yearly-peaks-days-above-a-limit), [9](#9-correcting-yearly-statistics-for-the-models-bias) |
 | What difference would a change in flow or climate make? | paired difference of two scenario runs | two `FORWARD` runs, the second with `reuse_sample_indices_from`; `scenario.paired_difference_from_files` | the two `Forward_Prediction_Ensemble_*.npz` | equal to the exact effect (V8) | [10](#10-comparing-two-scenarios) |
-| My site's bands held too rarely. Can they be widened? | conformal margin, from the misses of held-out years | cross-validation, then `FORWARD` with `forward_options.conformal_margins`; `scenario.conformal_range` | `cv_conformal_margins.csv`; columns `*_conformal` of `Forward_Prediction_Envelopes_*.csv` | V19_TABLE | [6](#widening-a-band-that-held-too-rarely-optional) |
+| My site's bands held too rarely. Can they be widened? | conformal margin, from the misses of held-out years | cross-validation, then `FORWARD` with `forward_options.conformal_margins`; `scenario.conformal_range` | `cv_conformal_margins.csv`; columns `*_conformal` of `Forward_Prediction_Envelopes_*.csv` | 90% bands, British Columbia, later years: 86.9% of days and 84.8% of 30-day means without, 90.7% and 92.1% with; Swiss rivers 87.8% and 89.9% without, 88.9% and 89.8% with (V18, V19) | [6](#widening-a-band-that-held-too-rarely-optional) |
 | Did the ranges hold at my site? | cross-validation check | `cross_validation: enabled: true`, `run_mode: "DE"` | `cv_interval_coverage.csv`, `cv_yearly_statistics_summary.csv` | this is the test | [8](#8-testing-on-years-the-model-has-not-seen-cross-validation) |
 | How precisely do the data fix the model's parameters? | MCMC parameter intervals; jackknife intervals | `DE-MCMC`; cross-validation | `parameter_significance_*.csv`; rows `jackknife_*` of `cv_results.csv` | 90% intervals contained the true values 92–97% (MCMC) and 81–95% (jackknife) of the time (V4) | [11](#11-how-well-are-the-parameters-known) |
 | Is the model too warm or too cool in some season? | mean error by month and season | every run with measurements; cross-validation | `bias_by_month_*.csv`; `cv_bias_by_month.csv` | | [12](#12-mean-error-by-month-and-season) |
@@ -696,7 +696,20 @@ test of the margin at your site. Quote it with the result.
 **What the validation shows** ([V19](../validation/REPORT.md#v19); 90% bands,
 share inside without and with the margin):
 
-V19_UNC_TABLE
+| 90% bands | days | 7-day means | 30-day means |
+|---|---|---|---|
+| British Columbia, later years 2021–2022 (17 rivers) | 86.9% → 90.7% | 87.0% → 90.7% | 84.8% → 92.1% |
+| British Columbia, 160 held-out years (23 rivers) | 86.3% → 89.5% | 86.2% → 89.3% | 82.3% → 88.8% |
+| Swiss rivers, later validation years | 87.8% → 88.9% | 91.4% → 89.5% | 89.9% → 89.8% |
+| Swiss rivers, 33 held-out years | 88.8% → 89.8% | 92.4% → 89.6% | 90.1% → 89.6% |
+
+On the British Columbia rivers the typical margin for days was 0.21 °C, and the
+90% band became 0.35 °C wider (3.13 against 2.78 °C). In summer it held on
+88.8% of days (83.4% without), and on the days of the 2021 heat dome on 86.0%
+(81.6%). On the Swiss rivers, where the bands already held, the margins were
+small (0.07 °C for days, slightly negative for 7-day means) and the bands kept
+holding. Averaged over rivers the widened bands hold; single rivers still vary
+(77–96% of later-year days for 90% bands in British Columbia).
 
 **Limits.**
 
@@ -1350,8 +1363,8 @@ range you quote beside it.
 | days, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.5% | 98.0–98.2% |
 | 7-day means, held-out years (V11) | 53–59% | 84–87% | 93–94% | 96% | 98.5–99.1% |
 | days, later validation years (V5) | 42–52% | 75–80% | 85–90% | 91–95% | 95–99.5% |
-| days, British Columbia, later years 2021–2022 (V18) | V18_ROW |
-| the same, with conformal margins (V19) | V19_ROW |
+| days, British Columbia, later years 2021–2022 (V18) | 48.7% | 76.7% | 86.9% | 92.0% | 97.0% |
+| the same, with conformal margins (V19) | 48.3% | 80.3% | 90.7% | 95.6% | 98.9% |
 | yearly statistics, corrected (V11) | 50–69% | 77–85% | 85–94% | 92–100% | 100% |
 
 \* Below the level only because about 3% of V4's synthetic values are below
@@ -1370,7 +1383,7 @@ one).*
   statistics.
 - **95%** holds for days and 7-day means over many years, and for corrected
   yearly statistics. In years unlike the calibration years it can be somewhat
-  narrow (91–95% in V5; V18_95 on the British Columbia rivers, V18). Check it
+  narrow (91–95% in V5; 92.0% on the British Columbia rivers, V18). Check it
   at your site (`cv_interval_coverage.csv`); if it held too rarely, widen it
   (section [6](#widening-a-band-that-held-too-rarely-optional)).
 - **99%** daily intervals missed about twice as many days as stated (98.0–98.2%

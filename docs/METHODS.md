@@ -1191,8 +1191,21 @@ yearly value would need at least 9 held-out years.
 *What the validation shows* (V18, V19). On the 23 British Columbia rivers, which
 played no part in developing the error model, 90% intervals without margins
 held on 86.9% of days, 87.0% of 7-day means and 84.8% of 30-day means in
-2021–2022 (V18). With the margins they held on V19_BC_A (V19). In the held-out years: V19_BC_B.
-On the 3 Swiss rivers, where intervals already held, the margins gave V19_CH.
+2021–2022 (V18). With the margins (median 0.21 °C for days) they held on
+90.7%, 90.7% and 92.1%, and 95% intervals on 95.6% of days (against 92.0%), at
+a cost of 0.35 °C of width (3.13 against 2.78 °C); in summer 88.8% (83.4%
+without), and on the days of the 2021 heat dome 86.0% (81.6%). In the 160
+held-out years, each with a margin from the river's other years, 90% intervals
+held on 89.5% of days, 89.3% of 7-day means and 88.8% of 30-day means (86.3%,
+86.2% and 82.3% without). On the 3 Swiss rivers, where the intervals already
+held, the margins were small (median 0.07 °C for days, −0.03 °C for 7-day
+means) and kept them holding: in the later years 88.9% of days, 89.5% of 7-day
+means and 89.8% of 30-day means (87.8%, 91.4% and 89.9% without); in the
+held-out years 89.8%, 89.6% and 89.6%. Pooled coverage is right; single rivers
+still vary. With the margins, 90% intervals held on 77–96% of the later-year
+days of the converged British Columbia rivers. 99% intervals with the margins
+held on 98.9% of later-year days in British Columbia but 97.0% in Switzerland:
+a 99% margin rests on the few largest misses, and is uncertain.
 
 **Comparing two scenarios** (for example observed versus naturalised flow): run
 FORWARD once per scenario from the same chain with `save_ensemble: true`, and
@@ -1368,7 +1381,7 @@ by an independent group for 23 rivers in British Columbia, reproduced day by day
 (V15); predictions from short records (V16); a comparison with regressions on
 air temperature (V17); prediction intervals on the British Columbia rivers,
 which played no part in developing the error model (V18); and the conformal
-margins on all 26 rivers (V19). V19_FAILLIST do not pass all their criteria; the report says
+margins on all 26 rivers (V19). V4, V5, V9, V10, V14 and V18 do not pass all their criteria; the report says
 where and why. V4 fails only because about 3% of its synthetic values are below
 0 °C, which no interval can contain since intervals are kept at or above
 `Tice_cover`; real water does not go below freezing, and V5, on real data, shows

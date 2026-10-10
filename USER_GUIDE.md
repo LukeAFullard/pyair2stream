@@ -1036,8 +1036,9 @@ cross-validation shows that your site's bands held less often than stated
 (`cv_interval_coverage.csv`, §13), they can be widened by how far the hidden
 years' measurements fell outside them. On 23 rivers in British Columbia, 90%
 bands held on only about 87% of days and 85% of 30-day means in later years
-([V18](validation/REPORT.md#v18)); with this margin they held on V19_BC_A_SHORT
-([V19](validation/REPORT.md#v19)). The method is split conformal prediction
+([V18](validation/REPORT.md#v18)); with this margin they held on 90.7% of days and 92.1% of 30-day means
+([V19](validation/REPORT.md#v19)). On the Swiss rivers, where the bands already
+held, the margins were small (median 0.07 °C) and changed little. The method is split conformal prediction
 ([docs/METHODS.md §13](docs/METHODS.md#13-forward-runs-and-scenario-comparisons)).
 
 1. Run a cross-validation of the calibration years (§13) with the same

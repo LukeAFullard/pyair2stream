@@ -19,8 +19,16 @@
   7-day and 30-day means. Off unless set: results without it are unchanged.
 - **Validation V18: prediction intervals on 23 independent rivers.** On the
   British Columbia rivers, which played no part in developing the error model,
-  V18_CHANGELOG
-- **Validation V19: conformal margins on 26 rivers.** V19_CHANGELOG
+  90% intervals held on 86.9% of days, 87.0% of 7-day means and 84.8% of
+  30-day means in 2021–2022, and on 86.3%, 86.2% and 82.3% in 160 held-out
+  years: too narrow, because the errors of new years were larger than those of
+  the calibration years. V18 does not pass. The default weekly ρ did better over
+  30 days than ρ from consecutive days (84.8% against 81.9%).
+- **Validation V19: conformal margins on 26 rivers.** With the margins, 90%
+  intervals on the British Columbia rivers held on 90.7% of days, 90.7% of
+  7-day means and 92.1% of 30-day means in 2021–2022, and on 89.5%, 89.3% and
+  88.8% in held-out years. On the 3 Swiss rivers, where they already held, the
+  margins were small and the intervals kept holding (88.9–89.8%). V19 passes.
 
 ## [0.5.1] - 2026-10-09
 
