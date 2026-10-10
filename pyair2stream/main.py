@@ -29,7 +29,7 @@ from .model import (call_model, aggregation, statis, funcobj, detect_segments, w
 JACKKNIFE_NOTE = (
     "The rows jackknife_{level}_lower/upper are approximate {level}% intervals for the parameters "
     "(uncertainty_options.parameter_interval; in validation, 90% intervals contained the true values "
-    "83-95% of the time; validation/REPORT.md, V4). The 'std' row is only the spread between folds: "
+    "81-95% of the time; validation/REPORT.md, V4). The 'std' row is only the spread between folds: "
     "it is far too small to use as an uncertainty."
 )
 

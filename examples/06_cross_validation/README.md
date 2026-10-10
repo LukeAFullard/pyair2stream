@@ -107,16 +107,16 @@ the best-fit parameters move when the data change. For version 8:
 
 | Year held out | a1 | a2 | a3 | a4 | a5 | a6 | a7 | a8 |
 |---|---|---|---|---|---|---|---|---|
-| 2002 | 0.912 | 0.634 | 0.750 | 0.107 | 2.288 | 1.545 | 0.601 | 0.241 |
-| 2003 | 0.925 | 0.679 | 0.797 | 0.094 | 2.703 | 1.772 | 0.602 | 0.283 |
-| 2004 | 0.925 | 0.651 | 0.769 | 0.069 | 2.475 | 1.645 | 0.601 | 0.260 |
-| 2005 | 0.888 | 0.681 | 0.800 | 0.061 | 2.686 | 1.748 | 0.601 | 0.278 |
-| 2006 | 0.850 | 0.669 | 0.784 | 0.047 | 2.783 | 1.784 | 0.595 | 0.290 |
-| 2007 | 0.874 | 0.639 | 0.757 | 0.071 | 2.767 | 1.992 | 0.603 | 0.282 |
-| 2008 | 0.877 | 0.629 | 0.741 | 0.078 | 2.340 | 1.550 | 0.601 | 0.244 |
-| 2009 | 0.849 | 0.659 | 0.774 | −0.035 | 2.630 | 1.710 | 0.602 | 0.272 |
-| **mean** | 0.887 | 0.655 | 0.772 | 0.061 | 2.584 | 1.718 | 0.601 | 0.269 |
-| **90% interval** | 0.744–1.031 | 0.561–0.750 | 0.671–0.872 | −0.141–0.264 | 1.682–3.486 | 1.040–2.397 | 0.590–0.612 | 0.182–0.356 |
+| 2002 | 0.912 | 0.635 | 0.750 | 0.107 | 2.288 | 1.545 | 0.601 | 0.241 |
+| 2003 | 0.925 | 0.677 | 0.795 | 0.096 | 2.689 | 1.764 | 0.602 | 0.282 |
+| 2004 | 0.926 | 0.659 | 0.778 | 0.062 | 2.562 | 1.701 | 0.601 | 0.268 |
+| 2005 | 0.888 | 0.681 | 0.800 | 0.061 | 2.685 | 1.747 | 0.601 | 0.278 |
+| 2006 | 0.849 | 0.669 | 0.783 | 0.048 | 2.781 | 1.782 | 0.595 | 0.289 |
+| 2007 | 0.873 | 0.639 | 0.756 | 0.070 | 2.766 | 1.991 | 0.603 | 0.282 |
+| 2008 | 0.878 | 0.629 | 0.742 | 0.078 | 2.340 | 1.550 | 0.601 | 0.244 |
+| 2009 | 0.848 | 0.660 | 0.775 | −0.036 | 2.630 | 1.710 | 0.602 | 0.272 |
+| **mean** | 0.887 | 0.656 | 0.772 | 0.061 | 2.593 | 1.724 | 0.601 | 0.270 |
+| **90% interval** | 0.742–1.033 | 0.564–0.749 | 0.674–0.871 | −0.144–0.265 | 1.720–3.465 | 1.061–2.387 | 0.590–0.612 | 0.185–0.354 |
 
 ![Parameters fitted without each year, and their 90% intervals](figures/parameters_by_fold.png)
 
@@ -136,7 +136,7 @@ the best-fit parameters move when the data change. For version 8:
     stays between 0.845 and 0.854. Its 90% interval is ±2%, against ±13–14% for
     `a2` and `a3` themselves.
   - `a5/a8` is the temperature the discharge terms pull the water towards. It
-    stays between 9.5 and 9.8 °C. Its interval is ±5%, against ±32–35% for
+    stays between 9.5 and 9.8 °C. Its interval is ±5%, against ±31–34% for
     `a5` and `a8`.
 
   The data fix these combinations well. That is why the predictions change so
@@ -158,9 +158,9 @@ years. They are the bands in the figure.
 Keep in mind:
 
 - **They are approximate.** In a test with known parameters, these intervals
-  contained the true values 83–95% of the time, for every model version
+  contained the true values 81–95% of the time, for every model version
   ([validation V4](../../validation/REPORT.md#v4)). The MCMC parameter ranges
-  of example 02 did as well or better in that test (97% for version 5, 93% for
+  of example 02 did as well or better in that test (97% for version 5, 92% for
   version 8).
 - **They describe years like those in the record.** Conditions the record does
   not contain, such as much lower summer flows, can need different values.
