@@ -107,7 +107,9 @@ The checks:
   validation score does not test the model on data it was not fitted to.
 - Dates must be real (Gregorian) dates. With `calendar: "noleap"` (365-day
   climate-model years) the dates are real dates without 29 February, checked
-  like standard dates. A 360-day calendar is refused: its 30 February cannot be
+  like standard dates. A row dated 29 February is an error, unless
+  `drop_29_february: true`: the rows are then removed, with a warning that
+  counts them and the water-temperature measurements they held. A 360-day calendar is refused: its 30 February cannot be
   held by the dates used in the outputs, plots and cross-validation, and
   relabelling its rows would shift the months against the seasons by about 5
   days a year. Such files are converted to the standard calendar first
@@ -641,7 +643,10 @@ The steps:
    For each, the model is run and random error is added to every day: normally
    distributed with standard deviation equal to that parameter set's daily
    root-mean-square residual (`iid`), or an AR(1) series with the same standard
-   deviation and ρ (`ar1`). The `prediction_interval` (default 90%; any level
+   deviation and ρ (`ar1`). Like the simulation itself, each simulated series
+   is kept at or above `Tice_cover` (water is not colder than the ice floor),
+   so in winter the lower edge of the band does not fall below it. The
+   `prediction_interval` (default 90%; any level
    above 0 and below 100) is the band
    between the matching lower and upper percentiles of these simulations on each
    day. The program then reports the **coverage**: the share of observed days
@@ -695,6 +700,23 @@ validation years of V5, whose errors were larger than in calibration, daily
 intervals were narrower than stated, more so at high levels (90%: 85–89%; 95%:
 91–95%; 99%: 95–99.5%). 7-day means held at every level (V11: 96–97% at 95%,
 98.6–99.2% at 99%).
+
+**An alternative tested: an error size that changes with the season.** The
+error size σ is the same all year. A size measured for each calendar month
+(the root-mean-square residual of the month's days, interpolated smoothly
+between months, with the same overall size) was tested by leave-one-year-out
+cross-validation of the three Swiss rivers (versions 5 and 8, 96 held-out
+years), against the constant size, on the same calibrations. The model's
+errors varied only mildly over the year (monthly sizes 0.7–1.5 times the
+yearly one, in no common pattern; on the Mentue smaller in summer). With
+version 8 the seasonal size made the 90% intervals hold less often on the
+hottest 10% of days (87.6% against 91.1%; by air temperature 87.8% against
+91.0%) and for the highest daily mean of each year (72% of years against 80%),
+with the same interval score overall (2.80 °C both; lower is better: it
+rewards narrow intervals that hold). With version 5 it improved the interval
+score by 3–5% but not the coverage on the hottest days (84% against 85%):
+version 5 underestimates the peaks, a bias that a different error size cannot
+remove. The constant size was therefore kept.
 
 **Where the chain is centred.** With the default least-squares likelihood the
 chain is centred on the DE best fit: in V5 the centre of the band stayed within
@@ -795,7 +817,7 @@ where an AR(1) with ρ₁ implies g₇(ρ₁) = 0.25–0.51. So ρ₇ = 0.86–0
 | Use | How |
 |---|---|
 | Least-squares likelihood (default) | n_eff = n / F, from the spacing of the scored days (item 2); about n(1 − ρ)/(1 + ρ) for complete daily data, and the block formula of item 2 for weekly or monthly scoring. This sets the width of the posterior, and so of the parameter intervals. |
-| Prediction noise (DE-MCMC band, FORWARD runs) | each simulated series gets eₜ = ρ eₜ₋₁ + σ √(1 − ρ²) zₜ, zₜ standard normal, started from its stationary distribution in each segment |
+| Prediction noise (DE-MCMC band, FORWARD runs) | each simulated series gets eₜ = ρ eₜ₋₁ + σ √(1 − ρ²) zₜ, zₜ standard normal, started from its stationary distribution in each segment, and is kept at or above `Tice_cover` |
 | FORWARD runs | ρ is taken from the chain's `_meta.json` (or `uncertainty_options.ar1_rho`), not from the data being predicted |
 | Cross-validation check (§11) | each fold's own σ and ρ |
 | Exact AR(1) likelihood | always ρ₁, because whitening (eₜ − ρ eₜ₋₁) is a day-scale operation |

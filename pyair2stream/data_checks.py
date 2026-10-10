@@ -72,9 +72,10 @@ class CheckedTable:
             print(f"Note: {message}")
 
 
-def _line(i: int) -> int:
-    """Line of the CSV file that holds table row i (line 1 is the header)."""
-    return int(i) + 2
+def _line(i: int, rows=None) -> int:
+    """Line of the CSV file that holds table row i (line 1 is the header). `rows`: the file row of
+    each table row, when rows were removed (drop_29_february)."""
+    return int(i if rows is None else rows[int(i)]) + 2
 
 
 def _column_hint(columns, name: str) -> str:
@@ -85,7 +86,7 @@ def _column_hint(columns, name: str) -> str:
     return ""
 
 
-def _as_numbers(df: pd.DataFrame, col: str, source: str, problems: List[Problem]) -> pd.Series:
+def _as_numbers(df: pd.DataFrame, col: str, source: str, problems: List[Problem], rows=None) -> pd.Series:
     """The column as floats with missing values as NaN; text that is not a number is an error."""
     raw = df[col]
     values = pd.to_numeric(raw, errors='coerce')
@@ -96,18 +97,18 @@ def _as_numbers(df: pd.DataFrame, col: str, source: str, problems: List[Problem]
         hint = " Use a point, not a comma, as the decimal separator." if re.fullmatch(r"-?\d+,\d+", bad) else ""
         problems.append(Problem('error',
             f"Column {col} in {source} has {int(text.sum())} value(s) that are not numbers "
-            f"(first: {bad!r} on line {_line(i)}). Leave a missing value blank or write -999.{hint}"))
+            f"(first: {bad!r} on line {_line(i, rows)}). Leave a missing value blank or write -999.{hint}"))
     return values.astype(np.float64).where(values != MISSING_CODE)
 
 
-def _first(mask: pd.Series, dates: pd.Series) -> str:
+def _first(mask: pd.Series, dates: pd.Series, rows=None) -> str:
     i = int(np.argmax(mask.to_numpy()))
-    return f"{dates.iloc[i].date()}, line {_line(i)}"
+    return f"{dates.iloc[i].date()}, line {_line(i, rows)}"
 
 
 def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', version: int = 8,
                 gap_tolerant: bool = False, calendar: str = 'standard',
-                min_theta_floor: Optional[float] = None) -> CheckedTable:
+                min_theta_floor: Optional[float] = None, drop_29_february: bool = False) -> CheckedTable:
     """
     Check a data table as a run would, and collect every problem.
 
@@ -116,7 +117,7 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
     df : DataFrame with the columns Date, T_air, T_water and (versions 4, 7, 8) Discharge.
     source : the file name (or a description) used in the messages.
     period : 'calibration', 'validation' or 'scenario' (the input of a FORWARD run).
-    version, gap_tolerant, calendar, min_theta_floor : as in the configuration.
+    version, gap_tolerant, calendar, min_theta_floor, drop_29_february : as in the configuration.
 
     Returns
     -------
@@ -153,17 +154,30 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
         return CheckedTable(df, None, problems)       # nothing more can be checked
 
     # --- Dates -------------------------------------------------------------------------
+    rows = None
+    if calendar == 'noleap' and drop_29_february:
+        # Removed before any other check; messages still name the lines of the file.
+        parsed = pd.to_datetime(df['Date'], errors='coerce')
+        leap = ((parsed.dt.month == 2) & (parsed.dt.day == 29)).to_numpy()
+        if leap.any():
+            water = pd.to_numeric(df.loc[leap, 'T_water'], errors='coerce')
+            measured = int((water.notna() & (water != MISSING_CODE)).sum())
+            problems.append(Problem('warning', f"Removed {int(leap.sum())} row(s) dated 29 February from {source} "
+                                               f"(drop_29_february), with {measured} water-temperature "
+                                               f"measurement(s): the noleap calendar has no 29 February."))
+            rows = np.flatnonzero(~leap)
+            df = df[~leap].reset_index(drop=True)
     raw_dates = df['Date']
     dates = pd.to_datetime(raw_dates, errors='coerce')
     blank = raw_dates.isna() | (raw_dates.astype(str).str.strip() == "")
     unreadable = dates.isna() & ~blank
     if blank.any():
         i = int(np.argmax(blank.to_numpy()))
-        problems.append(Problem('error', f"Date is blank on line {_line(i)} of {source} "
+        problems.append(Problem('error', f"Date is blank on line {_line(i, rows)} of {source} "
                                          f"({int(blank.sum())} blank date(s)). Every row needs a date."))
     if unreadable.any():
         i = int(np.argmax(unreadable.to_numpy()))
-        problems.append(Problem('error', f"Date {str(raw_dates.iloc[i]).strip()!r} on line {_line(i)} of {source} "
+        problems.append(Problem('error', f"Date {str(raw_dates.iloc[i]).strip()!r} on line {_line(i, rows)} of {source} "
                                          f"cannot be read as a date ({int(unreadable.sum())} such date(s)). "
                                          "Write dates as YYYY-MM-DD, in the same format on every row."))
     if blank.any() or unreadable.any():
@@ -174,12 +188,13 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
         backwards = dates.diff() < pd.Timedelta(0)
         if calendar == 'noleap' and leap_days.any():
             i = int(np.argmax(leap_days.to_numpy()))
-            problems.append(Problem('error', f"{dates.iloc[i].date()} on line {_line(i)} of {source} is 29 February, "
-                                             "which the noleap calendar does not have. Remove the 29 February rows, "
-                                             "or use calendar: 'standard'."))
+            problems.append(Problem('error', f"{dates.iloc[i].date()} on line {_line(i, rows)} of {source} is 29 February, "
+                                             "which the noleap calendar does not have. Remove the 29 February rows "
+                                             "(or set drop_29_february: true to have them removed), or use "
+                                             "calendar: 'standard'."))
         elif dates.duplicated().any():
             d = dates[duplicated].iloc[0]
-            lines = [_line(i) for i in np.flatnonzero((dates == d).to_numpy())]
+            lines = [_line(i, rows) for i in np.flatnonzero((dates == d).to_numpy())]
             problems.append(Problem('error', f"The time series in {source} must be continuous at a daily time scale "
                                              f"with each date once: {d.date()} appears on lines "
                                              f"{', '.join(map(str, lines))} ({int(dates.duplicated().sum())} repeated "
@@ -187,8 +202,8 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
         elif backwards.any():
             i = int(np.argmax(backwards.to_numpy()))
             problems.append(Problem('error', f"The time series in {source} must be continuous at a daily time scale, "
-                                             f"in date order: {dates.iloc[i].date()} on line {_line(i)} comes after "
-                                             f"{dates.iloc[i - 1].date()} on line {_line(i - 1)}. Sort the rows by date."))
+                                             f"in date order: {dates.iloc[i].date()} on line {_line(i, rows)} comes after "
+                                             f"{dates.iloc[i - 1].date()} on line {_line(i - 1, rows)}. Sort the rows by date."))
         elif len(dates):
             expected = pd.date_range(dates.iloc[0], dates.iloc[-1], freq='D')
             if calendar == 'noleap':
@@ -198,7 +213,7 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                 after = int(np.searchsorted(dates.to_numpy(), missing[0].to_datetime64())) - 1
                 problems.append(Problem('error', f"The time series in {source} must be continuous at a daily time scale "
                                                  f"with no missing dates: {len(missing)} date(s) have no row (first: "
-                                                 f"{missing[0].date()}, after line {_line(after)}). Add a row for each "
+                                                 f"{missing[0].date()}, after line {_line(after, rows)}). Add a row for each "
                                                  "missing date and leave its values blank."))
 
     n_days = len(df)
@@ -222,11 +237,11 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
 
     # --- Values ------------------------------------------------------------------------
     for col in ('T_air', 'T_water', 'Discharge'):
-        df[col] = _as_numbers(df, col, source, problems)
+        df[col] = _as_numbers(df, col, source, problems, rows)
     label = dates if dates is not None else pd.Series(pd.NaT, index=df.index)
 
     def where(mask):
-        return _first(mask, label) if dates is not None else f"line {_line(int(np.argmax(mask.to_numpy())))}"
+        return _first(mask, label, rows) if dates is not None else f"line {_line(int(np.argmax(mask.to_numpy())), rows)}"
 
     for col, (lo, hi) in PLAUSIBLE_RANGES.items():
         bad = (df[col] < lo) | (df[col] > hi)

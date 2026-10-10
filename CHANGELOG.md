@@ -7,8 +7,17 @@
   the figures inside it (at screen size), so it opens in any browser and can be
   sent as one file. `summary.md` now also shows the figures and links each
   output file.
+- **`drop_29_february`.** With `calendar: "noleap"`, a file with 29 February
+  rows was refused; `drop_29_february: true` removes those rows instead, with a
+  warning that counts them and the water-temperature measurements they held.
+  It is off by default.
 
 ### Fixed
+- **Prediction ranges no longer go below the ice floor.** The random error
+  was added to each simulated series without the floor (`Tice_cover`) that the
+  simulation itself applies, so in winter the lower edge of a 90% band could
+  reach about −1 °C. Each series is now kept at or above `Tice_cover`, in the
+  DE-MCMC band, FORWARD runs and the cross-validation checks.
 - ⚠ **Zero-flow days in gap-tolerant mode are no longer skipped silently.**
   Versions 4, 7 and 8 cannot simulate a day without flow, and gap-tolerant mode
   treated such days as gaps without a message: the output marked them as not
@@ -241,6 +250,10 @@
   to the standard calendar first; USER_GUIDE §5 shows how with xarray.
 
 ### Documentation
+- METHODS §12: a seasonal error size was tested by cross-validation on the
+  Swiss rivers and not adopted (worse on the hottest days for version 8).
+- Validation: V6 writes `noleap` dates without 29 February, and V8 calibrates
+  with the ice floor of its scenario runs, as the new checks require.
 - METHODS §7 and USER_GUIDE §8: the scores in `goodness_of_fit_*.csv` are
   computed on the scored values (daily values, or weekly or monthly means).
 - METHODS §10: a gap-tolerant FORWARD run takes the day-of-year averages from

@@ -109,11 +109,7 @@ class FoldResult:
     # estimates it): daily residual SD and AR(1) rho (0 for the iid noise model).
     sigma: float = float("nan")
     rho: float = float("nan")
-    # The seasonal error model of the same residuals (`uncertainty.monthly_sigma_factors`): the
-    # error size of each calendar month relative to sigma, and rho of the errors divided by it.
-    sigma_factors: Optional[np.ndarray] = field(default=None, repr=False)
-    rho_seasonal: float = float("nan")
-    # Simulated water temperature is never below this (Tice_cover), noise included.
+    # Simulated water temperature is never below this (Tice_cover), random error included.
     ice_floor: float = float("-inf")
     # Year label (calendar or water year) of each held-out day.
     years_held_out: Optional[np.ndarray] = field(default=None, repr=False)
@@ -266,35 +262,6 @@ def _fold_error_model(data: CommonData) -> tuple[float, float]:
         rho = estimate_rho(data.Twat_mod, data.Twat_obs, eval_mask, _segments_for(data),
                            options.get('rho_timescale', DEFAULT_RHO_TIMESCALE))
     return float(sigma), float(rho)
-
-
-def _fold_seasonal_error_model(data: CommonData) -> tuple[np.ndarray, float]:
-    """The seasonal error model on the same days as `_fold_error_model`: the monthly error-size
-    factors, and rho of the residuals divided by their day's factor (0 for the iid noise model)."""
-    from .config import DEFAULT_NOISE_MODEL, DEFAULT_RHO_TIMESCALE
-    from .optimization import _segments_for
-    from .uncertainty import estimate_rho, monthly_sigma_factors, daily_sigma_factor
-    options = data.uncertainty_options or {}
-    eval_mask = data.eval_mask if data.eval_mask is not None else np.ones(data.n_tot, dtype=bool)
-    factors, scaled_obs = seasonal_residuals(data, eval_mask)
-    rho = 0.0
-    if options.get('noise_model', DEFAULT_NOISE_MODEL) == 'ar1':
-        rho = estimate_rho(data.Twat_mod, scaled_obs, eval_mask, _segments_for(data),
-                           options.get('rho_timescale', DEFAULT_RHO_TIMESCALE))
-    return factors, float(rho)
-
-
-def seasonal_residuals(data: CommonData, eval_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """The monthly error-size factors of the scored residuals (`uncertainty.monthly_sigma_factors`),
-    and the observations moved so that each residual is divided by its day's factor (for estimating
-    rho of the standardised errors with the usual functions)."""
-    from .uncertainty import monthly_sigma_factors, daily_sigma_factor
-    m = eval_mask & (data.Twat_obs != -999.0) & (data.Twat_mod != -999.0) & (np.arange(data.n_tot) >= 365)
-    resid = data.Twat_mod[m] - data.Twat_obs[m]
-    factors, _ = monthly_sigma_factors(resid, data.date[m, 1], data.date[m, 2])
-    scaled_obs = data.Twat_obs.copy()
-    scaled_obs[m] = data.Twat_mod[m] - resid / daily_sigma_factor(factors, data.date[m, 1], data.date[m, 2])
-    return factors, scaled_obs
 
 
 def _restore_fold(data: CommonData, idx: np.ndarray, orig_twat: np.ndarray, orig_tair: np.ndarray, orig_q: np.ndarray) -> None:
@@ -466,7 +433,6 @@ def run_leave_one_year_out_cv(
                 # residuals of its training years: its error model, as DE-MCMC would
                 # estimate it from a calibration on those years.
                 sigma, rho = _fold_error_model(data)
-                sigma_factors, rho_seasonal = _fold_seasonal_error_model(data)
 
                 # Score the held-out days the calibration would score: in
                 # gap-tolerant mode not the unscored start of a segment (§10),
@@ -495,8 +461,6 @@ def run_leave_one_year_out_cv(
                         {'year': data.date[idx, 0], 'month': data.date[idx, 1], 'day': data.date[idx, 2]})),
                     sigma=sigma,
                     rho=rho,
-                    sigma_factors=sigma_factors,
-                    rho_seasonal=rho_seasonal,
                     ice_floor=float(data.Tice_cover),
                     years_held_out=assign_year_groups(data, cv_config.water_year_start_month)[idx],
                 ))
@@ -682,35 +646,27 @@ def warmest_months(dates, values, n: int = 4) -> list:
     return sorted(int(m) for m in s.groupby(s.index.month).mean().nlargest(n).index)
 
 
-def _fold_ensemble(r: FoldResult, noise_model: str, n_simulations: int, rng: np.random.Generator,
-                   error_size: str = "constant"):
+def _fold_ensemble(r: FoldResult, noise_model: str, n_simulations: int, rng: np.random.Generator):
     """`n_simulations` series of a fold's held-out window: its simulation plus random error from its
-    own error model (sigma, rho; with `error_size` "seasonal", sigma times each day's seasonal factor
-    and rho of the standardised errors), as a FORWARD run makes them, never below the ice floor.
-    Returns (observed, ensemble), with NaN where there is no measurement or no simulation."""
-    from .uncertainty import generate_ar1_noise, daily_sigma_factor
+    own error model (sigma, rho), as a FORWARD run makes them, never below the ice floor. Returns
+    (observed, ensemble), with NaN where there is no measurement or no simulation."""
+    from .uncertainty import generate_ar1_noise
     obs = np.where(r.obs_held_out == MISSING_DATA_SENTINEL, np.nan, r.obs_held_out)
     sim = np.where(r.sim_held_out == MISSING_DATA_SENTINEL, np.nan, r.sim_held_out)
     n_days = len(sim)
-    seasonal = error_size == "seasonal"
-    if seasonal and r.sigma_factors is None:
-        raise ValueError("error_size 'seasonal' needs the fold's seasonal error model (sigma_factors).")
-    rho = r.rho_seasonal if seasonal else r.rho
     if noise_model == "ar1":
-        noise = np.array([generate_ar1_noise(n_days, 1.0, rho, [(0, n_days - 1)], rng)
+        noise = np.array([generate_ar1_noise(n_days, r.sigma, r.rho, [(0, n_days - 1)], rng)
                           for _ in range(n_simulations)])
     else:
-        noise = rng.normal(0.0, 1.0, (n_simulations, n_days))
-    size = r.sigma * (daily_sigma_factor(r.sigma_factors, r.dates_held_out.month, r.dates_held_out.day)
-                      if seasonal else np.ones(n_days))
+        noise = rng.normal(0.0, r.sigma, (n_simulations, n_days))
     measured = np.isfinite(obs) & np.isfinite(sim)
-    members = np.maximum(sim[None, :] + noise * size[None, :], r.ice_floor)
+    members = np.maximum(sim[None, :] + noise, r.ice_floor)
     return np.where(measured, obs, np.nan), np.where(measured[None, :], members, np.nan)
 
 
 def check_interval_coverage(results: list[FoldResult], levels=COVERAGE_LEVELS, extra_level: Optional[float] = None,
                             noise_model: str = "ar1", n_simulations: int = CHECK_SIMULATIONS,
-                            seed: Optional[int] = None, error_size: str = "constant") -> pd.DataFrame:
+                            seed: Optional[int] = None) -> pd.DataFrame:
     """
     Did prediction intervals of each level hold in the held-out years? For each level (%), the share
     of measured held-out days inside the central range of the fold's simulations (as in
@@ -725,7 +681,7 @@ def check_interval_coverage(results: list[FoldResult], levels=COVERAGE_LEVELS, e
         if r.dates_held_out is None or not np.isfinite(r.sigma):
             continue
         rng = np.random.default_rng(None if seed is None else [int(seed), int(r.fold_id), 7])
-        obs, ens = _fold_ensemble(r, noise_model, n_simulations, rng, error_size)
+        obs, ens = _fold_ensemble(r, noise_model, n_simulations, rng)
         week_obs = pd.Series(obs).rolling(7).mean().to_numpy()
         week_ens = pd.DataFrame(ens.T).rolling(7).mean().to_numpy().T
         for what, o, e in (("daily", obs, ens), ("7-day", week_obs, week_ens)):
@@ -745,8 +701,7 @@ def check_interval_coverage(results: list[FoldResult], levels=COVERAGE_LEVELS, e
 def check_yearly_statistics(results: list[FoldResult], threshold: Optional[float] = None,
                             season_months: Optional[list] = None, noise_model: str = "ar1",
                             level: float = 90.0, n_simulations: int = CHECK_SIMULATIONS,
-                            seed: Optional[int] = None, return_simulations: bool = False,
-                            error_size: str = "constant"):
+                            seed: Optional[int] = None, return_simulations: bool = False):
     """
     Did the predicted ranges of yearly statistics hold in years the model was not
     calibrated on?
@@ -804,7 +759,7 @@ def check_yearly_statistics(results: list[FoldResult], threshold: Optional[float
         if r.dates_held_out is None or not np.isfinite(r.sigma):
             continue
         rng = np.random.default_rng(None if seed is None else [int(seed), int(r.fold_id)])
-        obs_used, ens = _fold_ensemble(r, noise_model, n_simulations, rng, error_size)
+        obs_used, ens = _fold_ensemble(r, noise_model, n_simulations, rng)
         measured = np.isfinite(obs_used)
         years = r.years_held_out if r.years_held_out is not None else r.dates_held_out.year.to_numpy()
         in_season = np.isin(r.dates_held_out.month, season_months)

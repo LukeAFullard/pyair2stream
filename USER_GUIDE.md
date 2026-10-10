@@ -227,7 +227,9 @@ expect larger errors in other years, and check the model on validation years.
 **Climate-model data** often uses a 365-day calendar with no leap days.
 Declare it with `calendar: "noleap"`: the file then has real dates without
 29 February. Do not pad such data with invented dates, or the seasonal term
-will drift out of step.
+will drift out of step. A file with 29 February rows is refused; with
+`drop_29_february: true` those rows are removed instead, and the run warns how
+many, and how many water-temperature measurements went with them.
 
 Some climate models use a **360-day calendar** (twelve months of 30 days, with
 30 February). pyair2stream does not accept it: its dates, outputs and plots
@@ -303,6 +305,7 @@ version: 8                  # 3, 4, 5, 7 or 8 (§4)
 integrator: "CRN"           # CRN, EXP, RK4, RK2 or EUL (§4)
 Tice_cover: 0.0             # water temperature is never simulated below this (°C)
 calendar: "standard"        # standard or noleap (§5)
+drop_29_february: false     # noleap only: true removes 29 February rows instead of refusing the file
 min_theta_floor: null       # e.g. 1.0e-6 to allow days with zero flow (§9.2)
 Qmedia: null                # mean discharge used to scale the flow; needed for FORWARD (below)
 
@@ -558,6 +561,7 @@ After a calibration, look at these, in this order:
 | `parameter_bounds: min > max` | Swap or correct the bounds of the parameter it names. |
 | `No parameter is free to calibrate` | Add `parameter_bounds`. |
 | `Missing calibration data file` / `Missing validation data file` | Check `paths.input_data` or `paths.validation_data`. |
+| `... is 29 February, which the noleap calendar does not have` | Remove the 29 February rows, set `drop_29_february: true` to have them removed, or use `calendar: "standard"` if the file has real dates with leap days ([§5](#5-preparing-your-own-data)). |
 | `must be continuous at a daily time scale` | The message says which problem it is: a date with no row (add a row; its values may be empty), a date that appears twice (remove one of the rows), or dates out of order (sort the rows by date). |
 | `Date is blank on line ...` / `cannot be read as a date` | Write every date as `YYYY-MM-DD`, in the same format on every row. |
 | `value(s) that are not numbers` | Replace text such as `n.a.` with an empty cell, or write `-999`. Use a point, not a comma, as the decimal separator. |

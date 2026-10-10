@@ -232,6 +232,10 @@ def read_calibration(config_file='config.yaml') -> CommonData:
             "Climate-model output without leap days must declare calendar: 'noleap' rather "
             "than being padded with invented dates -- see USER_GUIDE.md §5."
         )
+    drop = config.get('drop_29_february', False)
+    if not isinstance(drop, bool):
+        raise ValueError(f"drop_29_february must be true or false, got {drop!r}.")
+    data.drop_29_february = drop
 
     # Paths mapping
     paths = config.get('paths') or {}
@@ -596,6 +600,7 @@ def precheck_validation(data: CommonData) -> None:
         raise FileNotFoundError(f"Missing validation data file: {filename}")
     checked = check_table(pd.read_csv(filename), filename, period='validation', version=data.version,
                           gap_tolerant=data.gap_tolerant, calendar=data.calendar,
+                              drop_29_february=data.drop_29_february,
                           min_theta_floor=data.min_theta_floor)
     checked.raise_first_error()
     checked.print_warnings()
@@ -669,6 +674,7 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
         check_period = 'validation' if p == 'v' else ('scenario' if data.runmode == 'FORWARD' else 'calibration')
         checked = check_table(pd.read_csv(filename), filename, period=check_period, version=data.version,
                               gap_tolerant=data.gap_tolerant, calendar=data.calendar,
+                              drop_29_february=data.drop_29_february,
                               min_theta_floor=data.min_theta_floor)
         checked.raise_first_error()
         checked.print_warnings()

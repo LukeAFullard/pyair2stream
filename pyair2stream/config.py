@@ -169,6 +169,8 @@ class CommonData:
     # 'noleap' (real dates without 29 February: 365 days every year). '360_day' is
     # refused: convert such files to the standard calendar first (USER_GUIDE.md §5).
     calendar: str = 'standard'
+    # With calendar 'noleap': remove rows dated 29 February (with a warning) instead of refusing the file.
+    drop_29_february: bool = False
     wmin: np.float64 = np.float64(0.0)
     wmax: np.float64 = np.float64(0.0)
 

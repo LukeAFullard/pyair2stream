@@ -437,25 +437,14 @@ def test_a_partial_first_or_last_year_trains_but_is_not_held_out_or_a_block(tmp_
     assert count_blocks(data, water) == 2
 
 
-def test_fold_ensemble_seasonal_error_size_and_ice_floor():
-    # The seasonal error model scales each day's error by its month's factor; members never go
-    # below the ice floor.
+def test_fold_ensemble_members_are_never_below_the_ice_floor():
     from pyair2stream.cross_validation import FoldResult, _fold_ensemble
-    dates = pd.date_range("2003-01-01", "2003-12-31")
-    n = len(dates)
-    factors = np.where(np.arange(12) < 6, 0.5, 1.5)
-    r = FoldResult(fold_id=0, label="2003", held_out_start=dates[0], held_out_end=dates[-1], n_obs_held_out=n,
-                   par_best=np.zeros(8), nse=0.0, kge=0.0, rmse=0.0, obs_held_out=np.full(n, 5.0),
-                   sim_held_out=np.full(n, 5.0), dates_held_out=dates, sigma=1.0, rho=0.0,
-                   sigma_factors=factors, rho_seasonal=0.0, ice_floor=4.0)
-    _, constant = _fold_ensemble(r, "iid", 4000, np.random.default_rng(0))
-    _, seasonal = _fold_ensemble(r, "iid", 4000, np.random.default_rng(0), "seasonal")
-    assert constant.min() == seasonal.min() == 4.0
-    # Above the floor (5 + error > 4), the spread follows the factor: small in late winter, large in late summer.
-    feb, aug = dates.month == 2, dates.month == 8
-    assert np.percentile(seasonal[:, feb], 95) - 5.0 == pytest.approx(0.5 * 1.645, rel=0.05)
-    assert np.percentile(seasonal[:, aug], 95) - 5.0 == pytest.approx(1.5 * 1.645, rel=0.05)
-    assert np.percentile(constant[:, aug], 95) - 5.0 == pytest.approx(1.645, rel=0.05)
-    with pytest.raises(ValueError, match="seasonal"):
-        _fold_ensemble(FoldResult(**{**r.__dict__, "sigma_factors": None}), "iid", 10, np.random.default_rng(0),
-                       "seasonal")
+    dates = pd.date_range("2003-01-01", periods=60)
+    r = FoldResult(fold_id=0, label="2003", held_out_start=dates[0], held_out_end=dates[-1], n_obs_held_out=60,
+                   par_best=np.zeros(8), nse=0.0, kge=0.0, rmse=0.0, obs_held_out=np.full(60, 0.5),
+                   sim_held_out=np.full(60, 0.5), dates_held_out=dates, sigma=1.0, rho=0.8, ice_floor=0.0)
+    _, ens = _fold_ensemble(r, "ar1", 500, np.random.default_rng(0))
+    assert ens.min() == 0.0 and (ens == 0.0).mean() > 0.2      # about 31% of values would be below 0
+    _, free = _fold_ensemble(FoldResult(**{**r.__dict__, "ice_floor": float("-inf")}), "ar1", 500,
+                             np.random.default_rng(0))
+    assert free.min() < 0.0
