@@ -841,11 +841,13 @@ are scored, so with many missing days ρ₁ is used, and ρ₁ needs consecutive
 scored days: with a measurement every other day there are none, and ρ = 0,
 with a warning. With ρ = 0 (fewer than 30 consecutive pairs), bands for
 multi-day quantities are too narrow; a FORWARD run can then be given a ρ with
-`uncertainty_options.ar1_rho`, which must be justified separately.
+`uncertainty_options.ar1_rho`, which must be justified separately. The chain's
+and the FORWARD run's `_meta.json` record `rho_measured: false` in that case,
+and `summary.md` marks ρ as not measured.
 
 ρ is estimated once, at the DE best fit, on the calibration's scored days. In a
 cross-validation, each fold estimates its own σ and ρ on its training days. The
-chain's `_meta.json` records `rho`, `rho_timescale`, `rho_likelihood`,
+chain's `_meta.json` records `rho`, `rho_measured`, `rho_timescale`, `rho_likelihood`,
 `scoring_block_days` and `likelihood_variance_factor` (F = n/n_eff). FORWARD
 runs use the chain's ρ. They say so when it was estimated at another time scale than
 their own `rho_timescale` (chains from version 0.4.1 or earlier used consecutive

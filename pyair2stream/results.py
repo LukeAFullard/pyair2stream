@@ -430,7 +430,13 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
         if sigma is not None:
             lines.append(f"| Daily error size σ | {sigma:.3f} °C |")
         if m.get("rho") is not None:
-            lines.append(f"| Error persistence ρ | {m['rho']:.3f} |")
+            if m.get("rho_measured") is False:
+                lines.append(f"| Error persistence ρ | {m['rho']:.3f}: **not measured**. There were too few pairs of "
+                             "consecutive measured days (at least 30 are needed), so no persistence was assumed. "
+                             "The parameter ranges and the ranges of anything longer than a day are therefore too "
+                             "narrow (docs/UNCERTAINTY.md §5) |")
+            else:
+                lines.append(f"| Error persistence ρ | {m['rho']:.3f} |")
         if m.get("interval_coverage") is not None:
             lines.append(f"| Measured days inside the {level:g}% range | {100 * m['interval_coverage']:.1f}% of "
                          f"{m.get('interval_coverage_n_days', '?')} (should be close to {level:g}%) |")

@@ -11,6 +11,13 @@
   rows was refused; `drop_29_february: true` removes those rows instead, with a
   warning that counts them and the water-temperature measurements they held.
   It is off by default.
+- **ρ that could not be measured is flagged.** With too few pairs of
+  consecutive measured days (measurements every other day or weekly, for
+  example), the error persistence ρ falls back to 0 and the parameter ranges
+  and multi-day ranges are too narrow. Until now only a console warning said
+  so. The chain's and the FORWARD run's `_meta.json` now record
+  `rho_measured`, and `summary.md` marks ρ as not measured in its uncertainty
+  table. A FORWARD run carries the flag over from the chain.
 
 ### Fixed
 - **Prediction ranges no longer go below the ice floor.** The random error

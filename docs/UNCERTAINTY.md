@@ -405,7 +405,9 @@ thousands of pairs.
 
 The daily value in turn needs at least 30 pairs of consecutive measured days.
 With fewer, for example with measurements only every other day or once a week,
-ρ is set to 0 (no persistence), with the warning `Falling back to rho=0.0`.
+ρ is set to 0 (no persistence), with the warning `Falling back to rho=0.0`;
+`summary.md` then marks ρ as **not measured** in its uncertainty table, and
+the `_meta.json` files record `rho_measured: false`.
 Then the parameter ranges are too narrow, and so are the ranges for anything
 longer than a day. Such data cannot show how long the errors last. If you
 must use them, say so, and set `uncertainty_options.ar1_rho` in the `FORWARD`

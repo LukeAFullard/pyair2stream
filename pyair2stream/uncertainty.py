@@ -57,6 +57,18 @@ def estimate_ar1_rho(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mask: np.n
     return float(np.clip(rho, 0.0, 0.99))
 
 
+def rho_measured(Twat_obs: np.ndarray, eval_mask: np.ndarray, segments: list) -> bool:
+    """
+    Whether the residuals have enough pairs of consecutive scored days (the pairs
+    `estimate_ar1_rho` uses) to measure rho at all. Without them (measurements every
+    other day or weekly, for example) the estimators fall back to rho = 0, and the
+    parameter ranges and the ranges of multi-day quantities are too narrow.
+    """
+    valid = (eval_mask & (Twat_obs != -999.0)).astype(bool)
+    n_pairs = sum(int(np.count_nonzero(valid[start:end] & valid[start + 1:end + 1])) for start, end in segments)
+    return n_pairs >= MIN_PAIRS_FOR_RHO_ESTIMATE
+
+
 def weekly_mean_correlation(rho: float, week: int = WEEK) -> float:
     """
     Correlation between the means of two consecutive, non-overlapping blocks of
