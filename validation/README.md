@@ -30,6 +30,7 @@ before its result.
 | V15 | Given the parameters and inputs an independent group published for 23 rivers in British Columbia (Callahan and Moore, 2025), does it compute their simulated water temperatures, day by day? Does its own calibration fit at least as well? | Results from other people, rivers and climates, including the 2021 heat dome, compared in full rather than by a summary error. |
 | V16 | Calibrated on 1, 2, 3, 5 or 10 years of data, how much worse does the model predict other years than when calibrated on the whole record? | Users plan how long to measure, or hold only a short record. |
 | V17 | Does air2stream predict years it was not calibrated on better than regressions of water temperature on air temperature (same day, averaged, S-curve, with discharge), fitted on the same years? On the 3 Swiss and 23 British Columbia rivers, by daily error, 7-day means, yearly peaks, hot days and the 2021 heat dome. | A regression is quicker and needs no special software; the model must earn its extra effort. |
+| V18 | On 23 British Columbia rivers that played no part in developing the error model, do the prediction intervals hold at their stated levels, for days, 7-day and 30-day means, in the later years 2021-2022 and in years held out by cross-validation? Do the corrected ranges of yearly statistics hold? Does the default ρ do better over several weeks than ρ from consecutive days? | The error model's persistence rule was chosen on the Swiss rivers; evidence from rivers it was not tuned on shows whether it generalises. |
 
 ## Running it
 
@@ -85,7 +86,7 @@ leaves out its interval part (B).
 
 Most checks use the three Swiss rivers in [`data/switzerland/`](../data/switzerland/README.md),
 with the published parameters and model errors of Piccolroaz et al. (2016) and
-of Toffolon and Piccolroaz (2015). V15 and V17 use the 23 British Columbia streams of
+of Toffolon and Piccolroaz (2015). V15, V17 and V18 use the 23 British Columbia streams of
 Callahan and Moore (2025) in [`data/british_columbia/`](../data/british_columbia/README.md),
 from their published dataset (https://doi.org/10.5281/zenodo.14502248, CC BY
 4.0). Each README gives the sources, periods and licence. The errors found in
