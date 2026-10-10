@@ -78,11 +78,11 @@ The change, simulation by simulation (scenario minus baseline):
 
 | Scenario | Change in | Median | 90% range |
 |---|---|---|---|
-| air +2 °C | summer (Jun–Aug) mean | +1.52 °C | +1.49 to +1.56 °C |
-| air +2 °C | winter (Dec–Feb) mean | +1.05 °C | +0.99 to +1.10 °C |
-| air +2 °C | whole-year mean | +1.36 °C | +1.32 to +1.40 °C |
-| air +2 °C, 20% less summer flow | summer (Jun–Aug) mean | +1.58 °C | +1.54 to +1.63 °C |
-| air +2 °C, 20% less summer flow | winter (Dec–Feb) mean | +1.05 °C | +0.99 to +1.10 °C |
+| air +2 °C | summer (Jun–Aug) mean | +1.52 °C | +1.48 to +1.56 °C |
+| air +2 °C | winter (Dec–Feb) mean | +1.02 °C | +0.96 to +1.08 °C |
+| air +2 °C | whole-year mean | +1.35 °C | +1.31 to +1.40 °C |
+| air +2 °C, 20% less summer flow | summer (Jun–Aug) mean | +1.58 °C | +1.54 to +1.62 °C |
+| air +2 °C, 20% less summer flow | winter (Dec–Feb) mean | +1.02 °C | +0.96 to +1.08 °C |
 
 ![Monthly mean change in water temperature for both scenarios](figures/monthly_change.png)
 
@@ -113,9 +113,9 @@ all three runs.
 
 | Year | P(7-day mean > 20 °C): as measured | air +2 °C | air +2 °C, less summer flow | Days above 18 °C: as measured | air +2 °C | air +2 °C, less summer flow |
 |---|---|---|---|---|---|---|
-| 2010 | 0.57 | 1.00 | 1.00 | 30 (22 to 38) | 50 (42 to 59) | 51 (43 to 60) |
-| 2011 | 0.33 | 0.99 | 0.99 | 18 (11 to 27) | 41 (33 to 49) | 41 (33 to 50) |
-| 2012 | 0.14 | 0.95 | 0.97 | 24 (15 to 33) | 56 (43 to 70) | 59 (45 to 72) |
+| 2010 | 0.54 | 1.00 | 1.00 | 30 (23 to 37) | 50 (42 to 59) | 51 (43 to 59) |
+| 2011 | 0.35 | 0.99 | 0.99 | 18 (11 to 27) | 41 (32 to 50) | 42 (33 to 50) |
+| 2012 | 0.15 | 0.97 | 0.98 | 24 (15 to 34) | 57 (45 to 69) | 59 (46 to 71) |
 
 *Days above 18 °C: median, with the 90% range in brackets.*
 
@@ -127,10 +127,10 @@ orange: the two scenarios. The number above each bar is the share of the
 simulations above the 20 °C limit (dashed). Drawn with
 `plots.yearly_statistic`.*
 
-**Reading it.** The year's highest 7-day mean rises by 1.6 °C (90% range 1.56 to
+**Reading it.** The year's highest 7-day mean rises by 1.6 °C (90% range 1.55 to
 1.65 °C). In 2010–2012, a 20 °C limit was exceeded in one year of three (P =
-0.14 to 0.57). With 2 °C warmer air, it would be exceeded almost every year (P =
-0.95 to 1.00). The number of days above 18 °C would roughly double.
+0.15 to 0.54). With 2 °C warmer air, it would be exceeded almost every year (P =
+0.97 to 1.00). The number of days above 18 °C would roughly double.
 
 ## Climate-model data
 
@@ -164,7 +164,7 @@ change:
 - **Stay near the calibrated conditions.** Check how far the scenario goes
   beyond the calibration years (step 1). Discharge outside the calibrated range
   gives a warning.
-- **What it does not mean.** "P = 0.95 to 1.00" is the probability under this
+- **What it does not mean.** "P = 0.97 to 1.00" is the probability under this
   delta change and this model, with the error the model had in 2002–2009. It
   is not a forecast of the future climate.
 
