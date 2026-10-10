@@ -563,6 +563,13 @@ sensitivity analyses), the package makes these checks
    `max_plausible_twat` (default 60 °C).
 3. Choosing `RK4`, `RK2` or `EUL` prints a note that it is kept to reproduce
    the Fortran.
+4. In a prediction range (the DE-MCMC band, `FORWARD` intervals), each
+   parameter set is checked the same way: a set whose simulation diverges, or
+   in which a difference can grow more than `stability_max_growth` times, is
+   left out as a divergent draw (`uncertainty_options.on_divergent_draw:
+   "drop"`, the default), and the run says how many were. If more than
+   `uncertainty_options.max_divergent_fraction` (default 10%) are left out,
+   it stops.
 
 An unstable run does not always blow up. The 0 °C floor (`Tice_cover`) cuts
 off every excursion below 0 °C, and that can turn an unstable run into
