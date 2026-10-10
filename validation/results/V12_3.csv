@@ -1,7 +1,7 @@
 river,version,folds,A2 against A: folds with a parameter moved > 2 SE,"A2 against A: jackknife SE ratio, median (range)",B against B0: folds with a parameter moved > 2 SE,"B against B0: jackknife SE ratio, median (range)"
-Dischmabach,5,9,0,1.01 (0.83-1.84),0,0.98 (0.97-1.36)
-Dischmabach,8,9,0,0.74 (0.00-1.10),0,0.92 (0.00-1.31)
-Mentue,5,10,0,0.99 (0.96-1.00),0,1.03 (1.02-1.06)
-Mentue,8,10,0,1.04 (0.98-1.18),0,1.07 (1.02-1.17)
+Dischmabach,5,9,0,0.99 (0.94-1.02),0,0.98 (0.97-1.36)
+Dischmabach,8,9,0,0.99 (0.10-1.22),0,1.01 (0.42-1.30)
+Mentue,5,10,0,0.85 (0.83-0.98),0,1.05 (1.01-1.06)
+Mentue,8,10,0,1.01 (0.96-1.02),0,1.08 (1.02-1.12)
 Rhône,5,29,0,0.65 (0.55-0.96),0,0.87 (0.80-0.92)
-Rhône,8,29,0,1.06 (0.92-1.10),0,1.09 (0.99-1.23)
+Rhône,8,29,0,1.41 (0.99-1.46),0,1.02 (0.91-1.30)

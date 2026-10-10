@@ -14,13 +14,13 @@ import argparse
 import numpy as np
 import pandas as pd
 
-from .io import read_calibration, read_Tseries, precheck_validation, SettingsFileNotFoundError
+from .io import read_calibration, read_Tseries, precheck_validation, SettingsFileNotFoundError, theta_of_days, fit_settings
 from .optimization import forward_mode, PSO_mode, LH_mode, DE_mode, DE_MCMC_mode
-from .config import CommonData
+from .config import CommonData, theta_floor_of, zero_flow_ok
 from .post_processing import post_process
 from .sensitivity import sensitivity_analysis
-from .results import (RunResult, capture_output, collect_parameters, collect_scores, messages_from,
-                      output_files, write_filled_series, write_summary)
+from .results import (RunResult, capture_output, collect_parameters, collect_scores, files_of_this_run,
+                      messages_from, write_filled_series, write_summary)
 from . import __version__
 
 from .model import (call_model, aggregation, statis, funcobj, detect_segments, warn_on_stability,
@@ -29,7 +29,7 @@ from .model import (call_model, aggregation, statis, funcobj, detect_segments, w
 JACKKNIFE_NOTE = (
     "The rows jackknife_{level}_lower/upper are approximate {level}% intervals for the parameters "
     "(uncertainty_options.parameter_interval; in validation, 90% intervals contained the true values "
-    "83-95% of the time; validation/REPORT.md, V4). The 'std' row is only the spread between folds: "
+    "81-95% of the time; validation/REPORT.md, V4). The 'std' row is only the spread between folds: "
     "it is far too small to use as an uncertainty."
 )
 
@@ -89,13 +89,14 @@ def run_optimizer(data: CommonData) -> None:
 
 def _write_calibration_metadata(data: CommonData) -> None:
     """Write calibration_metadata.json (Qmedia, theta range, version, integrator, parameters)."""
-    Q_cal = data.Q[365:data.n_tot]
-    valid_Q_cal = (Q_cal != -999.0) & (Q_cal > 0.0)
+    # The flows the parameters were fitted on, as the model used them (zero-flow days at
+    # min_theta_floor when it is set): a FORWARD run reports days outside this range.
     theta_min = theta_max = None
-    if np.any(valid_Q_cal) and data.Qmedia > 0:
-        theta_cal = Q_cal[valid_Q_cal] / data.Qmedia
-        theta_min = float(np.min(theta_cal))
-        theta_max = float(np.max(theta_cal))
+    if data.Qmedia > 0:
+        theta_cal, _ = theta_of_days(data.Q[365:data.n_tot], data.Qmedia, theta_floor_of(data.version, data.min_theta_floor))
+        if theta_cal.size:
+            theta_min = float(np.min(theta_cal))
+            theta_max = float(np.max(theta_cal))
 
     calibration_metadata = {
         "qmedia": float(data.Qmedia),
@@ -106,12 +107,25 @@ def _write_calibration_metadata(data: CommonData) -> None:
         "version": int(data.version),
         "integrator": data.mod_num,
         "par_best": [float(x) for x in data.par_best],
+        **fit_settings(data),
         "pyair2stream_version": __version__,
         "random_seed": data.random_seed,
     }
     metadata_path = os.path.join(data.folder, "calibration_metadata.json")
     with open(metadata_path, 'w') as f:
         json.dump(calibration_metadata, f, indent=2)
+
+
+def _warm_up_column(data: CommonData) -> np.ndarray:
+    """1 on the days that are not scored while the model forgets its start value, else 0:
+    the first warmup_drop_days of each segment in gap-tolerant mode, or of a file shorter
+    than a year (which starts from its first day's conditions, io.read_Tseries)."""
+    warm_up = np.zeros(data.n_tot, dtype=int)
+    starts = [start for start, _ in data.segments] if data.gap_tolerant and data.segments else [365]
+    ends = [end for _, end in data.segments] if data.gap_tolerant and data.segments else [data.n_tot - 1]
+    for start, end in zip(starts, ends):
+        warm_up[start:min(start + data.warmup_drop_days, end + 1)] = 1
+    return warm_up
 
 
 def forward(data: CommonData) -> None:
@@ -126,7 +140,7 @@ def forward(data: CommonData) -> None:
         detect_segments(data)
 
     warn_on_stability(data, error_fraction=data.stability_error_fraction)
-    check_segment_warmup(data)
+    check_segment_warmup(data, suggest_shorter=data.runmode != 'FORWARD')
     call_model(data)
     check_numerical_divergence(data, max_plausible_twat=data.max_plausible_twat)
     check_daily_plausibility(data)
@@ -160,7 +174,12 @@ def forward(data: CommonData) -> None:
 
     # Construct gap columns
     tair_gap = np.where(data.Tair == -999.0, 1, 0)
-    q_gap = np.where(data.Q == -999.0, 1, 0)
+    # Discharge that cannot be used: missing, or (versions 4/7/8 without min_theta_floor, which
+    # cannot simulate a day without flow) zero or negative; gap-tolerant mode treats both as gaps.
+    q_zero = np.zeros(data.n_tot, dtype=bool)
+    if not zero_flow_ok(data.version, data.min_theta_floor):
+        q_zero = (data.Q != -999.0) & (data.Q <= 0.0)
+    q_gap = np.where((data.Q == -999.0) | q_zero, 1, 0)
     segment_id = np.full(data.n_tot, -999)
     if data.gap_tolerant and data.segments:
         for idx, (start, end) in enumerate(data.segments):
@@ -185,6 +204,8 @@ def forward(data: CommonData) -> None:
         cal_df['Tair_gap'] = tair_gap
         cal_df['Q_gap'] = q_gap
         cal_df['segment_id'] = segment_id
+    if data.warmup_from_first_day or data.gap_tolerant:
+        cal_df['warm_up'] = _warm_up_column(data)
 
     # Drop the warm-up block: it is a verbatim copy of year one with sentinel
     # dates (Year=-999), an implementation detail that broke pd.to_datetime and
@@ -205,6 +226,10 @@ def forward(data: CommonData) -> None:
             q_gap_count = np.sum(q_gap[365:])
             f.write(f"T_air missing fraction: {tair_gap_count}/{n_data_points} ({tair_gap_count/n_data_points:.2%})\n")
             f.write(f"Q missing fraction: {q_gap_count}/{n_data_points} ({q_gap_count/n_data_points:.2%})\n")
+            q_zero_count = int(np.sum(q_zero[365:]))
+            if q_zero_count:
+                f.write(f"  of which zero or negative discharge (treated as gaps; set min_theta_floor to "
+                        f"simulate them): {q_zero_count}\n")
 
             total_valid_days = 0
             if data.segments:
@@ -244,6 +269,7 @@ def forward(data: CommonData) -> None:
     print(f"{data.mean_obs:.5f} {data.TSS_obs:.5f} {data.std_obs:.5f}")
 
     warn_on_stability(data, error_fraction=data.stability_error_fraction)
+    check_segment_warmup(data, suggest_shorter=False)
     call_model(data)
     check_numerical_divergence(data, max_plausible_twat=data.max_plausible_twat)
     ei = funcobj(data)
@@ -254,7 +280,12 @@ def forward(data: CommonData) -> None:
     out_val_path = os.path.join(data.folder, f"3_{data.runmode}_{data.fun_obj}_{data.station}_{data.series}v_{data.time_res}.csv")
 
     val_tair_gap = np.where(data.Tair == -999.0, 1, 0)
-    val_q_gap = np.where(data.Q == -999.0, 1, 0)
+    # As for the calibration: zero-flow days that versions 4/8 (without min_theta_floor) cannot
+    # simulate are gaps too.
+    val_q_zero = np.zeros(data.n_tot, dtype=bool)
+    if not zero_flow_ok(data.version, data.min_theta_floor):
+        val_q_zero = (data.Q != -999.0) & (data.Q <= 0.0)
+    val_q_gap = np.where((data.Q == -999.0) | val_q_zero, 1, 0)
     val_segment_id = np.full(data.n_tot, -999)
     if data.gap_tolerant and data.segments:
         for idx, (start, end) in enumerate(data.segments):
@@ -276,6 +307,8 @@ def forward(data: CommonData) -> None:
         val_df['Tair_gap'] = val_tair_gap
         val_df['Q_gap'] = val_q_gap
         val_df['segment_id'] = val_segment_id
+    if data.warmup_from_first_day or data.gap_tolerant:
+        val_df['warm_up'] = _warm_up_column(data)
 
     val_df.iloc[365:].to_csv(out_val_path, index=False)  # drop the warm-up block
 
@@ -312,12 +345,16 @@ def run(config, verbose: bool = True) -> RunResult:
     if verbose and summary:
         print(f"Summary of this run: {summary}")
     return RunResult(output_dir=data.folder, run_mode=data.runmode, version=data.version, parameters=parameters,
-                     scores=scores, messages=messages, summary=summary, files=output_files(data.folder), data=data)
+                     scores=scores, messages=messages, summary=summary, files=files_of_this_run(data), data=data)
 
 
 def _run(config, t1: float) -> CommonData:
     """The run itself: load and check the data, calibrate or simulate, write the outputs."""
-    data = read_calibration(config_file=config)
+    data = read_calibration(config_file=config)   # records what the output folder already holds
+    if data.folder_before:
+        print(f"Warning: the output folder {data.folder} already holds {len(data.folder_before):,} file(s) from "
+              "earlier runs. This run replaces those with the same names as its own outputs (for example "
+              "summary.md) and keeps the others; summary.md describes only this run's files and counts the others.")
 
     read_Tseries(data, 'c')
     # The validation file is used only after the calibration, which can take hours:

@@ -34,16 +34,16 @@ it cancels. What is left is the effect of the abstraction:
 
 | | Baseline: average summer temperature | Abstraction | Difference |
 |---|---|---|---|
-| Simulation 1 | 16.54 °C | 16.60 °C | +0.06 °C |
-| Simulation 2 | 16.28 °C | 16.30 °C | +0.02 °C |
-| Simulation 3 | 16.58 °C | 16.64 °C | +0.07 °C |
+| Simulation 1 | 16.57 °C | 16.63 °C | +0.07 °C |
+| Simulation 2 | 16.43 °C | 16.50 °C | +0.07 °C |
+| Simulation 3 | 16.36 °C | 16.39 °C | +0.03 °C |
 
-Simulations 2 and 3 disagree by 0.3 °C about the river. But they agree that the
+Simulations 1 and 3 disagree by 0.2 °C about the river. But they agree that the
 abstraction warms it a little in summer.
 
 **Not paired** means comparing simulations that used different parameter sets.
 The abstraction of simulation 3 minus the baseline of simulation 2 gives
-+0.36 °C. The other way round, it gives −0.28 °C. These numbers mostly show the
++0.13 °C. The other way round, it gives −0.04 °C, a cooling. These numbers mostly show the
 difference between two parameter sets, not the effect of the abstraction. This
 is what you would get by running the two scenarios separately, each with its
 own random parameter sets, and comparing their results.
@@ -54,12 +54,25 @@ after (not paired) mixes the effect with the differences between people.
 
 The last row of the results table shows the cost. There, `run.py` matches the
 simulations of the two runs at random, on purpose. The 90% range of the summer
-change becomes −0.32 to +0.43 °C, so you could not even tell whether the
+change becomes −0.30 to +0.39 °C, so you could not even tell whether the
 abstraction warms or cools the river. It is shown only to make the point:
 always pair.
 
 Pairing assumes that the model's error on a given day would be the same in both
-scenarios.
+scenarios. On a winter day when a simulation is held at the ice floor
+(`Tice_cover`, 0 °C) in one run and not in the other, the error does not
+cancel exactly.
+
+**The uncertainty method, and why.** This example uses a DE-MCMC chain (as in
+example 02) and two `FORWARD` runs that draw the same 1,000 parameter sets from
+it, with the same daily errors, and are then subtracted series by series (a
+paired difference). It is used because the question is about a *change*: what
+is uncertain about the river in both runs cancels, and what is left is the
+uncertainty of the change itself, from the parameters. No cross-validated
+correction is applied: it corrects a bias in a yearly statistic, which affects
+both runs alike and cancels in their difference.
+[docs/UNCERTAINTY.md §10](../../docs/UNCERTAINTY.md#10-comparing-two-scenarios)
+explains pairing in plain words.
 
 ## Steps
 
@@ -106,11 +119,11 @@ diff = scenario.paired_difference_from_files(
 
 | | Median | 90% range |
 |---|---|---|
-| Average summer (Jun–Aug) change | +0.04 °C | +0.02 to +0.08 °C |
-| Average winter (Dec–Feb) change | −0.07 °C | −0.12 to −0.03 °C |
-| Largest warming on a single day | +0.33 °C | +0.27 to +0.39 °C |
-| Extra days per year above 18 °C | 1.0 | 0.0 to 2.0 |
-| *Summer change if the runs were not paired* | *+0.05 °C* | *−0.32 to +0.43 °C* |
+| Average summer (Jun–Aug) change | +0.05 °C | +0.02 to +0.08 °C |
+| Average winter (Dec–Feb) change | −0.06 °C | −0.11 to −0.02 °C |
+| Largest warming on a single day | +0.33 °C | +0.27 to +0.40 °C |
+| Extra days per year above 18 °C | 0.7 | 0.0 to 2.0 |
+| *Summer change if the runs were not paired* | *+0.05 °C* | *−0.30 to +0.39 °C* |
 
 ![Daily effect of the abstraction and the summer average](figures/abstraction_effect.png)
 
@@ -136,8 +149,13 @@ simulation's average summer change, paired (orange) and not paired (grey).*
   model's response to discharge is wrong. The model learns that response from
   the natural changes in flow during the calibration years.
 - **Stay within the calibrated flows.** If the scenario's discharge goes
-  outside the range seen in calibration, the run prints a warning. The model
-  is then extrapolating.
+  outside the range seen in calibration, the run reports every such day, with
+  their number and the first date. The model is then extrapolating. Here the
+  reduced flows stay inside the calibrated range.
+- **What it does not mean.** "+0.05 °C in summer" is the effect of this
+  abstraction according to this model, on the weather of 2010–2012. It is not
+  a measured effect, and it does not include the chance that the model's
+  response to discharge is wrong (above).
 - The validation suite checks that paired differences are exact where the true
   answer is known ([V8](../../validation/REPORT.md#v8)).
 

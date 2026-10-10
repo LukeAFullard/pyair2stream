@@ -9,7 +9,7 @@ the heavy numeric lifting to the Numba-compiled functions.
 import numpy as np
 import math
 import pandas as pd
-from .config import CommonData, PI, TTT, ACTIVE_PARAMS
+from .config import CommonData, PI, TTT, ACTIVE_PARAMS, zero_flow_ok
 
 # Sanity bound on simulated water temperature (degC) -- see USER_GUIDE.md §9.1:
 # explicit integrators (RK4/RK2/EUL) can diverge silently on scenario discharge that differs
@@ -172,6 +172,18 @@ def largest_growth(data: CommonData) -> dict:
     return {'growth': growth, 'log10_growth': best, 'start': start, 'end': end}
 
 
+def simulated_discharge_days(data: CommonData) -> np.ndarray:
+    """The days whose discharge the model simulates with: every day for versions 3 and 5
+    (they do not use it); otherwise the days with discharge above zero, and also zero-flow
+    days when they are simulated (version 7, or at min_theta_floor; `config.zero_flow_ok`),
+    since B is computed for them as the integrators use it."""
+    if data.version in (3, 5):
+        return np.ones(data.n_tot, dtype=np.bool_)
+    if zero_flow_ok(data.version, data.min_theta_floor):
+        return (data.Q != -999.0) & (data.Q >= 0.0)
+    return (data.Q != -999.0) & (data.Q > 0.0)
+
+
 def stability_report(data: CommonData) -> dict:
     """
     Pre-flight stability check of the current integrator, from the B series.
@@ -186,11 +198,7 @@ def stability_report(data: CommonData) -> dict:
     """
     B = compute_B_series(data)
 
-    if data.version in (3, 5):
-        valid = np.ones(data.n_tot, dtype=np.bool_)
-    else:
-        valid = (data.Q != -999.0) & (data.Q > 0.0)
-    valid &= np.isfinite(B)
+    valid = simulated_discharge_days(data) & np.isfinite(B)
 
     limit = STABILITY_LIMITS.get(data.mod_num, np.inf)
 
@@ -337,9 +345,7 @@ def check_daily_plausibility(data: CommonData) -> dict:
     ended on one. Returns the numbers behind the warnings.
     """
     B = compute_B_series(data)
-    valid = np.isfinite(B)
-    if data.version not in (3, 5):
-        valid &= (data.Q != -999.0) & (data.Q > 0.0)
+    valid = simulated_discharge_days(data) & np.isfinite(B)
     n_negative = int(np.sum(valid & (B < 0.0)))
     min_B = float(np.min(B[valid])) if np.any(valid) else None
 
@@ -373,20 +379,32 @@ def check_daily_plausibility(data: CommonData) -> dict:
     return {"min_B": min_B, "n_negative_B": n_negative, "change_corr": change_corr}
 
 
-def check_segment_warmup(data: CommonData) -> None:
+def check_segment_warmup(data: CommonData, suggest_shorter: bool = True) -> None:
     """
-    Gap-tolerant mode only: warn if `warmup_drop_days` is too short for the
-    approximate restart temperature of each segment to be forgotten.
+    Warn if `warmup_drop_days` is too short for the model's start value to be
+    forgotten: the approximate restart temperature of each segment in gap-tolerant
+    mode, or the first day's conditions a file shorter than a year starts from
+    (`warmup_from_first_day`).
 
     A difference between the restart value and the "true" state decays roughly
     as exp(-B*t), where B (1/day) is the ODE's decay rate for the current
     parameters. After 3/B days about 95% of it has gone, so the unscored start
-    of each segment should be at least that long.
+    of each segment should be at least that long. With `suggest_shorter` (a
+    calibration in gap-tolerant mode), a note also says when a shorter warm-up
+    would score many more measured days.
     """
-    if not data.gap_tolerant or not data.segments:
+    if data.gap_tolerant and data.segments:
+        segments = data.segments
+        start_of = "the start of each segment may still reflect its approximate restart temperature"
+        guide = "§10"
+    elif not data.gap_tolerant and data.warmup_from_first_day:
+        segments = [(365, data.n_tot - 1)]
+        start_of = "the first days of the file may still reflect the conditions the model started from"
+        guide = "§5"
+    else:
         return
     in_seg = np.zeros(data.n_tot, dtype=bool)
-    for start, end in data.segments:
+    for start, end in segments:
         in_seg[start:end + 1] = True
     B = compute_B_series(data)
     ok = in_seg & np.isfinite(B) & (B > 0)
@@ -396,10 +414,11 @@ def check_segment_warmup(data: CommonData) -> None:
     if data.warmup_drop_days < needed:
         print(
             f"Warning: warmup_drop_days={data.warmup_drop_days} is shorter than about three "
-            f"relaxation times of the calibrated model ({needed} days). The start of each "
-            f"segment may still reflect its approximate restart temperature; consider "
-            f"warmup_drop_days: {needed}. See USER_GUIDE.md §10."
+            f"relaxation times of the calibrated model ({needed} days): {start_of}; consider "
+            f"warmup_drop_days: {needed}. See USER_GUIDE.md {guide}."
         )
+        return
+    if not data.gap_tolerant or not suggest_shorter:
         return
     # The opposite case: with many gaps, a warm-up much longer than the model needs throws
     # away measurements. Say how many a warm-up of `needed` days (and pieces of at least
@@ -506,6 +525,8 @@ def check_nonpositive_discharge(data: CommonData) -> None:
       `Q` there is a data-quality question, not a numerical one.
     - `data.min_theta_floor` is set -- the opt-in escape hatch clamps `theta` away
       from zero instead of raising (applied inside the integrators themselves).
+    - `data.version` is 7 -- a4 is fixed at 0, so there is no theta^a4: at theta = 0
+      the discharge terms drop out (`config.zero_flow_ok`).
 
     Called from `read_Tseries` for both the calibration and validation/FORWARD-mode
     scenario record, so a naturally-occurring zero-flow day is caught once at data
@@ -513,9 +534,7 @@ def check_nonpositive_discharge(data: CommonData) -> None:
     positive `a4`, and applies identically to a naturalised-flow/climate-projection
     FORWARD run.
     """
-    if data.gap_tolerant or data.version not in (4, 7, 8):
-        return
-    if data.min_theta_floor is not None:
+    if data.gap_tolerant or zero_flow_ok(data.version, data.min_theta_floor):
         return
     if data.Q is None or data.n_tot <= 365:
         return
@@ -547,15 +566,28 @@ def check_nonpositive_discharge(data: CommonData) -> None:
     )
 
 
+def _days_in_month(year: int, month: int, calendar: str = 'standard') -> int:
+    """Length of a calendar month (February: 28 days in a noleap record)."""
+    import calendar as _calendar
+    if month == 2 and calendar == 'noleap':
+        return 28
+    return _calendar.monthrange(year, month)[1]
+
+
 def find_segments(data: CommonData, min_segment_days: int):
     """
     Gap-tolerant mode: the stretches of consecutive days (from index 365 on) with valid air
-    temperature and, for versions 4/7/8, positive discharge. Returns (kept, dropped): lists of
-    (start, end) index pairs, inclusive, split by whether they are at least `min_segment_days` long.
+    temperature and, for versions 4/7/8, discharge: present, and positive unless
+    `min_theta_floor` is set (then a zero-flow day is simulated at the floor) or the
+    version is 7 (which simulates it at theta = 0). Returns
+    (kept, dropped): lists of (start, end) index pairs, inclusive, split by whether they are at
+    least `min_segment_days` long.
     """
     valid = data.Tair[365:data.n_tot] != -999.0
     if data.version not in [3, 5]:
-        valid &= (data.Q[365:data.n_tot] != -999.0) & (data.Q[365:data.n_tot] > 0.0)
+        valid &= data.Q[365:data.n_tot] != -999.0
+        if not zero_flow_ok(data.version, getattr(data, 'min_theta_floor', None)):
+            valid &= data.Q[365:data.n_tot] > 0.0
     edges = np.diff(np.concatenate(([0], valid.astype(np.int8), [0])))
     starts = np.flatnonzero(edges == 1) + 365
     ends = np.flatnonzero(edges == -1) + 364
@@ -583,6 +615,8 @@ def detect_segments(data: CommonData) -> None:
         data.eval_mask = np.zeros(data.n_tot, dtype=np.bool_)
         if data.n_tot > 365:
             data.eval_mask[365:] = True
+        if data.warmup_from_first_day:      # a file shorter than a year (io.read_Tseries)
+            data.eval_mask[365:365 + data.warmup_drop_days] = False
         return
 
     data.eval_mask = np.zeros(data.n_tot, dtype=np.bool_)
@@ -679,9 +713,25 @@ def _run_integration(data: CommonData, segments, p):
         p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], theta_floor
     )
 
+def equilibrium_temperature(data: CommonData, i: int, p: np.ndarray) -> float:
+    """The water temperature at which the equation is at rest under the conditions of row
+    `i` (dTw/dt = A - B*Tw = 0, so A/B), not below `Tice_cover`. With a non-positive B there
+    is no such temperature; the day's air temperature is used instead."""
+    from .model_numba import fast_AB_version
+    theta_floor = data.min_theta_floor if data.min_theta_floor is not None else 0.0
+    A, B = fast_AB_version(data.version, p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8],
+                           data.Tair[i], data.Q[i], data.tt[i], data.Qmedia, theta_floor)
+    start = A / B if B > 0.0 else data.Tair[i]
+    return float(max(start, data.Tice_cover))
+
+
 def call_model_segmented(data: CommonData) -> None:
     """
-    Segmented ODE integration for gap-tolerant mode.
+    Segmented ODE integration for gap-tolerant mode. A calibration or validation starts
+    each segment from its measured water temperature, or else from the calibration's
+    day-of-year average. A FORWARD run starts it from the temperature that matches its
+    first day's conditions (`equilibrium_temperature`): a scenario's start must not come
+    from measurements made under other conditions, and paired runs must start alike.
     """
     data.Twat_mod[:] = -999.0
 
@@ -690,19 +740,13 @@ def call_model_segmented(data: CommonData) -> None:
 
     for start, end in data.segments:
         # Initial Condition
-        if data.Twat_obs[start] != -999.0:
+        if data.runmode == 'FORWARD':
+            data.Twat_mod[start] = equilibrium_temperature(data, start, p)
+        elif data.Twat_obs[start] != -999.0:
             data.Twat_mod[start] = data.Twat_obs[start]
         else:
-            # DOY is 0-indexed in array but 1-366 in reality
-            if data.calendar == 'standard':
-                year = data.date[start, 0]
-                month = data.date[start, 1]
-                day = data.date[start, 2]
-                doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
-            else:
-                from .io import calendar_day_index
-                doy = calendar_day_index(data, start)
-            data.Twat_mod[start] = data.doy_climatology[doy]
+            from .io import climatology_day
+            data.Twat_mod[start] = data.doy_climatology[climatology_day(data, start)]
 
     _run_integration(data, data.segments, p)
 
@@ -809,19 +853,22 @@ def aggregation(data: CommonData) -> None:
                 n_pos = n_pos - count
 
     elif unit == 'm':
-        # At most one month per 28 days, plus partial months at either end. (A count of
-        # n_tot / 30.5 was too small for 360-day records longer than about 60 years.)
+        # At most one month per 28 days, plus partial months at either end (a safe upper
+        # bound for any record length).
         n_units = (data.n_tot - 365) // 28 + 2
         data.I_inf = np.full((n_units, 3), -999, dtype=np.int32)
         n_days = 0
         month_curr = -999
+        full_days = 0   # the calendar length of the current month (prc applies to it, not to the
+                        # days present, so a month the record covers only in part is not scored
+                        # as a whole one); February has 28 days in a noleap record
         count = 0
         tmp = 0.0
 
         for i in range(365, data.n_tot):
             month = data.date[i, 1]
             if month != month_curr:
-                if count > 0 and count >= n_days * data.prc and i != 365:
+                if count > 0 and count >= full_days * data.prc and i != 365:
                     data.I_inf[n_inf - 1, 1] = n_pos - 2
                     data.I_inf[n_inf - 1, 2] = i - int(np.floor(0.5 * n_days)) - 1
                     data.Twat_obs_agg[data.I_inf[n_inf - 1, 2]] = tmp / count
@@ -831,6 +878,7 @@ def aggregation(data: CommonData) -> None:
                         data.I_pos[n_pos - 1 - count : n_pos - 1] = -999
                         n_pos = n_pos - count
                 month_curr = month
+                full_days = _days_in_month(int(data.date[i, 0]), int(month), data.calendar)
                 count = 0
                 n_days = 1
                 tmp = 0.0
@@ -844,7 +892,7 @@ def aggregation(data: CommonData) -> None:
                 count += 1
 
         # Last month
-        if count > 0 and count >= n_days * data.prc:
+        if count > 0 and count >= full_days * data.prc:
             data.I_inf[n_inf - 1, 1] = n_pos - 2
             data.I_inf[n_inf - 1, 2] = data.n_tot - 1 - int(np.floor(0.5 * n_days)) # using data.n_tot - 1 as the last i
             data.Twat_obs_agg[data.I_inf[n_inf - 1, 2]] = tmp / count

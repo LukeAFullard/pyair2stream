@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import scipy.signal
 from pyair2stream.uncertainty import estimate_ar1_rho, generate_ar1_noise, MIN_PAIRS_FOR_RHO_ESTIMATE
 
@@ -174,7 +175,9 @@ def test_least_squares_likelihood_matches_iid_at_rho_zero_and_widens_with_rho():
     runs = build_ar1_runs(np.ones(200, bool), [(0, 199)])
     assert np.isclose(_least_squares_log_likelihood(e, 0.0, runs), _iid_log_likelihood(e, np.zeros(200)))
     rho = 0.7
-    scale = (1 - rho) / (1 + rho)
+    from pyair2stream.uncertainty import scored_error_variance_factor
+    scale = 1.0 / scored_error_variance_factor(np.arange(200), rho)      # close to (1 - rho) / (1 + rho)
+    assert scale == pytest.approx((1 - rho) / (1 + rho), rel=0.02)
     d_ls = _least_squares_log_likelihood(1.1 * e, rho, runs) - _least_squares_log_likelihood(e, rho, runs)
     d_iid = _iid_log_likelihood(1.1 * e, np.zeros(200)) - _iid_log_likelihood(e, np.zeros(200))
     assert np.isclose(d_ls, scale * d_iid)

@@ -28,6 +28,23 @@ ACTIVE_PARAMS = {
     8: (0, 1, 2, 3, 4, 5, 6, 7),
 }
 VALID_VERSIONS = tuple(ACTIVE_PARAMS)
+
+
+def zero_flow_ok(version: int, min_theta_floor=None) -> bool:
+    """Whether a day of zero discharge can be simulated. Versions 3 and 5 do not use
+    discharge. Version 7 fixes a4 = 0, so it never divides by theta^a4: at theta = 0 its
+    discharge terms drop out. Versions 4 and 8 divide by theta^a4 and need
+    min_theta_floor (or gap-tolerant mode, which leaves such days out)."""
+    return version in (3, 5, 7) or min_theta_floor is not None
+
+
+def theta_floor_of(version: int, min_theta_floor=None):
+    """The lowest theta the model runs at, for `io.theta_of_days`: min_theta_floor when set,
+    0 for version 7 (which runs zero-flow days at theta = 0), else None (zero-flow days are
+    not simulated)."""
+    if min_theta_floor is not None:
+        return min_theta_floor
+    return 0.0 if version == 7 else None
 VALID_RUN_MODES = ('DE', 'PSO', 'LATHYP', 'FORWARD', 'DE-MCMC')
 VALID_INTEGRATORS = ('CRN', 'EXP', 'RK4', 'RK2', 'EUL')
 VALID_OBJECTIVES = ('NSE', 'KGE', 'RMS')
@@ -73,6 +90,9 @@ class CommonData:
     calib_theta_min: Optional[float] = None
     calib_theta_max: Optional[float] = None
     warmup_drop_days: int = 15
+    # A file shorter than a year, outside gap-tolerant mode: the warm-up holds its first
+    # day's conditions and its first warmup_drop_days are not scored (io.read_Tseries).
+    warmup_from_first_day: bool = False
     min_segment_days: int = 30
     segments: Optional[list] = None
     sensitivity_analysis: bool = False
@@ -103,6 +123,13 @@ class CommonData:
 
     # Top-level calibration seed. None reproduces the previous unseeded behaviour.
     random_seed: Optional[int] = None
+    # How a FORWARD run with prediction intervals chose its parameter sets, for the summary:
+    # {"seed": int or None, "source": "forward_options.random_seed" / "random_seed" / None,
+    #  "reused_from": path or None}. None when no parameter sets were drawn.
+    forward_draw: Optional[dict] = None
+    # The output folder's files when the run started ({relative path: (mtime_ns, size)}), so
+    # the summary describes only the files this run wrote (results.files_of_this_run).
+    folder_before: Optional[dict] = None
 
     # Cross Validation
     cross_validation: Optional['CVConfig'] = None  # Expected to be Optional[CVConfig]
@@ -138,10 +165,12 @@ class CommonData:
     # instead of hitting a `ZeroDivisionError` (a4 > 0) or a silent `inf` (a4 < 0).
     min_theta_floor: Optional[float] = None
 
-    # Declared calendar for the forcing series: 'standard' (real Gregorian dates,
-    # the only calendar the daily-continuity check validates against), 'noleap'
-    # (365 days every year, no Feb 29), or '360_day' (12 uniform 30-day months).
+    # Declared calendar for the forcing series: 'standard' (real Gregorian dates) or
+    # 'noleap' (real dates without 29 February: 365 days every year). '360_day' is
+    # refused: convert such files to the standard calendar first (USER_GUIDE.md §5).
     calendar: str = 'standard'
+    # With calendar 'noleap': remove rows dated 29 February (with a warning) instead of refusing the file.
+    drop_29_february: bool = False
     wmin: np.float64 = np.float64(0.0)
     wmax: np.float64 = np.float64(0.0)
 

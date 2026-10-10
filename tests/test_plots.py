@@ -23,7 +23,7 @@ def close_figures():
     plt.close("all")
 
 
-def _ensemble(n=200, days=730, seed=0):
+def _ensemble(n=200, days=731, seed=0):    # 2020 (a leap year) and 2021
     rng = np.random.default_rng(seed)
     dates = pd.date_range("2020-01-01", periods=days, freq="D")
     base = 10 + 8 * np.sin(2 * np.pi * (dates.dayofyear.to_numpy() - 110) / 365)
@@ -71,6 +71,9 @@ def test_change_by_month_and_day_for_one_or_several_scenarios():
 
     ax = plots.change(diff, dates, by="year")
     assert [t.get_text() for t in ax.get_xticklabels()] == ["2020", "2021"]
+    # A year the dates cover only in part is left out of the yearly changes.
+    ax = plots.change(diff[:, 100:], dates[100:], by="year")
+    assert [t.get_text() for t in ax.get_xticklabels()] == ["2021"]
     ax = plots.change(diff, dates, by="day")
     assert np.allclose(ax.get_lines()[-1].get_ydata(), diff[0])
     with pytest.raises(ValueError):

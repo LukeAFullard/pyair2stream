@@ -2,7 +2,171 @@
 
 ## [0.5.1] - 2026-10-09
 
+### Added
+- **`summary.html`.** Every run now also writes its summary as a web page, with
+  the figures inside it (at screen size), so it opens in any browser and can be
+  sent as one file. `summary.md` now also shows the figures and links each
+  output file.
+- **`drop_29_february`.** With `calendar: "noleap"`, a file with 29 February
+  rows was refused; `drop_29_february: true` removes those rows instead, with a
+  warning that counts them and the water-temperature measurements they held.
+  It is off by default.
+- **ρ that could not be measured is flagged.** With too few pairs of
+  consecutive measured days (measurements every other day or weekly, for
+  example), the error persistence ρ falls back to 0 and the parameter ranges
+  and multi-day ranges are too narrow. Until now only a console warning said
+  so. The chain's and the FORWARD run's `_meta.json` now record
+  `rho_measured`, and `summary.md` marks ρ as not measured in its uncertainty
+  table. A FORWARD run carries the flag over from the chain.
+- **Validation: a longer DE-MCMC run for one British Columbia station.**
+  `validation/v15_long_chain.py` reruns V15's sampler for one station with a
+  higher step limit. Station 08KH006, not converged within V15's 100,000
+  steps, converged after 127,000; 7 of its 8 published parameter values lie
+  outside the 90% intervals, as the unconverged run suggested
+  (`validation/reports/V15_long_chain.md`).
+
 ### Fixed
+- **Prediction ranges no longer go below the ice floor.** The random error
+  was added to each simulated series without the floor (`Tice_cover`) that the
+  simulation itself applies, so in winter the lower edge of a 90% band could
+  reach about −1 °C. Each series is now kept at or above `Tice_cover`, in the
+  DE-MCMC band, FORWARD runs and the cross-validation checks. In validation
+  V4, about 3% of the synthetic measurements are below 0 °C, where no range
+  can now reach, so its coverage fell by up to 3 points, to below the stated
+  levels, and V4 no longer passes. Real water does not go below freezing, and
+  V5, on real rivers, shows no such drop.
+- ⚠ **Zero-flow days in gap-tolerant mode are no longer skipped silently.**
+  Versions 4, 7 and 8 cannot simulate a day without flow, and gap-tolerant mode
+  treated such days as gaps without a message: the output marked them as not
+  missing, and `scenario.exceedance` counted them as not above the threshold.
+  A scenario in which the river dries up could therefore show fewer warm days
+  than the baseline. Now:
+  - a calibration or validation run warns, with the number of days and the
+    first one, and marks them in `Q_gap` of its output file (a calibration also
+    counts them in `gaps_summary.txt`);
+  - a FORWARD run stops with an error that explains the choices;
+  - with `min_theta_floor` set, the days are simulated (they were gaps even
+    then);
+  - `scenario.exceedance` and `scenario.aggregate` warn about days without a
+    simulated value, and `scenario.paired_difference` refuses two runs that
+    simulated different days.
+- **FORWARD runs use the calibration's error model.** A FORWARD run took the
+  error model (`noise_model`) from its own settings, so after a calibration
+  with `noise_model: "iid"` it used the default `"ar1"` unless the setting was
+  repeated, with a ρ the calibration had not used: its prediction ranges were
+  wider than the calibration's, without a message. It now takes the error model
+  from the chain's `_meta.json`; a different one set in the FORWARD settings is
+  used with a note, as are `residual_sigma` and `ar1_rho` set there (notes
+  appear in `summary.md`).
+- **The summary describes only its own run.** When runs shared an output
+  folder (as a calibration and its FORWARD runs may), `summary.md` took its
+  uncertainty section from the first record in the folder, so a FORWARD run's
+  summary could show the calibration's coverage, σ and convergence as its own;
+  it listed every file and figure in the folder as the run's outputs; and the
+  gap-filled series could take a prediction range left by an earlier run. Now a
+  run records the folder's files when it starts, warns if there are any, and
+  its summary, gap-filled series and `RunResult.files` use only the files it
+  wrote. The summary counts the others and names those it replaced.
+- **A FORWARD run's seed.** The draw of parameter sets for its prediction
+  intervals used only `forward_options.random_seed`, so a run with the
+  top-level `random_seed` alone was not repeatable, and `summary.md` reported
+  the top-level seed whether or not it had been used (it said "not repeatable"
+  for every example, which are). The draw now uses
+  `forward_options.random_seed`, else `random_seed` (a note says so if both are
+  set and differ), and `summary.md` states the seed used and where it was set,
+  that the parameter sets were reused from another run, or that the run has no
+  random choices.
+- **A paired difference checks the error settings.**
+  `scenario.paired_difference_from_files` now refuses two runs with a different
+  error model, σ or ρ: the error added to each draw then does not cancel, and
+  the difference's spread would include it.
+- **Extrapolation to zero flow is reported.** A FORWARD run warned about flows
+  outside the calibrated range only when more than 1% of days were outside, and
+  left out zero-flow days run at `min_theta_floor` (the furthest extrapolation
+  possible): a scenario with 11% dry days gave no warning. It now reports every
+  day outside the range, with the count, the first date, the lowest and highest
+  θ and the number of zero-flow days. The calibrated range also includes days
+  run at the floor, so they warn only when the calibration had none.
+- ⚠ **Negative discharge is an error.** With `min_theta_floor` set, a negative
+  value (for example a missing-value code such as -9999) was silently run as
+  zero flow. Negative discharge now always stops the run, and zero discharge
+  with `min_theta_floor` gives a warning with the number of days.
+- ⚠ **A FORWARD run uses the settings the parameters were fitted with.**
+  `Tice_cover` and `min_theta_floor` change what the model computes, but were
+  not recorded with the calibration, so a FORWARD run with different ones used
+  the parameters under different physics without a message.
+  `calibration_metadata.json` and the MCMC chain's `_meta.json` now record them
+  (with `calendar`, `gap_tolerant` and `time_resolution`, which describe the
+  fit), and a FORWARD run that loads either file stops if they differ. Files
+  written by earlier versions give a note asking you to check them.
+- **Validation and scenario files may be shorter than a year.** Every file had
+  to be at least 365 days long, only because the model's warm-up copies the
+  first year: a validation file covering one summer was skipped, and a short
+  scenario was refused. Validation and FORWARD files now need at least 30 days
+  (a warning recommends a year or more). A file shorter than a year starts from
+  its first day's conditions; its first `warmup_drop_days` are not scored and
+  are marked `warm_up = 1` in the output, and a warning says if the model needs
+  longer to forget its start. A calibration still needs a year, and the error
+  now gives the reason: the parameters of the yearly cycle cannot be fitted from
+  part of a year. Files of a year or more are unchanged.
+- **Cross-validation tests every whole year.** By default the first two years
+  were never held out, on the belief that the model needed earlier data to
+  start from; it does not (the held-out year keeps its forcing and has the
+  warm-up year before it, or in gap-tolerant mode restarts like any segment).
+  With 5 years, only 3 were tested. The defaults are now `skip_first_year:
+  false` and `min_train_years: 0`, and the error that refused them is gone;
+  both settings can still exclude first years. When the first year is held out,
+  the warm-up's copy of its measurements is hidden too, so they play no part
+  (the model then starts at 4 °C, a year before the record). Examples 03, 06
+  and 08 were rerun with the new defaults.
+- **Version 7 accepts zero discharge.** It was refused, like versions 4 and 8,
+  because those divide by θ^a4, which is undefined at zero flow; version 7
+  fixes a4 = 0 and never divides by θ. A zero-flow day is now simulated at
+  θ = 0 (its discharge terms drop out) in every mode, with a note giving the
+  number of days; in gap-tolerant mode it is no longer a gap. A FORWARD run
+  counts such days as outside the calibrated flows unless the calibration had
+  them too. Versions 4 and 8 are unchanged; negative discharge stays an error.
+- **Gap-tolerant FORWARD runs no longer need water temperature.** Each segment
+  started from the measured water temperature, or from the day-of-year average
+  of the run's own file, so a scenario file without water temperature (a
+  climate scenario, for example) stopped with an error, and one with it started
+  each segment from measurements made under other conditions. A FORWARD run now
+  starts each segment from the temperature at which the equation is at rest
+  under its first day's conditions; measured water temperature is used only to
+  report the fit. Calibration and validation are unchanged. Gap-tolerant output
+  files gain a `warm_up` column marking the unscored first days of each
+  segment.
+- **`Qmedia` must be positive.** A `Qmedia` of zero or below was refused only in
+  gap-tolerant mode; otherwise every simulated temperature was NaN and the run
+  stopped with an error that blamed the integrator. It is now refused for
+  versions 4, 7 and 8 in every mode, with a message that says why.
+- **Partial years and months are no longer counted as whole ones.** A record
+  that starts or ends part-way through a year has a partial first or last year
+  and month, which five places treated as whole. One rule now applies
+  throughout: a year, season or month counts only if the record covers all of
+  its days (unmeasured days inside it are fine, as before).
+  - Cross-validation does not hold out a partial year (it is still used for
+    training), with a warning; such a winter-only "year" scored far worse
+    than whole years and pulled the mean scores down. The jackknife counts only
+    whole years as blocks.
+  - The cross-validation check of yearly statistics leaves out a year the
+    held-out dates cover only in part: its season could pass the 80% rule on
+    the few days inside the record, biasing the correction applied to FORWARD
+    results.
+  - `plots.change(by="year")` leaves out partial years, with a warning.
+  - `bias_by_month` counts a month, season or year only if the record covers
+    all of its days (13 days of July counted as a July).
+  - Monthly scoring applies `prc` to the month's calendar length, so a few days
+    of a month at either end of the record are no longer scored as a monthly
+    mean (as in the Fortran, which compared them with the days present; METHODS
+    §17).
+- **Yearly statistics leave out partial years.** `scenario.year_statistics`
+  gave a "highest 7-day mean" and a count of warm days for the first and last
+  year of a file even when the file covered only part of them (for example a
+  record ending in March, whose "yearly peak" was a winter value). Such years
+  are now left out, with a warning; `partial_years="keep"` includes them. The
+  cross-validation check is unchanged: it keeps a year only if its season was
+  measured.
 - ⚠ **Any file may start on any date.** The 1 January start, which the
   Fortran assumed (it counted the time of year from the row number), is no
   longer required for calibration and validation files: the time of year comes
@@ -10,14 +174,12 @@
   repeats. Before, a record starting on 2 January had to wait for the next
   1 January, losing almost a year of measurements. Records starting on
   1 January give exactly the same results as before.
-- **`calendar: "noleap"` and `"360_day"` take the time of year from the dates.**
-  They counted it from the row position with the first row as 1 January, so a
-  FORWARD or gap-tolerant file starting on another date (for example
-  1 October, a water year) ran with its seasonal term out of phase, without a
-  message. A `noleap` file now has real dates without 29 February, checked for
-  missing and repeated days like standard dates. In a `360_day` file the first
-  date sets the day of the year the file starts on, and the rows are counted on
-  from there (METHODS §2).
+- **`calendar: "noleap"` takes the time of year from the dates.** It counted
+  it from the row position with the first row as 1 January, so a FORWARD or
+  gap-tolerant file starting on another date (for example 1 October, a water
+  year) ran with its seasonal term out of phase, without a message. A `noleap`
+  file now has real dates without 29 February, checked for missing and
+  repeated days like standard dates (METHODS §2).
 - **Ensemble draws that are unstable with RK4, RK2 or EUL are excluded.** In
   the DE-MCMC band and FORWARD intervals a draw now also counts as divergent
   when a difference can grow more than `stability_max_growth` times
@@ -25,9 +187,68 @@
   `max_plausible_twat` and still be wrong. `CRN` and `EXP` are not affected.
 - **DE-MCMC likelihood: exactly the scored values.** With weekly or monthly
   scoring, `prc` below 1 and gap-tolerant mode, a block whose middle day was
-  itself unscored was scored by the objective but left out of the likelihood.
-  The likelihood now uses the same blocks as the objective. Daily scoring and
+  itself unscored, or fell in a gap between segments, was scored by the
+  objective but left out of the likelihood (in one test, 8 of 123 blocks). The
+  likelihood now uses every block the objective scores. Daily scoring and
   `prc: 1` are unchanged.
+- **DE-MCMC likelihoods use the spacing of the scored days.** Errors d days
+  apart have correlation ρ^d, but both likelihoods assumed the scored days
+  were consecutive. With gappy or sparse measurements the default
+  (`least_squares`) counted too few independent values, so its ranges were too
+  wide (for measurements every other day at ρ = 0.86, about 1.4 times), and
+  `likelihood: "exact"` treated the days on either side of a gap as unrelated,
+  so its ranges were too narrow. Both now use the actual spacing (METHODS §12).
+  For complete daily data the effective number of values changes only by an
+  end-of-record term of about 0.3%.
+- **The mean error by month leaves out the unscored warm-up days.** In
+  gap-tolerant mode and for files shorter than a year, the first
+  `warmup_drop_days` of each segment or file are not scored, but
+  `bias_by_month_*` included them. A segment that starts on a measured day
+  starts at that measurement, so these days pulled the reported seasonal
+  error towards zero. They are now left out, as from the scores. The
+  calibration's table also no longer drops a month that the record covers
+  but whose first days are unscored. `filled_water_temperature_*.csv` gets
+  the `warm_up` column, so the model's still-settling values are marked.
+- **The local search after DE no longer stops on a runaway parameter set.** A
+  simulation that ran away scored minus infinity; L-BFGS-B's finite-difference
+  slope was then undefined (SciPy's "invalid value encountered in subtract")
+  and it stopped, keeping the DE result without a message. Such sets now get
+  the same large finite penalty as a set without a score, and an early stop is
+  reported.
+- **The stability checks include simulated zero-flow days.** With
+  `min_theta_floor`, versions 4 and 8 divide by the floor raised to a4 on
+  zero-flow days, so B can be hundreds of times larger there. The growth
+  check already included them; the share of days above the integrator's
+  limit and the reported largest B left them out. Both now include them.
+- ⚠ **`scenario.aggregate` gives no value for a partial period.** A week or
+  month that the dates covered only in part (at either end of the file), or
+  that included days without a simulated value (gaps), was computed from the
+  days it had, without a message: a 10-day file gave a 7-day and a 3-day
+  "week", and a monthly sum over 12 days of July. Such a period is now NaN,
+  with a warning. `min_days=N` accepts periods with at least N days with a
+  value, and `return_periods=True` also returns each period's label (METHODS
+  §13).
+- ⚠ **Qmedia includes zero-flow days when the model simulates them.** It
+  averaged only the days with discharge above zero; the original Fortran
+  averages every day with a value. With zero-flow days (version 7, or
+  `min_theta_floor`), Qmedia was larger than the mean discharge (25% for a
+  river dry a fifth of the time). It now matches the Fortran. Each earlier
+  calibration was self-consistent, and FORWARD runs keep the Qmedia recorded
+  in `calibration_metadata.json`; calibrating such a record again gives a
+  different Qmedia and different parameters (METHODS §4).
+- **The day-of-year water temperature is averaged by calendar date.** In
+  gap-tolerant mode a segment that starts without a measurement starts from
+  the average for that date. After 29 February a leap year's day numbers are
+  one ahead, so it averaged, for example, 1 March of leap years with 2 March
+  of other years (up to about 0.15 °C off in spring and autumn, within the
+  unscored warm-up days). 1 March is now averaged with 1 March, and
+  29 February has its own value (METHODS §10).
+- ⚠ **DE-MCMC refuses `objective_function: KGE`.** It found the best fit by
+  KGE but sampled the uncertainty with a least-squares likelihood, so the
+  reported best parameters and their ranges described two different fits,
+  without a message. It now stops with an error suggesting NSE or RMS (which
+  are least squares and agree with the likelihood). KGE remains available for
+  DE, PSO, LATHYP and cross-validation.
 - **LATHYP** started from a best score of −999, so if every sample scored
   lower (NSE can be far below −999), it returned the all-zero start
   parameters. It now keeps the best finite score, and stops with an error if
@@ -36,12 +257,28 @@
   every other warning, so they now appear in `summary.md` and
   `RunResult.messages`.
 
+### Removed
+- ⚠ **`calendar: "360_day"`.** It never worked: a file with genuine 360-day
+  dates (30 February) was refused when its dates were read, and relabelling
+  the rows with ordinary dates put months and years out of step with the
+  model's seasons by about 5 days a year, so monthly scoring, cross-validation
+  years and monthly or yearly results described the wrong part of the year,
+  without a message. It is now refused with an explanation. Convert such files
+  to the standard calendar first; USER_GUIDE §5 shows how with xarray.
+
 ### Documentation
+- Validation suite rerun on 0.5.1: 12 of 17 checks pass (V4, V5, V9, V10 and
+  V14 do not). README, USER_GUIDE, METHODS, UNCERTAINTY, PUBLISHED_RESULTS and
+  validation/README quote the new numbers.
+- METHODS §12: a seasonal error size was tested by cross-validation on the
+  Swiss rivers and not adopted (worse on the hottest days for version 8).
+- Validation: V6 writes `noleap` dates without 29 February, and V8 calibrates
+  with the ice floor of its scenario runs, as the new checks require.
 - METHODS §7 and USER_GUIDE §8: the scores in `goodness_of_fit_*.csv` are
   computed on the scored values (daily values, or weekly or monthly means).
-- METHODS §10: a gap-tolerant FORWARD run takes the day-of-year averages from
-  its own file. METHODS §13: in gap-tolerant mode a paired difference is too
-  small for the first days of each segment.
+- METHODS §10 and §13: how a gap-tolerant FORWARD run starts each segment
+  (at rest under its first day's conditions), and what that means for a
+  paired difference in the first days of a segment.
 
 ## [0.5.0] - 2026-10-05
 

@@ -94,7 +94,9 @@ def change(differences, dates, by: str = "month", level: float = 90, reference: 
     by : "day", "month" or "year"
         "day": the median change and its range on each day. "month": each simulation's
         mean change in each calendar month (all years together), as a median and a
-        range bar. "year": the same for each year.
+        range bar. "year": the same for each year; a year the dates cover only in part
+        (at the start or end) is left out, with a warning, as its mean would describe
+        only those days.
     level : float
         Width of the range in per cent.
     reference : float, optional
@@ -132,6 +134,13 @@ def change(differences, dates, by: str = "month", level: float = 90, reference: 
             continue
         keys = dates.month if by == "month" else dates.year
         groups = sorted(set(keys))
+        if by == "year":
+            from .scenario import partial_year_labels
+            partial = partial_year_labels(dates, dates.year)
+            if partial and k == 0:
+                print(f"Warning: year(s) {', '.join(str(int(y)) for y in partial)} are only partly covered by the "
+                      "dates, so they are left out of the yearly changes.")
+            groups = [g for g in groups if g not in partial]
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             means = np.array([np.nanmean(diff[:, keys == g], axis=1) for g in groups])     # (groups, simulations)

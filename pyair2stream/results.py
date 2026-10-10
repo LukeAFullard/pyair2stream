@@ -3,19 +3,24 @@ What a run produced, in one place.
 
 - `RunResult`, returned by `pyair2stream.run`: the best parameters, the scores, the
   warnings and notes the run printed, and the output files.
-- `summary.md`, a one-page summary written into every output folder.
+- `summary.md`, a one-page summary written into every output folder, and the same page as
+  `summary.html`, with the figures in it, to open in a web browser or send as one file.
 - `filled_water_temperature_<period>.csv`: the measured water temperature, with the
   model's values on the days without a measurement (and the prediction range where
   the run made one).
 """
 
+import base64
 import contextlib
 import datetime
 import glob
+import html
 import io
 import json
 import os
+import re
 import sys
+import urllib.parse
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -40,8 +45,9 @@ class RunResult:
         in goodness_of_fit_*.csv; a FORWARD run's are under "forward", a cross-validation
         run's (all held-out days together) under "cross-validation".
     messages: the warnings and notes the run printed, in order.
-    summary: the path of summary.md.
-    files: every output file, relative to output_dir.
+    summary: the path of summary.md (summary.html, beside it, is the same page with the figures).
+    files: the files this run wrote or replaced, relative to output_dir (the folder may also
+        hold files from earlier runs).
     data: the run's internal state (CommonData), for advanced use.
     """
     output_dir: str
@@ -111,7 +117,7 @@ def _simulation_files(data: CommonData) -> dict:
     files = {"calibration" if data.runmode != "FORWARD" else "forward":
              os.path.join(data.folder, f"2_{stem}c_{data.time_res}.csv"),
              "validation": os.path.join(data.folder, f"3_{stem}v_{data.time_res}.csv")}
-    return {k: v for k, v in files.items() if os.path.exists(v)}
+    return {k: v for k, v in files.items() if os.path.exists(v) and _this_run(data, v)}
 
 
 def _read_daily(path: str) -> pd.DataFrame:
@@ -130,7 +136,7 @@ def _range_file(data: CommonData, period: str) -> Optional[str]:
     else:
         return None
     path = os.path.join(data.folder, name)
-    return path if os.path.exists(path) else None
+    return path if os.path.exists(path) and _this_run(data, path) else None
 
 
 def _level(data: CommonData) -> float:
@@ -174,6 +180,30 @@ def output_files(folder: str) -> list:
     return sorted(out)
 
 
+def _stamp(path: str):
+    st = os.stat(path)
+    return st.st_mtime_ns, st.st_size
+
+
+def snapshot_folder(folder: str) -> dict:
+    """The files in a folder now, with when they were last written: {relative path: stamp}."""
+    return {name: _stamp(os.path.join(folder, name)) for name in output_files(folder)} if os.path.isdir(folder) else {}
+
+
+def files_of_this_run(data: CommonData) -> list:
+    """The files in the output folder that this run wrote or replaced (all of them if the
+    folder was not recorded when the run started)."""
+    before = getattr(data, "folder_before", None)
+    files = output_files(data.folder)
+    if before is None:
+        return files
+    return [f for f in files if before.get(f) != _stamp(os.path.join(data.folder, f))]
+
+
+def _this_run(data: CommonData, path: str) -> bool:
+    return os.path.relpath(path, data.folder) in set(files_of_this_run(data))
+
+
 # --- Gap-filled water temperature --------------------------------------------------------------------
 
 def write_filled_series(data: CommonData) -> list:
@@ -189,6 +219,9 @@ def write_filled_series(data: CommonData) -> list:
         out["T_water_filled"] = out.T_water_measured.where(out.T_water_measured.notna(), out.T_water_model)
         out["source"] = np.where(out.T_water_measured.notna(), "measured",
                                  np.where(out.T_water_model.notna(), "model", "none"))
+        if "warm_up" in sim:
+            # The model is still settling on these days (not scored): its values are less reliable.
+            out["warm_up"] = sim.warm_up.fillna(0).astype(int)
         rng = _range_file(data, period)
         if rng:
             band = _read_daily(rng)
@@ -204,6 +237,7 @@ def write_filled_series(data: CommonData) -> list:
 
 FILE_DESCRIPTIONS = (
     ("summary.md", "this page"),
+    ("summary.html", "this page with the figures in it, to open in a web browser or send as one file"),
     ("filled_water_temperature_", "the measured water temperature, with the model's values on the days without "
                                   "a measurement (`source` says which), and the prediction range where there is one"),
     ("0_", "every parameter set tried during the calibration, with its score"),
@@ -247,6 +281,19 @@ def _describe(name: str) -> str:
     return ""
 
 
+# The figures in summary.md and summary.html: the simulations first, then the checks of the
+# errors, then the calibration's diagnostics; any other figure last.
+FIGURE_ORDER = ("calibration_", "validation_", "full_simulation_", "forward_projection", "predicted_vs_measured_",
+                "bias_by_month_", "residual_diagnostics_", "parameter_significance_", "parameter_correlation_",
+                "convergence_", "dottyplots_")
+
+
+def _figure_rank(name: str):
+    base = os.path.basename(name)
+    rank = next((i for i, prefix in enumerate(FIGURE_ORDER) if base.startswith(prefix)), len(FIGURE_ORDER))
+    return rank, name
+
+
 def _period_rows(data: CommonData) -> list:
     rows = []
     for period, path in _simulation_files(data).items():
@@ -278,6 +325,21 @@ def _fmt(x, digits=3):
     return "" if x is None or (isinstance(x, float) and not np.isfinite(x)) else f"{x:.{digits}f}"
 
 
+def seed_text(data: CommonData) -> str:
+    """What made the run's random choices repeatable, for the summary. A FORWARD run's only
+    random choice is the draw of parameter sets for its prediction intervals."""
+    if data.runmode != "FORWARD":
+        return str(data.random_seed) if data.random_seed is not None else "none (not repeatable)"
+    draw = getattr(data, "forward_draw", None)
+    if not draw:
+        return "not needed (no random choices in this run)"
+    if draw.get("reused_from"):
+        return f"not needed: the parameter sets were reused from `{draw['reused_from']}`"
+    if draw.get("seed") is None:
+        return "none (not repeatable)"
+    return f"{draw['seed']} ({draw['source']})"
+
+
 def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], messages: list,
                   settings: str = "", seconds: Optional[float] = None) -> str:
     """Write summary.md into the output folder and return its path."""
@@ -294,7 +356,7 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
     if data.runmode != "FORWARD":
         lines.append(f"| Score | {data.fun_obj}, on {_resolution(data.time_res)} |")
     lines.append(f"| Integrator | {data.mod_num} |")
-    lines.append(f"| Random seed | {data.random_seed if data.random_seed is not None else 'none (not repeatable)'} |")
+    lines.append(f"| Random seed | {seed_text(data)} |")
     lines.append(f"| Gap-tolerant mode | {'yes' if data.gap_tolerant else 'no'} |")
     if data.version in (4, 7, 8):
         lines.append(f"| Qmedia (mean discharge) | {data.Qmedia:.4g} ({'set in the settings' if data.Qmedia_user is not None else 'computed from the calibration file'}) |")
@@ -330,7 +392,8 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
         if data.runmode != "FORWARD":
             lines.append("| lower bound | " + " | ".join(f"{lo[n]:.4g}" for n in names) + " |")
             lines.append("| upper bound | " + " | ".join(f"{hi[n]:.4g}" for n in names) + " |")
-            sig = glob.glob(os.path.join(data.folder, "parameter_significance_*.csv"))
+            sig = [f for f in glob.glob(os.path.join(data.folder, "parameter_significance_*.csv"))
+                   if _this_run(data, f)]
             if sig:
                 table = pd.read_csv(sig[0])
                 lower = [c for c in table.columns if c.endswith("_CI_Lower")]
@@ -349,8 +412,11 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
                       + (" Widen that bound and calibrate again." if at_bound else "")]
         lines.append("")
 
-    meta = glob.glob(os.path.join(data.folder, "MCMC_chain_*_meta.json")) + \
-        glob.glob(os.path.join(data.folder, "Forward_Prediction_Ensemble_*_meta.json"))
+    # The uncertainty record of this run only: a FORWARD run's prediction intervals, or a
+    # DE-MCMC run's chain (not those of another run sharing the output folder).
+    pattern = {"FORWARD": "Forward_Prediction_Ensemble_*_meta.json", "DE-MCMC": "MCMC_chain_*_meta.json"}
+    meta = [f for f in glob.glob(os.path.join(data.folder, pattern.get(data.runmode, "-")))
+            if _this_run(data, f)]
     if meta:
         m = json.load(open(meta[0]))
         level = _level(data)
@@ -364,7 +430,13 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
         if sigma is not None:
             lines.append(f"| Daily error size σ | {sigma:.3f} °C |")
         if m.get("rho") is not None:
-            lines.append(f"| Error persistence ρ | {m['rho']:.3f} |")
+            if m.get("rho_measured") is False:
+                lines.append(f"| Error persistence ρ | {m['rho']:.3f}: **not measured**. There were too few pairs of "
+                             "consecutive measured days (at least 30 are needed), so no persistence was assumed. "
+                             "The parameter ranges and the ranges of anything longer than a day are therefore too "
+                             "narrow (docs/UNCERTAINTY.md §5) |")
+            else:
+                lines.append(f"| Error persistence ρ | {m['rho']:.3f} |")
         if m.get("interval_coverage") is not None:
             lines.append(f"| Measured days inside the {level:g}% range | {100 * m['interval_coverage']:.1f}% of "
                          f"{m.get('interval_coverage_n_days', '?')} (should be close to {level:g}%) |")
@@ -374,9 +446,12 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
     lines += [f"- {msg}" for msg in messages] if messages else ["None."]
     lines.append("")
 
-    files = output_files(data.folder)
-    if "summary.md" not in files:
-        files = sorted(files + ["summary.md"])
+    files = sorted(set(files_of_this_run(data)) | {"summary.md", "summary.html"})
+    figures = sorted((name for name in files if name.lower().endswith(".png")), key=_figure_rank)
+    if figures:
+        lines += ["## Figures", ""]
+        for name in figures:
+            lines += [f"![{_describe(name) or os.path.basename(name)}]({_href(name)})", ""]
     # A figure saved as .png and .pdf is listed once, with both extensions.
     grouped = {}
     for name in files:
@@ -385,13 +460,132 @@ def write_summary(data: CommonData, scores: dict, parameters: Optional[dict], me
         grouped.setdefault(key, []).append(name)
     lines += ["## Output files", "", "| File | What it is |", "|---|---|"]
     for key, names in grouped.items():
-        shown = f"`{names[0]}`" if len(names) == 1 else f"`{key}` (" + ", ".join(
-            os.path.splitext(n)[1] for n in names) + ")"
+        shown = f"[`{names[0]}`]({_href(names[0])})" if len(names) == 1 else f"`{key}` (" + ", ".join(
+            f"[{os.path.splitext(n)[1]}]({_href(n)})" for n in names) + ")"
         lines.append(f"| {shown} | {_describe(names[0])} |")
+    before = getattr(data, "folder_before", None) or {}
+    replaced = sorted(f for f in before if f in files)
+    earlier = len(before) - len(replaced)
+    if before:
+        lines += ["", f"This folder also holds {earlier:,} file(s) from earlier runs, not described here."
+                  + (" This run replaced these files of an earlier run: " + ", ".join(f"`{f}`" for f in replaced)
+                     + "." if replaced else "")]
     lines += ["", "## Next", "",
               "- How to read these results: USER_GUIDE.md §8.",
               "- Before using them for a decision: the checklist in USER_GUIDE.md §14.", ""]
     path = os.path.join(data.folder, "summary.md")
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
+    with open(os.path.join(data.folder, "summary.html"), "w", encoding="utf-8") as f:
+        f.write(summary_html(lines, data.folder))
     return path
+
+
+# --- summary.html ------------------------------------------------------------------------------------
+
+FIGURE_WIDTH = 1200     # pixels: figures are saved at 300 dpi; the page holds a smaller copy (256 colours)
+
+_CSS = """
+:root { --fg: #1d2125; --muted: #5b6570; --bg: #ffffff; --line: #d8dde3; --head: #f3f5f7; --link: #0b5cad; }
+@media (prefers-color-scheme: dark) {
+  :root { --fg: #e6e9ec; --muted: #a3acb6; --bg: #16191c; --line: #343a40; --head: #1f2327; --link: #7db7f0; }
+}
+body { font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg);
+       max-width: 1000px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 1.6em; margin: 0 0 4px; } h2 { font-size: 1.2em; margin-top: 2em; border-bottom: 1px solid var(--line); }
+table { border-collapse: collapse; margin: 8px 0; display: block; overflow-x: auto; }
+th, td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; vertical-align: top; }
+th { background: var(--head); } td:has(code) { min-width: 14em; }
+code { font: 0.9em ui-monospace, Menlo, Consolas, monospace; word-break: break-all; }
+a { color: var(--link); }
+figure { margin: 16px 0 28px; } figure img { max-width: 100%; height: auto; background: #fff; }
+figcaption { color: var(--muted); font-size: 0.92em; }
+"""
+
+
+def _href(name: str) -> str:
+    return urllib.parse.quote(name.replace(os.sep, "/"))
+
+
+def _inline(text: str) -> str:
+    """The inline Markdown of summary.md (code, bold, links) as HTML."""
+    out = html.escape(text, quote=False)
+    out = re.sub(r"\[(.+?)\]\(([^)\s]+)\)", lambda m: f'<a href="{html.escape(m.group(2))}">{m.group(1)}</a>', out)
+    out = re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
+    return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", out)
+
+
+def _image_data(path: str) -> Optional[str]:
+    """The figure as a data: URI, at most FIGURE_WIDTH pixels wide and in 256 colours (about a
+    quarter of the size, with no visible loss for line plots); None if it cannot be read."""
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            im = im.convert("RGB")
+            if im.width > FIGURE_WIDTH:
+                im = im.resize((FIGURE_WIDTH, round(im.height * FIGURE_WIDTH / im.width)), Image.LANCZOS)
+            buf = io.BytesIO()
+            im.quantize(256, method=Image.Quantize.MEDIANCUT).save(buf, format="PNG", optimize=True)
+            raw = buf.getvalue()
+    except Exception:  # noqa: BLE001  (a figure that cannot be scaled is embedded as it is)
+        try:
+            with open(path, "rb") as f:
+                raw = f.read()
+        except OSError:
+            return None
+    return "data:image/png;base64," + base64.b64encode(raw).decode("ascii")
+
+
+def _table_html(rows: list) -> str:
+    cells = [[c.strip() for c in row.strip().strip("|").split("|")] for row in rows]
+    head, body = cells[0], [c for c in cells[1:] if not all(set(x) <= set("-: ") for x in c)]
+    out = ["<table>"]
+    if any(head):
+        out.append("<thead><tr>" + "".join(f"<th>{_inline(c)}</th>" for c in head) + "</tr></thead>")
+    out.append("<tbody>")
+    for row in body:
+        tag = "th" if not any(head) and row and row[0] else "td"
+        out.append("<tr>" + "".join(f"<{tag if i == 0 else 'td'}>{_inline(c)}</{tag if i == 0 else 'td'}>"
+                                    for i, c in enumerate(row)) + "</tr>")
+    return "\n".join(out + ["</tbody></table>"])
+
+
+def summary_html(lines: list, folder: str) -> str:
+    """summary.md (its lines) as a self-contained web page, with the figures embedded."""
+    title = lines[0].lstrip("# ").strip() if lines else "pyair2stream run summary"
+    body, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("|"):
+            j = i
+            while j < len(lines) and lines[j].startswith("|"):
+                j += 1
+            body.append(_table_html(lines[i:j]))
+            i = j
+            continue
+        if line.startswith("- "):
+            j = i
+            while j < len(lines) and lines[j].startswith("- "):
+                j += 1
+            body.append("<ul>" + "".join(f"<li>{_inline(x[2:])}</li>" for x in lines[i:j]) + "</ul>")
+            i = j
+            continue
+        figure = re.fullmatch(r"!\[(.*)\]\((.+)\)", line)
+        if figure:
+            name = urllib.parse.unquote(figure.group(2))
+            src = _image_data(os.path.join(folder, name))
+            caption = f"{_inline(figure.group(1))} (<a href=\"{figure.group(2)}\"><code>{html.escape(name)}</code></a>)"
+            if src:
+                body.append(f'<figure><img src="{src}" alt="{html.escape(figure.group(1))}">'
+                            f"<figcaption>{caption}</figcaption></figure>")
+        elif line.startswith("## "):
+            body.append(f"<h2>{_inline(line[3:])}</h2>")
+        elif line.startswith("# "):
+            body.append(f"<h1>{_inline(line[2:])}</h1>")
+        elif line.strip():
+            body.append(f"<p>{_inline(line)}</p>")
+        i += 1
+    return ("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+            f"<title>{html.escape(title)}</title>\n<style>{_CSS}</style>\n</head>\n<body>\n"
+            + "\n".join(body) + "\n</body>\n</html>\n")

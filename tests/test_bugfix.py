@@ -24,6 +24,8 @@ def test_mcmc_autocorr_invalid_json():
     data.Twat_mod = np.array([1, 2, 3])
     data.eval_mask = None
     data.gap_tolerant = False
+    data.calendar = "standard"
+    data.min_theta_floor = None
     data.uncertainty_options = {'strict_convergence': False}
     data.date = np.array([[2000, 1, 1], [2000, 1, 2], [2000, 1, 3]])
     data.station = "test"

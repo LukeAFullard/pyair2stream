@@ -14,6 +14,30 @@ Two things make a prediction uncertain:
 A **90% prediction interval** includes both. On 90% of days, the measured
 temperature should fall inside it.
 
+## The method, and why
+
+This example uses the package's standard route to a prediction range, in two
+runs:
+
+1. **`DE-MCMC` on the calibration years.** DE finds the best fit. MCMC (Markov
+   chain Monte Carlo) then collects thousands of parameter sets, each in
+   proportion to how well it fits: the **chain**. The run also measures the
+   size (σ) and persistence (ρ) of the best fit's daily errors.
+2. **A `FORWARD` run with intervals on the years to predict.** It draws 1,000
+   parameter sets from the chain, simulates each, and adds a random error
+   series of size σ and persistence ρ to each one. On each day, the 90%
+   interval runs from the 5th to the 95th percentile of the 1,000 values. Each
+   series is kept at or above the ice floor (`Tice_cover`, 0 °C by default),
+   as the simulation itself is.
+
+Why this way: the parameters alone would give a band far too narrow (they are
+fixed well by eight years of data), and the error model alone would ignore
+that other parameter sets fit almost as well. The chain carries the first, the
+error model the second. The interval is then tested on years the calibration
+did not see (step 2 below), because only that shows whether it holds.
+[docs/UNCERTAINTY.md](../../docs/UNCERTAINTY.md) explains each part in plain
+words (§4, §6 and §11).
+
 ## Step 1: calibrate with uncertainty
 
 ```bash
@@ -26,10 +50,10 @@ block. After the calibration, the sampler runs in blocks of 1,000 steps until
 its results are stable. Then it reports:
 
 ```
-  6000 steps: max autocorrelation time 35.4, max split-Rhat 1.0077
+  6000 steps: max autocorrelation time 34.9, max split-Rhat 1.0090
 MCMC converged after 6000 steps (at least 50 x the autocorrelation time, split-Rhat below 1.01).
 ...
-Interval check: 91.0% of 2907 observed days lie inside the 90% prediction interval.
+Interval check: 91.1% of 2907 observed days lie inside the 90% prediction interval.
 ```
 
 The two numbers say whether the sampler has run long enough. The
@@ -59,8 +83,11 @@ pyair2stream --config examples/02_uncertainty/predict.yaml
 [`predict.yaml`](predict.yaml) is a `FORWARD` run on the 2010–2012 data. It:
 
 - takes the fitted parameters and the discharge scaling (`Qmedia`) from step 1's
-  `calibration_metadata.json`;
+  `calibration_metadata.json`. It stops if the chain was fitted with another
+  model version, integrator, `Qmedia`, `Tice_cover` or `min_theta_floor`;
 - draws 1,000 parameter sets from the chain;
+- takes the error model (`noise_model`, σ and ρ) from the chain's
+  `_meta.json`, so it adds the same kind of error as step 1 measured;
 - writes the interval for every day to
   `output/prediction/Forward_Prediction_Envelopes_Mentue_c_1d.csv`
   (`Twat_mod_lower`, `Twat_mod_p50`, `Twat_mod_upper`).
@@ -68,10 +95,10 @@ pyair2stream --config examples/02_uncertainty/predict.yaml
 2010–2012 have measurements, so it also reports how many fall inside:
 
 ```
-Interval check: 89.5% of 1095 observed days lie inside the 90% prediction interval.
+Interval check: 89.1% of 1095 observed days lie inside the 90% prediction interval.
 ```
 
-That is close to 90%, slightly below. The validation suite found 85–89% on
+That is close to 90%, slightly below. The validation suite found 85–90% on
 three Swiss rivers ([V5](../../validation/REPORT.md#v5)). The model's errors
 are somewhat larger in years it has not seen. So the intervals are slightly
 too narrow for new years.
@@ -90,8 +117,8 @@ Keep the defaults. In short:
   day, the alternative `"iid"` (independent errors) gives about the same
   interval. But for anything over several days (7-day means, a run of days
   above a limit), `"iid"` gives intervals that are far too narrow. On the Swiss
-  rivers, its 90% intervals for 7-day means held only 39–62% of the time,
-  against 89–94% with `"ar1"` ([V5](../../validation/REPORT.md#v5)).
+  rivers, its 90% intervals for 7-day means held only 39–59% of the time,
+  against 87–93% with `"ar1"` ([V5](../../validation/REPORT.md#v5)).
 - **`likelihood`** is left at its default, `"least_squares"`. It keeps the band
   centred on the best fit. The alternative, `"exact"`, centred this example's
   band about 0.04 °C cooler. It also gave lower probabilities of exceeding a
@@ -104,16 +131,30 @@ Keep the defaults. In short:
   means and yearly peaks it does (example 03).
 - **`random_seed`** makes the whole run repeatable.
 
+## What the result means, and what it does not
+
+- It means: on a day of 2010–2012, the measured daily mean water temperature
+  lay inside the 90% interval on about 9 days in 10. The interval is honest for
+  single days in years like the calibration years.
+- It does not give a range for anything spanning several days (a 7-day mean,
+  a yearly peak, a count of warm days). Those must be computed in each
+  simulated series (example [03](../03_compliance/README.md)).
+- It does not cover errors in the inputs (air temperature and discharge are
+  taken as exact), or a river that changed after the calibration years.
+- For years unlike the calibration years, expect the interval to be slightly
+  too narrow (see above).
+
 ## About the parameters
 
 `output/calibration/parameter_significance_DE-MCMC_Mentue.csv` lists each
 parameter's mean and 90% range. The ranges lie around the best fit in
-`calibration_metadata.json`, but not always evenly. For example, `a5` is 2.54
-in the best fit and 3.01 on average in the chain, with a 90% range of 2.02 to
-4.24.
+`calibration_metadata.json`, but not always evenly. For example, `a5` is 2.55
+in the best fit and 3.02 on average in the chain, with a 90% range of 2.03 to
+4.25.
 
-In a test with known parameters, such 90% ranges contained the true value at
-least 90% of the time ([V4](../../validation/REPORT.md#v4)). In that test
+In a test with known parameters, such 90% ranges, made with the default
+settings used here, contained the true value at least 90% of the time
+([V4](../../validation/REPORT.md#v4)). In that test
 (version 5), the ranges of the slow-acting parameters (`a1`, `a6`, `a7`) were
 about the right width. Those of the fast-acting ones (`a2`, `a3`) were wider
 than needed, which errs on the side of caution

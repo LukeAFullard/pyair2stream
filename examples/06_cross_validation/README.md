@@ -13,6 +13,23 @@ calibrates on the others, and predicts the hidden year. Then it repeats this
 for each year. Each of these calibrations, with one year hidden, is called a
 **fold**.
 
+**The uncertainty methods, and why.** This example uses two:
+
+- **Cross-validation** for the predictions. Each year is predicted from a
+  calibration that never saw its water temperatures (its air temperature and
+  discharge, the model's inputs, are kept). So the error on the hidden years
+  is an honest measure of how well the model predicts a year it was not
+  fitted to.
+- **The jackknife** for the parameters. The folds share most of their years,
+  so the spread of their parameters is far too small to be an uncertainty. The
+  jackknife scales it up to account for that overlap, and gives approximate
+  90% confidence intervals for the parameters.
+
+Neither gives a prediction interval. For that, use DE-MCMC and a `FORWARD` run
+(example [02](../02_uncertainty/README.md)).
+[docs/UNCERTAINTY.md](../../docs/UNCERTAINTY.md) explains cross-validation in
+§8 and the jackknife in §11.
+
 ## Run it
 
 ```bash
@@ -27,9 +44,11 @@ the Mentue's 2002–2009 record, with a `cross_validation` block:
 ```yaml
 cross_validation:
   enabled: true
-  unit: "year"             # hide one calendar year at a time
-  skip_first_year: true    # 2002 and 2003 are always used for calibration
+  unit: "year"             # hide one calendar year at a time: each of 2002-2009 in turn
 ```
+
+Every year is hidden in turn, the first one included: the model does not need
+earlier data to start from.
 
 They also set `Qmedia`, the mean discharge of 2002–2009. Then every fold scales
 discharge the same way. Otherwise, version 8's parameters would also move with
@@ -56,6 +75,8 @@ Each run writes:
 
 | Year held out | RMSE, version 5 | RMSE, version 8 |
 |---|---|---|
+| 2002 | 0.70 °C | 0.60 °C |
+| 2003 | 0.66 °C | 0.71 °C |
 | 2004 | 0.56 °C | 0.54 °C |
 | 2005 | 0.62 °C | 0.64 °C |
 | 2006 | 0.76 °C | 0.64 °C |
@@ -75,7 +96,7 @@ Each run writes:
   was about three times the usual (a mean of 2.5, against 0.4–0.9 in the other
   years).
 - **Version 8 is slightly better.** Its error over all held-out days is
-  0.66 °C, against 0.69 °C, and it is better in four of the six years. The gain
+  0.66 °C, against 0.69 °C, and it is better in five of the eight years. The gain
   is small. But version 5 does not use discharge, so it cannot be used for flow
   scenarios such as example 04.
 
@@ -86,14 +107,16 @@ the best-fit parameters move when the data change. For version 8:
 
 | Year held out | a1 | a2 | a3 | a4 | a5 | a6 | a7 | a8 |
 |---|---|---|---|---|---|---|---|---|
-| 2004 | 0.925 | 0.651 | 0.769 | 0.069 | 2.475 | 1.645 | 0.601 | 0.260 |
-| 2005 | 0.888 | 0.681 | 0.800 | 0.061 | 2.686 | 1.748 | 0.601 | 0.278 |
-| 2006 | 0.850 | 0.669 | 0.784 | 0.047 | 2.783 | 1.784 | 0.595 | 0.290 |
-| 2007 | 0.874 | 0.639 | 0.757 | 0.071 | 2.767 | 1.992 | 0.603 | 0.282 |
-| 2008 | 0.877 | 0.629 | 0.741 | 0.078 | 2.340 | 1.550 | 0.601 | 0.244 |
-| 2009 | 0.849 | 0.659 | 0.774 | −0.035 | 2.630 | 1.710 | 0.602 | 0.272 |
-| **mean** | 0.877 | 0.655 | 0.771 | 0.048 | 2.613 | 1.738 | 0.600 | 0.271 |
-| **90% interval** | 0.741–1.013 | 0.562–0.748 | 0.671–0.870 | −0.158–0.255 | 1.765–3.462 | 1.012–2.464 | 0.587–0.614 | 0.190–0.352 |
+| 2002 | 0.912 | 0.635 | 0.750 | 0.107 | 2.288 | 1.545 | 0.601 | 0.241 |
+| 2003 | 0.925 | 0.677 | 0.795 | 0.096 | 2.689 | 1.764 | 0.602 | 0.282 |
+| 2004 | 0.926 | 0.659 | 0.778 | 0.062 | 2.562 | 1.701 | 0.601 | 0.268 |
+| 2005 | 0.888 | 0.681 | 0.800 | 0.061 | 2.685 | 1.747 | 0.601 | 0.278 |
+| 2006 | 0.849 | 0.669 | 0.783 | 0.048 | 2.781 | 1.782 | 0.595 | 0.289 |
+| 2007 | 0.873 | 0.639 | 0.756 | 0.070 | 2.766 | 1.991 | 0.603 | 0.282 |
+| 2008 | 0.878 | 0.629 | 0.742 | 0.078 | 2.340 | 1.550 | 0.601 | 0.244 |
+| 2009 | 0.848 | 0.660 | 0.775 | −0.036 | 2.630 | 1.710 | 0.602 | 0.272 |
+| **mean** | 0.887 | 0.656 | 0.772 | 0.061 | 2.593 | 1.724 | 0.601 | 0.270 |
+| **90% interval** | 0.742–1.033 | 0.564–0.749 | 0.674–0.871 | −0.144–0.265 | 1.720–3.465 | 1.061–2.387 | 0.590–0.612 | 0.185–0.354 |
 
 ![Parameters fitted without each year, and their 90% intervals](figures/parameters_by_fold.png)
 
@@ -101,19 +124,19 @@ the best-fit parameters move when the data change. For version 8:
 
 - **Some parameters are fixed firmly, others loosely.** `a7`, the timing of
   the seasonal term, comes back within ±1% every time. `a1` to `a3` come back
-  within ±6%. The discharge terms `a5`, `a6` and `a8` move by up to ±15%. `a6`
+  within ±5%. The discharge terms `a5`, `a6` and `a8` move by up to 16%. `a6`
   moves most when 2007, the unusual year, is left out.
 - **The data do not fix `a4`.** It even changes sign (when 2009 is left out).
   Its interval includes zero. So the data cannot tell whether discharge
   changes the river's thermal inertia. Version 7 fixes `a4` at zero.
 - **Parameters that trade off move together.** `a2` and `a3` rise and fall
-  together (correlation 0.99 across the folds), and so do `a5` and `a8`. Their
+  together (correlation 1.00 across the folds), and so do `a5` and `a8` (0.99). Their
   ratios are much steadier than either parameter:
   - `a2/a3` is how much the water warms per degree of air temperature. It
     stays between 0.845 and 0.854. Its 90% interval is ±2%, against ±13–14% for
     `a2` and `a3` themselves.
   - `a5/a8` is the temperature the discharge terms pull the water towards. It
-    stays between 9.5 and 9.8 °C. Its interval is ±4%, against ±30–32% for
+    stays between 9.5 and 9.8 °C. Its interval is ±5%, against ±31–34% for
     `a5` and `a8`.
 
   The data fix these combinations well. That is why the predictions change so
@@ -128,16 +151,16 @@ uncertainty. Any two folds share six of their seven calibration years, so they
 are bound to agree more closely than calibrations on different records would.
 
 The jackknife corrects for this overlap. Here it widens the spread by a factor
-of 2.4. The result is the `jackknife_90` rows: approximate 90% confidence
+of 2.5. The result is the `jackknife_90` rows: approximate 90% confidence
 intervals for the value a calibration would find from a record of similar
 years. They are the bands in the figure.
 
 Keep in mind:
 
 - **They are approximate.** In a test with known parameters, these intervals
-  contained the true values 83–95% of the time, for every model version
+  contained the true values 81–95% of the time, for every model version
   ([validation V4](../../validation/REPORT.md#v4)). The MCMC parameter ranges
-  of example 02 did as well or better in that test (97% for version 5, 93% for
+  of example 02 did as well or better in that test (97% for version 5, 92% for
   version 8).
 - **They describe years like those in the record.** Conditions the record does
   not contain, such as much lower summer flows, can need different values.
@@ -192,6 +215,18 @@ the simulated water temperature (`output/sensitivity/sensitivity_*.csv`):
 - A low sensitivity does not mean a poorly fixed parameter. `a7` changes the
   simulation little per 1% of its range (3.7 days), yet the data fix it within
   ±1%, because it shifts the whole yearly cycle.
+
+## What the results mean, and what they do not
+
+- The held-out errors mean: in a year like 2002–2009, with measured air
+  temperature and discharge, expect a typical daily error of about 0.7 °C,
+  and up to 0.9 °C in an unusual year.
+- They do not show how the model does in conditions the record does not
+  contain (a much drier or warmer year), or with inputs that are themselves
+  uncertain (a climate scenario, a borrowed air-temperature record).
+- Each year is predicted from the other years, later ones included. For
+  predictions of the future, a test on later years only (example
+  [01](../01_quickstart/README.md)) is the stricter one.
 
 ## When to use it
 

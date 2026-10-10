@@ -42,13 +42,19 @@ python validation/run_all.py --only V2 V6
 ```
 
 With `--only`, the other checks keep their reports from the earlier run.
-`REPORT.md` then names the run each report comes from. Since the DE stopping
-rule was tightened (0.5.0), V2 and V4 take about an hour each. Where jobs are
-limited in length, run the suite in parts with `--only`. V15, the longest
-check, saves each station's results in `work/v15_cache/` as it goes. If it is
+`REPORT.md` then names the run each report comes from. In the committed
+report (4 cores), the checks took about 3.5 hours in all: V15 and V2 about 50
+minutes each, V4 about 45 minutes, V9 and V12 about a quarter of an hour each,
+and every other check under 10 minutes (each check's report gives its run
+time). Where jobs are limited in length, run the suite in parts with
+`--only`. V15, the longest check, saves each station's results in `work/v15_cache/` as it goes. If it is
 stopped, running it again reuses them, but only if the code of the package
 and of the suite is exactly the same; its report then says how many were
 reused.
+
+`v15_long_chain.py` is not part of the suite: it reruns V15's DE-MCMC for one
+station with a higher step limit (`python validation/v15_long_chain.py 08KH006
+--steps 500000`, about half an hour) and writes `reports/V15_long_chain.md`.
 
 V1 needs `gfortran` and the Fortran source (`git submodule update --init`).
 Without them, V1 is reported as not run.
@@ -72,7 +78,8 @@ A rerun of the full suite reproduced every other table exactly.
 
 **The quick run** (`--quick`, also run by CI) checks that every check runs. It
 uses only a few replicates or years, which is too few to judge coverage. So in
-the quick run, V4, V5 and V14 report their coverage without judging it.
+the quick run, V4 and V14 report their coverage without judging it, and V5
+leaves out its interval part (B).
 
 ## Data
 
@@ -92,7 +99,11 @@ It shows that:
 - the software computes what it claims to;
 - calibration finds the right answer when one is known;
 - the uncertainty ranges and probabilities hold as often as they state, when
-  the model is right.
+  the model is right (V4, V9). In V4 the daily ranges fall up to 3.2 points
+  short of their level, and the check fails, only because about 3% of its
+  synthetic values are below 0 °C: since version 0.5.1 no range goes below
+  the ice floor, so those values can never be inside. Real water does not go
+  below freezing.
 
 It also shows how well the model does on real rivers, and where the approach
 falls short there:

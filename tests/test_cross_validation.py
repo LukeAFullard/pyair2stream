@@ -12,7 +12,7 @@ from pyair2stream.cross_validation import (
 def dummy_data(tmp_path):
     data = CommonData()
     data.folder = str(tmp_path)  # calibration runs write their history here, not the working directory
-    n_tot = 365 * 4
+    n_tot = 365 * 4 + 1   # 2010-01-01 to 2013-12-31 (2012 is a leap year): whole years
     data.n_tot = n_tot
     data.date = np.zeros((n_tot, 3), dtype=np.int32)
 
@@ -259,7 +259,7 @@ def test_run_leave_one_year_out_cv_gap_tolerant(dummy_data):
     assert (dummy_data.Tair != -999.0).all()
     assert (dummy_data.Q != -999.0).all()
 
-def test_run_leave_one_year_out_cv_rejects_first_year(dummy_data):
+def test_run_leave_one_year_out_cv_may_hold_out_the_first_year(dummy_data):
     from pyair2stream.cross_validation import run_leave_one_year_out_cv
     np.random.seed(42)
 
@@ -305,9 +305,40 @@ def test_run_leave_one_year_out_cv_rejects_first_year(dummy_data):
         optimizer_overrides={"n_run": 2, "n_particles": 2}
     )
 
-    import pytest
-    with pytest.raises(ValueError, match="The first year cannot be a candidate fold"):
-        run_leave_one_year_out_cv(dummy_data, config, 'PSO')
+    # Allowed now: the first year needs no earlier data (0.5.1). Two-year blocks, the short
+    # trailing one dropped. (This fixture has no warm-up block, so its first rows are not
+    # checked for a partial year; test_a_partial_first_or_last_year... covers that.)
+    with pytest.warns(UserWarning, match="short trailing"):
+        results = run_leave_one_year_out_cv(dummy_data, config, 'PSO')
+    assert len(results) == 1
+
+
+def test_every_whole_year_is_held_out_by_default(dummy_data):
+    dummy_data.Twat_obs = np.ones(dummy_data.n_tot)
+    assert [label for label, _ in build_folds(dummy_data, CVConfig())] == ["2010", "2011", "2012", "2013"]
+
+
+def test_holding_out_the_first_year_hides_its_copy_in_the_warm_up(tmp_path):
+    from pyair2stream.cross_validation import _mask_fold, _restore_fold
+    dates = pd.date_range("2010-01-01", "2012-12-31")
+    data = CommonData()
+    data.n_tot = 365 + len(dates)
+    data.date = np.full((data.n_tot, 3), -999, dtype=np.int32)
+    data.date[365:, 0], data.date[365:, 1], data.date[365:, 2] = dates.year, dates.month, dates.day
+    data.Twat_obs = np.arange(data.n_tot, dtype=np.float64)
+    data.Twat_obs[:365] = data.Twat_obs[365:730]
+    data.Tair, data.Q = np.ones(data.n_tot), np.ones(data.n_tot)
+    before = data.Twat_obs.copy()
+    folds = dict(build_folds(data, CVConfig()))
+    assert list(folds) == ["2010", "2011", "2012"]
+    saved = _mask_fold(data, folds["2010"])
+    assert np.all(data.Twat_obs[:365] == -999.0) and np.all(data.Twat_obs[folds["2010"]] == -999.0)
+    _restore_fold(data, folds["2010"], *saved)
+    np.testing.assert_array_equal(data.Twat_obs, before)
+    saved = _mask_fold(data, folds["2011"])       # a later year: the warm-up keeps its copy of 2010
+    np.testing.assert_array_equal(data.Twat_obs[:365], before[:365])
+    _restore_fold(data, folds["2011"], *saved)
+    np.testing.assert_array_equal(data.Twat_obs, before)
 
 
 def test_jackknife_reduces_to_the_standard_jackknife_when_every_block_is_held_out():
@@ -384,3 +415,36 @@ def test_gap_tolerant_cv_does_not_score_the_unscored_start_of_a_segment(dummy_da
     after_gap = gap[-1] + 1 - np.where(dummy_data.date[:, 0] == 2012)[0][0]
     assert np.all(results["2012"].obs_held_out[after_gap:after_gap + 15] == -999.0)
     assert (dummy_data.Tair[gap] == -999.0).all()       # the real gap is still there
+
+
+def test_a_partial_first_or_last_year_trains_but_is_not_held_out_or_a_block(tmp_path, capsys):
+    # A record from 19 July 2010 to 3 March 2013 (rows 0-364 are the warm-up copy).
+    dates = pd.date_range("2010-07-19", "2013-03-03")
+    data = CommonData()
+    data.folder = str(tmp_path)
+    data.n_tot = 365 + len(dates)
+    data.date = np.full((data.n_tot, 3), -999, dtype=np.int32)
+    data.date[365:, 0], data.date[365:, 1], data.date[365:, 2] = dates.year, dates.month, dates.day
+    data.Twat_obs = np.ones(data.n_tot)
+    config = CVConfig(unit="year", water_year_start_month=1, min_train_years=0, skip_first_year=True)
+    folds = build_folds(data, config)
+    assert [label for label, _ in folds] == ["2011", "2012"]
+    assert "year(s) 2013 are only partly covered by the record" in capsys.readouterr().out
+    assert count_blocks(data, config) == 2           # 2011 and 2012; not the partial 2010 and 2013
+    # Water years from October: 2011 (Oct 2010 - Sep 2011) and 2012 are whole; 2010 and 2013 are not.
+    water = CVConfig(unit="year", water_year_start_month=10, min_train_years=0, skip_first_year=True)
+    assert [label for label, _ in build_folds(data, water)] == ["2011", "2012"]
+    assert count_blocks(data, water) == 2
+
+
+def test_fold_ensemble_members_are_never_below_the_ice_floor():
+    from pyair2stream.cross_validation import FoldResult, _fold_ensemble
+    dates = pd.date_range("2003-01-01", periods=60)
+    r = FoldResult(fold_id=0, label="2003", held_out_start=dates[0], held_out_end=dates[-1], n_obs_held_out=60,
+                   par_best=np.zeros(8), nse=0.0, kge=0.0, rmse=0.0, obs_held_out=np.full(60, 0.5),
+                   sim_held_out=np.full(60, 0.5), dates_held_out=dates, sigma=1.0, rho=0.8, ice_floor=0.0)
+    _, ens = _fold_ensemble(r, "ar1", 500, np.random.default_rng(0))
+    assert ens.min() == 0.0 and (ens == 0.0).mean() > 0.2      # about 31% of values would be below 0
+    _, free = _fold_ensemble(FoldResult(**{**r.__dict__, "ice_floor": float("-inf")}), "ar1", 500,
+                             np.random.default_rng(0))
+    assert free.min() < 0.0

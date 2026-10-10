@@ -17,12 +17,13 @@ import emcee
 
 import json
 from .config import CommonData, DEFAULT_NOISE_MODEL, DEFAULT_LIKELIHOOD, DEFAULT_RHO_TIMESCALE
+from .io import fit_settings, settings_differences, SETTINGS_NOT_RECORDED
 from .model import (
     call_model, funcobj, aggregation, statis, warn_on_stability, check_numerical_divergence,
     is_numerically_divergent, NumericalDivergenceError, check_daily_plausibility,
 )
-from .uncertainty import (estimate_rho, estimate_ar1_rho, generate_ar1_noise, build_ar1_runs, ar1_whitened_stats,
-                          mean_error_variance_factor, scoring_block_days)
+from .uncertainty import (estimate_rho, estimate_ar1_rho, rho_measured, generate_ar1_noise, ar1_whitened_stats,
+                          scored_error_variance_factor, scoring_block_days)
 
 # A near-perfect-fit MCMC log-likelihood is capped at this large but finite value rather
 # than returned as a literal np.inf, which poisons emcee's acceptance-ratio arithmetic
@@ -72,44 +73,47 @@ def _iid_log_likelihood(mod_valid: np.ndarray, obs_valid: np.ndarray) -> float:
     return -0.5 * N * np.log(SSE / N)
 
 
-def _ar1_log_likelihood(residuals: np.ndarray, rho: float, runs: list) -> float:
+def _ar1_log_likelihood(residuals: np.ndarray, rho: float, runs: list, block_days: int = 1) -> float:
     """
-    Concentrated Gaussian log-likelihood accounting for AR(1)-correlated residuals
-. `rho` is treated as fixed
-    (estimated once at the DE optimum, not sampled). Each independent run contributes
-    its own `0.5*log(1-rho**2)` term, so the correction scales with the number of runs.
+    Concentrated Gaussian log-likelihood accounting for AR(1)-correlated residuals on the
+    scored rows `runs` (taken together in date order): values d days apart have
+    correlation rho**d, so values on either side of a gap stay related
+    (`ar1_whitened_stats`). `rho` is treated as fixed (estimated once at the DE optimum,
+    not sampled). With weekly or monthly scoring (`block_days` > 1) the block means are
+    treated as independent (a warning says so where this is used).
     """
-    sse_u, N, n_runs = ar1_whitened_stats(residuals, rho, runs)
+    sse_u, N, log_scale = ar1_whitened_stats(residuals, rho, runs, independent=block_days > 1)
     if N == 0:
         return -np.inf
     if sse_u == 0:
         return MCMC_MAX_LOG_LIKELIHOOD
-    return -0.5 * N * np.log(sse_u / N) + 0.5 * n_runs * np.log(1.0 - rho ** 2)
+    return -0.5 * N * np.log(sse_u / N) + log_scale
 
 
-def _least_squares_log_likelihood(residuals: np.ndarray, rho: float, runs: list, block_days: int = 1) -> float:
+def _least_squares_log_likelihood(residuals: np.ndarray, rho: float, runs: list, block_days: int = 1,
+                                  factor: Optional[float] = None) -> float:
     """
     Concentrated least-squares (iid Gaussian) log-likelihood with the effective number of
-    independent observations n_eff in place of n. Its maximum is the least-squares fit; its
-    spread is widened for the autocorrelation of the errors: n_eff = n / factor, with factor the
-    variance of a mean of the scored errors relative to independent ones for daily AR(1) errors
-    with lag-1 correlation rho (`mean_error_variance_factor`). For daily scoring
-    n_eff = n (1 - rho) / (1 + rho); with weekly or monthly scoring each scored value is a block
-    mean (`block_days` days), whose errors are much less correlated from block to block. Equal to
-    `_iid_log_likelihood` when rho = 0.
+    independent observations n_eff = n / factor in place of n. Its maximum is the
+    least-squares fit; its spread is widened for the autocorrelation of the errors: the
+    factor is the variance of a mean of the scored errors relative to independent ones,
+    for daily AR(1) errors with lag-1 correlation rho, given how far apart the scored values
+    are (`scored_error_variance_factor`; with weekly or monthly scoring each scored value is
+    a block mean of `block_days` days). For n consecutive days it is close to
+    (1 + rho) / (1 - rho). Pass `factor` to reuse one computed for the same scored rows.
+    Equal to `_iid_log_likelihood` when rho = 0.
     """
     if not runs:
         return -np.inf
-    e = residuals[np.concatenate(runs)]
+    rows = np.concatenate(runs)
+    e = residuals[rows]
     n = len(e)
     sse = float(np.sum(e ** 2))
     if sse == 0:
         return MCMC_MAX_LOG_LIKELIHOOD
-    if block_days == 1:
-        n_eff = n * (1.0 - rho) / (1.0 + rho)
-    else:
-        n_eff = n / mean_error_variance_factor(rho, block_days)
-    return -0.5 * n_eff * np.log(sse / n)
+    if factor is None:
+        factor = scored_error_variance_factor(rows, rho, block_days)
+    return -0.5 * (n / factor) * np.log(sse / n)
 
 
 def _reflected_walker_init(initial: np.ndarray, scale: np.ndarray, lo: np.ndarray, hi: np.ndarray,
@@ -269,9 +273,10 @@ def _draw_rng(chain_hash: str, chain_row: int) -> np.random.Generator:
     return np.random.default_rng([int(chain_hash[:16], 16), int(chain_row)])
 
 
-def _noisy_member(Twat_mod: np.ndarray, noise: np.ndarray) -> np.ndarray:
-    """One ensemble member: simulation plus residual noise, NaN where not simulated (gaps)."""
-    member = Twat_mod + noise
+def _noisy_member(Twat_mod: np.ndarray, noise: np.ndarray, ice_floor: float) -> np.ndarray:
+    """One ensemble member: simulation plus residual noise, never below the ice floor
+    (Tice_cover, as the simulation itself), NaN where not simulated (gaps)."""
+    member = np.maximum(Twat_mod + noise, ice_floor)
     member[Twat_mod == -999.0] = np.nan
     return member
 
@@ -369,11 +374,12 @@ def _hash_file(path: str) -> str:
 
 def _check_chain_provenance(data: CommonData, sidecar_path: str) -> None:
     """
-    Refuse a FORWARD run whose model version, integrator or Qmedia differ from those
-    the chain's parameters were fitted under (recorded in the chain's `_meta.json`):
-    the parameters mean something only with them (docs/METHODS.md §4, §6). Chains
-    written before this was recorded (0.4.2 and earlier) cannot be checked; a note
-    says so.
+    Refuse a FORWARD run whose model version, integrator, Qmedia, Tice_cover or
+    min_theta_floor differ from those the chain's parameters were fitted under
+    (recorded in the chain's `_meta.json`): the parameters mean something only with
+    them (docs/METHODS.md §4, §6). Chains written before these were recorded (0.4.2
+    and earlier for the first three, 0.5.0 and earlier for the last two) cannot be
+    checked; a note says so.
     """
     meta = {}
     if os.path.exists(sidecar_path):
@@ -395,6 +401,11 @@ def _check_chain_provenance(data: CommonData, sidecar_path: str) -> None:
     # 0.1%: a Qmedia typed with a few significant digits is the same one.
     if data.version not in (3, 5) and not np.isclose(float(meta["qmedia"]), float(data.Qmedia), rtol=1e-3, atol=0.0):
         problems.append(f"Qmedia {meta['qmedia']} (this run: {float(data.Qmedia)}; they differ by more than 0.1%)")
+    differences = settings_differences(meta, data)
+    if differences is None:
+        print(SETTINGS_NOT_RECORDED.format(path=sidecar_path))
+    else:
+        problems += differences
     if problems:
         raise ValueError(
             f"The MCMC chain {sidecar_path.replace('_meta.json', '.csv')} was fitted with "
@@ -570,8 +581,20 @@ def forward_mode(data: CommonData) -> None:
 
         print(f"Generating Forward Prediction Intervals from {chain_path}...")
 
-        seed = data.forward_options.get('random_seed', None)
+        # The seed of the draw of parameter sets: forward_options.random_seed, else the
+        # top-level random_seed (the one the guide documents for repeatable results).
+        forward_seed = data.forward_options.get('random_seed', None)
+        if forward_seed is not None:
+            seed, seed_source = int(forward_seed), 'forward_options.random_seed'
+            if data.random_seed is not None and int(data.random_seed) != seed:
+                print(f"Note: random_seed is {data.random_seed} and forward_options.random_seed is {seed}; the "
+                      f"parameter sets are drawn with forward_options.random_seed ({seed}).")
+        elif data.random_seed is not None:
+            seed, seed_source = int(data.random_seed), 'random_seed'
+        else:
+            seed, seed_source = None, None
         rng = np.random.default_rng(seed)
+        data.forward_draw = {"seed": seed, "source": seed_source, "reused_from": None}
 
         chain_df = pd.read_csv(chain_path)
         chain = chain_df.values
@@ -608,6 +631,7 @@ def forward_mode(data: CommonData) -> None:
                 )
             sample_indices = np.asarray(prior_meta['sample_indices'], dtype=np.int64)
             n_samples = len(sample_indices)
+            data.forward_draw["reused_from"] = reuse_path
             print(
                 f"Reusing {n_samples} sample indices from {reuse_path} "
                 "(random_seed/global random state ignored for this draw)."
@@ -637,10 +661,18 @@ def forward_mode(data: CommonData) -> None:
         # Resolve sigma: explicit config override first, then the sidecar written by
         # DE-MCMC (mirroring the `rho` resolution below), matching `rho`'s
         # existing carry-forward instead of silently defaulting to 0.0 behind a print.
+        chain_meta = {}
+        if os.path.exists(sidecar_path):
+            try:
+                with open(sidecar_path, 'r') as f:
+                    chain_meta = json.load(f)
+            except (OSError, ValueError):
+                chain_meta = {}
         sigma_override = data.forward_options.get('residual_sigma')
         if sigma_override is not None and float(sigma_override) > 0.0:
             sigma = float(sigma_override)
-            print(f"Using explicit residual_sigma override: {sigma}")
+            print(f"Note: this run uses residual_sigma = {sigma:g}, as set in forward_options, not the "
+                  f"chain's {chain_meta.get('sigma', 'unrecorded value')}.")
         elif os.path.exists(sidecar_path):
             try:
                 with open(sidecar_path, 'r') as f:
@@ -662,8 +694,24 @@ def forward_mode(data: CommonData) -> None:
                 "not a prediction interval (docs/METHODS.md §13)."
             )
 
-        noise_model = uncertainty_options.get('noise_model', DEFAULT_NOISE_MODEL)
+        # The error model the chain was fitted with, unless this run's settings name another
+        # (a deliberate choice, e.g. a sensitivity test, which is then noted in the summary).
+        set_noise_model = uncertainty_options.get('noise_model', DEFAULT_NOISE_MODEL)
+        chain_noise_model = chain_meta.get('noise_model_used_for_this_run')
+        if chain_noise_model is None:
+            noise_model = set_noise_model
+            print(f"Note: {sidecar_path} does not record the error model (noise_model) the chain was fitted "
+                  f"with, so this run uses '{noise_model}' from its settings. Make sure it is the calibration's.")
+        elif uncertainty_options.get('noise_model_set') and set_noise_model != chain_noise_model:
+            noise_model = set_noise_model
+            print(f"Note: the MCMC chain was fitted with noise_model '{chain_noise_model}'; this run uses "
+                  f"'{noise_model}', as set in uncertainty_options. Its prediction ranges are therefore not "
+                  "those of the calibration's error model.")
+        else:
+            noise_model = chain_noise_model
+            print(f"Using noise_model '{noise_model}' carried from calibration run {sidecar_path}")
         rho_used = 0.0
+        rho_was_measured = None   # not applicable to iid noise
 
         if noise_model == 'ar1':
             ar1_rho_override = uncertainty_options.get('ar1_rho')
@@ -672,21 +720,26 @@ def forward_mode(data: CommonData) -> None:
             # interval does not depend on the data being predicted and two scenario runs
             # use the same noise (their paired difference then cancels it exactly).
             sidecar_rho = None
+            sidecar_rho_measured = True
             sidecar_timescale = None
             if os.path.exists(sidecar_path):
                 try:
                     with open(sidecar_path, 'r') as f:
                         sidecar = json.load(f)
                     sidecar_rho = sidecar.get('rho')
+                    sidecar_rho_measured = sidecar.get('rho_measured', True)
                     # Chains written before rho_timescale existed (0.4.1 and earlier) used consecutive days.
                     sidecar_timescale = sidecar.get('rho_timescale', 'daily')
                 except Exception as e:
                     print(f"Warning: Failed to read rho from sidecar {sidecar_path} ({e}).")
             if ar1_rho_override is not None:
                 rho_used = ar1_rho_override
-                print(f"Using explicit ar1_rho override: {rho_used}")
+                rho_was_measured = True   # set by the user, who must justify it
+                print(f"Note: this run uses ar1_rho = {rho_used:g}, as set in uncertainty_options, not the "
+                      f"chain's {sidecar_rho if sidecar_rho is not None else 'unrecorded value'}.")
             elif sidecar_rho is not None:
                 rho_used = float(sidecar_rho)
+                rho_was_measured = bool(sidecar_rho_measured)
                 print(f"Using rho={rho_used:.4f} carried from calibration run {sidecar_path}")
                 rho_timescale = uncertainty_options.get('rho_timescale', DEFAULT_RHO_TIMESCALE)
                 if sidecar_timescale != rho_timescale:
@@ -700,11 +753,13 @@ def forward_mode(data: CommonData) -> None:
                 rho_timescale = uncertainty_options.get('rho_timescale', DEFAULT_RHO_TIMESCALE)
                 rho_used = estimate_rho(data.Twat_mod, data.Twat_obs, eval_mask_for_rho, segments_for_rho,
                                         rho_timescale)
+                rho_was_measured = rho_measured(data.Twat_obs, eval_mask_for_rho, segments_for_rho)
                 print(f"Using rho={rho_used:.4f} estimated ({rho_timescale}) from this run's own residuals "
                       "(no rho recorded with the chain).")
             else:
                 print("Warning: No residuals available to estimate rho; falling back to rho=0.0 (equivalent to iid)")
                 rho_used = 0.0
+                rho_was_measured = False
 
         ensemble_simulations = []
         excluded_draws = []
@@ -756,7 +811,7 @@ def forward_mode(data: CommonData) -> None:
             else:
                 noise = draw_rng.normal(0, sigma, data.n_tot)
 
-            ensemble_simulations.append(_noisy_member(data.Twat_mod, noise))
+            ensemble_simulations.append(_noisy_member(data.Twat_mod, noise, data.Tice_cover))
 
         # `sample_indices` is passed through so `valid_draw_indices` (the chain
         # rows that actually survived divergence filtering, in order -- not the
@@ -794,12 +849,14 @@ def forward_mode(data: CommonData) -> None:
             "chain_content_sha256": chain_hash,
             "chain_n_rows": chain_n_rows,
             "requested_seed": seed,
+            "seed_source": seed_source,
             "sample_indices": [int(x) for x in sample_indices],
             "reused_sample_indices_from": reuse_path if reuse_path else None,
             "source_chain_converged": source_chain_converged,
             "noise_model": noise_model,
             "residual_sigma": sigma,
             "rho": float(rho_used),
+            "rho_measured": rho_was_measured,
         }
         with open(meta_filename, 'w') as f:
             json.dump(meta_data, f, indent=2, allow_nan=False)
@@ -1069,9 +1126,10 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
         row = list(p_vals) + [eff_index, data.current_nse, data.current_r2, data.current_mae]
         history.append(row)
 
-        # Return negated efficiency so scipy minimizes
-        # Handle NaN by returning a large positive number
-        if np.isnan(eff_index):
+        # Return negated efficiency so scipy minimizes. A NaN score, or an infinite one (a
+        # simulation that runs away), gets a large finite penalty: with inf, L-BFGS-B's
+        # finite-difference gradient is inf - inf = NaN and the polish stops.
+        if not np.isfinite(eff_index):
             return 1e30
         return -eff_index
 
@@ -1116,6 +1174,9 @@ def DE_mode(data: CommonData, seed: Optional[int] = None) -> None:
     )
 
     print(f"L-BFGS-B Finished. Best internal negated objective: {result_bfgs.fun:.6f}")
+    if not result_bfgs.success:
+        print(f"Warning: the local search after DE (L-BFGS-B) stopped early: {result_bfgs.message}. "
+              "The better of its result and the DE result is kept.")
 
     # Keep the DE solution if the local polish did not improve on it (e.g. an
     # abnormal L-BFGS-B termination).
@@ -1165,6 +1226,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
 
     rho_timescale = uncertainty_options.get('rho_timescale', DEFAULT_RHO_TIMESCALE)
     best_rho = estimate_rho(data.Twat_mod, data.Twat_obs, eval_mask, segments, rho_timescale)
+    best_rho_measured = rho_measured(data.Twat_obs, eval_mask, segments) if noise_model == 'ar1' else None
     # The exact AR(1) likelihood removes the day-to-day correlation (e_t - rho * e_{t-1}), a
     # day-scale operation, so it always uses the correlation of consecutive days. rho_timescale
     # sets the rho of the simulated prediction noise and of the least-squares effective sample size.
@@ -1172,8 +1234,6 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
                       if likelihood == 'exact' else best_rho)
     # With weekly or monthly scoring each scored value is the mean of a block of days.
     block_days = scoring_block_days(data.time_res)
-    variance_factor = (mean_error_variance_factor(rho_likelihood, block_days)
-                       if noise_model == 'ar1' and likelihood == 'least_squares' else None)
     if noise_model == 'ar1' and likelihood == 'exact' and block_days > 1:
         print(f"Warning: with time_resolution '{data.time_res}' no two scored values are consecutive days, so "
               "the exact AR(1) likelihood treats the scored errors as independent and the parameter intervals "
@@ -1190,9 +1250,13 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
     best_sigma = _daily_residual_sigma(data, eval_mask)
 
     # Reused across every likelihood evaluation below: observations (and therefore the
-    # valid/AR(1)-run structure) do not change while theta is being explored, only the
-    # simulated series does.
-    ar1_runs = build_ar1_runs(valid_mask_agg, segments) if noise_model == 'ar1' else None
+    # scored rows and their spacing) do not change while theta is being explored, only the
+    # simulated series does. Every scored value counts, including a block whose middle day
+    # lies in a gap (it was left out of the AR(1) likelihoods); the likelihoods use the
+    # distance in days between the scored values.
+    ar1_runs = [np.flatnonzero(valid_mask_agg)] if noise_model == 'ar1' else None
+    variance_factor = (scored_error_variance_factor(ar1_runs[0], rho_likelihood, block_days)
+                       if noise_model == 'ar1' and likelihood == 'least_squares' else None)
 
     def log_probability(theta):
         p_vals = best_params.copy()
@@ -1213,8 +1277,9 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         if noise_model == 'ar1':
             residuals = data.Twat_mod_agg - data.Twat_obs_agg
             if likelihood == 'least_squares':
-                return _least_squares_log_likelihood(residuals, rho_likelihood, ar1_runs, block_days)
-            return _ar1_log_likelihood(residuals, rho_likelihood, ar1_runs)
+                return _least_squares_log_likelihood(residuals, rho_likelihood, ar1_runs, block_days,
+                                                     variance_factor)
+            return _ar1_log_likelihood(residuals, rho_likelihood, ar1_runs, block_days)
         else:
             mod = data.Twat_mod_agg[valid_mask_agg]
             obs = data.Twat_obs_agg[valid_mask_agg]
@@ -1333,7 +1398,7 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         else:
             noise = rng.normal(0, sigma_iter, data.n_tot)
 
-        ensemble_simulations.append(_noisy_member(data.Twat_mod, noise))
+        ensemble_simulations.append(_noisy_member(data.Twat_mod, noise, data.Tice_cover))
 
     # `sample_indices` is passed through so `valid_draw_indices` (the chain rows
     # that actually survived divergence filtering, in order) ends up in the
@@ -1361,7 +1426,9 @@ def _run_mcmc_uncertainty(data: CommonData, seed: Optional[int], best_params: np
         "version": int(data.version),
         "integrator": data.mod_num,
         "qmedia": float(data.Qmedia),
+        **fit_settings(data),
         "rho": best_rho,
+        "rho_measured": best_rho_measured,
         "rho_timescale": rho_timescale,
         "rho_likelihood": rho_likelihood,
         "scoring_block_days": block_days,

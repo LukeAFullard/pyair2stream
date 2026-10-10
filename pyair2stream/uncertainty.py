@@ -57,6 +57,18 @@ def estimate_ar1_rho(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mask: np.n
     return float(np.clip(rho, 0.0, 0.99))
 
 
+def rho_measured(Twat_obs: np.ndarray, eval_mask: np.ndarray, segments: list) -> bool:
+    """
+    Whether the residuals have enough pairs of consecutive scored days (the pairs
+    `estimate_ar1_rho` uses) to measure rho at all. Without them (measurements every
+    other day or weekly, for example) the estimators fall back to rho = 0, and the
+    parameter ranges and the ranges of multi-day quantities are too narrow.
+    """
+    valid = (eval_mask & (Twat_obs != -999.0)).astype(bool)
+    n_pairs = sum(int(np.count_nonzero(valid[start:end] & valid[start + 1:end + 1])) for start, end in segments)
+    return n_pairs >= MIN_PAIRS_FOR_RHO_ESTIMATE
+
+
 def weekly_mean_correlation(rho: float, week: int = WEEK) -> float:
     """
     Correlation between the means of two consecutive, non-overlapping blocks of
@@ -110,6 +122,36 @@ def mean_error_variance_factor(rho: float, block_days: int = 1) -> float:
     if m == 1:
         return (1.0 + rho) / (1.0 - rho)
     return 1.0 + 2.0 * weekly_mean_correlation(rho, m) / (1.0 - rho ** m)
+
+
+def scored_error_variance_factor(positions: np.ndarray, rho: float, block_days: int = 1) -> float:
+    """
+    Variance of the mean of the scored errors relative to independent ones, for scored
+    values on the rows (days) `positions`, when daily errors are AR(1) with lag-1
+    correlation `rho`: 1 + (2/n) * the sum, over pairs, of their correlation. Values d days
+    apart have correlation rho**d; block means (`block_days` = m > 1) k blocks apart,
+    k = round(d / m), have r_b * rho**(m*(k-1)), r_b = `weekly_mean_correlation(rho, m)`.
+    So the spacing of the scored values counts: two values a gap apart are less related
+    than consecutive ones. For n consecutive values it tends to `mean_error_variance_factor`
+    as n grows (for a record of a few years it is within about 0.3%).
+    """
+    pos = np.sort(np.asarray(positions, dtype=np.int64))
+    n = len(pos)
+    if rho <= 0.0 or n < 2:
+        return 1.0
+    gaps = np.diff(pos)
+    m = int(block_days)
+    if m == 1:
+        step, scale = rho ** gaps.astype(np.float64), 1.0
+    else:
+        blocks = np.maximum(np.rint(gaps / m), 1.0)
+        step, scale = rho ** (m * blocks), weekly_mean_correlation(rho, m) / rho ** m
+    # Sum over pairs i < j of the product of the steps between them: S_j = step_j * (1 + S_{j-1}).
+    s = total = 0.0
+    for x in step.tolist():
+        s = x * (1.0 + s)
+        total += s
+    return 1.0 + 2.0 * scale * total / n
 
 
 def estimate_ar1_rho_weekly(Twat_mod: np.ndarray, Twat_obs: np.ndarray, eval_mask: np.ndarray,
@@ -223,38 +265,46 @@ def build_ar1_runs(valid_mask: np.ndarray, segments: list) -> list:
     return runs
 
 
-def ar1_whitened_stats(residuals: np.ndarray, rho: float, runs: list) -> tuple:
+def ar1_whitened_stats(residuals: np.ndarray, rho: float, runs: list, independent: bool = False) -> tuple:
     """
-    Whiten `residuals` within each run of `runs` using the AR(1) transform and
-    return the sufficient statistics for the concentrated AR(1) log-likelihood.
+    Whiten the scored `residuals` (on the rows of `runs`, taken together in date order)
+    with the AR(1) transform and return the sufficient statistics for the concentrated
+    AR(1) log-likelihood.
 
-    For a run `e[0..L-1]`, the whitened residuals are
-    `u[0] = e[0] * sqrt(1 - rho**2)` and `u[t] = e[t] - rho * e[t-1]` for
-    `t >= 1`; these are iid under the AR(1) model, so their sum of squares is
-    the AR(1) analogue of the iid SSE.
+    Values d days apart have correlation rho**d, so after a gap the step is
+    `u = (e[t] - rho**d * e[prev]) * sqrt((1 - rho**2) / (1 - rho**(2d)))`, and the first
+    value is `u = e[0] * sqrt(1 - rho**2)`. For consecutive days (d = 1) this is the usual
+    `e[t] - rho * e[t-1]`; across a long gap it tends to a fresh start. The u are iid under
+    the AR(1) model with the innovation variance, so their sum of squares is the AR(1)
+    analogue of the iid SSE. (A gap used to start a new, independent run, which treated
+    values on either side of a short gap as unrelated.) With `independent` every value is
+    a fresh start (block means with weekly or monthly scoring).
 
     Returns
     -------
     sse_u : float
-        Sum of squared whitened residuals across all runs.
+        Sum of squared whitened residuals.
     n : int
-        Total number of residuals (sum of run lengths).
-    n_runs : int
-        Number of runs. Each run independently contributes one
-        `0.5 * log(1 - rho**2)` term to the concentrated log-likelihood, so the total correction
-        scales with the number of runs, not just with N.
+        Number of residuals.
+    log_scale : float
+        Sum of the log of the scale factors, `0.5 * log(1 - rho**2)` for the first value
+        and `0.5 * log((1 - rho**2) / (1 - rho**(2d)))` for each later one (0 for d = 1):
+        the Jacobian term of the concentrated log-likelihood.
     """
-    sse_u = 0.0
-    n = 0
-    for run in runs:
-        e = residuals[run]
-        u = np.empty_like(e, dtype=np.float64)
-        u[0] = e[0] * np.sqrt(1.0 - rho ** 2)
-        if len(e) > 1:
-            u[1:] = e[1:] - rho * e[:-1]
-        sse_u += float(np.sum(u ** 2))
-        n += len(e)
-    return sse_u, n, len(runs)
+    if not runs:
+        return 0.0, 0, 0.0
+    pos = np.sort(np.concatenate(runs).astype(np.int64))
+    e = residuals[pos].astype(np.float64)
+    n = len(e)
+    r2 = 1.0 - rho ** 2
+    if independent or n == 1:
+        scale = np.full(n, np.sqrt(r2))
+        u = e * scale
+    else:
+        decay = rho ** np.diff(pos).astype(np.float64)
+        scale = np.concatenate([[np.sqrt(r2)], np.sqrt(r2 / (1.0 - decay ** 2))])
+        u = np.concatenate([[e[0]], e[1:] - decay * e[:-1]]) * scale
+    return float(np.sum(u ** 2)), n, float(np.sum(np.log(scale)))
 
 
 def generate_ar1_noise(n_tot: int, sigma: float, rho: float, segments: list, rng: np.random.Generator) -> np.ndarray:

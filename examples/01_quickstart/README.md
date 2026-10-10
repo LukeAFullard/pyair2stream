@@ -19,9 +19,9 @@ pyair2stream --config examples/01_quickstart/config.yaml
 It takes under a minute. Near the end, the console shows:
 
 ```
-DE Finished. Best internal negated objective: -0.987657
+DE Finished. Best internal negated objective: -0.987594
 L-BFGS-B Finished. Best internal negated objective: -0.987927
-Efficiency Index in calibration 0.9879265649786034
+Efficiency Index in calibration 0.9879266370887719
 Consistency check passed.
 ```
 
@@ -34,8 +34,9 @@ The settings file, [`config.yaml`](config.yaml), sets:
 ## Read the results
 
 Everything is written to `examples/01_quickstart/output/`. Start with
-`summary.md`: one page with the settings, the data used, the scores, the
-fitted parameters, every warning, and what each other file is.
+`summary.md` (or `summary.html`, the same page for a web browser): the
+settings, the data used, the scores, the fitted parameters, every warning, the
+figures, and what each other file is.
 
 | | Calibration (2002–2009) | Validation (2010–2012) |
 |---|---|---|
@@ -51,7 +52,8 @@ than the calibration score, as expected.
 ![Observed and simulated water temperature, 2010-2012](figures/validation.png)
 
 *`validation_DE_NSE_Mentue.png`: measured (black) and simulated (orange) water
-temperature in the validation years. The residuals (simulated minus measured)
+temperature in the validation years, with air temperature (blue) and
+discharge (grey). The residuals (simulated minus measured)
 are below. Look for long runs of residuals on one side of zero: they show
 periods the model gets wrong. Here that is early 2012, after the river froze.*
 
@@ -63,6 +65,17 @@ The fitted parameters are on the first line of `1_DE_NSE_Mentue_c_1d.out`. They
 are also in `calibration_metadata.json`, which later runs reuse (examples
 02–04). USER_GUIDE [§8](../../USER_GUIDE.md#8-understanding-the-output-files)
 explains every file.
+
+## What it means, and what it does not
+
+- It means: with measured air temperature and discharge, this calibration
+  predicts the Mentue's daily mean water temperature in years it was not
+  fitted to with a typical error of about 0.8 °C.
+- It does not give a range for a single prediction: a best fit has no error
+  bars (example [02](../02_uncertainty/README.md) adds them).
+- It does not show that the model suits conditions outside 2002–2012, or that
+  every year is predicted equally well (example
+  [06](../06_cross_validation/README.md) tests each year in turn).
 
 ## Use your own data
 

@@ -135,10 +135,19 @@ def test_any_start_date_and_the_length():
     late = _table(start="2001-01-02")
     for kw in ({}, {"period": "scenario"}, {"gap_tolerant": True}):
         assert _errors(late, **kw) == []
+    # A calibration needs a whole year, for the parameters of the yearly cycle.
     short = _table(n=300)
     assert "The calibration time series in f.csv has only 300 day(s)" in _errors(short)[0]
-    assert "The scenario (FORWARD) time series in f.csv has only 300 day(s)" in _errors(short, period="scenario")[0]
-    checked = check_table(short, "f.csv", period="validation")
+    assert "yearly cycle" in _errors(short)[0]
+    # Validation and scenario files may be shorter, down to 30 days, with a warning.
+    for period, name in (("scenario", "scenario (FORWARD)"), ("validation", "validation")):
+        checked = check_table(short, "f.csv", period=period)
+        assert checked.errors == [] and f"The {name} file f.csv has 300 days, less than a year" in checked.warnings[0]
+        assert "a year or more is recommended" in checked.warnings[0]
+        assert check_table(_table(n=30), "f.csv", period=period).errors == []
+    too_short = _table(n=29)
+    assert "has only 29 day(s); at least 30 are required" in _errors(too_short, period="scenario")[0]
+    checked = check_table(too_short, "f.csv", period="validation")
     assert checked.errors == [] and "validation will be skipped" in checked.warnings[0]
 
 
@@ -157,7 +166,7 @@ def _noleap_table(n=400, start="2001-03-15"):
     return _table(n).assign(Date=dates.strftime("%Y-%m-%d"))
 
 
-@pytest.mark.parametrize("calendar", ["standard", "noleap", "360_day"])
+@pytest.mark.parametrize("calendar", ["standard", "noleap"])
 @pytest.mark.parametrize("period, gap_tolerant", [("calibration", False), ("scenario", False), ("calibration", True)])
 def test_every_calendar_accepts_any_start_date(calendar, period, gap_tolerant):
     df = _noleap_table(start="2003-07-19") if calendar == "noleap" else _table(start="2001-01-02")
@@ -175,14 +184,9 @@ def test_noleap_checks_the_dates_without_29_february():
         in _errors(leap, calendar="noleap")[0]
 
 
-def test_360_day_checks_the_order_and_the_first_day():
-    # The rows are counted on from the first date, so later dates only label the rows.
-    df = _table().drop(index=[99]).reset_index(drop=True)
-    assert _errors(df, calendar="360_day") == []
-    df.iloc[[20, 21]] = df.iloc[[21, 20]].to_numpy()
-    assert "must have non-decreasing dates" in _errors(df, calendar="360_day")[0]
-    assert "is the 31st of a month, which the 360_day calendar does not have" \
-        in _errors(_table(start="2001-01-31"), calendar="360_day")[0]
+def test_360_day_calendar_is_refused_with_how_to_convert():
+    with pytest.raises(ValueError, match="calendar '360_day' is not supported.*convert_calendar"):
+        check_table(_table(), "f.csv", calendar="360_day")
 
 
 # --- A run uses the same checks for every file --------------------------------------------

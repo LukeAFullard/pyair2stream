@@ -12,11 +12,13 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import os
 
+from .config import zero_flow_ok
+
 from .data_checks import check_table
 
 def analyze_timeseries(df, output_plot_path=None, output_summary_path=None, gap_tolerant=False, min_segment_days=30,
                        version=8, period="calibration", calendar="standard", min_theta_floor=None,
-                       source="the data"):
+                       source="the data", drop_29_february=False):
     """
     Check a data table before a run, and describe its missing data and usable segments.
 
@@ -36,6 +38,7 @@ def analyze_timeseries(df, output_plot_path=None, output_summary_path=None, gap_
         calendar (str): as `calendar` in the configuration.
         min_theta_floor (float, optional): as in the configuration.
         source (str): name of the file, used in the messages.
+        drop_29_february (bool): as in the configuration (with calendar 'noleap').
 
     Returns:
         (dict, str): summary statistics and the report text. summary['errors'] lists the
@@ -43,8 +46,13 @@ def analyze_timeseries(df, output_plot_path=None, output_summary_path=None, gap_
         those a run would only warn about.
     """
     checked = check_table(df, source, period=period, version=version, gap_tolerant=gap_tolerant,
-                          calendar=calendar, min_theta_floor=min_theta_floor)
+                          calendar=calendar, min_theta_floor=min_theta_floor,
+                          drop_29_february=drop_29_february)
     df = df.copy()
+    if calendar == 'noleap' and drop_29_february and 'Date' in df.columns:
+        # The rows the run would remove (check_table reports them).
+        parsed = pd.to_datetime(df['Date'], errors='coerce')
+        df = df[~((parsed.dt.month == 2) & (parsed.dt.day == 29))].reset_index(drop=True)
 
     # Numbers, with -999 (and blank) as missing. Text that is not a number is reported
     # by the checks above and counted as missing here.
@@ -52,8 +60,10 @@ def analyze_timeseries(df, output_plot_path=None, output_summary_path=None, gap_
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').replace(-999.0, np.nan)
             if col == 'Discharge':
-                # Treat zero or negative discharge as missing data to prevent mathematical errors in the ODE
-                df.loc[df[col] <= 0.0, col] = np.nan
+                # Zero discharge is a gap for the versions that cannot simulate it (as in a run);
+                # negative discharge is an error, reported by the checks above.
+                bad = df[col] < 0.0 if zero_flow_ok(version, min_theta_floor) else df[col] <= 0.0
+                df.loc[bad, col] = np.nan
 
     # Dates: rows whose date cannot be read are left out of the description (the checks
     # report them). With the standard calendar, every date between the first and the

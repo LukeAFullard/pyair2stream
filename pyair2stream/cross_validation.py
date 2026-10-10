@@ -20,10 +20,11 @@ Summary of the design:
 - Only data.Twat_obs (plus data.Tair/data.Q in gap-tolerant mode) is ever
   mutated, and only transiently (masked, then restored via try/finally
   before the next fold or on error).
-- The first eligible calendar year is strictly enforced to never be a
-  candidate fold, as there is no prior year of valid data to use for
-  model spin-up. If `skip_first_year` is False, `min_train_years` must
-  be > 0.
+- Every whole year can be held out, the first one included: in the default
+  mode the held-out year keeps its forcing and the first year has the warm-up
+  year before it (with the copy of its held-out observations hidden too); in
+  gap-tolerant mode a held-out year restarts like any segment.
+  `skip_first_year` and `min_train_years` exclude the first years if wanted.
 
 """
 
@@ -52,14 +53,14 @@ class CVConfig:
     unit: str = "year"                  # "year" or "n_years"
     n_years_per_fold: int = 1           # only used if unit == "n_years"
     water_year_start_month: int = 1     # 1 = calendar year; e.g. 10 = Oct-Sep water year
-    min_train_years: int = 1            # Skip the first N eligible years (beyond the mandatory
-                                         # spin-up year) to ensure they are always used for
-                                         # training. This ONLY gates the start of the fold
-                                         # sequence, it is NOT an ongoing per-fold minimum.
-    skip_first_year: bool = True        # first calendar/water year is spin-up-only,
-                                         # never a candidate fold (nothing precedes
-                                         # it to spin up from). If set to False, you
-                                         # MUST set min_train_years > 0 to skip it.
+    min_train_years: int = 0            # never hold out the first N years (after the one
+                                         # skip_first_year skips). Every fold trains on all
+                                         # the years it does not hold out, so this only
+                                         # removes test years; it is kept for comparison
+                                         # with earlier runs (it was 1 before 0.5.1).
+    skip_first_year: bool = False       # never hold out the first year (it was True
+                                         # before 0.5.1, on the belief that the model
+                                         # needed earlier data to start from).
     min_valid_obs: int = 10              # minimum number of valid T_water observations
                                          # required for a block to be considered a fold
     optimizer_overrides: Optional[dict] = None  # e.g. {"n_run": 20, "n_particles": 20}
@@ -108,6 +109,8 @@ class FoldResult:
     # estimates it): daily residual SD and AR(1) rho (0 for the iid noise model).
     sigma: float = float("nan")
     rho: float = float("nan")
+    # Simulated water temperature is never below this (Tice_cover), random error included.
+    ice_floor: float = float("-inf")
     # Year label (calendar or water year) of each held-out day.
     years_held_out: Optional[np.ndarray] = field(default=None, repr=False)
 
@@ -134,32 +137,41 @@ def assign_year_groups(data: CommonData, water_year_start_month: int = 1) -> np.
     return np.where(months >= water_year_start_month, years + 1, years)
 
 
+def partial_years(data: CommonData, wy: np.ndarray) -> list:
+    """The year labels (of `assign_year_groups`) that the record covers only in part: its
+    first and last year when it starts or ends part-way through one. They are used for
+    training, but are not held out as folds or counted as jackknife blocks."""
+    from .scenario import partial_year_labels
+    rows = np.arange(365, data.n_tot)
+    dates = pd.to_datetime(dict(year=data.date[rows, 0], month=data.date[rows, 1], day=data.date[rows, 2]))
+    return [int(y) for y in partial_year_labels(dates, wy[rows], calendar_years=bool(np.all(wy[rows] == data.date[rows, 0])))]
+
+
 def build_folds(data: CommonData, cv_config: CVConfig) -> list[tuple[str, np.ndarray]]:
     """
     Returns a list of (fold_label, row_indices) tuples -- one per eligible
     fold -- built strictly from calendar dates via assign_year_groups.
 
     - Drops the earliest (min_train_years + int(skip_first_year)) labelled
-      years entirely: they exist only to spin up / train, never to be held
-      out (there's nothing before the record start to spin up a first-year
-      fold correctly).
+      years (none by default) as candidate folds; they are still used for
+      training.
     - unit="n_years": groups the remaining eligible years into consecutive
       non-overlapping blocks of n_years_per_fold; a short trailing block
       (fewer than n_years_per_fold years) is dropped rather than yielded as
       a partial fold.
     """
-    if not cv_config.skip_first_year and cv_config.min_train_years == 0:
-        raise ValueError(
-            "The first year cannot be a candidate fold. You must set skip_first_year=True "
-            "or min_train_years > 0 to ensure the model has a prior year to spin up from."
-        )
-
     wy = assign_year_groups(data, cv_config.water_year_start_month)
     # Exclude the synthetic -999 year from the warm-up block
     unique_years = sorted(int(y) for y in np.unique(wy) if y != -999)
 
     first_eligible = cv_config.min_train_years + int(cv_config.skip_first_year)
     eligible_years = unique_years[first_eligible:]
+    # A year the record covers only in part is not a test of a year: it trains, but is not held out.
+    partial = [y for y in partial_years(data, wy) if y in eligible_years]
+    if partial:
+        print(f"Warning: year(s) {', '.join(map(str, partial))} are only partly covered by the record, so they "
+              "are not held out as cross-validation folds (they are still used for training).")
+        eligible_years = [y for y in eligible_years if y not in partial]
 
     if cv_config.unit == "year":
         blocks = [[y] for y in eligible_years]
@@ -197,6 +209,13 @@ def build_folds(data: CommonData, cv_config: CVConfig) -> list[tuple[str, np.nda
 # Masking helpers
 # --------------------------------------------------------------------------
 
+def _warm_up_copies(data: CommonData, idx: np.ndarray) -> np.ndarray:
+    """Rows of the warm-up block (dated -999) that copy the record rows `idx`: row j
+    copies row 365 + j."""
+    copies = idx[(idx >= 365) & (idx < 730)] - 365
+    return copies[data.date[copies, 0] == -999]
+
+
 def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Set Twat_obs, Tair, and Q to the configured missing value for the given rows and return the original
@@ -215,6 +234,10 @@ def _mask_fold(data: CommonData, idx: np.ndarray) -> tuple[np.ndarray, np.ndarra
     orig_q = data.Q[idx].copy()
 
     data.Twat_obs[idx] = MISSING_DATA_SENTINEL
+    # The warm-up block (rows 0-364) copies the first 365 days; the simulation starts from
+    # its first observation. Hide the copies of held-out days too, so that no measurement
+    # of a held-out first year plays any part.
+    data.Twat_obs[_warm_up_copies(data, idx)] = MISSING_DATA_SENTINEL
 
     if data.gap_tolerant:
         data.Tair[idx] = MISSING_DATA_SENTINEL
@@ -250,6 +273,8 @@ def _restore_fold(data: CommonData, idx: np.ndarray, orig_twat: np.ndarray, orig
     the datasets from disk.
     """
     data.Twat_obs[idx] = orig_twat
+    copies = _warm_up_copies(data, idx)
+    data.Twat_obs[copies] = data.Twat_obs[copies + 365]
 
     if data.gap_tolerant:
         data.Tair[idx] = orig_tair
@@ -436,6 +461,7 @@ def run_leave_one_year_out_cv(
                         {'year': data.date[idx, 0], 'month': data.date[idx, 1], 'day': data.date[idx, 2]})),
                     sigma=sigma,
                     rho=rho,
+                    ice_floor=float(data.Tice_cover),
                     years_held_out=assign_year_groups(data, cv_config.water_year_start_month)[idx],
                 ))
             finally:
@@ -461,9 +487,11 @@ JACKKNIFE_LEVEL = 0.90
 
 def count_blocks(data: CommonData, cv_config: CVConfig) -> int:
     """Number of blocks (years, or groups of `n_years_per_fold` years) in the whole record,
-    including the leading years that are never held out."""
+    including any leading years not held out (`skip_first_year`, `min_train_years`). Only whole years count: a year the
+    record covers only in part is not a block of the same size."""
     wy = assign_year_groups(data, cv_config.water_year_start_month)
-    n_years = len([y for y in np.unique(wy) if y != -999])
+    partial = partial_years(data, wy)
+    n_years = len([y for y in np.unique(wy) if y != -999 and y not in partial])
     size = cv_config.n_years_per_fold if cv_config.unit == "n_years" else 1
     return n_years // size
 
@@ -472,10 +500,10 @@ def jackknife_rows(par: np.ndarray, n_blocks: int, level: float = JACKKNIFE_LEVE
     """
     Delete-one-block jackknife intervals for the parameters, from the m folds' fitted
     parameters (rows of `par`). The standard jackknife deletes each of the n blocks once:
-    SE^2 = (n-1)/n * sum over n of (theta_i - mean)^2. Cross-validation never holds out the
-    first years, so only m < n deletions are available; the sum over n is estimated as n/m
-    times the sum over the m folds, giving SE^2 = (n-1)/m * sum over m. The interval is the
-    mean of the folds +- t(level, m-1) x SE.
+    SE^2 = (n-1)/n * sum over n of (theta_i - mean)^2. When cross-validation does not hold
+    out every block (skipped first years, too few observations), only m < n deletions are
+    available; the sum over n is estimated as n/m times the sum over the m folds, giving
+    SE^2 = (n-1)/m * sum over m. The interval is the mean of the folds +- t(level, m-1) x SE.
     """
     from scipy import stats
     par = np.asarray(par, dtype=np.float64)
@@ -620,8 +648,8 @@ def warmest_months(dates, values, n: int = 4) -> list:
 
 def _fold_ensemble(r: FoldResult, noise_model: str, n_simulations: int, rng: np.random.Generator):
     """`n_simulations` series of a fold's held-out window: its simulation plus random error from its
-    own error model (sigma, rho), as a FORWARD run makes them. Returns (observed, ensemble), with NaN
-    where there is no measurement or no simulation."""
+    own error model (sigma, rho), as a FORWARD run makes them, never below the ice floor. Returns
+    (observed, ensemble), with NaN where there is no measurement or no simulation."""
     from .uncertainty import generate_ar1_noise
     obs = np.where(r.obs_held_out == MISSING_DATA_SENTINEL, np.nan, r.obs_held_out)
     sim = np.where(r.sim_held_out == MISSING_DATA_SENTINEL, np.nan, r.sim_held_out)
@@ -632,7 +660,8 @@ def _fold_ensemble(r: FoldResult, noise_model: str, n_simulations: int, rng: np.
     else:
         noise = rng.normal(0.0, r.sigma, (n_simulations, n_days))
     measured = np.isfinite(obs) & np.isfinite(sim)
-    return np.where(measured, obs, np.nan), np.where(measured[None, :], sim[None, :] + noise, np.nan)
+    members = np.maximum(sim[None, :] + noise, r.ice_floor)
+    return np.where(measured, obs, np.nan), np.where(measured[None, :], members, np.nan)
 
 
 def check_interval_coverage(results: list[FoldResult], levels=COVERAGE_LEVELS, extra_level: Optional[float] = None,
@@ -709,7 +738,8 @@ def check_yearly_statistics(results: list[FoldResult], threshold: Optional[float
         {(year, statistic): simulated values}.
     """
     from scipy.stats import binom, t as student_t
-    from .scenario import YEARLY_STATISTICS, year_statistics, pit as pit_of, central_range, inside_range
+    from .scenario import (YEARLY_STATISTICS, year_statistics, pit as pit_of, central_range, inside_range,
+                           partial_year_labels)
     level = float(level)
     if not (0.0 < level < 100.0):
         raise ValueError(f"level must be strictly between 0 and 100 (per cent), got {level}")
@@ -733,11 +763,14 @@ def check_yearly_statistics(results: list[FoldResult], threshold: Optional[float
         measured = np.isfinite(obs_used)
         years = r.years_held_out if r.years_held_out is not None else r.dates_held_out.year.to_numpy()
         in_season = np.isin(r.dates_held_out.month, season_months)
-        sim_stats = year_statistics(ens, r.dates_held_out, threshold, years=years)
-        obs_stats = year_statistics(obs_used, r.dates_held_out, threshold, years=years)
+        # A year the held-out dates cover only in part would be judged on part of its season.
+        partial = partial_year_labels(r.dates_held_out, years, calendar_years=r.years_held_out is None)
+        # Partial years are kept: a year counts below if its season was measured.
+        sim_stats = year_statistics(ens, r.dates_held_out, threshold, years=years, partial_years="keep")
+        obs_stats = year_statistics(obs_used, r.dates_held_out, threshold, years=years, partial_years="keep")
         for year in sorted(sim_stats):
             season = (years == year) & in_season
-            if not season.any() or measured[season].mean() < MIN_SEASON_OBSERVED:
+            if year in partial or not season.any() or measured[season].mean() < MIN_SEASON_OBSERVED:
                 continue
             for name in YEARLY_STATISTICS:
                 value = float(obs_stats[year][name][0])

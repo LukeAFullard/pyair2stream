@@ -46,34 +46,99 @@ def load_ensemble(path: str):
     return ensemble, dates
 
 
-def aggregate(ensemble: np.ndarray, dates, how: str = 'mean', freq: str = '7D') -> np.ndarray:
+def _warn_days_without_value(ensemble: np.ndarray, consequence: str) -> None:
+    """Print a warning when some days of an ensemble have no simulated value (NaN)."""
+    missing = np.isnan(np.atleast_2d(ensemble)).any(axis=0)
+    if missing.any():
+        print(f"Warning: {int(missing.sum())} day(s) have no simulated value (for example gaps in gap-tolerant "
+              f"mode); {consequence}.")
+
+
+def aggregate(ensemble: np.ndarray, dates, how: str = 'mean', freq: str = '7D',
+              min_days=None, return_periods: bool = False):
     """
     Resample each ensemble member (row) over `freq`, independently.
 
-    This is the correct way to build, e.g., a 7-day rolling/blocked mean prediction
+    This is the correct way to build, e.g., a 7-day blocked mean prediction
     interval: aggregate first, per draw, then take percentiles across draws --
     never the reverse.
+
+    A period counts only if enough of its days have a simulated value: by default
+    all of them (`min_days=None`), so a week or month that the dates cover only in
+    part (at either end of the file) or that includes days without a value (gaps
+    in gap-tolerant mode) gets no value (NaN), with a warning. A 3-day mean is not
+    a 7-day mean, and a sum over part of a month understates it. With
+    `min_days=N`, a period with at least N days with a value is computed from
+    those days.
 
     Parameters
     ----------
     ensemble : ndarray, shape (n_samples, n_days)
-    dates : array-like of datetime-like, length n_days
+    dates : array-like of datetime-like, length n_days (consecutive or not, one per day)
     how : str
         Any reduction name supported by `pandas.Resampler` (e.g. 'mean', 'sum', 'max').
     freq : str
-        Any pandas offset alias (e.g. '7D', 'MS').
+        Any pandas offset alias of a day or longer (e.g. '7D', 'MS'). '7D' blocks start
+        on the first date.
+    min_days : int, optional
+        The fewest days with a value a period needs. Default: every day of the period.
+    return_periods : bool
+        Also return the label of each period (pandas' resample label: the first day of
+        a '7D' block or an 'MS' month).
 
     Returns
     -------
-    ndarray, shape (n_samples, n_periods)
+    ndarray, shape (n_samples, n_periods); with `return_periods`, also a
+    pandas.DatetimeIndex of length n_periods.
     """
-    ensemble = np.asarray(ensemble)
+    ensemble = np.asarray(ensemble, dtype=np.float64)
     dates = pd.DatetimeIndex(dates)
-    aggregated_rows = [
-        getattr(pd.Series(row, index=dates).resample(freq), how)().to_numpy()
-        for row in ensemble
-    ]
-    return np.array(aggregated_rows)
+    if min_days is not None and (int(min_days) != min_days or min_days < 1):
+        raise ValueError(f"min_days must be a whole number of days, at least 1, got {min_days!r}.")
+    offset = pd.tseries.frequencies.to_offset(freq)
+    if isinstance(offset, (pd.offsets.Day, pd.offsets.Tick)):     # Day is not a Tick from pandas 3
+        # Fixed-length blocks ('7D'), starting on the first date: every block has freq's days.
+        days_per_block = (offset.n if isinstance(offset, pd.offsets.Day)
+                          else pd.Timedelta(offset) / pd.Timedelta(days=1))
+        if days_per_block < 1 or days_per_block != int(days_per_block):
+            raise ValueError(f"freq must be a whole number of days or a calendar period, got {freq!r}.")
+        length = None
+    else:
+        # Calendar periods (weeks, months, years): their lengths from a daily calendar that
+        # covers whole periods beyond both ends of the file.
+        margin = pd.Timedelta(days=1100)
+        calendar = pd.date_range(dates[0].normalize() - margin, dates[-1].normalize() + margin, freq='D')
+        length = pd.Series(1.0, index=calendar).resample(freq).count()
+
+    def resample(series):
+        return series.resample(freq)
+
+    aggregated_rows, enough = [], None
+    for row in ensemble:
+        series = pd.Series(row, index=dates)
+        values = getattr(resample(series), how)()
+        days = resample(series).count()
+        if min_days is not None:
+            need = float(min_days)
+        elif length is None:
+            need = days_per_block
+        else:
+            need = length.reindex(values.index).to_numpy()
+        ok = days.to_numpy() >= need
+        aggregated_rows.append(np.where(ok, values.to_numpy(dtype=np.float64), np.nan))
+        enough = ok if enough is None else enough & ok
+    result = np.array(aggregated_rows)
+    periods = values.index if len(ensemble) else pd.DatetimeIndex([])
+
+    if enough is not None and not enough.all():
+        rule = ("fewer than all their days" if min_days is None
+                else f"fewer than min_days={int(min_days)} days")
+        print(f"Warning: {int((~enough).sum())} of {len(enough)} period(s) ({freq}) have {rule} with a "
+              "simulated value (the dates cover them only in part, or some days have no value); "
+              f"they have no {how} (NaN)." + (" Set min_days to accept partial periods." if min_days is None else ""))
+    if min_days is not None:
+        _warn_days_without_value(ensemble, f"each period's {how} uses only the days that have one")
+    return (result, periods) if return_periods else result
 
 
 def exceedance(ensemble: np.ndarray, threshold: float, consecutive_days: int = 1) -> np.ndarray:
@@ -94,7 +159,8 @@ def exceedance(ensemble: np.ndarray, threshold: float, consecutive_days: int = 1
     -------
     ndarray, shape (n_samples,)
     """
-    ensemble = np.asarray(ensemble)
+    ensemble = np.asarray(ensemble, dtype=np.float64)
+    _warn_days_without_value(ensemble, "they are not counted as above the threshold")
     above = ensemble > threshold
     if consecutive_days <= 1:
         return above.sum(axis=1)
@@ -119,7 +185,8 @@ def exceedance(ensemble: np.ndarray, threshold: float, consecutive_days: int = 1
 YEARLY_STATISTICS = ("highest daily mean", "highest 7-day mean", "days above threshold")
 
 
-def year_statistics(ensemble: np.ndarray, dates, threshold: float, window: int = 7, years=None) -> dict:
+def year_statistics(ensemble: np.ndarray, dates, threshold: float, window: int = 7, years=None,
+                    partial_years: str = "skip") -> dict:
     """
     Three statistics of each year, for each ensemble member (row): the highest daily
     mean, the highest `window`-day moving mean (the day and the `window - 1` days
@@ -138,6 +205,11 @@ def year_statistics(ensemble: np.ndarray, dates, threshold: float, window: int =
     window : int
     years : array-like of int, length n_days, optional
         Year label of each day (for example water years); default: calendar year.
+    partial_years : "skip" (default) or "keep"
+        A record that starts or ends part-way through a year covers only part of
+        its first or last year. Its highest values and its count of days above
+        the threshold would then describe only those days, not the year, so such
+        years are left out, with a warning. "keep" includes them.
 
     Returns
     -------
@@ -146,10 +218,18 @@ def year_statistics(ensemble: np.ndarray, dates, threshold: float, window: int =
         YEARLY_STATISTICS (the moving mean is named "highest 7-day mean" whatever
         `window` is). A statistic with no usable day is NaN.
     """
+    if partial_years not in ("skip", "keep"):
+        raise ValueError(f"partial_years must be 'skip' or 'keep', got {partial_years!r}")
     ens = np.atleast_2d(np.asarray(ensemble, dtype=np.float64))
     labels = np.asarray(pd.DatetimeIndex(dates).year if years is None else years)
+    skipped = partial_year_labels(dates, labels, calendar_years=years is None) if partial_years == "skip" else []
+    if skipped:
+        print(f"Warning: year(s) {', '.join(str(int(y)) for y in skipped)} are only partly covered by the dates, "
+              "so their yearly statistics are left out (partial_years='keep' includes them).")
     out = {}
     for year in np.unique(labels):
+        if year in skipped:
+            continue
         x = ens[:, labels == year]
         ok = np.isfinite(x)
         with np.errstate(invalid="ignore"):
@@ -167,6 +247,35 @@ def year_statistics(ensemble: np.ndarray, dates, threshold: float, window: int =
         out[int(year)] = {YEARLY_STATISTICS[0]: highest, YEARLY_STATISTICS[1]: week,
                           YEARLY_STATISTICS[2]: np.where(ok.any(axis=1), above, np.nan)}
     return out
+
+
+def partial_year_labels(dates, labels, calendar_years: bool = True) -> list:
+    """
+    The year labels that the dates cover only in part. The dates are consecutive days,
+    so only the first and the last year can be partial. A year is whole if the record
+    starts on its first day and ends on its last. The first day of a year is 1 January
+    for calendar years; for other labels (water years) it is the day on which the label
+    changes inside the record. With no such change (one label, not a calendar year), a
+    year is taken as whole if it has at least 365 days.
+    """
+    idx = pd.DatetimeIndex(dates)
+    labels = np.asarray(labels)
+    if len(idx) == 0:
+        return []
+    if calendar_years:
+        start = (1, 1)
+    else:
+        change = np.flatnonzero(labels[1:] != labels[:-1]) + 1
+        start = (idx[change[0]].month, idx[change[0]].day) if len(change) else None
+    if start is None:
+        return [labels[0]] if len(idx) < 365 else []
+    partial = []
+    if (idx[0].month, idx[0].day) != start:
+        partial.append(labels[0])
+    after = idx[-1] + pd.Timedelta(days=1)
+    if (after.month, after.day) != start and labels[-1] not in partial:
+        partial.append(labels[-1])
+    return partial
 
 
 def pit(simulated: np.ndarray, value: float, rng: np.random.Generator) -> float:
@@ -264,14 +373,24 @@ def paired_difference(ens_a: np.ndarray, ens_b: np.ndarray) -> np.ndarray:
     Raises
     ------
     ValueError
-        If the two ensembles do not have identical shape.
+        If the two ensembles do not have identical shape, or do not have values on the
+        same days (for example zero-flow days left out as gaps in only one of the runs).
     """
-    ens_a = np.asarray(ens_a)
-    ens_b = np.asarray(ens_b)
+    ens_a = np.asarray(ens_a, dtype=np.float64)
+    ens_b = np.asarray(ens_b, dtype=np.float64)
     if ens_a.shape != ens_b.shape:
         raise ValueError(
             f"paired_difference requires both ensembles to have identical shape "
             f"(same parameter draws in the same order); got {ens_a.shape} and {ens_b.shape}."
+        )
+    differ = (np.isnan(ens_a) != np.isnan(ens_b)).any(axis=0)
+    if differ.any():
+        first = int(np.argmax(differ))
+        raise ValueError(
+            f"The two runs do not have values on the same days: {int(differ.sum())} day(s) are simulated in one "
+            f"and not the other (first: day {first} of the series). A difference there would compare a value with "
+            "nothing. This happens, for example, when zero-flow days are left out as gaps in gap-tolerant mode in "
+            "only one run; make both runs simulate the same days (USER_GUIDE.md §9.2)."
         )
     return ens_a - ens_b
 
@@ -315,7 +434,8 @@ def paired_difference_from_files(path_a: str, path_b: str) -> np.ndarray:
     with this function. See docs/METHODS.md §13 for the full workflow.
 
     Checks, in order: the two runs' source MCMC/posterior chain (content hash and
-    row count), the number of samples requested, the exact `sample_indices` drawn,
+    row count), the number of samples requested, the error settings (noise model,
+    σ and ρ: the added error cancels only if they match), the exact `sample_indices` drawn,
     and `valid_draw_indices` -- the subset of those indices that actually survived
     per-draw divergence filtering
     and therefore ended up as rows in the saved ensemble. `valid_draw_indices` is
@@ -347,6 +467,21 @@ def paired_difference_from_files(path_a: str, path_b: str) -> np.ndarray:
                 f"({meta_a.get(key)!r}) and '{path_b}' ({meta_b.get(key)!r}). Both runs "
                 "must be forward_mode() (or DE-MCMC envelope) calls against "
                 "the SAME posterior chain -- see docs/METHODS.md §13."
+            )
+
+    # The daily error added to a draw cancels in the difference only if both runs used the
+    # same error model, size and persistence.
+    for key, label in (('noise_model', 'error model (noise_model)'), ('residual_sigma', 'error size σ'),
+                       ('rho', 'error persistence ρ')):
+        a, b = meta_a.get(key), meta_b.get(key)
+        same = a == b or (isinstance(a, (int, float)) and isinstance(b, (int, float)) and np.isclose(a, b))
+        if not same:
+            raise ValueError(
+                f"paired_difference_from_files: the {label} differs between '{path_a}' ({a!r}) and "
+                f"'{path_b}' ({b!r}). The daily error added to each draw cancels in a paired difference only "
+                "if both runs used the same error settings; otherwise the difference's spread would include "
+                "that error, not only the parameter uncertainty. Run both scenarios with the same "
+                "uncertainty_options and forward_options.residual_sigma (docs/METHODS.md §13)."
             )
 
     if meta_a.get('sample_indices') != meta_b.get('sample_indices'):

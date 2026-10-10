@@ -86,8 +86,11 @@ def bias_by_month(dates, obs, sim) -> tuple:
 
     Daily errors are autocorrelated and the model can be off for a whole season,
     so days are not independent. Each period is therefore first averaged within
-    each year (a month counts in a year if it has at least MIN_DAYS_MONTH days
-    with both values; a season, MIN_DAYS_SEASON; a year, MIN_DAYS_YEAR). The
+    each year. A period counts in a year if the dates cover all of its days (a
+    record that starts or ends part-way through it covers only some), and at
+    least MIN_DAYS_MONTH days of a month have both values (a season,
+    MIN_DAYS_SEASON; a year, MIN_DAYS_YEAR). February counts as whole with 28
+    days, so a noleap record's Februaries count. The
     bias is the mean of these yearly values and the interval is
     mean ± t(0.975, n_years - 1) · sd / sqrt(n_years); it needs at least two
     years. Seasons follow the calendar year (December counts with January and
@@ -104,6 +107,10 @@ def bias_by_month(dates, obs, sim) -> tuple:
     err = np.asarray(sim, dtype=np.float64) - np.asarray(obs, dtype=np.float64)
     ok = np.isfinite(err)
     df = pd.DataFrame({'year': dates.year[ok], 'month': dates.month[ok], 'err': err[ok]})
+    # The (year, month) pairs whose every day is among the dates.
+    present = pd.Series(1, index=pd.MultiIndex.from_arrays([dates.year, dates.month])).groupby(level=[0, 1]).size()
+    whole = {(int(y), int(m)) for (y, m), n in present.items()
+             if n >= (28 if m == 2 else pd.Period(year=int(y), month=int(m), freq='M').days_in_month)}
     groups = [(MONTH_NAMES[m - 1], (m,), MIN_DAYS_MONTH) for m in range(1, 13)]
     groups += [(name, months, MIN_DAYS_SEASON) for name, months in SEASONS]
     groups += [('All year', tuple(range(1, 13)), MIN_DAYS_YEAR)]
@@ -111,7 +118,8 @@ def bias_by_month(dates, obs, sim) -> tuple:
     for name, months, min_days in groups:
         sub = df[df.month.isin(months)]
         per_year = sub.groupby('year').err.agg(['size', 'mean'])
-        per_year = per_year[per_year['size'] >= min_days]
+        covered = [y for y in per_year.index if all((int(y), m) in whole for m in months)]
+        per_year = per_year[(per_year['size'] >= min_days) & per_year.index.isin(covered)]
         for year, r in per_year.iterrows():
             yearly.append({'period': name, 'year': int(year), 'n_days': int(r['size']), 'bias': float(r['mean'])})
         n = len(per_year)
@@ -424,6 +432,9 @@ def post_process(data: CommonData, toll: float = None):
         # Create datetime index
         dates = pd.to_datetime(df[['Year', 'Month', 'Day']])
 
+        # The mean error by month uses the whole file: whether a month is covered depends on
+        # the record, not on where its first and last scored days are.
+        df_all, dates_all = df, dates
         if filter_to_obs:
             # Filter down the plotting range to the span of available observation data
             obs_valid_indices = np.where(df['Twat_obs_agg'].notna())[0]
@@ -486,9 +497,13 @@ def post_process(data: CommonData, toll: float = None):
             metrics_str = (f"\nNSE={nse:.3f}, R²={r2:.3f}, RMSE={rmse:.2f}°C, MAE={mae:.2f}°C (n={n})"
                            f"\nAIC={aic:.1f}, BIC={bic:.1f}") if (not np.isnan(nse) and not np.isnan(rmse)) else ""
 
-            # Mean error by month and season, from the daily values (is the model off in one season?)
-            if output_name != "full_simulation" and (df['Twat_obs'].notna() & df['Twat_mod'].notna()).any():
-                write_bias_by_month(dates, df['Twat_obs'], df['Twat_mod'], data.folder,
+            # Mean error by month and season, from the daily values (is the model off in one season?).
+            # The unscored warm-up days (`warm_up` = 1: the first days of each gap-tolerant segment,
+            # or of a file shorter than a year) are left out, as from the scores: the model is still
+            # settling, and on a segment's first day it starts at the measurement.
+            bias_obs = df_all['Twat_obs'].where(df_all['warm_up'] != 1) if 'warm_up' in df_all else df_all['Twat_obs']
+            if output_name != "full_simulation" and (bias_obs.notna() & df_all['Twat_mod'].notna()).any():
+                write_bias_by_month(dates_all, bias_obs, df_all['Twat_mod'], data.folder,
                                     f"bias_by_month_{output_name}_{data.runmode}_{data.fun_obj}_{data.station}",
                                     title_prefix)
         else:

@@ -83,7 +83,7 @@ repository's top folder**, because the paths in its settings file start there
 pyair2stream --config examples/01_quickstart/config.yaml
 ```
 
-It takes under a minute. After a banner, you should see:
+It takes under a minute. After a banner, you should see, among other lines:
 
 ```
 mean, TSS and standard deviation (calibration)
@@ -142,12 +142,13 @@ on air temperature is quicker to fit. In
 [validation V17](validation/REPORT.md#v17), on 3 Swiss and 23 British Columbia
 rivers, version 8 predicted daily temperatures in new years better than every
 regression on 23 of the 26 rivers. On yearly peaks, the hottest days and the
-2021 heat dome its lead was smaller: it did better than every regression on 14
-of 23 British Columbia rivers. If your question is about peaks or hot spells,
+2021 heat dome its lead was smaller: it did better than every regression on 13
+to 16 of the 23 British Columbia rivers, and on the yearly peaks of only 1 of
+the 3 Swiss rivers. If your question is about peaks or hot spells,
 compare the model with a regression on your own validation years. The best
 regression was usually an S-curve on air temperature averaged over the last
-few days or weeks; a straight line on the day's air temperature was the worst
-on every river.
+few days or weeks; for daily temperatures, a straight line on the day's air
+temperature was the worst regression on every river.
 
 ### Integrator (`integrator`)
 
@@ -193,11 +194,18 @@ first line with the problem.
   looks implausible, but replace such codes with empty cells first.
 - **`T_air` and `Discharge` must have no gaps.** If yours have gaps, fill them
   or use [gap-tolerant mode](#10-gap-tolerant-mode).
-- **Discharge must be above zero** for versions 4, 7 and 8
-  ([§9.2](#92-zero-or-negative-discharge)).
-- **Every file must be at least 365 days long**, because the model's warm-up
-  repeats the first year. It may start on any day. A validation file shorter
-  than a year is skipped, with a warning.
+- **Discharge must be above zero** for versions 4 and 8. Version 7 accepts
+  zero flow ([§9.2](#92-zero-or-negative-discharge)).
+- **A calibration file must be at least 365 days long.** The model has
+  parameters for the yearly cycle, which cannot be fitted from part of a year.
+  A file may start on any day.
+- **Validation and scenario files need at least 30 days**, but a year or more
+  is recommended. A shorter file is used with a warning: a few weeks say little
+  about how the model does in other seasons. The model starts from the
+  conditions of the file's first day, so its first `warmup_drop_days` (default
+  15) are not scored and are marked `warm_up = 1` in the output file. If you
+  care about a particular period, start the file at least that many days
+  before it. A validation file shorter than 30 days is skipped, with a warning.
 - **Calibration and validation files need a `T_water` column with some
   measurements.** A scenario file does not.
 - **Keep the validation years separate from the calibration years.** If the
@@ -214,16 +222,35 @@ spare any years, use cross-validation (§13) instead.
 predicted later years almost as well as 7 to 21 years: the median error was at
 most 0.03 °C larger ([validation V16](validation/REPORT.md#v16)). One year was
 often enough too. But an unusual year, such as a heatwave summer, made the
-predictions of other years up to 0.17 °C worse. So with only one or two years,
+predictions of other years up to 0.18 °C worse. So with only one or two years,
 expect larger errors in other years, and check the model on validation years.
 
-**Climate-model data** often uses a 365-day calendar with no leap days, or a
-360-day calendar. Declare it with `calendar: "noleap"` or
-`calendar: "360_day"`. Do not pad such data with invented dates, or the
-seasonal term will drift out of step. A `noleap` file has real dates without
-29 February. A `360_day` file has 30 February, which ordinary dates do not, so
-only its first date is read as a date: it sets the day of the year the file
-starts on (day 1 to 30 of its month), and the rows are counted on from there.
+**Climate-model data** often uses a 365-day calendar with no leap days.
+Declare it with `calendar: "noleap"`: the file then has real dates without
+29 February. Do not pad such data with invented dates, or the seasonal term
+will drift out of step. A file with 29 February rows is refused; with
+`drop_29_february: true` those rows are removed instead, and the run warns how
+many, and how many water-temperature measurements went with them.
+
+Some climate models use a **360-day calendar** (twelve months of 30 days, with
+30 February). pyair2stream does not accept it: its dates, outputs and plots
+cannot hold 30 February, and relabelling the rows with ordinary dates would
+put the months out of step with the model's seasons by about 5 days a year.
+Convert such a file to the standard calendar first. With xarray:
+
+```python
+import numpy as np
+import xarray as xr
+
+ds = xr.open_dataset("gcm_360day.nc")         # daily air temperature and discharge
+ds = ds.convert_calendar("standard", align_on="year", missing=np.nan, use_cftime=False)
+ds = ds.interpolate_na("time")                # fill the 5 or 6 days added to each year
+ds.to_dataframe().reset_index().rename(columns={"time": "Date"})   # then rename the columns as in this section
+```
+
+`align_on="year"` spreads the added days evenly through each year, and
+`interpolate_na` fills each one from the days either side. This is a choice
+about your data: record it with your results.
 
 **Building the file from raw data.** pyair2stream has two helpers:
 
@@ -271,22 +298,23 @@ Every key is optional, except where marked. The defaults are shown.
 # --- Names (used in the output file names) ---
 project_name: "pyair2stream_project"
 station_name: "AirStation"
-water_station: "AirStation"       # default: the same as station_name
+water_station: "AirStation"       # default: the same as station_name ("WaterStation" if that is not set either)
 series: "series"                  # any short label
 
 # --- Model ---
 version: 8                  # 3, 4, 5, 7 or 8 (§4)
 integrator: "CRN"           # CRN, EXP, RK4, RK2 or EUL (§4)
 Tice_cover: 0.0             # water temperature is never simulated below this (°C)
-calendar: "standard"        # standard, noleap or 360_day (§5)
+calendar: "standard"        # standard or noleap (§5)
+drop_29_february: false     # noleap only: true removes 29 February rows instead of refusing the file
 min_theta_floor: null       # e.g. 1.0e-6 to allow days with zero flow (§9.2)
-Qmedia: null                # mean discharge used to scale the flow; needed for FORWARD (below)
+Qmedia: null                # mean discharge used to scale the flow; a FORWARD run of version 4, 7 or 8 needs it, or paths.calibration_metadata (below)
 
 # --- Calibration ---
 run_mode: "DE"              # DE, PSO, LATHYP, DE-MCMC or FORWARD (below)
 objective_function: "NSE"   # the score to optimise: NSE, KGE or RMS (docs/METHODS.md §7)
 time_resolution: "1d"       # score daily values ("1d"), N-week means (e.g. "2w") or monthly means ("1m")
-prc: 1.0                    # weekly/monthly scoring: the share of days in a week or month that must be measured (above 0, at most 1)
+prc: 1.0                    # weekly/monthly scoring: the share of a week's or month's days that must be measured (above 0, at most 1); a month only partly in the file counts its missing days as unmeasured
 random_seed: null           # an integer makes results exactly repeatable
 
 parameter_bounds:           # needed for calibration: 8 values each, for a1..a8
@@ -354,7 +382,7 @@ calibrate again.
 the minimum of `a2` and `a3` to 0. Otherwise the fit can end on parameters
 whose daily simulation zigzags between 0 °C and high values. The zigzag
 averages out over a week or a month, so it can score well. In a test with known
-parameters, this happened in 9 of 30 weekly-scored calibrations
+parameters, this happened in 8 of 30 weekly-scored calibrations
 ([V4](validation/REPORT.md#v4)). pyair2stream warns when it happens.
 
 ### Run modes (`run_mode`)
@@ -364,7 +392,7 @@ parameters, this happened in 9 of 30 weekly-scored calibrations
 | `DE` | Calibrates with Differential Evolution, then a local search. **Recommended.** |
 | `PSO` | Calibrates with Particle Swarm Optimisation, as the original Fortran does. Less reliable: check that it converged. |
 | `LATHYP` | Tries many parameter sets spread over the bounds (Latin hypercube). This explores; it does not optimise. |
-| `DE-MCMC` | Calibrates with `DE`, then measures the uncertainty of the parameters and predictions (§11). |
+| `DE-MCMC` | Calibrates with `DE`, then measures the uncertainty of the parameters and predictions (§11). Needs `objective_function` NSE or RMS. |
 | `FORWARD` | Does not calibrate. Runs given parameters, for example on a scenario (§12). |
 
 ### Qmedia: keep it fixed when discharge changes
@@ -372,6 +400,10 @@ parameters, this happened in 9 of 30 weekly-scored calibrations
 The model never uses discharge directly. It uses `Discharge / Qmedia`, where
 `Qmedia` is the mean discharge of the calibration file. The fitted parameters
 only make sense with that `Qmedia`.
+
+`Qmedia` is the mean of every day of the calibration file that has a
+discharge. Days of zero flow count when the model simulates them (version 7, or
+`min_theta_floor` set), as in the original Fortran; otherwise they are left out.
 
 So when you run the model on a changed flow, keep the calibration's `Qmedia`.
 If you recomputed it from the new flows, the change would cancel out. For
@@ -383,8 +415,12 @@ point `paths.calibration_metadata` at the `calibration_metadata.json` the
 calibration wrote. This also:
 
 - supplies the fitted parameters;
-- checks that `version` and `integrator` match the calibration;
-- warns if the scenario's flows go outside the calibrated range.
+- checks that `version`, `integrator`, `Tice_cover` and `min_theta_floor` match
+  the calibration, and stops if they don't (the parameters only mean something
+  with the settings they were fitted with);
+- warns if any of the scenario's flows go outside the calibrated range, with
+  the number of days and the first one (days of zero flow run at
+  `min_theta_floor` count too).
 
 You can also set `Qmedia:` yourself.
 
@@ -413,6 +449,7 @@ result.scores["validation"]["RMSE"]               # the validation RMSE, °C
 result.parameters                                 # {"a1": ..., "a8": ...}: the best fit
 result.messages                                   # the warnings and notes the run printed
 result.output_dir, result.summary                 # the output folder and its summary.md
+result.files                                      # the files this run wrote
 ```
 
 - `config` can be the path of a settings file, or a dict with the same keys.
@@ -444,12 +481,22 @@ for version in (5, 8):
 
 All files go to `output_dir`. Their names include the run mode, the score
 (objective), the station, the series label and the time resolution. Every plot
-is saved as a PNG and as a PDF.
+is saved as a PNG and as a PDF. In a `FORWARD` run, the files named
+`calibration_*` below are named `forward_projection_*` instead (they describe
+the input file of that run).
 
 **Start with `summary.md`.** Every run writes this one-page summary: the
 settings, the data used, the scores, the parameters (and whether any sits on a
 bound), the uncertainty (after `DE-MCMC` or a `FORWARD` run with intervals),
-every warning and note the run printed, and what each output file is.
+every warning and note the run printed, the figures, and what each output
+file is. `summary.html` is the same page for a web browser, with the figures
+inside it, so it can be sent as one file.
+
+Several runs may share an output folder (for example a calibration and its
+FORWARD runs). A run then warns that the folder already holds files from
+earlier runs, and its summary describes only the files it wrote. It counts the
+others and names those it replaced, such as the earlier `summary.md`: copy a
+summary elsewhere first if you want to keep it, or give each run its own folder.
 
 ### What to check first
 
@@ -476,23 +523,24 @@ After a calibration, look at these, in this order:
 
 | File | Contents |
 |---|---|
-| `summary.md` | a one-page summary of the run: settings, data, scores, parameters, uncertainty, warnings and notes, and what each file is |
-| `filled_water_temperature_<period>.csv` | one row per day of the calibration, validation or `FORWARD` file: `T_water_measured`, `T_water_model`, `T_water_filled` (the measurement where there is one, the model's value otherwise) and `source` (`measured`, `model` or `none`). After `DE-MCMC`, or a `FORWARD` run with intervals, also the model's prediction range (`model_lower_90`, `model_upper_90` for a 90% range). |
-| `1_*.out` | line 1: the 8 fitted parameters; line 2: the calibration score; line 3: the validation score (if run) |
-| `2_*.csv` / `3_*.csv` | one row per day of the calibration / validation file: `Year, Month, Day, Tair, Twat_obs, Twat_mod, Twat_obs_agg, Twat_mod_agg, Q`. `_agg` are the values actually scored; `-999` means none. Gap-tolerant runs add `Tair_gap, Q_gap, segment_id`. |
-| `goodness_of_fit_<period>_*.csv` | N, NSE, R² (squared correlation), RMSE, MAE, AIC and BIC, for `calibration` and `validation`. The `full_simulation` file repeats the calibration scores, because only measured days are scored. |
+| `summary.md` | a one-page summary of the run: settings, data, scores, parameters, uncertainty, warnings and notes, the figures, and what each file is |
+| `summary.html` | the same page for a web browser, with the figures inside it (one file to send) |
+| `filled_water_temperature_<period>.csv` | `<period>` is `calibration`, `validation` or `forward`. One row per day of that file: `T_water_measured`, `T_water_model`, `T_water_filled` (the measurement where there is one, the model's value otherwise) and `source` (`measured`, `model` or `none`). Where the output files have `warm_up` (gap-tolerant runs, files shorter than a year), it is copied: on those days the model is still settling, so its values are less reliable. After `DE-MCMC` (calibration file only), or a `FORWARD` run with intervals, also the model's prediction range (`model_lower_90`, `model_upper_90` for a 90% range). |
+| `1_*.out` | line 1: the 8 fitted parameters; line 2: the calibration score; line 3: the validation score (if run). With `objective_function: "RMS"` the score is written as minus the RMSE. |
+| `2_*.csv` / `3_*.csv` | one row per day of the calibration / validation file: `Year, Month, Day, Tair, Twat_obs, Twat_mod, Twat_obs_agg, Twat_mod_agg, Q`. `_agg` are the values actually scored; `-999` means none. Gap-tolerant runs add `Tair_gap, Q_gap, segment_id`. `warm_up` (gap-tolerant runs, and files shorter than a year) is 1 on the unscored days at the start of each segment or file. |
+| `goodness_of_fit_<period>_*.csv` | N, NSE, R² (squared correlation), RMSE, MAE, AIC and BIC, for `calibration` and `validation` (`forward_projection` in a `FORWARD` run whose file has measurements). The `full_simulation` file repeats the calibration scores, because only measured days are scored. |
 | `calibration_*.png`, `validation_*.png` | measured and simulated water temperature on the measured days, with the residuals below |
 | `full_simulation_*.png` | the calibration period again, on every day, including days without a measurement |
 | `predicted_vs_measured_*.png` | simulated against measured temperature |
 | `residual_diagnostics_*.png` | the residuals' histogram, normal Q-Q plot and autocorrelation. Use it to check the assumptions behind the uncertainty ranges. |
-| `bias_by_month_<period>_*.csv` / `.png` | the mean error (simulated minus measured) for each month, each season and the whole year, with a 95% interval ([docs/METHODS.md §7](docs/METHODS.md#7-measuring-the-fit)) |
+| `bias_by_month_<period>_*.csv` / `.png` | the mean error (simulated minus measured) for each month, each season and the whole year, with a 95% interval; the unscored `warm_up` days are left out ([docs/METHODS.md §7](docs/METHODS.md#7-measuring-the-fit)) |
 | `0_*.csv`, `convergence_*.png`, `dottyplots_*.png` | every parameter set tried; the best score so far against the number of tries (it should flatten out); the score against each parameter |
-| `calibration_metadata.json` | `Qmedia`, the calibrated flow range, version, integrator, parameters and seed. Later runs reuse it. Not written by `FORWARD` runs. |
+| `calibration_metadata.json` | `Qmedia`, the calibrated flow range, version, integrator, parameters, seed and the settings that go with them (`Tice_cover`, `min_theta_floor`, `calendar`, `gap_tolerant`, `time_resolution`). Later runs reuse it. Not written by `FORWARD` runs. |
 | `parameters.txt` | the bounds actually used |
 | `gaps_summary.txt` | gap-tolerant runs: the stretches of data used |
 | `sensitivity_*` | §11 |
 | `MCMC_*`, `parameter_significance_*`, `parameter_correlation_*` | §11 |
-| `Forward_Prediction_*`, `forward_projection*.png` | §12 |
+| `Forward_Prediction_*`, `forward_projection.png` | §12 |
 | `cv_results.csv`, `cv_bias_by_month.*`, `cv_yearly_statistics*.csv`, `cv_interval_coverage.csv` | §13 |
 
 ### Reading the scores
@@ -521,6 +569,7 @@ After a calibration, look at these, in this order:
 | `parameter_bounds: min > max` | Swap or correct the bounds of the parameter it names. |
 | `No parameter is free to calibrate` | Add `parameter_bounds`. |
 | `Missing calibration data file` / `Missing validation data file` | Check `paths.input_data` or `paths.validation_data`. |
+| `... is 29 February, which the noleap calendar does not have` | Remove the 29 February rows, set `drop_29_february: true` to have them removed, or use `calendar: "standard"` if the file has real dates with leap days ([§5](#5-preparing-your-own-data)). |
 | `must be continuous at a daily time scale` | The message says which problem it is: a date with no row (add a row; its values may be empty), a date that appears twice (remove one of the rows), or dates out of order (sort the rows by date). |
 | `Date is blank on line ...` / `cannot be read as a date` | Write every date as `YYYY-MM-DD`, in the same format on every row. |
 | `value(s) that are not numbers` | Replace text such as `n.a.` with an empty cell, or write `-999`. Use a point, not a comma, as the decimal separator. |
@@ -528,28 +577,42 @@ After a calibration, look at these, in this order:
 | `Missing 'T_air' column` (or another column) `(found 'T_air ' ...)` | Column names must match exactly: check for spaces and capital letters. |
 | `Missing 'Discharge' column` | Versions 4, 7 and 8 need discharge. |
 | `Missing 'T_water' column` / `has no water temperature measurements` | Calibration and validation files need measured water temperature. If a validation file has none, remove `paths.validation_data`. |
-| `has only ... day(s); at least 365 are required` | Calibration and scenario files need at least a year of data. |
-| `Warning: ... validation will be skipped` | The validation file is shorter than a year. Give it at least 365 days, or remove it. |
+| `has only ... day(s); at least 365 are required` | A calibration file needs at least a year of data, for the parameters of the yearly cycle. |
+| `has only ... day(s); at least 30 are required` | A scenario file needs at least 30 days. |
+| `Warning: ... validation will be skipped` | The validation file is shorter than 30 days. Give it more days, or remove it. |
+| `Warning: ... has ... days, less than a year` | The file is used, but its first days are not scored ([§5](#5-preparing-your-own-data)). A year or more is recommended. |
+| `Warning: warmup_drop_days=... is shorter than` | Gap-tolerant mode or a file shorter than a year: increase `warmup_drop_days` as the message suggests ([§10](#10-gap-tolerant-mode)). |
 | `Warning: ... are also measured days of the calibration file` | The validation file repeats calibration days. Use separate years ([§5](#5-preparing-your-own-data)). |
 | `Non-positive discharge (Q <= 0)` | See [§9.2](#92-zero-or-negative-discharge). |
+| `Negative discharge in ...` | Flow cannot be negative: it is almost certainly a missing-value code. Write missing values as `-999` or leave the cell blank ([§9.2](#92-zero-or-negative-discharge)). |
+| `Zero or negative discharge in ...` (gap-tolerant mode) | A calibration or validation run treats those days as gaps; a FORWARD run stops. Set `min_theta_floor` to simulate them, or correct the data ([§9.2](#92-zero-or-negative-discharge)). |
+| `Note: Zero discharge in ...: ... Version 7 simulates them with theta = 0` | Information only. Check that the river really had no flow on those days ([§9.2](#92-zero-or-negative-discharge)). |
 | `FORWARD mode requires an explicit Qmedia` | Set `paths.calibration_metadata` or `Qmedia:` ([§6](#qmedia-keep-it-fixed-when-discharge-changes)). |
+| `Both Qmedia: ... and paths.calibration_metadata ... were supplied and disagree` | Remove `Qmedia:`; the calibration's value is the right one. |
+| `calibration_metadata version (...) does not match` / `calibration_metadata integrator (...) does not match` | Set `version` and `integrator` as in the calibration ([§9.1](#91-numerical-stability-and-the-choice-of-integrator)). |
 | `n_dat is 0 after aggregation` | No usable `T_water` values. Check the column, or lower `prc`. |
 | `prc must be a fraction above 0 and at most 1` | Set `prc` to, for example, `0.6` (60% of the days in each week or month). |
 | `Warning: ... value(s) of T_air` (or `T_water`) `... are outside` | Usually a missing-value code other than `-999`. Replace it with an empty cell. Otherwise check that the units are °C. |
 | `No valid segments found` | Gap-tolerant mode: no stretch without gaps is at least `min_segment_days` long. |
-| `Qmedia is zero or negative` | Gap-tolerant mode: too little valid discharge. Set `Qmedia:`. |
-| `NumericalDivergenceError` / `exceed the ... stability limit` / `can grow ... times` | Use `CRN` or `EXP` ([§9.1](#91-numerical-stability-and-the-choice-of-integrator)). |
+| `Qmedia must be positive` | `Qmedia:` (or the `qmedia` in `calibration_metadata.json`) is zero or negative. It is the average discharge that flow is divided by. |
+| `Qmedia ... cannot be computed` | The record has no positive discharge. Set `Qmedia:`. |
+| `The calibration in ... was fitted with ...` | The FORWARD run's `Tice_cover` or `min_theta_floor` differs from the calibration's. Set them as in the calibration. |
+| `Note: ... does not record the Tice_cover and min_theta_floor` | The calibration or chain was made with version 0.5.0 or earlier. Check by hand that they match, or calibrate again. |
+| `NumericalDivergenceError` / `exceed the ... stability limit` / `can grow ... times` | Use `CRN` or `EXP` ([§9.1](#91-numerical-stability-and-the-choice-of-integrator)). If the message says B is negative, narrow `parameter_bounds` instead. |
 | `Warning: the relaxation rate B is negative` / `zigzags from one day to the next` | The fitted parameters are physically impossible. This usually follows weekly or monthly scoring with bounds that allow a negative `a2` or `a3`. Set their minimum to 0 and calibrate again ([§6](#parameters-a1a8)). Do not use the results. |
 | `Efficiency mismatch in forward run` | An internal check failed. Please report it, with your settings file. |
 | `mcmc_walkers ... must be at least 2x` | Increase `mcmc_walkers`. |
+| `run_mode DE-MCMC cannot be used with objective_function KGE` | Use `objective_function: "NSE"` or `"RMS"`. The uncertainty ranges are measured around the least-squares fit, which a KGE fit is not ([§11](#11-uncertainty-de-mcmc-and-sensitivity-analysis)). |
 | `MCMC did not converge within ... steps` | Try a simpler model version, or increase `mcmc_steps` ([§11](#11-uncertainty-de-mcmc-and-sensitivity-analysis)). |
 | `FORWARD mode needs parameters` | Set `paths.calibration_metadata` (or `parameters_forward`) ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `Note: integrator RK4/RK2/EUL is kept to reproduce the original Fortran` | Use `CRN`, unless you need results identical to the Fortran ([§9.1](#91-numerical-stability-and-the-choice-of-integrator)). |
+| `Warning: Cannot generate prediction intervals. MCMC chain not found at ...` | The run continues **without** intervals. Correct `forward_options.mcmc_chain_path` and run again. |
+| `Warning: the MCMC chain ... did NOT converge` | Do not use the intervals for a decision. Rerun `DE-MCMC` until it converges ([§11](#11-uncertainty-de-mcmc-and-sensitivity-analysis)). |
 | `enable_prediction_intervals is True but residual_sigma is 0.0/unavailable` | Point `mcmc_chain_path` at a chain that has its `_meta.json`, or set `residual_sigma`. |
 | `draws ... were excluded as numerically divergent` | Use `CRN` or `EXP`, or check the chain and the bounds ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `paired_difference_from_files: ... differs` | The two scenario runs did not use the same parameter sets ([§12](#12-scenario-runs-and-prediction-intervals)). |
-| `The MCMC chain ... was fitted with ...` | The FORWARD run's model version, integrator or `Qmedia` differs from the chain's calibration. Use `paths.calibration_metadata` from that calibration ([§12](#12-scenario-runs-and-prediction-intervals)). |
-| `Warning: warmup_drop_days=... is shorter than` | Gap-tolerant mode: increase `warmup_drop_days` as the message suggests ([§10](#10-gap-tolerant-mode)). |
+| `The MCMC chain ... was fitted with ...` | The FORWARD run's model version, integrator, `Qmedia`, `Tice_cover` or `min_theta_floor` differs from the chain's calibration. Use `paths.calibration_metadata` from that calibration ([§12](#12-scenario-runs-and-prediction-intervals)). |
+| `Warning: the output folder ... already holds ... file(s) from earlier runs` | Files with the same names, such as `summary.md`, are replaced. Give each run its own `output_dir` if you want to keep them ([§8](#8-understanding-the-output-files)). |
 | `Note: the calibrated model forgets its restart within about ... days` | Gap-tolerant mode: a shorter warm-up would score more measured days. Set the values it gives and calibrate again ([§10](#10-gap-tolerant-mode)). |
 | (no message) Good overall scores, but `bias_by_month_*.png` shows the model too warm or too cool in some months | A score over the whole year can hide an error in one season. Compare model versions ([§4](#4-choosing-a-model-version-and-integrator)). Where discharge drives the summer temperature, use version 7 or 8. If an error remains in the season of your limit, report it. A model that is too warm overstates the chance that a warm-water limit was exceeded; one that is too cool understates it. |
 
@@ -592,10 +655,11 @@ however long the run: it does not compound. [Example 09](examples/09_integrator_
 shows all of this on the Swiss rivers.
 
 Use `RK4`, `RK2` or `EUL` only to reproduce Fortran results, never for
-scenarios. Even when stable, they can be inaccurate with a one-day step: `EUL`
-was off by up to about 1 °C on the Mentue ([validation V6](validation/REPORT.md#v6)).
-Calibrating with `EXP` instead of `CRN` changed predictions by less than
-0.03 °C on the Swiss rivers.
+scenarios. Even when stable, they can be inaccurate with a one-day step: on
+the Mentue, `EUL` differed from a precise reference solution by 0.7–0.9 °C on average, and
+by up to 4.5 °C on single days ([validation V6](validation/REPORT.md#v6)).
+Calibrating with `EXP` instead of `CRN` changed the validation RMSE by less
+than 0.03 °C on the Swiss rivers.
 
 **Parameters belong to the method they were calibrated with.** Run them with
 the same one. This matters for parameters taken from a paper. The parameters
@@ -614,16 +678,35 @@ at the 0 °C floor, and how to check a scenario's B series before you run it.
 
 ### 9.2 Zero or negative discharge
 
-Versions 4, 7 and 8 divide by `θ^a4`. That is undefined when the flow is zero.
-So a zero or negative discharge stops the run when the data are loaded. The
-message names the first bad date. You can:
+Versions 4 and 8 divide by `θ^a4`. That is undefined when the flow is zero.
+So a zero discharge stops the run when the data are loaded. The message names
+the first bad date. You can:
 
 1. correct the data;
-2. use `gap_tolerant: true`, which treats those days as gaps; or
+2. use `gap_tolerant: true`, which treats those days as gaps: they are not
+   simulated or scored, and the model starts again after them. The run warns,
+   with the number of days and the first one, marks them in `Q_gap` and counts
+   them in `gaps_summary.txt`. A FORWARD (scenario) run stops instead: its
+   results are about those days, so leaving them out would hide the answer
+   (for example, a river that dries up would show fewer warm days); or
 3. set `min_theta_floor` (for example `1.0e-6`), which keeps θ at least that
-   large. Use this only for days that genuinely had no flow. Expect large
-   simulated responses on those days, because θ^a4 becomes very large or very
-   small as the flow approaches zero.
+   large, so the days are simulated (also in gap-tolerant mode). Use this only
+   for days that genuinely had no flow. Expect large simulated responses on
+   those days, because θ^a4 becomes very large or very small as the flow
+   approaches zero. The data check warns with the number of zero-flow days, and
+   a FORWARD run counts them as outside the calibrated flows unless the
+   calibration had such days too.
+
+**Version 7** fixes a4 at zero, so it never divides by θ: it simulates a
+zero-flow day with θ = 0. Its discharge terms then drop out, and the water
+follows the air alone. A note gives the number of such days and the first one,
+in every mode. A stream without flow may be dry or reduced to pools, which the
+model may not have been calibrated on: a FORWARD run counts these days as
+outside the calibrated flows unless the calibration had such days too.
+
+Negative discharge always stops the run for versions 4, 7 and 8: flow cannot be
+negative, so it is almost certainly a code for a missing value. Write missing
+values as `-999` or leave the cell blank.
 
 ## 10. Gap-tolerant mode
 
@@ -631,10 +714,16 @@ With `gap_tolerant: true`, `T_air` and `Discharge` may have gaps. This is how
 it works:
 
 - The record is split at each gap into **segments**: stretches with no gaps.
+  For versions 4 and 8, a day with zero discharge is also a gap unless
+  `min_theta_floor` is set (§9.2). Version 7 simulates it.
 - Segments shorter than `min_segment_days` (default 30) are dropped.
-- Each segment is simulated on its own. It starts from the measured water
-  temperature on its first day, or, if there is none, from the average for
-  that day of the year.
+- Each segment is simulated on its own. In a calibration or validation it
+  starts from the measured water temperature on its first day, or, if there
+  is none, from the calibration's average for that day of the year. A FORWARD
+  (scenario) run starts it from the water temperature that matches the first
+  day's air temperature and flow, so a scenario file needs no water
+  temperature, a scenario's start does not come from measurements made under
+  other conditions, and paired runs start alike.
 - The first `warmup_drop_days` (default 15) of each segment are not scored.
   This gives the model time to forget its approximate starting value. After
   the calibration, the program works out how long the fitted model needs:
@@ -677,6 +766,31 @@ Be aware:
   computed mean flow is too low.
 
 ## 11. Uncertainty (DE-MCMC) and sensitivity analysis
+
+### Which tool for which question
+
+pyair2stream has several uncertainty tools. They answer different questions,
+and a defensible result usually needs more than one.
+
+| Your question | Tool | Where |
+|---|---|---|
+| How precisely do my data fix each parameter? | `DE-MCMC` parameter ranges; jackknife intervals from cross-validation as a second opinion | §11, §13 |
+| What range of daily temperatures should I expect in the calibration years? | `DE-MCMC` prediction band (`MCMC_envelopes_*.csv`) | §11 |
+| ...in other years, a scenario or a climate projection? | `FORWARD` run with prediction intervals drawn from the `DE-MCMC` chain | §12 |
+| What range for a 7-day mean, a yearly peak or a number of warm days? How likely is it that a limit was exceeded? | the same `FORWARD` run with `save_ensemble: true`, then `pyair2stream.scenario` | §12 |
+| What difference would a change in flow or climate make? | two paired `FORWARD` runs | §12 |
+| How well does the model predict years it was not fitted to? Do its ranges hold there? | cross-validation: held-out scores, `cv_interval_coverage.csv` | §13 |
+| Is the model biased on yearly peaks or counts, and by how much? | cross-validation's check of yearly statistics, then `scenario.correct_statistic` on the `FORWARD` results | §12, §13 |
+
+What none of them covers: errors in the input data, a river that changes
+(a new dam, a changed channel), and conditions far outside the calibration
+years. The ranges are only as good as the checks on years the model was not
+fitted to.
+
+[docs/METHODS.md §1](docs/METHODS.md#1-what-the-model-is) has the full list,
+with how the tools are related, and
+[docs/UNCERTAINTY.md §1](docs/UNCERTAINTY.md#1-start-here-which-tool-answers-your-question)
+says what to check before you report each one.
 
 ### Parameter and prediction uncertainty
 
@@ -722,15 +836,21 @@ these before you use the results:
   `strict_convergence: false` the run continues, but marks every result as not
   converged. Do not use such results for decisions.
 - **Coverage.** The console and `MCMC_chain_*_meta.json` report
-  `interval_coverage`: the share of measured days inside the band. It should be
-  close to the level you asked for. If it is much lower, the band is too
-  narrow.
+  `interval_coverage`: the share of measured days of the calibration years
+  inside the band. It should be close to the level you asked for. If it is much
+  lower, the band is too narrow. Because these are the years the model was
+  fitted to, a good value here does not show that the band holds in other
+  years: check that on validation years or by cross-validation.
 - **The level.** `prediction_interval` can be any level, for example 95. On the
-  Swiss rivers, daily bands from 50% to 95% held in years not used for
-  calibration, but 99% bands held on only 98.0–98.2% of days
-  ([V11](validation/REPORT.md#v11)). Before you report a 95% or 99% band, check
-  it at your site: cross-validation (§13) writes `cv_interval_coverage.csv`
-  for each level.
+  Swiss rivers, over many held-out years, daily bands from 50% to 95% held,
+  but 99% bands held on only 98.0–98.2% of days
+  ([V11](validation/REPORT.md#v11)). On the later validation years of each
+  river, 95% bands held on 91–95% of days and 99% bands on 95–99.5%: too narrow
+  on some rivers ([V5](validation/REPORT.md#v5), one of the checks that fail).
+  Before you report a 95% or 99% band, check it at your site: cross-validation
+  (§13) writes `cv_interval_coverage.csv` for each level.
+  [docs/UNCERTAINTY.md §13](docs/UNCERTAINTY.md#13-choosing-the-level-90-95-or-99)
+  helps you choose.
 
 **The three error settings.** Keep the defaults. In short:
 
@@ -738,7 +858,7 @@ these before you use the results:
   day, as real errors do. For single days, `"iid"` (independent errors) gives
   about the same band. For anything over several days, such as a 7-day mean,
   `"iid"` gives bands that are far too narrow. On the Swiss rivers, its 90%
-  bands for 7-day means held only 39–62% of the time
+  bands for 7-day means held only 39–59% of the time
   ([V5](validation/REPORT.md#v5)).
 - **`rho_timescale: "weekly"`** sets how long the errors last (ρ). Real errors
   have a fast part, which fades in days, and a slow part, which lasts weeks.
@@ -750,13 +870,14 @@ these before you use the results:
 - **`likelihood: "least_squares"`** keeps the band centred on the best fit.
   The alternative, `"exact"`, moved the band's centre by up to 0.11 °C on the
   Swiss rivers, and made predictions slightly worse
-  ([V5](validation/REPORT.md#v5)).
+  ([V5](validation/REPORT.md#v5)). Both likelihoods use the actual spacing of the
+  measured days, so gaps between measurements are allowed for.
 
 **About the parameters.** For versions with many parameters, especially 8,
 several combinations fit almost equally well. So individual values are
 uncertain, and parameters that trade off move together. In a test with known
-parameters, the 90% parameter ranges contained the true values about 90% of
-the time or more ([V4](validation/REPORT.md#v4)). Rely on the predictions
+parameters and the default settings, the 90% parameter ranges contained the
+true values about 90% of the time or more ([V4](validation/REPORT.md#v4)). Rely on the predictions
 rather than on single parameter values. Do not combine the ends of several
 ranges: such combinations do not fit the data.
 
@@ -767,6 +888,8 @@ ranges: such combinations do not fit the data.
   and persistence (ρ), and the coverage;
 - `MCMC_envelopes_*.csv`: the band for each day of the calibration period
   (`Twat_mod_lower`, `Twat_mod_p50`, `Twat_mod_upper`);
+- `MCMC_ensemble_*.npz`: with `save_ensemble: true`, every simulated series of
+  the calibration period;
 - `parameter_significance_*.csv`: each parameter's mean, standard deviation
   and range at `parameter_interval`, and whether it differs from zero (at the
   5% level);
@@ -801,12 +924,12 @@ paths:
   calibration_metadata: "output/calibration_metadata.json"
 # parameters_forward: [8 values]  # only to run parameters other than the calibrated ones
 uncertainty_options:
-  noise_model: "ar1"          # the same as in the calibration
+  # noise_model: "ar1"        # default: the calibration's, from the chain; set it only to use another
 forward_options:
   enable_prediction_intervals: true
   mcmc_chain_path: "output/MCMC_chain_Station_A_series_1d.csv"   # from a DE-MCMC run
   n_samples: 1000
-  random_seed: 42
+  random_seed: 42             # default: the top-level random_seed
   residual_sigma: null        # default: taken from the chain's _meta.json
 ```
 
@@ -817,11 +940,29 @@ With prediction intervals, the run:
 3. adds random error with the calibration's typical size and persistence (σ
    and ρ, from the chain's `_meta.json`).
 
-It stops if the chain was fitted with another model version, integrator or
-`Qmedia`. If the input file has water temperature measurements, the run
-reports the fit and the share of measured days inside the band. The lower
-edge of the band can fall below `Tice_cover`, because the error is added after
-the simulation. Method: [docs/METHODS.md §13](docs/METHODS.md#13-forward-runs-and-scenario-comparisons).
+Each simulated series is kept at or above `Tice_cover`, as the simulation
+itself is, so the band does not go below the ice floor.
+
+It stops if the chain was fitted with another model version, integrator,
+`Qmedia`, `Tice_cover` or `min_theta_floor`. If the input file has water
+temperature measurements, the run reports the fit and the share of measured
+days inside the band. Method:
+[docs/METHODS.md §13](docs/METHODS.md#13-forward-runs-and-scenario-comparisons).
+
+**Outputs** (besides the usual files, named `forward_projection_*`):
+
+- `Forward_Prediction_Envelopes_*.csv`: the band for each day
+  (`Twat_mod_lower`, `Twat_mod_p50`, `Twat_mod_upper`);
+- `Forward_Prediction_Ensemble_*_meta.json`: the chain, the parameter sets
+  drawn, σ, ρ, the error model and the coverage;
+- `Forward_Prediction_Ensemble_*.npz`: with `save_ensemble: true`, every
+  simulated series;
+- `forward_projection.png`: the simulation with its band.
+
+**Short files.** A scenario file may be 30 to 364 days long. Its first
+`warmup_drop_days` are marked `warm_up = 1`: the model is still settling, so
+leave them out of your statistics, or start the file that many days before the
+period you care about (§5).
 
 **Weekly means, yearly peaks and counts of days** must be computed in each
 simulated series, not from the daily band. The upper edge of the daily band is
@@ -831,8 +972,13 @@ not the upper edge of a weekly mean. Set
 
 - `load_ensemble` reads the saved series;
 - `year_statistics` gives each year's highest daily mean, highest 7-day mean
-  and number of days above a threshold, in every series;
-- `aggregate` gives means, sums or maxima over fixed periods;
+  and number of days above a threshold, in every series. A year the dates
+  cover only in part (at the start or end of the file) is left out, with a
+  warning: its values would describe only those days;
+- `aggregate` gives means, sums or maxima over fixed periods. A period the
+  dates cover only in part, or with days not simulated, gets no value (NaN),
+  with a warning (`min_days=` accepts partial periods; `return_periods=True`
+  also returns the period dates);
 - `exceedance` counts days above a threshold.
 
 [Example 03](examples/03_compliance/README.md) computes the probability that a
@@ -861,10 +1007,24 @@ dev = check[check.statistic == "highest 7-day mean"].deviation   # measured minu
 p_exceeded = (scenario.correct_statistic(peak, dev) > 20).mean() # share of series above a 20 °C limit
 ```
 
+**What the correction does.** The cross-validation predicts each calibration
+year with that year hidden, and records the *deviation*: the measured statistic
+minus the median of its simulations. `correct_statistic` adds the mean of those
+deviations to every simulated value of the statistic (on the Mentue, −0.65 °C
+for the highest 7-day mean: the model was 0.65 °C too warm), plus a random
+amount for the uncertainty of that mean, larger with fewer years. *Uncorrected*
+means the values straight from the simulations; *corrected* means after this
+shift. The correction assumes the model's average error in the statistic is the
+same in the years predicted as in the years held out
+([docs/UNCERTAINTY.md §9](docs/UNCERTAINTY.md#9-correcting-yearly-statistics-for-the-models-bias)).
+
 With the correction, the 90% ranges held in 85–94% of years (V11). Report the
 corrected probability together with the check's summary
-(`cv_yearly_statistics_summary.csv`). With fewer than about 5 held-out years,
-the check says little and the correction is wide.
+(`cv_yearly_statistics_summary.csv`). `correct_statistic` needs at least 3
+held-out years; with fewer than about 5, the check says little and the
+correction is wide. The correction is random (`seed=` makes it repeatable). Use
+the same threshold and season in the cross-validation and in
+`year_statistics`.
 
 **Comparing two scenarios.** To get an uncertainty band for the *difference*
 (for example abstraction minus natural flow), both runs must use the same
@@ -884,7 +1044,8 @@ diff = scenario.paired_difference_from_files(
 )   # B minus A: one row per parameter set, one column per day
 ```
 
-This first checks that the two runs used the same parameter sets. Each pair
+This first checks that the two runs used the same chain, the same parameter
+sets, the same error settings (σ, ρ and error model) and the same dates. Each pair
 also gets the same random error in both runs, so the error cancels. What is
 left is the uncertainty of the effect itself, from the parameters. This
 assumes the model's error on a given day would be the same in both scenarios.
@@ -936,6 +1097,8 @@ from its own air temperature and discharge, like any prediction. This is the
 standard design. Hiding the inputs too changed no year's RMSE by more than
 0.01 °C ([V12](validation/REPORT.md#v12);
 [docs/METHODS.md §11](docs/METHODS.md#11-cross-validation) explains why).
+In gap-tolerant mode the hidden year's air temperature and discharge are also
+hidden during the calibration, so the year becomes a gap.
 
 Each year is predicted from a calibration that includes later years as well
 as earlier ones. For predictions of future years, also calibrate on the
@@ -949,36 +1112,47 @@ cross_validation:
   unit: "year"              # or "n_years" with n_years_per_fold
   n_years_per_fold: 1
   water_year_start_month: 1 # e.g. 10 for October-September years
-  min_train_years: 1        # extra first years that are never hidden
-  skip_first_year: true     # the first year is never hidden
+  skip_first_year: false    # true: never hide the first year
+  min_train_years: 0        # never hide this many further first years
   min_valid_obs: 10         # skip years with fewer measurements
   optimizer_overrides:      # optional cheaper settings for each fold
     n_run: 50
 ```
 
-With these defaults, the first two years are always used for calibration
-only. For versions 4, 7 and 8, also set `Qmedia:` (the mean discharge of the
-file). Then every fold scales discharge the same way. Otherwise the parameters
-also move with each fold's own mean discharge.
+With these defaults, every whole year is hidden in turn, the first one
+included: the model does not need earlier data to start from (it has its
+warm-up year, §3 of docs/METHODS.md). Each fold is calibrated on all the
+years it does not hide, so excluding early years with `skip_first_year` or
+`min_train_years` only removes test years. A year the file covers only in
+part (for example a last year ending in March) is used for calibration only,
+with a warning: a few months are not a test of a year. `paths.validation_data`
+is not used: each hidden year is the test.
+
+For versions 4, 7 and 8, also set `Qmedia:` (the mean discharge of the file).
+Then every fold scales discharge the same way. Otherwise the parameters also
+move with each fold's own mean discharge.
 
 A cross-validation run writes these files instead of the usual outputs:
 
-- **`cv_results.csv`**: one row per hidden year, with NSE, KGE and RMSE on
-  daily values and the fitted parameters. Then rows for the `mean`, the `std`
-  (spread), the scores over all hidden days together (`pooled`), and the
-  parameters' confidence intervals (`jackknife_90_lower`, `jackknife_90_upper`;
-  see below). Large differences in the parameters between years mean the data
+- **`cv_results.csv`**: one row per hidden year, with its dates, the number of
+  measurements, NSE, KGE and RMSE on daily values, and the fitted parameters
+  (`p1` to `p8`). Then rows for the `mean`, the `std` (spread), the scores over
+  all hidden days together (`pooled`), and the parameters' standard errors and
+  confidence intervals (`jackknife_se`, `jackknife_90_lower`,
+  `jackknife_90_upper`; see below). Large differences in the parameters between years mean the data
   do not pin them down well.
 - **`cv_bias_by_month.csv`** and **`.png`**: the mean error by month and season
   over the hidden years. A seasonal bias shows up here, in years the model did
   not see.
-- **`cv_yearly_statistics.csv`**: for each hidden year, 1,000 simulations of its
-  highest daily mean, highest 7-day mean and number of days above
-  `threshold`, and where the measured value fell among them. The `deviation`
+- **`cv_yearly_statistics.csv`**: for each hidden year and each statistic
+  (highest daily mean, highest 7-day mean, number of days above `threshold`):
+  the measured value, and the median and range of 1,000 simulations, and where
+  the measured value fell among them (`pit`, `inside`). The `deviation`
   column (measured minus the predicted median) is what
   `scenario.correct_statistic` uses (§12).
-- **`cv_yearly_statistics_summary.csv`**: for each statistic, how often the 50%
-  and 90% ranges held (with the range expected by chance), and the mean
+- **`cv_yearly_statistics_summary.csv`**: for each statistic, how often the
+  50%, 80%, 90% and 95% ranges, and the range at your `prediction_interval`,
+  held (with the range expected by chance), and the mean
   deviation with a 95% interval. If that interval does not include zero, the
   model is biased in that statistic.
 - **`cv_interval_coverage.csv`**: for the 50%, 80%, 90% and 95% bands and your
@@ -991,23 +1165,26 @@ Settings for the yearly statistics:
 cross_validation:
   threshold: 18             # °C, for "days above threshold" (default: the 90th percentile of the measurements)
   season_months: [6, 7, 8, 9]   # a year counts if 80% of these months was measured (default: the 4 warmest)
-  min_train_years: 0        # hide every year but the first: the check needs as many years as possible
 ```
 
 The check uses the error settings of `uncertainty_options` (`noise_model`,
-`rho_timescale`), as a FORWARD run does. It reports ranges at
-`prediction_interval`. With fewer than about 5 hidden years, it says little.
+`rho_timescale`), as a FORWARD run does, with σ and ρ from each fold's own
+calibration years. It reports ranges at `prediction_interval`. Each fold has
+one parameter set, so parameter uncertainty is left out: the ranges in
+`cv_interval_coverage.csv` and the yearly check are slightly narrower than a
+FORWARD run's, and their coverage errs low rather than high. With fewer than
+about 5 hidden years, the check says little.
 
 **Parameter confidence intervals.** The `jackknife_90_lower` and
 `jackknife_90_upper` rows give approximate 90% intervals for each parameter.
 (The level is `uncertainty_options.parameter_interval`, and the row names
 follow it.) They come from how much the parameters move between folds (the
 jackknife, [docs/METHODS.md §11](docs/METHODS.md#11-cross-validation)). In a
-test with known parameters, they contained the true values 83–95% of the time
+test with known parameters, they contained the true values 81–95% of the time
 ([V4](validation/REPORT.md#v4)). Keep in mind:
 
 - Do not use the `std` row as an uncertainty. The folds share most of their
-  data, so it is far too small. It contained the true values only 35–52% of
+  data, so it is far too small. It contained the true values only 39–60% of
   the time.
 - Each interval is for one parameter on its own. Parameters that trade off
   move together, so combining the ends of several intervals gives parameter
@@ -1016,7 +1193,7 @@ test with known parameters, they contained the true values 83–95% of the time
 - The intervals also depend a little on the optimiser's random start. Where
   parameters trade off, one fold can end on a distant set with almost the same
   fit. Another `random_seed` alone changed the intervals' typical width by a
-  factor of 0.65 to 1.06 ([V12](validation/REPORT.md#v12)). For poorly
+  factor of 0.65 to 1.41 ([V12](validation/REPORT.md#v12)). For poorly
   determined parameters, repeat the run with a second seed.
 
 Cross-validation runs only with `run_mode` `DE`, `PSO` or `LATHYP`. In other
@@ -1039,7 +1216,9 @@ decision, check:
 4. **Uncertainty.** If you report a band, its coverage is close to the level
    you asked for: on validation years, and in the season your limit applies
    to. Bands for new years are usually slightly narrow: 90% bands held on
-   85–89% of days on the Swiss rivers ([V5](validation/REPORT.md#v5)).
+   85–90% of days on the Swiss rivers ([V5](validation/REPORT.md#v5)). On the
+   hottest days, version 5's 90% bands held on only 83–84% of days; version
+   8's held on 91% ([V14](validation/REPORT.md#v14)).
    - For 7-day means, runs of warm days and other quantities over several days,
      keep `noise_model: "ar1"` and `rho_timescale: "weekly"` (the defaults).
      Compute them from the saved simulations (§12).

@@ -6,6 +6,7 @@ and reading/validating the input CSV time series data (forcing and observations)
 """
 
 import copy
+import datetime as _dt
 import os
 import json
 import re
@@ -15,22 +16,83 @@ import pandas as pd
 from typing import Tuple
 
 from .config import (
-    CommonData, DEFAULT_NOISE_MODEL, DEFAULT_LIKELIHOOD, VALID_LIKELIHOODS, DEFAULT_RHO_TIMESCALE, VALID_RHO_TIMESCALES, ACTIVE_PARAMS, VALID_VERSIONS, VALID_RUN_MODES, VALID_INTEGRATORS,
+    CommonData, theta_floor_of, zero_flow_ok, DEFAULT_NOISE_MODEL, DEFAULT_LIKELIHOOD, VALID_LIKELIHOODS, DEFAULT_RHO_TIMESCALE, VALID_RHO_TIMESCALES, ACTIVE_PARAMS, VALID_VERSIONS, VALID_RUN_MODES, VALID_INTEGRATORS,
     VALID_OBJECTIVES,
 )
 from .model import prepare_evaluation, check_nonpositive_discharge, STABILITY_MAX_GROWTH
-from .data_checks import check_table, PLAUSIBLE_RANGES as _PLAUSIBLE_RANGES
+from .results import snapshot_folder
+from .data_checks import CALENDARS, NO_360_DAY, MIN_SHORT_DAYS, check_table, PLAUSIBLE_RANGES as _PLAUSIBLE_RANGES
 
 
 # Day of the year on which each month starts, minus one, in a year without 29 February.
 NOLEAP_MONTH_START = np.array([0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334])
 
 
+def theta_of_days(Q: np.ndarray, qmedia: float, floor=None):
+    """theta = Q / Qmedia as the model uses it, on the days with discharge, and their row
+    positions in Q. With a `floor` (`config.theta_floor_of`: min_theta_floor, or 0 for
+    version 7) zero-flow days are included at it, as the model runs them; otherwise they
+    are not simulated and are left out."""
+    rows = np.flatnonzero(Q != -999.0) if floor is not None else np.flatnonzero((Q != -999.0) & (Q > 0.0))
+    theta = Q[rows] / qmedia
+    if floor is not None:
+        theta = np.maximum(theta, floor)
+    return theta, rows
+
+
+def fit_settings(data: CommonData) -> dict:
+    """The settings, besides version, integrator and Qmedia, recorded with fitted parameters
+    (calibration_metadata.json, the MCMC chain's _meta.json). Tice_cover and min_theta_floor
+    change what the model computes, so a FORWARD run must use the same ones
+    (`settings_differences`); the others describe the fit."""
+    return {
+        "Tice_cover": float(data.Tice_cover),
+        "min_theta_floor": data.min_theta_floor,
+        "calendar": data.calendar,
+        "gap_tolerant": bool(data.gap_tolerant),
+        "time_resolution": data.time_res,
+    }
+
+
+def settings_differences(meta: dict, data: CommonData):
+    """How this run's Tice_cover and min_theta_floor differ from those recorded in `meta`
+    (a list, empty when they match), or None when `meta` does not record them (files
+    written by version 0.5.0 or earlier). min_theta_floor is compared only for the
+    versions that use discharge."""
+    if not all(k in meta for k in ("Tice_cover", "min_theta_floor")):
+        return None
+    problems = []
+    if not np.isclose(float(meta["Tice_cover"]), float(data.Tice_cover), rtol=0.0, atol=1e-9):
+        problems.append(f"Tice_cover {meta['Tice_cover']} (this run: {float(data.Tice_cover)})")
+    floor, this_floor = meta["min_theta_floor"], data.min_theta_floor
+    same_floor = (floor is None and this_floor is None) or (
+        floor is not None and this_floor is not None and np.isclose(float(floor), this_floor, rtol=1e-9, atol=0.0))
+    if data.version not in (3, 5) and not same_floor:
+        problems.append(f"min_theta_floor {floor} (this run: {this_floor})")
+    return problems
+
+
+SETTINGS_NOT_RECORDED = (
+    "Note: {path} does not record the Tice_cover and min_theta_floor the parameters were "
+    "fitted with (files written by version 0.5.0 or earlier), so they cannot be checked "
+    "against this run. Make sure they match."
+)
+
+
 def calendar_day_index(data: CommonData, i: int) -> int:
-    """0-based day of the year of row `i` for the noleap and 360_day calendars, from the
-    seasonal phase `data.tt` that `read_Tseries` set (tt = day of the year / days in it)."""
-    days_in_year = 365 if data.calendar == 'noleap' else 360
-    return int(round(data.tt[i] * days_in_year)) - 1
+    """0-based day of the year of row `i` for the noleap calendar, from the seasonal phase
+    `data.tt` that `read_Tseries` set (tt = day of the year / 365)."""
+    return int(round(data.tt[i] * 365)) - 1
+
+
+def climatology_day(data: CommonData, i: int) -> int:
+    """Slot of row `i` in the day-of-year climatology (0..365). Standard dates use their
+    position in a leap year, so a calendar date has the same slot in every year (1 March is
+    always 60, and 29 February has its own slot 59); noleap dates use `calendar_day_index`."""
+    if data.calendar == 'standard':
+        month, day = int(data.date[i, 1]), int(data.date[i, 2])
+        return (_dt.date(2000, month, day) - _dt.date(2000, 1, 1)).days
+    return calendar_day_index(data, i)
 
 
 def _check_choice(name: str, value, allowed) -> None:
@@ -107,7 +169,7 @@ def read_calibration(config_file='config.yaml') -> CommonData:
     _check_choice('integrator', data.mod_num, VALID_INTEGRATORS)
     if data.mod_num in ('RK4', 'RK2', 'EUL'):
         print(f"Note: integrator {data.mod_num} is kept to reproduce the original Fortran. With a "
-              "one-day step it can be inaccurate even when stable (by up to about 1 degC for EUL); "
+              "one-day step it can be inaccurate even when stable (for EUL by 0.7-0.9 degC RMS on the Swiss rivers, more on single days); "
               "use CRN (the default) unless you need Fortran-identical results (USER_GUIDE §9.1).")
     data.runmode = config.get('run_mode', 'DE')
     if data.runmode == 'DE-CV-MCMC':
@@ -118,6 +180,16 @@ def read_calibration(config_file='config.yaml') -> CommonData:
             "parameters are from year to year (USER_GUIDE §13)."
         )
     _check_choice('run_mode', data.runmode, VALID_RUN_MODES)
+    # DE-MCMC samples a least-squares likelihood around the calibration's best fit; with KGE
+    # the reported best fit (KGE) and the uncertainty ranges (least squares) would describe
+    # two different fits.
+    if data.runmode == 'DE-MCMC' and data.fun_obj == 'KGE':
+        raise ValueError(
+            "run_mode DE-MCMC cannot be used with objective_function KGE: the uncertainty ranges are "
+            "sampled from a least-squares likelihood, so they would be centred on a different fit than "
+            "the KGE best fit reported with them. Use NSE or RMS (both least squares) with DE-MCMC; "
+            "KGE remains available for DE, PSO, LATHYP and cross-validation."
+        )
     data.prc = np.float64(config.get('prc', 1.0))
     if not (0.0 < data.prc <= 1.0):
         raise ValueError(
@@ -152,13 +224,18 @@ def read_calibration(config_file='config.yaml') -> CommonData:
     data.min_theta_floor = min_theta_floor
 
     data.calendar = config.get('calendar', 'standard')
-    if data.calendar not in ('standard', 'noleap', '360_day'):
+    if data.calendar == '360_day':
+        raise ValueError(NO_360_DAY)
+    if data.calendar not in CALENDARS:
         raise ValueError(
-            f"Invalid calendar '{data.calendar}'. Must be one of: 'standard', 'noleap', "
-            "'360_day'. GCM output on a non-standard calendar (no leap days, or 12 "
-            "uniform 30-day months) must declare it explicitly rather than being padded "
-            "to fake Gregorian dates -- see USER_GUIDE.md §5."
+            f"Invalid calendar '{data.calendar}'. Must be one of: 'standard', 'noleap'. "
+            "Climate-model output without leap days must declare calendar: 'noleap' rather "
+            "than being padded with invented dates -- see USER_GUIDE.md §5."
         )
+    drop = config.get('drop_29_february', False)
+    if not isinstance(drop, bool):
+        raise ValueError(f"drop_29_february must be true or false, got {drop!r}.")
+    data.drop_29_february = drop
 
     # Paths mapping
     paths = config.get('paths') or {}
@@ -193,6 +270,15 @@ def read_calibration(config_file='config.yaml') -> CommonData:
             raise ValueError(
                 f"calibration_metadata integrator ('{meta_integrator}') does not match "
                 f"the configured integrator ('{data.mod_num}')."
+            )
+        differences = settings_differences(calib_metadata, data)
+        if differences is None:
+            print(SETTINGS_NOT_RECORDED.format(path=calib_metadata_path))
+        elif differences:
+            raise ValueError(
+                f"The calibration in {calib_metadata_path} was fitted with "
+                + "; ".join(differences) + ". Its parameters mean something only with the "
+                "settings they were fitted with: set them as in the calibration."
             )
         meta_qmedia = float(calib_metadata['qmedia'])
         if qmedia_user is not None and abs(float(qmedia_user) - meta_qmedia) > 1e-9:
@@ -281,6 +367,8 @@ def read_calibration(config_file='config.yaml') -> CommonData:
 
     data.uncertainty_options = {
         "noise_model": noise_model,
+        # Whether the settings name the error model: a FORWARD run otherwise takes the chain's.
+        "noise_model_set": 'noise_model' in uncertainty_options,
         "likelihood": likelihood,
         "rho_timescale": rho_timescale,
         "ar1_rho": ar1_rho,
@@ -300,8 +388,8 @@ def read_calibration(config_file='config.yaml') -> CommonData:
             unit=cv_config_dict.get('unit', 'year'),
             n_years_per_fold=int(cv_config_dict.get('n_years_per_fold', 1)),
             water_year_start_month=int(cv_config_dict.get('water_year_start_month', 1)),
-            min_train_years=int(cv_config_dict.get('min_train_years', 1)),
-            skip_first_year=bool(cv_config_dict.get('skip_first_year', True)),
+            min_train_years=int(cv_config_dict.get('min_train_years', 0)),
+            skip_first_year=bool(cv_config_dict.get('skip_first_year', False)),
             min_valid_obs=int(cv_config_dict.get('min_valid_obs', 10)),
             optimizer_overrides=cv_config_dict.get('optimizer_overrides', None),
             threshold=(float(cv_config_dict['threshold'])
@@ -326,6 +414,9 @@ def read_calibration(config_file='config.yaml') -> CommonData:
 
     data.folder = paths.get('output_dir', os.path.join(data.name, f"output_{data.version}"))
     os.makedirs(data.folder, exist_ok=True)
+    # What the folder holds before this run writes anything (parameters.txt below), so the
+    # summary describes only this run's files and an empty folder is not reported as used.
+    data.folder_before = snapshot_folder(data.folder)
 
     # Fortran module hardcodes n_par = 8
     n_par = 8
@@ -405,7 +496,13 @@ def compute_qmedia(data: CommonData, verbose: bool = False) -> None:
     Recalculating this per fold ensures held-out data doesn't leak into ODE physics.
     """
     Q = data.Q[365:data.n_tot]
-    valid_Q_mask = (Q != -999.0) & (Q > 0.0)
+    # The mean of every day with discharge, as the original Fortran computes it. Zero-flow
+    # days count when the model can simulate them (version 7 or min_theta_floor), so Qmedia
+    # is the river's mean discharge; otherwise they are not simulated and are left out.
+    if zero_flow_ok(data.version, data.min_theta_floor):
+        valid_Q_mask = (Q != -999.0) & (Q >= 0.0)
+    else:
+        valid_Q_mask = (Q != -999.0) & (Q > 0.0)
     computed_qmedia = np.float64(0.0)
     if np.any(valid_Q_mask):
         computed_qmedia = np.float64(np.mean(Q[valid_Q_mask]))
@@ -421,10 +518,22 @@ def compute_qmedia(data: CommonData, verbose: bool = False) -> None:
     else:
         data.Qmedia = computed_qmedia
 
+    # theta = Q / Qmedia: with Qmedia <= 0 every simulated temperature is NaN, and the run
+    # stopped later with a divergence error that blamed the integrator.
+    if data.Qmedia <= 0 and data.version not in (3, 5):
+        if data.Qmedia_user is not None:
+            raise ValueError(
+                f"Qmedia must be positive, got {data.Qmedia_user}: it is the average discharge that "
+                "flow is divided by (theta = Q/Qmedia). Check `Qmedia:` in the configuration "
+                "(or the qmedia in paths.calibration_metadata)."
+            )
+        raise ValueError(
+            "Qmedia, the average discharge, cannot be computed: the "
+            "record has no positive discharge. Supply Qmedia in the configuration."
+        )
+
     if data.gap_tolerant:
         n_tot_raw = data._n_tot_raw if data._n_tot_raw is not None else data.n_tot - 365
-        if data.Qmedia <= 0 and data.version not in [3, 5]:
-            raise ValueError("Qmedia is zero or negative. Please supply Qmedia in the configuration file if the data is mostly empty.")
         if verbose and (data.n_Q / n_tot_raw) < 0.5 and data.Qmedia_user is None:
             print("Warning: More than 50% of Discharge values are missing. Consider supplying Qmedia_user in the configuration file.")
         if verbose and data.version in [3, 5]:
@@ -437,6 +546,8 @@ def compute_doy_climatology(data: CommonData) -> None:
     """
     Calculate DOY climatology from the currently valid (unmasked) Twat_obs.
     Recalculating this per fold ensures held-out data doesn't leak into segment initial conditions.
+    Values are averaged by calendar date (`climatology_day`), so leap and other years are
+    not shifted by a day after 29 February; slots without observations are interpolated.
     """
     data.doy_climatology = np.zeros(366, dtype=np.float64)
     doy_sums = np.zeros(366, dtype=np.float64)
@@ -444,21 +555,15 @@ def compute_doy_climatology(data: CommonData) -> None:
 
     for i in range(365, data.n_tot):
         if data.Twat_obs[i] != -999.0:
-            if data.calendar == 'standard':
-                year = data.date[i, 0]
-                month = data.date[i, 1]
-                day = data.date[i, 2]
-                doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days
-            else:
-                doy = calendar_day_index(data, i)
+            doy = climatology_day(data, i)
             doy_sums[doy] += data.Twat_obs[i]
             doy_counts[doy] += 1
 
     if np.sum(doy_counts) == 0:
         raise ValueError(
-            "No T_water observations in this file. Gap-tolerant mode starts each segment from "
-            "the observed water temperature, or from its day-of-year average in this file, so "
-            "it needs some observations (docs/METHODS.md §10)."
+            "No T_water observations in this file. A gap-tolerant calibration starts each segment "
+            "from the observed water temperature, or from its day-of-year average in the "
+            "calibration file, so it needs some observations (docs/METHODS.md §10)."
         )
 
     for i in range(366):
@@ -495,6 +600,7 @@ def precheck_validation(data: CommonData) -> None:
         raise FileNotFoundError(f"Missing validation data file: {filename}")
     checked = check_table(pd.read_csv(filename), filename, period='validation', version=data.version,
                           gap_tolerant=data.gap_tolerant, calendar=data.calendar,
+                          drop_29_february=data.drop_29_february,
                           min_theta_floor=data.min_theta_floor)
     checked.raise_first_error()
     checked.print_warnings()
@@ -568,6 +674,7 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
         check_period = 'validation' if p == 'v' else ('scenario' if data.runmode == 'FORWARD' else 'calibration')
         checked = check_table(pd.read_csv(filename), filename, period=check_period, version=data.version,
                               gap_tolerant=data.gap_tolerant, calendar=data.calendar,
+                              drop_29_february=data.drop_29_february,
                               min_theta_floor=data.min_theta_floor)
         checked.raise_first_error()
         checked.print_warnings()
@@ -580,8 +687,8 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
 
     n_tot_raw = len(df)
 
-    if p == 'v' and n_tot_raw < 365:
-        print('Validation period < 1 year --> validation is skipped')
+    if p == 'v' and n_tot_raw < MIN_SHORT_DAYS:
+        print(f'Validation period shorter than {MIN_SHORT_DAYS} days --> validation is skipped')
         return
 
     n_year = int(np.ceil(n_tot_raw / 365.25))
@@ -615,9 +722,17 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
     data.Q[365:n_tot] = Q
 
     data.date[0:365, :] = -999
-    data.Tair[0:365] = Tair[:365]
-    data.Twat_obs[0:365] = Twat_obs[:365]
-    data.Q[0:365] = Q[:365]
+    # A file shorter than a year (validation or scenario; a calibration needs a year) has
+    # no first year to copy: the warm-up holds the first day's conditions instead, so the
+    # model settles at the water temperature that matches them, and the first
+    # warmup_drop_days are not scored (detect_segments). Gap-tolerant mode does not
+    # simulate the warm-up block (each segment starts from the climatology).
+    short = n_tot_raw < 365
+    data.warmup_from_first_day = short and not data.gap_tolerant
+    first_year = slice(0, 1) if short else slice(0, 365)
+    data.Tair[0:365] = Tair[first_year]
+    data.Twat_obs[0:365] = Twat_obs[first_year]
+    data.Q[0:365] = Q[first_year]
 
     # Seasonal phase tt = day-of-year / days-in-year. Warm-up block: (j+1)/365,
     # as in the Fortran (re-aligned below if the record does not start on 1 Jan).
@@ -638,19 +753,11 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
             # Calculate day of year
             doy = (pd.Timestamp(year, month, day) - pd.Timestamp(year, 1, 1)).days + 1
             data.tt[i] = np.float64(doy / float(days_in_year))
-    elif data.calendar == 'noleap':
-        # Real dates without 29 February: the day of the year follows from each row's
-        # month and day, with the month lengths of a year that is never a leap year.
+    else:
+        # noleap: real dates without 29 February. The day of the year follows from each
+        # row's month and day, with the month lengths of a year that is never a leap year.
         doy = NOLEAP_MONTH_START[data.date[365:n_tot, 1] - 1] + data.date[365:n_tot, 2]
         data.tt[365:n_tot] = doy / 365.0
-    else:
-        # 360_day (twelve 30-day months): the first row's date sets the day of the year
-        # the file starts on, and the rows are counted on from there. Its other dates
-        # cannot be ordinary dates (a 360-day year has 30 February), so they only label
-        # the rows.
-        first = (int(data.date[365, 1]) - 1) * 30 + int(data.date[365, 2])
-        doy = (first - 1 + np.arange(n_tot - 365)) % 360 + 1
-        data.tt[365:n_tot] = doy / 360.0
 
     # The warm-up block copies the first 365 rows of forcing, so it must also copy
     # their seasonal phase. The Fortran's (j+1)/365 is only correct for a record
@@ -658,7 +765,9 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
     # exact equivalence); otherwise the seasonal term would be out of phase with
     # the copied forcing and bias the first weeks of the simulation.
     starts_jan1 = date_col.iloc[0].month == 1 and date_col.iloc[0].day == 1
-    if data.calendar != 'standard' or not starts_jan1:
+    if short:
+        data.tt[0:365] = data.tt[365]
+    elif data.calendar != 'standard' or not starts_jan1:
         data.tt[0:365] = data.tt[365:730]
 
     # Initial Qmedia and DOY climatology calculations
@@ -682,7 +791,9 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
                 "the discharge signal. See USER_GUIDE.md §6 (Qmedia)."
             )
         compute_qmedia(data, verbose=True)
-        if data.gap_tolerant and p == 'c':
+        # Segment start values (gap-tolerant mode): a FORWARD run starts each segment from
+        # its first day's conditions (model.equilibrium_temperature), not from measurements.
+        if data.gap_tolerant and p == 'c' and data.runmode != 'FORWARD':
             compute_doy_climatology(data)
 
         if (
@@ -692,18 +803,25 @@ def read_Tseries(data: CommonData, p: str, recompute_qmedia: bool = True) -> Non
             and data.calib_theta_max is not None
             and data.Qmedia > 0
         ):
-            Q_period = data.Q[365:data.n_tot]
-            valid_Q = (Q_period != -999.0) & (Q_period > 0.0)
-            if np.any(valid_Q):
-                theta = Q_period[valid_Q] / data.Qmedia
-                frac_outside = float(np.mean((theta < data.calib_theta_min) | (theta > data.calib_theta_max)))
-                if frac_outside > 0.01:
-                    print(
-                        f"Warning: {frac_outside:.1%} of days in this run have theta = Q/Qmedia "
-                        f"outside the calibrated range [{data.calib_theta_min:.5f}, "
-                        f"{data.calib_theta_max:.5f}]. The model is being extrapolated beyond the "
-                        f"calibrated regime for these days."
-                    )
+            # Every day outside the calibrated range is reported, zero-flow days run at
+            # min_theta_floor included: results on those days are an extrapolation.
+            theta, rows = theta_of_days(data.Q[365:data.n_tot], data.Qmedia,
+                                        theta_floor_of(data.version, data.min_theta_floor))
+            outside = (theta < data.calib_theta_min) | (theta > data.calib_theta_max)
+            if outside.any():
+                first = data.date[365 + rows[np.argmax(outside)]]
+                at_floor = int(np.sum(outside & (data.Q[365 + rows] <= 0.0)))
+                print(
+                    f"Warning: {int(outside.sum()):,} day(s) ({outside.mean():.1%} of the days with discharge; "
+                    f"first: {first[0]:04d}-{first[1]:02d}-{first[2]:02d}) have theta = Q/Qmedia outside the "
+                    f"calibrated range [{data.calib_theta_min:.5g}, {data.calib_theta_max:.5g}] "
+                    f"(lowest {theta.min():.5g}, highest {theta.max():.5g})"
+                    + (f", {at_floor:,} of them zero-flow days run at "
+                       + ("min_theta_floor" if data.min_theta_floor is not None else "theta = 0")
+                       if at_floor else "")
+                    + ". The model is extrapolated beyond the flows it was calibrated on on these days, so "
+                    "treat their results with care."
+                )
 
     # Guard against non-positive discharge for theta-using versions (4/7/8) in the
     # non-gap-tolerant path -- applies identically to the calibration record and to

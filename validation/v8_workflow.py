@@ -79,14 +79,14 @@ def _forward(csv, par, q, chain, name, noise, reuse=None, extra_unc=None):
 def _part_b():
     """Version 5 responds to a constant air-temperature change dTa with a water-temperature change of
     exactly a2/a3 * dTa on every day (once the start-up has passed). The ice floor is disabled here
-    (Tice_cover -100) so that this holds on every day."""
+    (Tice_cover -100), in the calibration and the scenario runs alike, so that this holds on every day."""
     from pyair2stream.optimization import DE_MCMC_mode
     from pyair2stream import scenario
     cal, val = river_csv("MAH_2369", "calibration"), river_csv("MAH_2369", "validation")
     q = mean_discharge(cal)
     out = os.path.join(WORK, "v8b", "out")
     cfg = {"version": 5, "integrator": "CRN", "run_mode": "DE-MCMC", "objective_function": "NSE",
-           "random_seed": 1, "Qmedia": q, "parameter_bounds": AUTHORS_BOUNDS,
+           "random_seed": 1, "Qmedia": q, "Tice_cover": -100.0, "parameter_bounds": AUTHORS_BOUNDS,
            "optimization": {**DE_SETTINGS, "mcmc_walkers": 32, "mcmc_steps": 20000},
            "paths": {"input_data": cal, "output_dir": out}}
     data = load(cfg, "v8b")
@@ -122,7 +122,10 @@ def _part_c(ensemble_path):
     rows = []
     weekly = scenario.aggregate(ens, dates, how="mean", freq="7D")
     frame = pd.DataFrame(ens.T, index=dates)
-    ref_weekly = frame.groupby((np.arange(len(dates)) // 7)).mean().to_numpy().T
+    ref_weekly = frame.groupby((np.arange(len(dates)) // 7)).mean().to_numpy().T.copy()
+    # A last block of fewer than 7 days has no value (a partial week is not a 7-day mean).
+    if len(dates) % 7:
+        ref_weekly[:, -1] = np.nan
     rows.append({"tool": "aggregate (7-day means)", "cases": weekly.size,
                  "disagreements": int(np.sum(~np.isclose(weekly, ref_weekly, atol=1e-12, equal_nan=True)))})
     for k in (1, 3, 7):

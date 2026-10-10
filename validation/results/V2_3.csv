@@ -1,16 +1,16 @@
 river,version,largest difference (% of range),match,"calibration RMSE, published","calibration RMSE, recalibrated",local search from published,seed 2 vs seed 1 (% of range),"validation RMSE, published","validation RMSE, recalibrated"
-Mentue,3,0.01,True,0.79267,0.79267,,,,
+Mentue,3,0.0,True,0.79267,0.79267,,,,
 Mentue,4,0.02,True,0.78499,0.78499,,,,
 Mentue,5,0.01,True,0.66642,0.66642,,,,
-Mentue,7,5.24,False,0.63715,0.6336,0.6336,0.13,0.7784,0.7791
-Mentue,8,11.73,False,0.645,0.63312,0.63312,0.01,0.7809,0.7791
+Mentue,7,5.13,False,0.63715,0.63361,0.6336,0.24,0.7784,0.779
+Mentue,8,11.84,False,0.645,0.63312,0.63312,0.1,0.7809,0.7793
 Rhône,3,0.33,True,0.90723,0.90723,,,,
-Rhône,4,0.2,True,0.90654,0.90654,,,,
+Rhône,4,0.1,True,0.90654,0.90654,,,,
 Rhône,5,0.0,True,0.87069,0.87069,,,,
-Rhône,7,13.32,False,0.57868,0.578,0.578,1.99,0.7391,0.7396
-Rhône,8,34.23,False,0.57922,0.5775,0.57783,4.11,0.7392,0.7392
+Rhône,7,12.58,False,0.57868,0.578,0.578,3.48,0.7391,0.7397
+Rhône,8,33.92,False,0.57922,0.5775,0.57783,4.42,0.7392,0.7392
 Dischmabach,3,0.23,True,0.9369,0.9369,,,,
-Dischmabach,4,0.0,True,0.93281,0.93281,,,,
+Dischmabach,4,0.01,True,0.93281,0.93281,,,,
 Dischmabach,5,0.0,True,0.7407,0.7407,,,,
 Dischmabach,7,0.0,True,0.63493,0.63493,,,,
-Dischmabach,8,3.1,False,0.63159,0.6316,0.63159,3.61,0.6514,0.6507
+Dischmabach,8,0.0,True,0.63159,0.63159,,,,

@@ -55,6 +55,33 @@ A run has two stages, and optionally a third:
    and differences between scenarios (§13). Cross-validation checks whether such
    ranges hold in years the model was not calibrated on (§11).
 
+**The uncertainty methods at a glance.** They answer different questions and
+are meant to be used together:
+
+| Method | Question it answers | Period | How to run it | Where the result is | § |
+|---|---|---|---|---|---|
+| DE-MCMC parameter intervals | How precisely do the calibration data fix each parameter? | calibration | `run_mode: DE-MCMC` | `parameter_significance_*.csv`; the samples in `MCMC_chain_*.csv` | §12 |
+| DE-MCMC prediction band | What range of daily water temperature do the parameter uncertainty and the model's own error give, and how often did it contain the measurements? | calibration only | `run_mode: DE-MCMC` | `MCMC_envelopes_*.csv`; coverage in `MCMC_chain_*_meta.json` | §12 |
+| FORWARD prediction intervals | The same range for any other period or scenario, from the chain; probabilities that a limit was exceeded; differences between scenarios | any period | `run_mode: FORWARD` with `forward_options.enable_prediction_intervals` | `Forward_Prediction_Envelopes_*.csv`, `Forward_Prediction_Ensemble_*.npz` and `_meta.json`; `pyair2stream.scenario` | §13 |
+| Cross-validation scores | How well does a calibration predict years it was not fitted to? | each held-out year | `cross_validation.enabled: true` with DE, PSO or LATHYP | `cv_results.csv`, `cv_bias_by_month.*` | §11 |
+| Cross-validated interval coverage | Did intervals of each level hold in the held-out years? | held-out years | as above | `cv_interval_coverage.csv` | §11 |
+| Cross-validated check of yearly statistics | Did the ranges of yearly peaks and counts hold, and is the model biased in them? | held-out years | as above | `cv_yearly_statistics*.csv` | §11 |
+| Cross-validated correction | Corrects the yearly statistics of FORWARD simulations for that bias | the years predicted | `scenario.correct_statistic` | your own script | §13 |
+| Jackknife parameter intervals | A second, independent estimate of the parameters' uncertainty, from how they change between folds | calibration years | as for cross-validation | `jackknife_*` rows of `cv_results.csv` | §11 |
+
+They are related through the error model. A single error size σ and
+persistence ρ, estimated from the residuals of the best fit (§12, "Error
+persistence"), set the random error added to every simulated series: in the
+DE-MCMC band, in FORWARD intervals, and in the cross-validation checks (there
+each fold's own σ and ρ, from its training years). The likelihood (§12, item 2)
+uses ρ to set how much information the calibration data carry, and so the width
+of the DE-MCMC parameter intervals. The cross-validation checks use one
+parameter set per fold, so they test the error model on years not used for
+fitting; a FORWARD run adds the parameter uncertainty from the chain, so its
+ranges are slightly wider. The DE-MCMC and jackknife parameter intervals are
+computed in unrelated ways; where they disagree, the parameters are poorly
+determined by the data.
+
 ## 2. Input data
 
 Each input file is a CSV with one row per calendar day and the columns `Date`,
@@ -86,24 +113,36 @@ The checks:
 - **`T_air` and `Discharge` must be complete** in the default mode. If they have
   gaps, use gap-tolerant mode (§10). Versions 3 and 5 do not use discharge, so the
   column may be absent or incomplete for them.
-- **Discharge must be positive** for versions 4, 7 and 8, because the equation
-  divides by a power of discharge. A zero or negative value is an error unless you
-  set `min_theta_floor` (§5) or use gap-tolerant mode.
+- **Discharge must be positive** for versions 4 and 8, because the equation
+  divides by a power of discharge. Zero is an error unless you set
+  `min_theta_floor` (§5; a warning gives the number of days) or, in a
+  calibration or validation, use gap-tolerant mode (the days then become gaps,
+  with a warning; in a FORWARD run they are an error, §10). Version 7 fixes
+  a4 = 0, so it does not divide by θ: a zero-flow day is simulated at θ = 0,
+  where its discharge terms drop out (a note says how many). Negative discharge
+  is an error for every version that uses discharge (4, 7 and 8).
 - **Any start date.** The time of year is taken from each row's date, so a
   file may start on any day (the Fortran assumed 1 January; §17).
-- **At least 365 days**, because the warm-up year (§3) repeats the first year.
-  A shorter calibration or FORWARD file is an error; a shorter validation file is
-  skipped, with a warning.
+- **Calibration: at least 365 days**, so that the parameters of the yearly
+  cycle (a5–a8 and the seasonal behaviour of the others) can be fitted: from part
+  of a year they would mean nothing for the other seasons. A shorter calibration
+  file is an error.
+- **Validation and FORWARD files: at least 30 days.** A file shorter than a year
+  is used with a warning that a year or more is recommended (a short period says
+  little about the other seasons) and the warm-up described in §3. A validation
+  file shorter than 30 days is skipped with a warning; a FORWARD file is an error.
 - **Validation days should not be calibration days.** A warning gives the number
   of days with a measured water temperature in both files: on those days the
   validation score does not test the model on data it was not fitted to.
-- Dates must be real (Gregorian) dates, unless you declare a climate-model
-  calendar. With `calendar: "noleap"` (365-day years) the dates are real dates
-  without 29 February, checked like standard dates. With `"360_day"` (twelve
-  30-day months) the first date sets the day of the year the file starts on (day
-  1 to 30 of its month), and the rows are counted on from there. Later dates
-  only label the rows, because ordinary dates have no 30 February, so only
-  their order is checked.
+- Dates must be real (Gregorian) dates. With `calendar: "noleap"` (365-day
+  climate-model years) the dates are real dates without 29 February, checked
+  like standard dates. A row dated 29 February is an error, unless
+  `drop_29_february: true`: the rows are then removed, with a warning that
+  counts them and the water-temperature measurements they held. A 360-day calendar is refused: its 30 February cannot be
+  held by the dates used in the outputs, plots and cross-validation, and
+  relabelling its rows would shift the months against the seasons by about 5
+  days a year. Such files are converted to the standard calendar first
+  (USER_GUIDE §5).
 - **Implausible values are reported**, not changed: a warning lists `T_air`
   outside −60 to 60 °C and `T_water` outside −2 to 50 °C. Such values usually
   mean a missing-value code other than blank or `-999` (for example `-99`), which
@@ -123,19 +162,39 @@ through the copied year, and then continues into the real record.
 The warm-up year is never scored and never written to output files. (Gap-tolerant
 mode handles start values differently; see §10.)
 
+**Files shorter than a year** (validation and FORWARD only, §2) have no year to
+copy. Their warm-up holds the conditions of the first day (air temperature,
+discharge and time of year) for 365 days, so the simulation enters the record at
+the water temperature that matches them. Water temperature on the first day
+lags the air, so this start is approximate; its error fades as exp(−B·t), as
+after a gap in gap-tolerant mode (§10). The first `warmup_drop_days` (default
+15) are therefore not scored and are marked `warm_up = 1` in the output file,
+and a warning says if the calibrated model needs longer than that (3/B days) to
+forget its start. In a test on a 60-day summer piece of a 4-year synthetic
+record, the short-file simulation differed from the full one by less than
+0.05 °C after the first 15 days. Values on the marked days are left in the
+outputs; for statistics of a short scenario, leave them out, or start the file
+at least `warmup_drop_days` before the period of interest. Files of a year or
+more are unchanged.
+
 ## 4. Discharge scaling (Qmedia)
 
 The model never sees discharge directly. It only uses the ratio
 
     θ = Discharge / Qmedia
 
-where `Qmedia` is the mean of all valid (non-missing, positive) discharge values
-in the **calibration** record, unless you set `Qmedia:` yourself. The fitted
+where `Qmedia` is the mean of the discharge values in the **calibration** record,
+unless you set `Qmedia:` yourself. Missing days are left out. Zero-flow days are
+included when the model simulates them (version 7, or `min_theta_floor` set,
+§5), as in the original Fortran, so `Qmedia` is the river's mean
+discharge; otherwise they are not simulated and are left out of the mean too. The fitted
 parameters are only meaningful together with the `Qmedia` they were fitted with,
 so:
 
 - the validation period is simulated with the calibration `Qmedia`;
 - every calibration writes it to `calibration_metadata.json`;
+- it must be positive (θ is divided by it): zero or a negative value is refused
+  for the versions that use discharge;
 - a FORWARD run must be given it explicitly (`Qmedia:` or
   `paths.calibration_metadata`). Recomputing it from new discharge data would
   rescale θ and cancel part or all of the discharge change being studied.
@@ -168,8 +227,10 @@ The simpler versions fix some parameters at zero:
 Parameters a version does not use are forced to zero everywhere, including
 values typed into `parameters_forward`.
 
-If `min_theta_floor` is set, θ is raised to at least that value before θ^a4 is
-evaluated, so a zero-flow day does not make the equation undefined.
+If `min_theta_floor` is set, θ is raised to at least that value wherever it
+appears (in θ^a4 and in the discharge-weighted terms), so a zero-flow day does
+not make the equation undefined. Version 7 (a4 = 0) needs no floor: without one
+it runs a zero-flow day at θ = 0 (with one, at the floor).
 
 ## 6. Solving the equation
 
@@ -179,7 +240,7 @@ daily inputs. Five methods (`integrator`) are available:
 | Integrator | Method | Stability |
 |---|---|---|
 | `CRN` (default) | Crank–Nicolson (semi-implicit, 2nd order) | stable for any B ≥ 0 |
-| `EXP` | exponential / integrating factor | stable for any B ≥ 0 |
+| `EXP` | exponential / integrating factor, with A and B (dTw/dt = A − B·Tw) averaged over the two days of the step | stable for any B ≥ 0 |
 | `RK4` | Runge–Kutta 4th order | only while B < 2.785 |
 | `RK2` | Heun (Runge–Kutta 2nd order) | only while B < 2.0 |
 | `EUL` | explicit Euler, Fortran variant (inputs of the next day) | only while B < 2.0 |
@@ -189,9 +250,11 @@ daily inputs. Five methods (`integrator`) are available:
 temperature would move away from equilibrium); see §7 for how it can arise and
 the warning about it. Because B depends on discharge, the explicit methods
 (RK4, RK2, EUL) can become unstable on flows different from calibration and then
-give wrong numbers without any error. Before a simulation, the package checks
-the B series: the share of days with B above the method's limit, and how much a
-difference in the simulated temperature can grow over a stretch of days. The
+give wrong numbers without any error. Before a simulation with one of them, the
+package checks the B series (CRN and EXP need no check): the share of days with B above the method's limit, and how much a
+difference in the simulated temperature can grow over a stretch of days. Both
+include zero-flow days that are simulated (version 7, or at `min_theta_floor`,
+where versions 4 and 8 divide by the floor raised to a4 and B can be very large). The
 equation is linear in water temperature, so one step multiplies a difference by
 a factor that follows from B on the days the step uses (`step_amplification`),
 and the growth over a stretch is the product of these factors (`largest_growth`;
@@ -205,7 +268,8 @@ After every step, water temperature is not allowed below `Tice_cover` (default
 With a one-day step, no scheme follows the equation exactly when water
 temperature responds within a day (large B). Compared with a fine-step
 solution of the same equation, CRN differs by 0.04–0.10 °C RMS on the Swiss
-rivers, and EUL by up to about 1 °C even where stable (validation V6). This is
+rivers, and EUL by 0.7–0.9 °C RMS (up to 4.5 °C on single days) even where
+stable (validation V6). This is
 not an error in the predictions, because the parameters are calibrated with
 the scheme and absorb its behaviour. It does mean that **parameters belong to
 the scheme they were calibrated with**. The parameters published by Piccolroaz
@@ -216,16 +280,18 @@ changed validation RMSE by less than 0.03 °C.
 ## 7. Measuring the fit
 
 **Scored days.** A day is scored if it has an observed water temperature and is
-not in the warm-up year (and, in gap-tolerant mode, not in the unscored start of
-a segment, §10).
+not in the warm-up year (and not in the unscored start of a file shorter than a
+year, §3, or, in gap-tolerant mode, of a segment, §10).
 
 **Time resolution.** With `time_resolution: "1d"`, each scored day is compared
 directly. With `"Nw"` (N weeks) the record is cut into consecutive blocks of N×7
 days starting on the first day; with `"1m"` into calendar months. A block is used
 only if the fraction of its days with a scored observation is at least `prc`
-(above 0 and at most 1; default 1.0, i.e. every day). As in the Fortran, an
-incomplete month at either end of the record counts only its days in the record,
-while a last, incomplete block of weeks is compared with the full N×7 days. The block's observed value is
+(above 0 and at most 1; default 1.0, i.e. every day). The fraction is of the
+block's full length: a month's calendar days (February 28 in a `noleap`
+record), N×7 days for weeks. So a month or block that the record covers only in
+part, at either end, is scored only if enough of the whole month or block is
+measured. The block's observed value is
 the mean of those observations, and the simulated value is the mean of the
 simulation **on the same days**.
 
@@ -233,7 +299,7 @@ Weekly or monthly means cannot see what happens from one day to the next. A
 parameter set whose daily simulation zigzags (in air2stream, a negative
 relaxation rate a3 makes the simulation swing between the 0 °C floor and high
 values) can then score as well as the true one. With the authors' bounds,
-which allow a negative a2 and a3, 9 of 30 weekly-scored calibrations of version
+which allow a negative a2 and a3, 8 of 30 weekly-scored calibrations of version
 5 on synthetic data ended on such a set: daily errors of about 11 °C, weekly
 means that fit (validation V4, case J). Physically, water warms with the air
 and relaxes towards equilibrium, so a2 and a3 should be at least 0; with those
@@ -265,8 +331,10 @@ of a cross-validation). A model can score well over the year and still be too
 warm in summer and too cool in spring. For each calendar month, each season
 (December counted with January and February of the same year) and the whole
 year, the daily errors (simulated − measured) are first averaged within each
-year; a month counts in a year if it has at least 10 days with both values (a
-season 30, a year 120). The bias is the mean of these yearly values, with the
+year. The unscored warm-up days (`warm_up` = 1, §3 and §10) are left out, as
+from the scores. A month, season or year counts in a year if the record covers all of
+its days (a record that starts or ends part-way through it does not) and at
+least 10 of a month's days have both values (a season 30, a year 120). The bias is the mean of these yearly values, with the
 95% interval mean ± t₀.₉₇₅,ₙ₋₁ · sd/√n over the n years (none with fewer than
 two). Days are not used as independent values because errors persist from day
 to day and can last a whole season, so an interval from daily values would be
@@ -287,7 +355,10 @@ values). The search maximises the objective function (§7).
   difference between good and poor fits, and it stopped some calibrations a
   third of the way through, on a worse fit. The best candidate is then
   refined by a local L-BFGS-B search within the same bounds; the refined result
-  is kept only if it is better.
+  is kept only if it is better. A parameter set whose simulation runs away (or
+  gives no score) gets a large finite penalty, so the local search's
+  finite-difference slopes stay defined; if the search still stops early, the
+  run says so.
 - **`PSO`** — Particle Swarm Optimisation as in the Fortran: `n_particles`
   particles, `n_run` iterations, inertia decreasing linearly from `wmax` to
   `wmin`, attraction weights `c1`, `c2`. A particle that reaches a bound stops
@@ -301,14 +372,19 @@ MAE. After the search, the model is re-run with the best parameters and the
 objective is recomputed; if it does not match, the run stops with an error.
 
 **Reproducibility.** With `random_seed:` set, DE, PSO, LATHYP and DE-MCMC give
-identical results on every run. Without it, results can differ between runs.
+identical results on every run. Without it, results can differ between runs. A
+FORWARD run's only random choice is the draw of parameter sets for its
+prediction intervals: it uses `forward_options.random_seed`, else `random_seed`
+(if both are set and differ, `forward_options.random_seed`, with a note).
+`summary.md` states which seed decided the run, or that none did.
 
 ## 9. Validation
 
 If `paths.validation_data` is given, the calibrated parameters are run on that
 record, with its own warm-up year (§3) and the calibration `Qmedia` (§4), and
-scored exactly as in §7. Validation needs at least 365 days; otherwise it is
-skipped with a message. Validation shows how well the model predicts data it was
+scored exactly as in §7. Validation needs at least 30 days; otherwise it is
+skipped with a message. A file shorter than a year starts from its first day's
+conditions and its first `warmup_drop_days` are not scored (§3). Validation shows how well the model predicts data it was
 not fitted to, which is the better guide to its reliability.
 
 ## 10. Gap-tolerant mode
@@ -316,20 +392,33 @@ not fitted to, which is the better guide to its reliability.
 With `gap_tolerant: true`, `T_air` and `Discharge` may have gaps:
 
 1. The record is split into **segments**: runs of consecutive days with valid
-   `T_air` (and, for versions 4/7/8, positive discharge). Segments shorter than
-   `min_segment_days` (default 30) are dropped.
-2. Each segment is simulated **separately**. It starts from the observed water
-   temperature on its first day if there is one, otherwise from the average
-   observed water temperature for that day of the year in the calibration record
-   (missing days of the year are interpolated). A FORWARD run uses the averages
-   of its own file, so in gap-tolerant mode that file needs some water
-   temperature measurements.
+   `T_air` (and, for versions 4/7/8, discharge, which for versions 4 and 8 must
+   be positive unless `min_theta_floor` is set). Segments shorter than `min_segment_days`
+   (default 30) are dropped. Zero-flow days left out this way are reported (a
+   warning with their number and the first one; in the calibration's output
+   file also `Q_gap` and `gaps_summary.txt`); in a FORWARD run they are an
+   error, because the scenario's results would silently leave them out.
+2. Each segment is simulated **separately**. In a calibration or validation it
+   starts from the observed water temperature on its first day if there is one,
+   otherwise from the average observed water temperature for that calendar date
+   in the calibration record (1 March is averaged with 1 March of every year,
+   leap years included; 29 February has its own average, and dates without
+   observations are interpolated).
+   A FORWARD run starts it from the temperature at which the equation is at rest
+   under the first day's conditions, A/B in dTw/dt = A − B·Tw (§6), not below
+   `Tice_cover` (if B is not positive there is no such temperature, and the
+   day's air temperature is used): a scenario's start then follows its own forcing, needs no
+   water-temperature measurements, and is the same for paired runs. Measured
+   water temperature in a FORWARD file is used only to report the fit. As for
+   a short file (§3), the start is approximate (water temperature lags the air,
+   and the first day may be unusual), and its error fades within the unscored
+   days below. In the output files, `warm_up` = 1 marks those days.
 3. The first `warmup_drop_days` (default 15) of every segment are simulated but
    **not scored**, so the approximate start value can be forgotten. A
    difference in the start value decays as exp(−∫B dt), so after three
    relaxation times (3/B days, using the median B over the segments) about 95%
-   of it has gone. The program warns if the warm-up is shorter than that. If
-   it is longer, and a warm-up of 3/B days (with segments of at least twice
+   of it has gone. The program warns if the warm-up is shorter than that. If,
+   in a calibration, it is longer, and a warm-up of 3/B days (with segments of at least twice
    that) would score at least 30 more observations and 5% more, it prints
    those settings and the number they would score.
 4. There is no separate 365-day warm-up (§3).
@@ -376,18 +465,30 @@ LATHYP:
 
 1. Years are labelled by calendar year, or by a water year starting in
    `water_year_start_month`.
-2. The first year (and the next `min_train_years`, default 1) are never held out,
-   because the model needs earlier data to start from. Later years become folds
-   (one year each, or blocks of `n_years_per_fold`). Folds with fewer than
-   `min_valid_obs` observations are skipped.
+2. Every year becomes a fold (one year each, or blocks of `n_years_per_fold`),
+   the first one included. It needs no earlier data: in the default mode the
+   hidden year keeps its air temperature and discharge, so the model runs
+   through it as usual, after the warm-up year (§3), whose copy of the hidden
+   year's measurements is hidden too (the simulation then starts at 4 °C, a
+   year before the record); in gap-tolerant mode the hidden year is a gap
+   during calibration, and is then simulated with its inputs restored, within
+   the record's segments like any other day (§10). `skip_first_year` and
+   `min_train_years` can exclude the first years (until version 0.5.0 the first
+   two were excluded by default); every fold is calibrated on all the years it
+   does not hide, so excluding them only removes test years. A year the record covers
+   only in part (its last year, when it ends part-way through one) is used for
+   training but not held out, with a warning: a few months are not a test of a
+   year. Folds with fewer than `min_valid_obs` (default 10) observations are
+   skipped.
 3. For each fold: its water-temperature observations are hidden; `Qmedia`
    (unless set with `Qmedia:`) and, in gap-tolerant mode, the day-of-year
    climatology are recomputed without the fold; the model is calibrated on the rest; the full record is simulated; and
-   NSE, KGE and RMSE are computed on the hidden days only (daily values; in
-   gap-tolerant mode not on the unscored start of a segment, §10).
-   In gap-tolerant mode the fold's air temperature and discharge are also hidden
-   during calibration, so the fold becomes a gap. Why the inputs are otherwise
-   kept is explained below the list.
+   NSE, KGE and RMSE are computed on the hidden days only (daily values,
+   whatever `time_resolution` the calibration scored; in gap-tolerant mode not
+   on the unscored start of a segment, §10). In gap-tolerant mode the fold's
+   air temperature and discharge are also hidden during calibration, so the
+   fold becomes a gap; they are restored for the simulation that is scored. Why
+   the inputs are otherwise kept is explained below the list.
 4. `cv_results.csv` lists each fold's scores and parameters, plus the mean and
    standard deviation across folds and "pooled" scores over all held-out days;
    `cv_bias_by_month.*` gives the mean error by month and season over the
@@ -397,10 +498,11 @@ LATHYP:
    made from the fold's simulation plus random error from the fold's own error
    model (σ and ρ estimated on its training years, as in §12). The highest daily
    mean, the highest 7-day moving mean and the number of days above `threshold`
-   (default: the 90th percentile of the measured temperatures) are computed in
+   (default: the 90th percentile of the measured temperatures of all held-out
+   years together) are computed in
    each series and in the measurements, over the days that were measured. A
-   year counts if at least 80% of `season_months` (default: the four warmest
-   months) was measured. For each year and statistic the output gives the
+   year counts if the held-out dates cover all of it and at least 80% of its
+   `season_months` (default: the four warmest months) was measured. For each year and statistic the output gives the
    predicted percentiles, the share of series below the measured value (the
    probability integral transform, PIT, which is uniform between 0 and 1 if the
    predictions are right; Gneiting et al., 2007) and the **deviation**: measured
@@ -409,8 +511,8 @@ LATHYP:
    mean deviation with its 95% confidence interval. Parameter uncertainty is not
    included (each fold has one parameter set), so these ranges are slightly
    narrower than a FORWARD run's (§13). Set `threshold` and `season_months` to
-   the limit and season in question: the defaults are chosen from all measured
-   temperatures, held-out years included. That changes no prediction, but a
+   the limit and season in question: the defaults are chosen from the measured
+   temperatures of the held-out years themselves. That changes no prediction, but a
    question fixed in advance is easier to defend.
 6. **Coverage at each level** (`cv_interval_coverage.csv`). From the same
    simulations, the share of measured held-out days, and of 7-day moving means,
@@ -437,8 +539,8 @@ its inputs, which shape only the first days to weeks of the next year.
 
 Validation V12 tested the alternatives on 96 held-out river-years. Hiding the
 inputs during calibration too (in gap-tolerant mode, where the year then becomes
-a gap) changed no year's RMSE by more than 0.007 °C against the same mode with
-the inputs kept (another optimizer seed alone: 0.007 °C), and a 60-day
+a gap) changed no year's RMSE by more than 0.005 °C against the same mode with
+the inputs kept (another optimizer seed alone: 0.008 °C), and a 60-day
 buffer of unused days on each side of the year (h-block cross-validation;
 Burman et al., 1994) by no more than 0.008 °C; neither changed the coverage of
 the 90% interval or the mean error of the yearly statistics measurably.
@@ -463,31 +565,37 @@ the 90% interval or the mean error of the yearly statistics measurably.
 Large variation of the parameters between folds means they are poorly determined
 by the data (equifinality). The spread between folds (`std`) is not a confidence
 interval: the folds share most of their data, so it understates the uncertainty
-(in validation V4 it contained the true values only 35–52% of the time).
+(in validation V4 it contained the true values only 39–60% of the time).
 
 `cv_results.csv` therefore also gives **jackknife intervals** for the parameters.
 With θᵢ the parameters fitted without block i (m folds), θ̄ their mean, and n the
-number of blocks in the whole record (years, or groups of `n_years_per_fold`):
+number of blocks in the whole record (whole years, or groups of
+`n_years_per_fold`; a partial first or last year is not a block of the same size
+and is not counted):
 
   SE² = (n − 1)/m · Σᵢ (θᵢ − θ̄)²,  interval = θ̄ ± t_(1+L)/2,m−1 · SE,
 
-with L the level `uncertainty_options.parameter_interval` (default 0.90; the
-rows are named `jackknife_90_lower` and so on).
+with L the level `uncertainty_options.parameter_interval` as a fraction
+(default 90, so L = 0.90; the rows are named `jackknife_90_lower`,
+`jackknife_90_upper` and `jackknife_se`). They are given when at least two
+folds were run.
 
 When every block is held out (m = n) this is the standard delete-one-block
-jackknife; the first years are never held out, so the sum over n blocks is
-estimated as n/m times the sum over the m folds. In validation V4 these 90%
-intervals contained the true parameters 83–95% of the time for every version.
+jackknife. When fewer blocks are held out (first years excluded, or years with
+too few observations), the sum over n blocks is estimated as n/m times the sum
+over the m folds. In validation V4 these 90%
+intervals contained the true parameters 81–95% of the time for every version.
 On the same data, the DE-MCMC parameter intervals (§12, default likelihood)
-contained them 97% of the time for version 5 and 93% for version 8. For
+contained them 97% of the time for version 5 and 92% for version 8. For
 versions 4, 7 and 8 set `Qmedia`
 explicitly, so that every fold uses the same discharge scaling.
 
 The jackknife intervals inherit the optimizer's randomness. Where parameters
 trade off (equifinality), a fold can end on a distant parameter set with almost
 the same fit, and that one fold widens the interval. In V12, another optimizer
-seed alone changed version 8's jackknife standard errors by a factor of 0.35 to
-1.55 (median over its parameters, by river). Read the jackknife intervals of
+seed alone changed the jackknife standard errors by a factor of 0.65 to 1.41
+(median over the parameters, for each river and version), and those of single
+parameters by up to a factor of 1.46 or down to 0.10. Read the jackknife intervals of
 poorly determined parameters as indicative, and check them with a second
 `random_seed`; predictions are not affected.
 
@@ -496,7 +604,11 @@ A cross-validation run does not also produce a single final calibration.
 ## 12. Parameter and prediction uncertainty (DE-MCMC)
 
 `run_mode: DE-MCMC` first calibrates with DE (§8), then estimates how uncertain
-the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
+the parameters and predictions are, using Markov chain Monte Carlo (MCMC). It
+needs `objective_function` NSE or RMS: both are least squares, so the DE best fit
+is also the most likely value of the likelihood below. A KGE best fit is a
+different point, and the ranges would not describe it, so DE-MCMC refuses KGE.
+The steps:
 
 1. **Prior.** Every parameter value inside the bounds is considered equally
    plausible beforehand; values outside are impossible. Results therefore depend
@@ -508,14 +620,25 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    residuals, limited to 0–0.99; see "Error persistence" at the end of this section), so n days of
    errors carry the information of fewer independent ones.
    - `noise_model: "ar1"` with `likelihood: "least_squares"` (the default):
-     log L = −(n_eff/2)·ln(SSE/n), with n_eff = n·(1−ρ)/(1+ρ), the usual
-     effective number of independent observations for AR(1) errors. Its best
-     value is the least-squares fit, the criterion the original authors
-     calibrated with, and its spread is widened to allow for the autocorrelation.
-   - `noise_model: "ar1"` with `likelihood: "exact"`: the exact AR(1) likelihood.
-     Errors are converted to independent "innovations" (e₀·√(1−ρ²); eₜ − ρ·eₜ₋₁)
-     within each unbroken run of scored days, and
-     log L = −(n/2)·ln(SSE_innovations/n) + (runs/2)·ln(1−ρ²). This weighs
+     log L = −(n_eff/2)·ln(SSE/n), with n_eff = n / F and F the variance of the
+     mean of the n scored errors relative to independent ones:
+     F = 1 + (2/n)·Σ_{i<j} ρ^|tᵢ − tⱼ|, summed over all pairs of scored days
+     tᵢ, tⱼ. Values on either side of a gap are therefore related, but less than
+     consecutive days. For n consecutive days F tends to (1+ρ)/(1−ρ), the usual
+     effective number of independent observations for AR(1) errors
+     (n_eff = n·(1−ρ)/(1+ρ); for a few years of complete data the two differ by
+     well under 1%, about 0.5% for four years at ρ = 0.86); for sparse measurements (say one day a week) F is much
+     smaller, and n_eff closer to n. Its best value is the least-squares fit,
+     the criterion the original authors calibrated with, and its spread is
+     widened to allow for the autocorrelation.
+   - `noise_model: "ar1"` with `likelihood: "exact"`: the exact AR(1) likelihood
+     (the Gaussian density of the scored errors, with correlation ρ^|tᵢ − tⱼ|).
+     Errors are converted to independent "innovations": the first scored day
+     gives e₀·√(1−ρ²), and each later one, d days after the previous scored
+     day, gives (eₜ − ρ^d·eₜ₋d)·√[(1−ρ²)/(1−ρ^2d)]. Then
+     log L = −(n/2)·ln(SSE_innovations/n) + Σ ln(scale factors). Days on either
+     side of a gap are linked through ρ^d rather than treated as independent;
+     for d = 1 this is the usual eₜ − ρ·eₜ₋₁. This weighs
      day-to-day changes in the error far more than its overall level. On real
      rivers, where the model is never exactly right, it moved the parameters away
      from the best fit, to slightly worse and cooler predictions (see below), so
@@ -527,18 +650,21 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    With weekly or monthly scoring (§7) each scored value is the mean of a block
    of m days (m = 7N for `"Nw"`, 30 for `"1m"`), and block means are much less
    correlated from one block to the next than days are. The least-squares
-   likelihood then uses n_eff = n / [1 + 2·r_b/(1 − ρ^m)], with r_b the
-   correlation between the means of adjacent blocks of AR(1) errors (the
-   formula g_m under "Error persistence" below, with m days); for m = 1
-   this is n·(1−ρ)/(1+ρ). The
+   likelihood then uses the same F with block correlations: block means k
+   blocks apart have correlation r_b·ρ^(m(k−1)), with r_b the correlation
+   between the means of adjacent blocks of AR(1) errors (the formula g_m under
+   "Error persistence" below, with m days). For n consecutive blocks
+   F tends to 1 + 2·r_b/(1 − ρ^m); for m = 1 this is (1+ρ)/(1−ρ). The
    daily n_eff applied to block means would make parameter intervals 1.6–4.4
-   times too wide for ρ = 0.5–0.95. The exact AR(1) likelihood needs consecutive
-   scored days; with weekly or monthly scoring it treats the block errors as
+   times too wide for ρ = 0.5–0.95. Every scored value enters both likelihoods,
+   including blocks next to a gap. The exact AR(1) likelihood is a day-scale
+   model; with weekly or monthly scoring it treats the block errors as
    independent and warns, since its intervals are then too narrow if errors
    persist from block to block. Each likelihood replaces the error size by
    its best estimate; this gives the same result as treating the error size as
    unknown with the standard non-informative prior (∝ 1/σ) and averaging over it.
-3. **Sampling.** `mcmc_walkers` (default 32) chains ("walkers") are started
+3. **Sampling.** `mcmc_walkers` (default 32; at least twice the number of
+   fitted parameters) chains ("walkers") are started
    close to the DE optimum (spread 0.1% of each parameter's bound range,
    reflected back inside the bounds) and advanced together by `emcee`'s
    ensemble sampler with the differential-evolution move (ter Braak, 2006): each
@@ -546,20 +672,25 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
    the strongly correlated parameters of air2stream.
 4. **Run length and convergence.** The sampler runs in blocks of 1,000 steps
    (at least 2,000). The first max(30% of steps, 5× the longest autocorrelation
-   time) steps are discarded as burn-in (or `burnin_fraction` of them). It
-   stops when the number of steps is at least 50 times the longest
-   autocorrelation time (estimated after burn-in) and split-R̂ is below 1.01 for
-   every parameter, or when `mcmc_steps` (default 20,000) is reached. After
-   burn-in, every k-th step is kept, with k half the shortest autocorrelation
-   time. If the
+   time, estimated on the whole chain so far) steps are discarded as burn-in
+   (or `burnin_fraction` of them). It stops when the total number of steps is
+   at least 50 times the longest autocorrelation time (estimated after
+   burn-in) and split-R̂ (computed after burn-in) is below 1.01 for every
+   parameter, or when `mcmc_steps` (default 20,000) is reached. After burn-in,
+   every k-th step is kept, with k half the shortest autocorrelation time
+   (rounded down, at least 1). If the
    chain has not converged, the run stops with an error and writes its
    diagnostics (`strict_convergence: true`, the default); with `false` it
    continues and every output is marked as not converged.
-5. **Prediction interval.** Up to 1000 parameter sets are drawn from the chain.
+5. **Prediction interval.** Up to 1000 parameter sets are drawn from the chain
+   (without replacement).
    For each, the model is run and random error is added to every day: normally
    distributed with standard deviation equal to that parameter set's daily
    root-mean-square residual (`iid`), or an AR(1) series with the same standard
-   deviation and ρ (`ar1`). The `prediction_interval` (default 90%; any level
+   deviation and ρ (`ar1`). Like the simulation itself, each simulated series
+   is kept at or above `Tice_cover` (water is not colder than the ice floor),
+   so in winter the lower edge of the band does not fall below it. The
+   `prediction_interval` (default 90%; any level
    above 0 and below 100) is the band
    between the matching lower and upper percentiles of these simulations on each
    day. The program then reports the **coverage**: the share of observed days
@@ -569,7 +700,8 @@ the parameters and predictions are, using Markov chain Monte Carlo (MCMC):
 6. Any drawn parameter set whose simulation diverges (§15) is excluded and
    reported: not finite, above `max_plausible_twat`, or, with RK4, RK2 or EUL, a
    difference that can grow more than `stability_max_growth` times (§6). If more
-   than `max_divergent_fraction` (default 10%) diverge, the run stops.
+   than `max_divergent_fraction` (default 10%) diverge, the run stops (with
+   `on_divergent_draw: "raise"`, at the first one).
 
 On any single day, iid and AR(1) errors have the same spread, so the daily band
 is about the same width under both. They differ for multi-day quantities (weekly
@@ -587,32 +719,56 @@ scale, the evidence and the alternatives are set out in
 at the end of this section.
 
 **What the validation shows** ([validation/REPORT.md](../validation/REPORT.md)).
-On synthetic data from a known truth, 90% prediction intervals contained about
-90% of new observations for versions 5 and 8 with every likelihood, and with the
-default least-squares likelihood the 90% parameter intervals contained the true
-values at least 90% of the time for both versions (V4). The exact AR(1)
+On synthetic data from a known truth, 90% prediction intervals contained 87–88%
+of new observations for versions 5 and 8 with every likelihood. They fall short
+of 90% only because about 3% of the synthetic observations (noise added to the
+simulation) are below 0 °C, and the intervals, kept at or above `Tice_cover`,
+cannot contain them; real water temperatures do not go below 0 °C (none of the
+18,225 measured days of the Swiss rivers). With the default least-squares
+likelihood the 90% parameter intervals, which the ice floor does not affect,
+contained the true values at least 90% of the time for both versions (V4). The exact AR(1)
 likelihood's intervals for version 8 contained the truth only about 75% of the
 time: its parameters trade off against each other and that posterior is far from
 normal. The sampler was cross-checked against emcee's stretch move. On three real
-rivers, with the default settings, 90% intervals contained 85–89% of daily
-values in years not used for calibration (84.7–89.6% across all settings
-tested), and for 7-day means 89–94%, against 83–89% with `rho_timescale:
-"daily"` and 39–62% with `iid` (V5). On the same rivers, the parameters published by Piccolroaz et al.
-(2016) lay inside these intervals for every converged run of versions 3–5. For
-versions 7 and 8 on the Mentue and version 8 on the Rhône several lay outside:
-there many parameter combinations fit almost equally well, and the published
-set is not where a least-squares calibration on these data lands (V2).
+rivers, 90% intervals contained 84.8–90.0% of daily values in years not used
+for calibration (the default settings and every other setting tested gave
+values in this range), and for 7-day means 87–93% with the default settings,
+against 81–88% with `rho_timescale: "daily"` and 39–59% with `iid` (V5). On the same rivers, the parameters published by Piccolroaz et al.
+(2016) lay inside these intervals for every river and version except version 8
+on the Mentue, where 5 of its 8 lay outside (76 of 81 parameter values inside
+in all): there many parameter combinations fit almost equally well, and the
+published set is not where a least-squares calibration on these data lands
+(V2).
 
-**At other levels.** On synthetic data the intervals held at every level tested
-(50%, 80%, 90%, 95% and 99%: mean coverage within 1.3 points of the level, V4).
+**At other levels.** On synthetic data, mean coverage was below the level by at
+most 3.2 points at every level tested (50%, 80%, 90%, 95% and 99%; at 99%:
+95.9–96.3%), for the reason above; before the ice floor was applied to the
+intervals (version 0.5.1), it was within 1.3 points of every level (V4).
 On the Swiss rivers, pooled over 48 years held out by cross-validation per
 version, daily intervals held from 50% to 95% (95% intervals: 94.4–94.5% of
 days), but 99% intervals held only 98.0–98.2%: the model's real errors have
 heavier tails than the normal distribution assumed (V11). In the later
 validation years of V5, whose errors were larger than in calibration, daily
-intervals were narrower than stated, more so at high levels (90%: 85–89%; 95%:
-91–95%; 99%: 95–99.5%). 7-day means held at every level (V11: 96–97% at 95%,
-98.6–99.2% at 99%).
+intervals were narrower than stated, more so at high levels (90%: 85–90%; 95%:
+91–95%; 99%: 95–99.5%). 7-day means held at every level (V11: 96% at 95%,
+98.5–99.1% at 99%).
+
+**An alternative tested: an error size that changes with the season.** The
+error size σ is the same all year. A size measured for each calendar month
+(the root-mean-square residual of the month's days, interpolated smoothly
+between months, with the same overall size) was tested by leave-one-year-out
+cross-validation of the three Swiss rivers (versions 5 and 8, 96 held-out
+years), against the constant size, on the same calibrations. The model's
+errors varied only mildly over the year (monthly sizes 0.7–1.5 times the
+yearly one, in no common pattern; on the Mentue smaller in summer). With
+version 8 the seasonal size made the 90% intervals hold less often on the
+hottest 10% of days (87.6% against 91.1%; by air temperature 87.8% against
+91.0%) and for the highest daily mean of each year (72% of years against 80%),
+with the same interval score overall (2.80 °C both; lower is better: it
+rewards narrow intervals that hold). With version 5 it improved the interval
+score by 3–5% but not the coverage on the hottest days (84% against 85%):
+version 5 underestimates the peaks, a bias that a different error size cannot
+remove. The constant size was therefore kept.
 
 **Where the chain is centred.** With the default least-squares likelihood the
 chain is centred on the DE best fit: in V5 the centre of the band stayed within
@@ -621,8 +777,11 @@ elsewhere, also for versions whose parameters do not trade off: in V5 it moved
 by up to 0.11 °C (cooler, Dischmabach version 5). For a limit on warm water, a
 cooler band would understate the chance of exceedance.
 
-**Outputs:** `MCMC_chain_*.csv` (post-burn-in samples), `MCMC_chain_*_meta.json`
-(σ, ρ, diagnostics, coverage, excluded draws), `MCMC_envelopes_*.csv`, and the
+**Outputs:** `MCMC_chain_*.csv` (post-burn-in samples, thinned as in item 4),
+`MCMC_chain_*_meta.json` (σ, ρ, the settings the parameters were fitted with,
+diagnostics, coverage, excluded draws), `MCMC_envelopes_*.csv` (the daily band
+and median), `MCMC_ensemble_*.npz` (every simulated series, with
+`save_ensemble: true`), and the
 parameter summary `parameter_significance_*.csv` (posterior mean, standard
 deviation, central credible interval at `parameter_interval`, default 90%, and
 whether zero lies outside the central 95%: a test at the usual 5% level,
@@ -684,15 +843,19 @@ sampling error of r₇ there. On the Mentue, r₇ = 0.52 ± 0.05 gives
 ρ₇ = 0.86 ± 0.02.
 
 Both estimates need daily observations. A window counts only if all 7 days
-are scored, so with many missing days (for example a measurement every other
-day) ρ₁ is used. With ρ = 0 (fewer than 30 consecutive pairs), bands for
-multi-day quantities are too narrow.
+are scored, so with many missing days ρ₁ is used, and ρ₁ needs consecutive
+scored days: with a measurement every other day there are none, and ρ = 0,
+with a warning. With ρ = 0 (fewer than 30 consecutive pairs), bands for
+multi-day quantities are too narrow; a FORWARD run can then be given a ρ with
+`uncertainty_options.ar1_rho`, which must be justified separately. The chain's
+and the FORWARD run's `_meta.json` record `rho_measured: false` in that case,
+and `summary.md` marks ρ as not measured.
 
 ρ is estimated once, at the DE best fit, on the calibration's scored days. In a
 cross-validation, each fold estimates its own σ and ρ on its training days. The
-chain's `_meta.json` records `rho`, `rho_timescale`, `rho_likelihood`,
-`scoring_block_days` and `likelihood_variance_factor` (n/n_eff). FORWARD runs
-use the chain's ρ. They say so when it was estimated at another time scale than
+chain's `_meta.json` records `rho`, `rho_measured`, `rho_timescale`, `rho_likelihood`,
+`scoring_block_days` and `likelihood_variance_factor` (F = n/n_eff). FORWARD
+runs use the chain's ρ. They say so when it was estimated at another time scale than
 their own `rho_timescale` (chains from version 0.4.1 or earlier used consecutive
 days). If ρ reaches its limit of 0.99, a warning says so: errors that persist
 for months usually mean a systematic error, such as a bias in one season (§7,
@@ -712,9 +875,9 @@ where an AR(1) with ρ₁ implies g₇(ρ₁) = 0.25–0.51. So ρ₇ = 0.86–0
 
 | Use | How |
 |---|---|
-| Least-squares likelihood (default) | n_eff = n(1 − ρ)/(1 + ρ) for daily scoring; the block formula of item 2 for weekly or monthly scoring. This sets the width of the posterior, and so of the parameter intervals. |
-| Prediction noise (DE-MCMC band, FORWARD runs) | each simulated series gets eₜ = ρ eₜ₋₁ + σ √(1 − ρ²) zₜ, zₜ standard normal, started from its stationary distribution in each segment |
-| FORWARD runs | ρ is taken from the chain's `_meta.json` (or `uncertainty_options.ar1_rho`), not from the data being predicted |
+| Least-squares likelihood (default) | n_eff = n / F, from the spacing of the scored days (item 2); about n(1 − ρ)/(1 + ρ) for complete daily data, and the block formula of item 2 for weekly or monthly scoring. This sets the width of the posterior, and so of the parameter intervals. |
+| Prediction noise (DE-MCMC band, FORWARD runs) | each simulated series gets eₜ = ρ eₜ₋₁ + σ √(1 − ρ²) zₜ, zₜ standard normal, started from its stationary distribution in each segment, and is kept at or above `Tice_cover` |
+| FORWARD runs | ρ is `uncertainty_options.ar1_rho` if set (with a note), else the chain's, from its `_meta.json`; only a chain that records none makes the run estimate ρ from its own residuals |
 | Cross-validation check (§11) | each fold's own σ and ρ |
 | Exact AR(1) likelihood | always ρ₁, because whitening (eₜ − ρ eₜ₋₁) is a day-scale operation |
 
@@ -776,7 +939,7 @@ slowest parameter. Validation V4 computes this formula and compares it with the
 measured spread of the estimates; they agree closely. With fast + slow errors,
 ρ₁ made a7's interval about 1.5 times too narrow (measured 1.55; the formula
 predicts 1.59). Its 90% interval contained the truth 67% of the time. The
-weekly ρ gave it the right width (90%). The cost is that the intervals of the
+weekly ρ gave it the right width (93%). The cost is that the intervals of the
 fast-varying parameters are wider than necessary, by a factor of about two to
 three in V4. That happens with either ρ: it is a property of a single effective
 sample size. The two errors are not equal: an interval that is too wide errs on
@@ -795,12 +958,12 @@ noisy, and ρ₁ sets the floor. For AR(1) errors, taking the larger changes not
 | Test | Weekly ρ (default) | Daily ρ | Check |
 |---|---|---|---|
 | AR(1) errors, synthetic: ρ estimated; 90% parameter intervals containing the truth | 0.699; 97.3% | 0.691; 97.3% | V4 E, G |
-| Fast + slow errors, synthetic: 90% parameter intervals | 98.0% | 88.7% | V4 H, I |
-| Same, interval of a7 alone | 90% | 67% | V4 H, I |
-| Same, 90% ranges of yearly peaks and counts | 90–94% | 80–88% | V9 A |
-| Real rivers, later years: daily values inside 90% intervals | 85.4–89.3% | 84.7–89.6% | V5 |
-| Same, 7-day means | 89.1–93.6% | 82.7–88.5% | V5 |
-| Same, 90% ranges of yearly peaks and counts | 80–93% | 53–87% | V9 B |
+| Fast + slow errors, synthetic: 90% parameter intervals | 98.7% | 88.7% | V4 H, I |
+| Same, interval of a7 alone | 93% | 67% | V4 H, I |
+| Same, 90% ranges of yearly peaks and counts | 89–94% | 83–90% | V9 A |
+| Real rivers, later years: daily values inside 90% intervals | 84.8–90.0% | 84.8–89.2% | V5 |
+| Same, 7-day means | 87.2–92.9% | 80.8–88.5% | V5 |
+| Same, 90% ranges of yearly peaks and counts | 80–93% | 60–87% | V9 B |
 
 The synthetic fast + slow errors are built like the real ones (60% of the
 variance in a part with ρ = 0.55, 40% in a part with ρ = 0.96). The real-river
@@ -848,21 +1011,36 @@ earlier, or to show how much a conclusion depends on the choice.
 without calibrating. It requires the calibration `Qmedia` (§4). Given
 `paths.calibration_metadata` (the calibration's `calibration_metadata.json`), it
 takes `Qmedia` and the calibrated parameters from it (unless
-`parameters_forward` is given), refuses a different model version or integrator,
-and warns if more than 1% of days have θ outside the range seen in calibration
-(extrapolation). If the file contains water-temperature observations, the fit is
+`parameters_forward` is given), refuses a different model version, integrator
+or `Tice_cover`, a different `min_theta_floor` (for the versions that use
+discharge), or a `Qmedia:` setting that differs from the recorded one,
+and warns if any day has θ outside the range seen in calibration
+(extrapolation), giving the number of days, the first one, the lowest and
+highest θ, and how many are zero-flow days run at `min_theta_floor` (or, for
+version 7, at θ = 0). θ is taken
+as the model uses it, so zero-flow days count at the floor, both in the
+calibration's range and in the run. If the file contains water-temperature observations, the fit is
 reported as in §7.
 
 **Prediction intervals** (`forward_options.enable_prediction_intervals: true`)
-reuse a DE-MCMC chain (`mcmc_chain_path`): `n_samples` (default 1000) parameter
-sets are drawn, each is run, and error is added with standard deviation σ =
-`forward_options.residual_sigma`, or else the calibration's daily residual
-standard deviation stored in the chain's `_meta.json`. For `ar1`, ρ is taken from
-`ar1_rho`, else from the chain's `_meta.json`, else from this run's own residuals.
+reuse a DE-MCMC chain (`mcmc_chain_path`; if the file does not exist, the run
+warns and gives no intervals): `n_samples` (default 1000, at most the chain's
+length) parameter sets are drawn without replacement, each is run, and error
+is added; each simulated series is kept at or above `Tice_cover`, as in §12.
+Unlike the DE-MCMC band, every draw gets the same σ. The error model (`ar1` or
+`iid`) is the one the chain was fitted with, recorded in its `_meta.json`,
+unless the run's settings name another (then a note says so). Its standard
+deviation σ is `forward_options.residual_sigma`, or else the root-mean-square
+daily residual of the calibration's best fit, stored in the chain's
+`_meta.json` (without either, the run stops). For `ar1`, ρ is
+taken from `ar1_rho`, else from the chain's `_meta.json`, else from this run's
+own residuals. A value set in the run's settings instead of the chain's is
+reported as a note, so it appears in `summary.md`.
 With the `_meta.json` that DE-MCMC writes next to the chain, the interval
 therefore does not depend on the observations it is checked against. The run
-refuses a chain whose `_meta.json` records another model version, integrator or
-`Qmedia` (by more than 0.1%) than its own. Coverage is reported if observations exist. The noise
+refuses a chain whose `_meta.json` records another model version, integrator,
+`Qmedia` (by more than 0.1%), `Tice_cover` or `min_theta_floor` than its own.
+Files written before these were recorded give a note asking you to check them. Coverage is reported if observations exist. The noise
 model, σ and ρ used are recorded in the run's
 `Forward_Prediction_Ensemble_*_meta.json`. σ and ρ are used at their estimated
 values; their own uncertainty is not added.
@@ -874,11 +1052,21 @@ error series. A probability is computed in three steps:
 1. In each series, compute the quantity the limit is defined on.
    `scenario.year_statistics` gives each year's highest daily mean, highest
    7-day moving mean (the day and the six before it) and number of days above a
-   threshold, defined exactly as in the cross-validation check (§11).
+   threshold, defined exactly as in the cross-validation check (§11). A year
+   the dates cover only in part (the first or last year of a file that starts
+   or ends part-way through a year) is left out, with a warning, unless
+   `partial_years="keep"`.
    `scenario.aggregate` gives means (or sums, maxima) over consecutive fixed
-   periods, and `scenario.exceedance` counts days above a threshold, optionally
-   only in runs of at least k consecutive days (days not simulated count as not
-   above).
+   periods (blocks of N days from the first date, or calendar weeks or months).
+   A period counts only if every one of its days has a simulated value: a period
+   the dates cover only in part (at either end of the file) or that includes a
+   gap gets no value, with a warning, since a 3-day mean is not a 7-day mean
+   (`min_days=N` accepts periods with at least N simulated days;
+   `return_periods=True` also returns each period's label).
+   `scenario.exceedance` counts days above a threshold, optionally
+   only in runs of at least k consecutive days. Days not simulated (gaps) are
+   not counted as above, and it warns when there are any.
+   `scenario.paired_difference` refuses two runs that simulated different days.
 2. The probability of exceedance is the share of series in which that quantity
    exceeds the limit. With 1,000 series it carries a sampling error of at most
    ±0.03 (95%).
@@ -926,14 +1114,14 @@ years for version 8 and 73–81% for version 5. After the correction they held
 in 85–94% for both versions, within the range expected by chance, and the
 measured value sat on average at the middle of the simulations (mean PIT
 0.48–0.50, against 0.31–0.52 before). At other levels the corrected ranges held
-in 75–85% of years at 80%, 92–100% at 95% and 100% at 99%, all within the range
+in 77–85% of years at 80%, 92–100% at 95% and 100% at 99%, all within the range
 expected by chance. The highest daily mean remained at the
 low end (85%): single-day peaks are the hardest statistic to predict. Applied
 as recommended to genuinely later years (cross-validation of the calibration
 years, then correction of the FORWARD simulations of the validation years; V9
 C, 15 river-years), the correction made the probabilities closer to what
 happened for 5 of 6 version and statistic pairs (version 8's Brier skill score
-against the share of past years rose from 0.08–0.43 to 0.35–0.50), but version
+against the share of past years rose from 0.09–0.42 to 0.34–0.51), but version
 8's 90% ranges for the highest daily mean still held in only 11 of 15
 river-years. Version 5 predicted almost the same peak every year on the Rhône,
 where discharge drives summer temperature; the correction removes its bias, but
@@ -943,15 +1131,20 @@ not its inability to follow the years.
 FORWARD once per scenario from the same chain with `save_ensemble: true`, and
 for the second run set `forward_options.reuse_sample_indices_from` to the first
 run's `Forward_Prediction_Ensemble_*_meta.json`, so both use exactly the same
-parameter sets. `scenario.paired_difference_from_files()` then checks this before
-computing the difference draw by draw, which gives an uncertainty band for the
+parameter sets. `scenario.paired_difference_from_files()` then checks this, and
+that both runs used the same error model, σ and ρ, before computing the
+difference draw by draw, which gives an uncertainty band for the
 *difference* itself. The random error added to a draw is generated from a seed
 fixed by the chain's content and the draw's row in it, so both runs add the same
 error to the same draw on the same day and it cancels in the difference: the
 band is the parameter uncertainty of the effect. This assumes the model's error
-on a given day would be the same under both scenarios. In gap-tolerant mode both
-runs restart each segment from the same temperature (§10), so the difference is
-too small for the first few days of each segment. The validation checks
+on a given day would be the same under both scenarios. In gap-tolerant mode each
+run starts a segment at the equilibrium temperature A/B of its own first day's
+conditions (§10), so the two runs start it at different temperatures: on a
+segment's first day the difference is the equilibrium (steady-state) response
+to that day's change, not the simulated, lagged one, and it settles to the
+simulated response within the unscored warm-up days (`warm_up` = 1), which are
+best left out of the difference. The validation checks
 that the paired difference equals the exact effect where it is known (V8).
 
 ## 14. Sensitivity analysis
@@ -971,17 +1164,25 @@ change one-sided.
 | Check | When | Effect |
 |---|---|---|
 | Missing, repeated, unordered or unreadable dates; text values; missing columns; incomplete `T_air`/`Discharge`; non-positive discharge; no `T_water` measurements; 29 February in a `noleap` file; short record (§2) | loading each file; the validation file before calibration | error |
-| `T_air` or `T_water` outside a plausible range; a validation file shorter than a year; validation days that are also calibration days (§2) | loading each file; the validation file before calibration | warning |
-| Invalid version, run mode, integrator, objective, time resolution, `prc`, bounds | loading config | error |
-| Stability of the chosen integrator (B vs. limit, §6) | before each user-facing simulation | warning; error if >10% of days exceed it (`stability_error_fraction`), or if a difference can grow more than 100 times over a stretch of days (`stability_max_growth`) |
+| `T_air` or `T_water` outside a plausible range; a validation file shorter than 30 days (validation skipped); validation days that are also calibration days; 29 February rows removed with `drop_29_february` (§2) | loading each file; the validation file before calibration | warning |
+| The output folder already holds files from earlier runs | start of each run | warning |
+| Invalid version, run mode, integrator, objective, time resolution, `prc`, bounds; DE-MCMC with KGE (§12) | loading config | error |
+| Stability of RK4, RK2 or EUL (B vs. limit, §6; CRN and EXP are not checked) | before each user-facing simulation | warning; error if >10% of days exceed it (`stability_error_fraction`), or if a difference can grow more than 100 times over a stretch of days (`stability_max_growth`) |
 | Simulated temperature not finite or above `max_plausible_twat` (60 °C) | after each user-facing simulation | error |
 | Negative relaxation rate B, or a daily simulation that zigzags (§7) | after calibration, before DE-MCMC sampling, FORWARD runs | warning |
 | ρ at its limit of 0.99; exact likelihood with weekly or monthly scoring (§12) | DE-MCMC | warning |
 | Recomputed objective matches the calibration result | after calibration | error |
-| Discharge outside the calibrated range | FORWARD runs | warning |
-| Segment warm-up too short | gap-tolerant runs | warning |
-| MCMC convergence; draws that diverge or, with RK4/RK2/EUL, are unstable (§12) | DE-MCMC, FORWARD intervals | warning / error |
-| Chain fitted with another model version, integrator or `Qmedia` (§13) | FORWARD intervals | error |
+| Discharge outside the calibrated range (any day, zero-flow days at `min_theta_floor` included) | FORWARD runs given `paths.calibration_metadata` (which records the range) | warning |
+| Negative discharge (a missing-value code other than −999) | loading each file (versions 4, 7, 8) | error |
+| Zero discharge with `min_theta_floor` set | loading each file | warning |
+| Zero discharge, version 7 (simulated at θ = 0) | loading each file | note |
+| Zero discharge in gap-tolerant mode, versions 4 and 8 without `min_theta_floor` (§10) | loading each file | warning (days become gaps); error in a FORWARD run |
+| Calibration file shorter than 365 days; FORWARD file shorter than 30 days (§2) | loading each file | error |
+| Validation or FORWARD file shorter than a year (§2, §3) | loading each file | warning |
+| Segment warm-up, or the unscored start of a file shorter than a year, too short (§3, §10) | gap-tolerant runs; files shorter than a year | warning |
+| MCMC convergence; draws that diverge or, with RK4/RK2/EUL, are unstable (§12) | DE-MCMC, FORWARD intervals (a chain recorded as not converged gives a warning) | warning / error |
+| Chain or calibration fitted with another model version, integrator, `Qmedia`, `Tice_cover` or `min_theta_floor` (§13) | FORWARD runs | error |
+| `Qmedia` zero or negative (§4) | loading data (versions 4, 7, 8) | error |
 
 ## 16. Limitations and good practice
 
@@ -1015,7 +1216,7 @@ change one-sided.
 - **Record length.** In V16, calibrations on 3 consecutive years of a Swiss
   river predicted the later years with a median RMSE at most 0.034 °C above
   that of the calibration on the whole record (7–21 years). Single years cost
-  0.04–0.06 °C as a median and up to 0.17 °C (version 8). The later years
+  0.04–0.06 °C as a median and up to 0.18 °C (version 8). The later years
   tested were similar to the calibration years; for conditions outside them,
   see the bullet above and V10.
 - **Compared with regression.** In V17 (3 Swiss and 23 British Columbia
@@ -1023,8 +1224,8 @@ change one-sided.
   regressions on air temperature (the best chosen on each river after seeing
   the held-out years) on 23 of 26 rivers: medians 0.74 against 0.89 °C
   (Switzerland) and 0.96 against 1.17 °C (British Columbia). On yearly peaks,
-  the hottest 10% of days and the 2021 heat dome it was better on 14 of 23
-  British Columbia rivers, and on the Swiss yearly peaks on 1 of 3 (median
+  the hottest 10% of days and the 2021 heat dome it was better on 13, 16 and 14
+  of 23 British Columbia rivers, and on the Swiss yearly peaks on 1 of 3 (median
   error 0.58 against 0.60 °C). Version 5 beat the best regression on 18 of 26
   rivers.
 - **Yearly statistics need the cross-validation check.** Their computation is
@@ -1076,10 +1277,10 @@ inputs for every version and Fortran integrator (to 5×10⁻⁶ °C, the precisi
 its printed output), and identical calibration scores and weekly and monthly
 averages, with and without gaps; all 30 published RMSE values of Piccolroaz et al. (2016)
 reproduced to within 0.001 °C, and their parameters recovered by recalibration
-except where the parameters trade off (versions 7 and 8 on two rivers, where
-recalibration fits slightly better with different parameters and the same
-predictions, and where the original program itself returns different
-parameters on every run); recovery of a known truth; calibrated intervals
+except where the parameters trade off (4 of 15 cases: versions 7 and 8 on the
+Mentue and the Rhône, where recalibration fits slightly better with different
+parameters and the same predictions, and the original program's own runs do
+not reproduce the published parameters either); recovery of a known truth; the coverage of intervals
 on synthetic data; out-of-sample performance on three real rivers; numerical
 accuracy; gaps; exact answers from the workflow and scenario tools;
 probabilities of exceeding a limit, on synthetic data and real rivers (V9);
@@ -1090,8 +1291,11 @@ published errors of Toffolon and Piccolroaz (2015), computed with RK4, also
 reproduced, and their parameters returned by calibration with RK4 (V13); and
 prediction intervals on the hottest days (V14); and the simulations published
 by an independent group for 23 rivers in British Columbia, reproduced day by day
-(V15). V5, V9, V10 and V14 do not pass all their criteria; the report says where
-and why. The errors found in the published studies are documented in
+(V15). V4, V5, V9, V10 and V14 do not pass all their criteria; the report says
+where and why. V4 fails only because about 3% of its synthetic values are below
+0 °C, which no interval can contain since intervals are kept at or above
+`Tice_cover`; real water does not go below freezing, and V5, on real data, shows
+no such shortfall. The errors found in the published studies are documented in
 [PUBLISHED_RESULTS.md](PUBLISHED_RESULTS.md). The test
 suite (`pytest tests/`) also compares against the Fortran and checks each
 safeguard above.
@@ -1108,8 +1312,11 @@ These are deliberate; each is covered by tests.
   first particle); failed (NaN) evaluations are ignored; and the early-stop
   test uses a tolerance of 1e-4 (the Fortran's test can never be met, so it
   always runs to the end).
-- **`Qmedia`** also excludes discharge ≤ 0, and is fixed at the calibration value
-  for validation and FORWARD runs instead of being recomputed.
+- **`Qmedia`** leaves out zero-flow days when the model does not simulate them
+  (versions 4 and 8 without `min_theta_floor`; the Fortran averages every
+  non-missing value, although it cannot simulate those days), and is fixed at
+  the calibration value for validation and FORWARD runs instead of being
+  recomputed from each file (§4). Negative discharge is refused (§2).
 - **Seasonal phase** is computed from each row's real date (equivalent for
   records starting on 1 January), so a record may start on any date, with the
   warm-up year taking the phase of the rows it copies. The Fortran takes it
@@ -1123,7 +1330,11 @@ These are deliberate; each is covered by tests.
 - **Time resolution**: an out-of-range index in the Fortran's weekly aggregation
   of the last, partial block is avoided; monthly aggregation accepts only `1m`
   (the Fortran ignores the number of months); a week or month without
-  observations is never scored (with `prc` 0 the Fortran divides by zero).
+  observations is never scored (with `prc` 0 the Fortran divides by zero); and
+  `prc` applies to a month's calendar length, so a month the record covers only
+  in part is not scored as a whole one (the Fortran compares it with the days
+  present; the results differ only for records that start or end part-way
+  through a month).
 - **`0_*.csv`** records every evaluated parameter set (the Fortran's
   `mineff_index` filter is not applied).
 - **Added features** not in the Fortran: gap-tolerant mode, cross-validation,

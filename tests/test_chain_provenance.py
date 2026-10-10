@@ -1,5 +1,5 @@
-"""A FORWARD run refuses a DE-MCMC chain fitted with another model version, integrator
-or Qmedia (recorded in the chain's _meta.json): the parameters mean something only
+"""A FORWARD run refuses a DE-MCMC chain fitted with another model version, integrator,
+Qmedia, Tice_cover or min_theta_floor (recorded in the chain's _meta.json): the parameters mean something only
 with the settings they were fitted with (docs/METHODS.md §13)."""
 import json
 
@@ -26,7 +26,8 @@ def _forward(tmp_path, meta):
     forward_mode(data)
 
 
-MATCHING = {"version": 8, "integrator": "RK4", "qmedia": 10.0}     # as _build_calibration_data
+MATCHING = {"version": 8, "integrator": "RK4", "qmedia": 10.0,     # as _build_calibration_data
+            "Tice_cover": 0.0, "min_theta_floor": None}
 
 
 @pytest.mark.parametrize("qmedia", [10.0, 10.004])     # typed with fewer digits: the same Qmedia
@@ -36,7 +37,8 @@ def test_matching_chain_is_accepted(tmp_path, capsys, qmedia):
 
 
 @pytest.mark.parametrize("key,value,word", [("version", 7, "model version"), ("integrator", "CRN", "integrator"),
-                                            ("qmedia", 10.02, "Qmedia")])
+                                            ("qmedia", 10.02, "Qmedia"), ("Tice_cover", 4.0, "Tice_cover"),
+                                            ("min_theta_floor", 1e-6, "min_theta_floor")])
 def test_mismatched_chain_is_refused(tmp_path, key, value, word):
     with pytest.raises(ValueError, match=word):
         _forward(tmp_path, {**MATCHING, key: value})
@@ -45,3 +47,8 @@ def test_mismatched_chain_is_refused(tmp_path, key, value, word):
 def test_old_chain_without_the_record_gives_a_note(tmp_path, capsys):
     _forward(tmp_path, {})
     assert "cannot be checked" in capsys.readouterr().out
+
+
+def test_chain_without_the_settings_record_gives_a_note(tmp_path, capsys):
+    _forward(tmp_path, {"version": 8, "integrator": "RK4", "qmedia": 10.0})
+    assert "Tice_cover and min_theta_floor" in capsys.readouterr().out

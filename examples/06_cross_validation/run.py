@@ -76,7 +76,7 @@ for k, (name, dev, lo, hi) in enumerate(rows):
     ax.plot([lo, hi], [y, y], color=blue, alpha=0.3, lw=7, solid_capstyle="round",
             label="90% jackknife interval" if k == 0 else None)
     ax.scatter(dev, np.full(len(dev), y), s=34, color=blue, edgecolor="white", linewidth=1.2, zorder=3,
-               label="fitted without one year (6 folds)" if k == 0 else None)
+               label=f"fitted without one year ({len(dev)} folds)" if k == 0 else None)
     ax.text(-62, y, name, ha="right", va="center", fontsize=8.5, color="#0b0b0b")
 ax.axvline(0, color="#8a8984", lw=1)
 ax.set(xlim=(-60, 60), yticks=[], xlabel="Difference from the mean of the folds (% of its value)",

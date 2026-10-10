@@ -1,5 +1,5 @@
 river,version,statistic,held-out calibration years,measured minus predicted median,95% CI,inside 90% range (cross-validation)
-Mentue,5,highest daily mean,7,-0.29 °C,-0.62 to +0.05,86%
+Mentue,5,highest daily mean,7,-0.29 °C,-0.63 to +0.05,86%
 Mentue,5,highest 7-day mean,7,-0.26 °C,-0.68 to +0.16,86%
 Mentue,5,days above threshold,7,+0.71 days,-6.70 to +8.13,57%
 Mentue,8,highest daily mean,7,-0.77 °C,-1.16 to -0.39,71%
@@ -10,10 +10,10 @@ Rhône,5,highest 7-day mean,20,-0.85 °C,-1.11 to -0.60,70%
 Rhône,5,days above threshold,20,-19.50 days,-29.82 to -9.18,75%
 Rhône,8,highest daily mean,20,+0.37 °C,+0.15 to +0.58,75%
 Rhône,8,highest 7-day mean,20,-0.08 °C,-0.24 to +0.08,85%
-Rhône,8,days above threshold,20,+3.98 days,-3.21 to +11.16,95%
+Rhône,8,days above threshold,20,+3.92 days,-3.23 to +11.08,95%
 Dischmabach,5,highest daily mean,6,+0.46 °C,-0.14 to +1.06,100%
 Dischmabach,5,highest 7-day mean,6,+0.45 °C,+0.01 to +0.89,100%
 Dischmabach,5,days above threshold,6,+11.00 days,+1.00 to +21.00,83%
 Dischmabach,8,highest daily mean,6,+0.01 °C,-0.47 to +0.50,100%
-Dischmabach,8,highest 7-day mean,6,+0.12 °C,-0.21 to +0.45,100%
-Dischmabach,8,days above threshold,6,+4.83 days,-3.06 to +12.73,83%
+Dischmabach,8,highest 7-day mean,6,+0.11 °C,-0.21 to +0.44,100%
+Dischmabach,8,days above threshold,6,+4.92 days,-2.95 to +12.79,83%

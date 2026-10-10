@@ -23,6 +23,5 @@ parameter_bounds:
 
 cross_validation:
   enabled: true
-  min_train_years: 0       # hold out every year but the first (2002)
   threshold: 18            # degC, for "days above 18 degC"
   season_months: [6, 7, 8, 9]

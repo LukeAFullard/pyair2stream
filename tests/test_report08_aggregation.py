@@ -115,33 +115,28 @@ def test_aggregation_monthly_matches_pandas_groupby():
                                     err_msg=f"month window {i} mismatch")
 
 
-def test_trailing_partial_month_accepted_as_full_period():
+def test_partial_months_at_either_end_are_judged_against_the_whole_month():
     """
-    A trailing partial month is accepted as a full month because `prc` is
-    compared against the *partial* period's own day count (`n_days` inside
-    the monthly loop, reset per calendar month), not a full ~30-day month's
-    (`model.py` aggregation, `unit == 'm'` branch). This is Fortran-equivalent
-    and correct-as-ported, but easy to miss -- documented here rather than
-    discovered (docs/audit/08_testing_gaps.md, 8.3).
-
-    4 days into a new month, all present, passes even a demanding
-    `prc=0.9`: 4 >= 4*0.9, even though 4 days is nowhere near 90% of a full
-    calendar month.
+    `prc` is the share of a month's calendar days that must be measured, so a month
+    the record covers only in part is not scored as a whole one. (It was compared
+    with the days present: a 4-day fragment of March passed even prc=0.9, as in the
+    Fortran, which assumed records started on 1 January.)
     """
-    # 2 full months (Jan, Feb 2001 non-leap) plus a 4-day fragment into March.
-    n_tot_raw = 31 + 28 + 4
-    data, dates, values = _build_aggregation_data(n_tot_raw, '1m', prc=0.9)
-
+    # 2 whole months (Jan, Feb 2001) plus a 4-day fragment of March: the fragment is dropped.
+    data, dates, values = _build_aggregation_data(31 + 28 + 4, '1m', prc=0.9)
     aggregation(data)
-
-    # Three windows: Jan, Feb, and the 4-day March fragment -- not dropped.
+    assert data.n_dat == 2
+    assert [data.date[data.I_inf[k, 2]][1] for k in range(2)] == [1, 2]
+    # A record starting on 28 January: its 4 days of January are dropped the same way.
+    data, dates, values = _build_aggregation_data(4 + 28 + 31, '1m', prc=0.9, start='2001-01-28')
+    aggregation(data)
+    assert data.n_dat == 2
+    assert [data.date[data.I_inf[k, 2]][1] for k in range(2)] == [2, 3]
+    # With prc=0.1, 4 of March's 31 days are enough (4 >= 3.1), and the mean is of those days.
+    data, dates, values = _build_aggregation_data(31 + 28 + 4, '1m', prc=0.1)
+    aggregation(data)
     assert data.n_dat == 3
-    last_window_date = data.date[data.I_inf[2, 2]]
-    assert last_window_date[1] == 3  # March
-
-    march_values = values[-4:]
-    actual = data.Twat_obs_agg[data.I_inf[2, 2]]
-    np.testing.assert_allclose(actual, np.mean(march_values), rtol=1e-12)
+    np.testing.assert_allclose(data.Twat_obs_agg[data.I_inf[2, 2]], np.mean(values[-4:]), rtol=1e-12)
 
 
 @pytest.mark.parametrize('time_res', ['1w', '1m'])
@@ -214,22 +209,21 @@ if __name__ == '__main__':
     pytest.main([__file__, '-v'])
 
 
-def test_monthly_aggregation_of_a_long_360_day_record():
-    """Monthly scoring of a 360-day-calendar record longer than about 60 years (climate
-    projections) once ran out of room for its months (IndexError)."""
+def test_monthly_aggregation_of_a_long_record():
+    """Monthly scoring of a record longer than about 60 years (climate projections) once ran
+    out of room for its months (IndexError)."""
     import yaml
     from pyair2stream.io import read_calibration, read_Tseries
     import tempfile, os
-    n = 360 * 80
-    t = np.arange(n)
-    dates = [f"{2000 + k // 360:04d}-{(k % 360) // 30 + 1:02d}-{min(k % 30 + 1, 28):02d}" for k in t]
+    dates = pd.date_range("2000-01-01", "2079-12-31", freq="D")
+    t = np.arange(len(dates))
     with tempfile.TemporaryDirectory() as tmp:
         csv = os.path.join(tmp, "d.csv")
-        pd.DataFrame({"Date": dates, "T_air": 10 + 10 * np.sin(2 * np.pi * t / 360),
-                      "T_water": 8 + 6 * np.sin(2 * np.pi * (t - 20) / 360)}).to_csv(csv, index=False)
+        pd.DataFrame({"Date": dates.strftime("%Y-%m-%d"), "T_air": 10 + 10 * np.sin(2 * np.pi * t / 365.25),
+                      "T_water": 8 + 6 * np.sin(2 * np.pi * (t - 20) / 365.25)}).to_csv(csv, index=False)
         cfg = os.path.join(tmp, "c.yaml")
         with open(cfg, "w") as f:
-            yaml.safe_dump({"version": 5, "run_mode": "FORWARD", "calendar": "360_day", "time_resolution": "1m",
+            yaml.safe_dump({"version": 5, "run_mode": "FORWARD", "time_resolution": "1m",
                             "parameters_forward": [1, 0.5, 0.5, 0, 0, 1, 0.5, 0],
                             "paths": {"input_data": csv, "output_dir": os.path.join(tmp, "out")}}, f)
         data = read_calibration(cfg)

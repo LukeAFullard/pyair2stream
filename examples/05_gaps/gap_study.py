@@ -134,7 +134,9 @@ def write_case(cal, name, gone, method):
 # --- 1. How fast is the restart forgotten? --------------------------------------------------------
 def restart_memory(par, qmedia, days=20):
     """Restart the model on every measured day of 2002-2009 and follow the difference from the
-    continuous simulation. Returns {start: array (restarts x days+1)}."""
+    continuous simulation. Returns {start: array (restarts x days+1)}. A calibration or
+    validation restarts from the measured water temperature, or else from the day-of-year
+    average; a FORWARD run restarts from the temperature at rest under the day's conditions."""
     data = load(CAL, "memory", Qmedia=qmedia)
     data.par[:] = par
     call_model(data)
@@ -143,13 +145,15 @@ def restart_memory(par, qmedia, days=20):
     compute_doy_climatology(data)
     data.gap_tolerant = True
     measured = data.Twat_obs.copy()
-    out = {"measured water temperature": [], "day-of-year average": []}
+    out = {"measured water temperature": [], "day-of-year average": [],
+           "temperature at rest (FORWARD runs)": []}
     for offset in range(days + 1):
         starts = np.arange(365 + offset, data.n_tot - days - 1, days + 1)
         starts = starts[measured[starts] != -999.0]
         data.segments = [(int(s), int(s) + days) for s in starts]
         for kind in out:
             data.Twat_obs[:] = measured
+            data.runmode = "FORWARD" if kind.endswith("(FORWARD runs)") else "DE"   # how a run of that kind starts
             if kind == "day-of-year average":
                 data.Twat_obs[starts] = -999.0          # no measurement: start from the average
             call_model(data)
@@ -172,6 +176,8 @@ def reported_and_actual_error(scattered, qmedia, share=0.20, draw=0):
         data = load(os.path.join(OUT, "inputs", f"{name}.csv"), f"{name}_check", Qmedia=qmedia, gap_tolerant=True,
                     warmup_drop_days=warmup, min_segment_days=min_segment)
         data.par[:] = par
+        data.runmode = "DE"         # restart as the calibration did (from the measured water temperature)
+        compute_doy_climatology(data)
         call_model(data)
         scored = data.eval_mask & (data.Twat_obs != -999.0)
         complete.par[:] = par
@@ -342,7 +348,7 @@ def main():
 def figure_memory(memory, needed):
     fig, ax = plt.subplots(figsize=(8, 3.6))
     days = np.arange(next(iter(memory.values())).shape[1])
-    for (kind, a), colour in zip(memory.items(), ("tab:blue", "tab:purple")):
+    for (kind, a), colour in zip(memory.items(), ("tab:blue", "tab:purple", "tab:orange")):
         ax.plot(days, a.mean(axis=0), "o-", color=colour, ms=4, label=f"restart from the {kind}")
         ax.plot(days, np.percentile(a, 95, axis=0), "--", color=colour, lw=1)
     ax.plot([], [], "-", color="dimgray", label="solid: the average restart")

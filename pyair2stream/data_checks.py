@@ -17,18 +17,27 @@ from typing import List, Optional
 import numpy as np
 import pandas as pd
 
+from .config import zero_flow_ok
+
 # Daily means outside these ranges (degC) are almost certainly not real, e.g. a
 # missing-value code other than -999 (such as -99 or -9999) or a unit error.
 PLAUSIBLE_RANGES = {'T_air': (-60.0, 60.0), 'T_water': (-2.0, 50.0)}
 
 MISSING_CODE = -999.0
-MIN_DAYS = 365
+CALENDARS = ('standard', 'noleap')
+NO_360_DAY = ("calendar '360_day' is not supported. A 360-day year has dates such as 30 February, which the "
+              "package's dates, outputs and plots cannot hold, and relabelling the rows with ordinary dates "
+              "would put months and years out of step with the model's seasons. Convert the file to the "
+              "standard calendar first (for example with xarray's convert_calendar), and record how the added "
+              "days were filled: USER_GUIDE.md §5.")
+MIN_DAYS = 365          # calibration: a whole year, so the seasonal parameters can be fitted
+MIN_SHORT_DAYS = 30     # validation and scenario files shorter than a year
 PERIOD_NAMES = {'calibration': 'calibration', 'validation': 'validation', 'scenario': 'scenario (FORWARD)'}
 
 
 @dataclass
 class Problem:
-    level: str        # 'error': a run stops; 'warning': a run continues
+    level: str        # 'error': a run stops; 'warning': a run continues; 'note': information
     message: str
 
 
@@ -48,6 +57,10 @@ class CheckedTable:
     def warnings(self) -> List[str]:
         return [p.message for p in self.problems if p.level == 'warning']
 
+    @property
+    def notes(self) -> List[str]:
+        return [p.message for p in self.problems if p.level == 'note']
+
     def raise_first_error(self) -> None:
         if self.errors:
             raise ValueError(self.errors[0])
@@ -55,11 +68,14 @@ class CheckedTable:
     def print_warnings(self) -> None:
         for message in self.warnings:
             print(f"Warning: {message}")
+        for message in self.notes:
+            print(f"Note: {message}")
 
 
-def _line(i: int) -> int:
-    """Line of the CSV file that holds table row i (line 1 is the header)."""
-    return int(i) + 2
+def _line(i: int, rows=None) -> int:
+    """Line of the CSV file that holds table row i (line 1 is the header). `rows`: the file row of
+    each table row, when rows were removed (drop_29_february)."""
+    return int(i if rows is None else rows[int(i)]) + 2
 
 
 def _column_hint(columns, name: str) -> str:
@@ -70,7 +86,7 @@ def _column_hint(columns, name: str) -> str:
     return ""
 
 
-def _as_numbers(df: pd.DataFrame, col: str, source: str, problems: List[Problem]) -> pd.Series:
+def _as_numbers(df: pd.DataFrame, col: str, source: str, problems: List[Problem], rows=None) -> pd.Series:
     """The column as floats with missing values as NaN; text that is not a number is an error."""
     raw = df[col]
     values = pd.to_numeric(raw, errors='coerce')
@@ -81,18 +97,18 @@ def _as_numbers(df: pd.DataFrame, col: str, source: str, problems: List[Problem]
         hint = " Use a point, not a comma, as the decimal separator." if re.fullmatch(r"-?\d+,\d+", bad) else ""
         problems.append(Problem('error',
             f"Column {col} in {source} has {int(text.sum())} value(s) that are not numbers "
-            f"(first: {bad!r} on line {_line(i)}). Leave a missing value blank or write -999.{hint}"))
+            f"(first: {bad!r} on line {_line(i, rows)}). Leave a missing value blank or write -999.{hint}"))
     return values.astype(np.float64).where(values != MISSING_CODE)
 
 
-def _first(mask: pd.Series, dates: pd.Series) -> str:
+def _first(mask: pd.Series, dates: pd.Series, rows=None) -> str:
     i = int(np.argmax(mask.to_numpy()))
-    return f"{dates.iloc[i].date()}, line {_line(i)}"
+    return f"{dates.iloc[i].date()}, line {_line(i, rows)}"
 
 
 def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', version: int = 8,
                 gap_tolerant: bool = False, calendar: str = 'standard',
-                min_theta_floor: Optional[float] = None) -> CheckedTable:
+                min_theta_floor: Optional[float] = None, drop_29_february: bool = False) -> CheckedTable:
     """
     Check a data table as a run would, and collect every problem.
 
@@ -101,7 +117,7 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
     df : DataFrame with the columns Date, T_air, T_water and (versions 4, 7, 8) Discharge.
     source : the file name (or a description) used in the messages.
     period : 'calibration', 'validation' or 'scenario' (the input of a FORWARD run).
-    version, gap_tolerant, calendar, min_theta_floor : as in the configuration.
+    version, gap_tolerant, calendar, min_theta_floor, drop_29_february : as in the configuration.
 
     Returns
     -------
@@ -110,6 +126,10 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
     """
     if period not in PERIOD_NAMES:
         raise ValueError(f"period must be one of {', '.join(PERIOD_NAMES)}, got {period!r}")
+    if calendar == '360_day':
+        raise ValueError(NO_360_DAY)
+    if calendar not in CALENDARS:
+        raise ValueError(f"calendar must be one of {', '.join(CALENDARS)}, got {calendar!r}")
     problems: List[Problem] = []
     df = df.copy()
     columns = list(df.columns)
@@ -134,33 +154,47 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
         return CheckedTable(df, None, problems)       # nothing more can be checked
 
     # --- Dates -------------------------------------------------------------------------
+    rows = None
+    if calendar == 'noleap' and drop_29_february:
+        # Removed before any other check; messages still name the lines of the file.
+        parsed = pd.to_datetime(df['Date'], errors='coerce')
+        leap = ((parsed.dt.month == 2) & (parsed.dt.day == 29)).to_numpy()
+        if leap.any():
+            water = pd.to_numeric(df.loc[leap, 'T_water'], errors='coerce')
+            measured = int((water.notna() & (water != MISSING_CODE)).sum())
+            problems.append(Problem('warning', f"Removed {int(leap.sum())} row(s) dated 29 February from {source} "
+                                               f"(drop_29_february), with {measured} water-temperature "
+                                               f"measurement(s): the noleap calendar has no 29 February."))
+            rows = np.flatnonzero(~leap)
+            df = df[~leap].reset_index(drop=True)
     raw_dates = df['Date']
     dates = pd.to_datetime(raw_dates, errors='coerce')
     blank = raw_dates.isna() | (raw_dates.astype(str).str.strip() == "")
     unreadable = dates.isna() & ~blank
     if blank.any():
         i = int(np.argmax(blank.to_numpy()))
-        problems.append(Problem('error', f"Date is blank on line {_line(i)} of {source} "
+        problems.append(Problem('error', f"Date is blank on line {_line(i, rows)} of {source} "
                                          f"({int(blank.sum())} blank date(s)). Every row needs a date."))
     if unreadable.any():
         i = int(np.argmax(unreadable.to_numpy()))
-        problems.append(Problem('error', f"Date {str(raw_dates.iloc[i]).strip()!r} on line {_line(i)} of {source} "
+        problems.append(Problem('error', f"Date {str(raw_dates.iloc[i]).strip()!r} on line {_line(i, rows)} of {source} "
                                          f"cannot be read as a date ({int(unreadable.sum())} such date(s)). "
                                          "Write dates as YYYY-MM-DD, in the same format on every row."))
     if blank.any() or unreadable.any():
         dates = None
-    elif calendar in ('standard', 'noleap'):
+    else:
         leap_days = (dates.dt.month == 2) & (dates.dt.day == 29)
         duplicated = dates.duplicated(keep=False)
         backwards = dates.diff() < pd.Timedelta(0)
         if calendar == 'noleap' and leap_days.any():
             i = int(np.argmax(leap_days.to_numpy()))
-            problems.append(Problem('error', f"{dates.iloc[i].date()} on line {_line(i)} of {source} is 29 February, "
-                                             "which the noleap calendar does not have. Remove the 29 February rows, "
-                                             "or use calendar: 'standard'."))
+            problems.append(Problem('error', f"{dates.iloc[i].date()} on line {_line(i, rows)} of {source} is 29 February, "
+                                             "which the noleap calendar does not have. Remove the 29 February rows "
+                                             "(or set drop_29_february: true to have them removed), or use "
+                                             "calendar: 'standard'."))
         elif dates.duplicated().any():
             d = dates[duplicated].iloc[0]
-            lines = [_line(i) for i in np.flatnonzero((dates == d).to_numpy())]
+            lines = [_line(i, rows) for i in np.flatnonzero((dates == d).to_numpy())]
             problems.append(Problem('error', f"The time series in {source} must be continuous at a daily time scale "
                                              f"with each date once: {d.date()} appears on lines "
                                              f"{', '.join(map(str, lines))} ({int(dates.duplicated().sum())} repeated "
@@ -168,8 +202,8 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
         elif backwards.any():
             i = int(np.argmax(backwards.to_numpy()))
             problems.append(Problem('error', f"The time series in {source} must be continuous at a daily time scale, "
-                                             f"in date order: {dates.iloc[i].date()} on line {_line(i)} comes after "
-                                             f"{dates.iloc[i - 1].date()} on line {_line(i - 1)}. Sort the rows by date."))
+                                             f"in date order: {dates.iloc[i].date()} on line {_line(i, rows)} comes after "
+                                             f"{dates.iloc[i - 1].date()} on line {_line(i - 1, rows)}. Sort the rows by date."))
         elif len(dates):
             expected = pd.date_range(dates.iloc[0], dates.iloc[-1], freq='D')
             if calendar == 'noleap':
@@ -179,40 +213,35 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                 after = int(np.searchsorted(dates.to_numpy(), missing[0].to_datetime64())) - 1
                 problems.append(Problem('error', f"The time series in {source} must be continuous at a daily time scale "
                                                  f"with no missing dates: {len(missing)} date(s) have no row (first: "
-                                                 f"{missing[0].date()}, after line {_line(after)}). Add a row for each "
+                                                 f"{missing[0].date()}, after line {_line(after, rows)}). Add a row for each "
                                                  "missing date and leave its values blank."))
-    else:
-        # 360_day: the first date sets the day of the year the file starts on, and the
-        # rows are counted on from there; the later dates only label the rows, so only
-        # their order can be checked.
-        backwards = dates.diff() < pd.Timedelta(0)
-        if backwards.any():
-            i = int(np.argmax(backwards.to_numpy()))
-            problems.append(Problem('error', f"The time series in {source} must have non-decreasing dates: "
-                                             f"{dates.iloc[i].date()} on line {_line(i)} comes after "
-                                             f"{dates.iloc[i - 1].date()} on line {_line(i - 1)}."))
-        if len(dates) and dates.iloc[0].day > 30:
-            problems.append(Problem('error', f"The first date of {source}, {dates.iloc[0].date()}, is the 31st of a "
-                                             "month, which the 360_day calendar does not have. It sets the day of the "
-                                             "year the file starts on: use a day from 1 to 30."))
 
     n_days = len(df)
-    if n_days < MIN_DAYS:
+    if period == 'calibration' and n_days < MIN_DAYS:
+        problems.append(Problem('error', f"The calibration time series in {source} has only {n_days} day(s); at "
+                                         f"least {MIN_DAYS} are required. A calibration needs at least a whole year "
+                                         "so the parameters that describe the yearly cycle can be fitted: from part "
+                                         "of a year they would mean nothing for the other seasons."))
+    elif n_days < MIN_SHORT_DAYS:
         if period == 'validation':
-            problems.append(Problem('warning', f"The validation file {source} has only {n_days} day(s), less than a "
-                                               "year, so validation will be skipped."))
+            problems.append(Problem('warning', f"The validation file {source} has only {n_days} day(s), fewer than "
+                                               f"{MIN_SHORT_DAYS}, so validation will be skipped."))
         else:
             problems.append(Problem('error', f"The {PERIOD_NAMES[period]} time series in {source} has only {n_days} "
-                                             f"day(s); at least {MIN_DAYS} are required (the model's warm-up year "
-                                             "repeats the first year of data)."))
+                                             f"day(s); at least {MIN_SHORT_DAYS} are required."))
+    elif n_days < MIN_DAYS:
+        problems.append(Problem('warning', f"The {PERIOD_NAMES[period]} file {source} has {n_days} days, less than a "
+                                           "year. It is used, but its first days are not scored while the model "
+                                           "settles (warmup_drop_days, default 15), and a short period says little "
+                                           "about the other seasons: a year or more is recommended (USER_GUIDE.md §5)."))
 
     # --- Values ------------------------------------------------------------------------
     for col in ('T_air', 'T_water', 'Discharge'):
-        df[col] = _as_numbers(df, col, source, problems)
+        df[col] = _as_numbers(df, col, source, problems, rows)
     label = dates if dates is not None else pd.Series(pd.NaT, index=df.index)
 
     def where(mask):
-        return _first(mask, label) if dates is not None else f"line {_line(int(np.argmax(mask.to_numpy())))}"
+        return _first(mask, label, rows) if dates is not None else f"line {_line(int(np.argmax(mask.to_numpy())), rows)}"
 
     for col, (lo, hi) in PLAUSIBLE_RANGES.items():
         bad = (df[col] < lo) | (df[col] > hi)
@@ -222,6 +251,31 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                                                f"{lo:g} to {hi:g} degC (first: {df[col].iloc[i]:g} on {where(bad)}). "
                                                "Check for missing-value codes other than -999 or a blank cell, and "
                                                "for unit errors; these values are used as given."))
+
+    if uses_q:
+        negative = df['Discharge'] < 0.0
+        if negative.any():
+            problems.append(Problem('error', f"Negative discharge in {source}: {int(negative.sum())} day(s) (first: "
+                                             f"{df['Discharge'][negative].iloc[0]:g} on {where(negative)}). Flow "
+                                             "cannot be negative, so this is probably a code for a missing value: "
+                                             "write a missing value as -999 or leave the cell blank."))
+        if min_theta_floor is not None:
+            zero = df['Discharge'] == 0.0
+            if zero.any():
+                problems.append(Problem('warning', f"Zero discharge in {source}: {int(zero.sum())} day(s) (first: "
+                                                   f"{where(zero)}). They are simulated at theta = min_theta_floor "
+                                                   f"({min_theta_floor:g}), where theta^a4 is extreme: expect "
+                                                   "large simulated responses on those days (USER_GUIDE.md "
+                                                   "§9.2)."))
+        elif version == 7:
+            zero = df['Discharge'] == 0.0
+            if zero.any():
+                problems.append(Problem('note', f"Zero discharge in {source}: {int(zero.sum())} day(s) (first: "
+                                                f"{where(zero)}). Version 7 simulates them with theta = 0: its "
+                                                "discharge terms drop out, and the water follows the air alone. A "
+                                                "stream without flow may be dry or reduced to pools, which the "
+                                                "model may not have been calibrated on: treat those days with care "
+                                                "(USER_GUIDE.md §9.2)."))
 
     if not gap_tolerant:
         gaps = df['T_air'].isna()
@@ -235,7 +289,7 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                 problems.append(Problem('error', f"The series of discharge in {source} must be complete: "
                                                  f"{int(gaps.sum())} day(s) have no value (first: {where(gaps)}). "
                                                  "Fill them, or set gap_tolerant: true."))
-        if uses_q and min_theta_floor is None:
+        if uses_q and not zero_flow_ok(version, min_theta_floor):
             nonpositive = df['Discharge'] <= 0.0
             if nonpositive.any():
                 problems.append(Problem('error', f"Non-positive discharge (Q <= 0) in {source}: {int(nonpositive.sum())} "
@@ -243,6 +297,25 @@ def check_table(df: pd.DataFrame, source: str, *, period: str = 'calibration', v
                                                  "divides by a power of discharge, which is undefined at zero flow. "
                                                  "Correct the data, set gap_tolerant: true to treat such days as "
                                                  "gaps, or set min_theta_floor (USER_GUIDE.md §9.2)."))
+
+    elif uses_q and not zero_flow_ok(version, min_theta_floor):
+        nonpositive = df['Discharge'] <= 0.0
+        if nonpositive.any():
+            n = int(nonpositive.sum())
+            what = (f"Zero or negative discharge in {source}: {n} day(s) (first: {where(nonpositive)}). Model "
+                    f"version {version} cannot simulate a day without flow (theta = Q / Qmedia is zero, and the "
+                    "equation divides by a power of theta). ")
+            if period == 'scenario':
+                problems.append(Problem('error', what + "In gap-tolerant mode these days would be left out as "
+                                        "gaps, so the scenario would have no water temperature on exactly these "
+                                        "days and they would not count in its results (for example in the number "
+                                        "of warm days). Set min_theta_floor to simulate them at a very low flow "
+                                        "(beyond the calibrated flows, so treat them with care), or correct the "
+                                        "data (USER_GUIDE.md §9.2)."))
+            else:
+                problems.append(Problem('warning', what + "In gap-tolerant mode these days are treated as gaps: "
+                                        "they are not simulated or scored, and the model starts again after them. "
+                                        "Set min_theta_floor to simulate them instead (USER_GUIDE.md §9.2)."))
 
     if period != 'scenario' and 'T_water' in columns and not df['T_water'].notna().any():
         what = "so it cannot test the model. Fill it, or remove paths.validation_data" if period == 'validation' \
