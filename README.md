@@ -174,7 +174,7 @@ explains the steps and the results ([examples/README.md](examples/README.md)).
 | Example | Question |
 |---|---|
 | [01 Quickstart](examples/01_quickstart/README.md) | Does the model reproduce this river, also in years it was not fitted to? |
-| [02 Uncertainty](examples/02_uncertainty/README.md) | What range of temperatures should we expect, and does that range hold? |
+| [02 Uncertainty](examples/02_uncertainty/README.md) | What range of temperatures should we expect, and does that range hold? How is a range that holds too rarely widened? |
 | [03 Compliance](examples/03_compliance/README.md) | How likely is it that a temperature limit was exceeded? |
 | [04 Scenario](examples/04_scenario/README.md) | What difference would taking 30% of the flow make? |
 | [05 Gaps](examples/05_gaps/README.md) | What should I do about missing data? |

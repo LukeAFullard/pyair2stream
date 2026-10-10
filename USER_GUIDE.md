@@ -1063,7 +1063,9 @@ The margin is the same in every season, so check the widened band in the
 season of your limit too. It needs years: from fewer than about 5 hidden years
 the margin is uncertain (the file needs at least 3). The column `inside_after`
 shows how often the widened band held in each hidden year when the margin came
-from the other years only; quote it with your result. It is not for yearly
+from the other years only; quote it with your result.
+[Example 02](examples/02_uncertainty/README.md) (steps 3 and 4) shows the effect
+on a prediction. It is not for yearly
 statistics (use `correct_statistic`, above) or for the difference between two
 scenarios (below).
 
