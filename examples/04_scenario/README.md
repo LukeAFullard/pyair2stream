@@ -23,7 +23,7 @@ day-to-day model error.
 
 The simulations disagree about how warm the river is. Their average summer
 water temperature ranges from 16.3 to 16.8 °C (90% range). The abstraction
-changes it by only about 0.04 °C, more than ten times less. To see such a small effect,
+changes it by only about 0.05 °C, ten times less. To see such a small effect,
 the uncertainty about the river's temperature must be taken out.
 
 **Paired** means that simulation 1 of the abstraction run uses the same
@@ -34,16 +34,16 @@ it cancels. What is left is the effect of the abstraction:
 
 | | Baseline: average summer temperature | Abstraction | Difference |
 |---|---|---|---|
-| Simulation 1 | 16.54 °C | 16.60 °C | +0.06 °C |
-| Simulation 2 | 16.28 °C | 16.30 °C | +0.02 °C |
-| Simulation 3 | 16.58 °C | 16.64 °C | +0.07 °C |
+| Simulation 1 | 16.57 °C | 16.63 °C | +0.07 °C |
+| Simulation 2 | 16.43 °C | 16.50 °C | +0.07 °C |
+| Simulation 3 | 16.36 °C | 16.39 °C | +0.03 °C |
 
-Simulations 2 and 3 disagree by 0.3 °C about the river. But they agree that the
+Simulations 1 and 3 disagree by 0.2 °C about the river. But they agree that the
 abstraction warms it a little in summer.
 
 **Not paired** means comparing simulations that used different parameter sets.
 The abstraction of simulation 3 minus the baseline of simulation 2 gives
-+0.36 °C. The other way round, it gives −0.28 °C. These numbers mostly show the
++0.13 °C. The other way round, it gives −0.04 °C, a cooling. These numbers mostly show the
 difference between two parameter sets, not the effect of the abstraction. This
 is what you would get by running the two scenarios separately, each with its
 own random parameter sets, and comparing their results.
@@ -54,7 +54,7 @@ after (not paired) mixes the effect with the differences between people.
 
 The last row of the results table shows the cost. There, `run.py` matches the
 simulations of the two runs at random, on purpose. The 90% range of the summer
-change becomes −0.32 to +0.43 °C, so you could not even tell whether the
+change becomes −0.30 to +0.39 °C, so you could not even tell whether the
 abstraction warms or cools the river. It is shown only to make the point:
 always pair.
 
@@ -119,11 +119,11 @@ diff = scenario.paired_difference_from_files(
 
 | | Median | 90% range |
 |---|---|---|
-| Average summer (Jun–Aug) change | +0.04 °C | +0.02 to +0.08 °C |
-| Average winter (Dec–Feb) change | −0.07 °C | −0.12 to −0.03 °C |
-| Largest warming on a single day | +0.33 °C | +0.27 to +0.39 °C |
-| Extra days per year above 18 °C | 1.0 | 0.0 to 2.0 |
-| *Summer change if the runs were not paired* | *+0.05 °C* | *−0.32 to +0.43 °C* |
+| Average summer (Jun–Aug) change | +0.05 °C | +0.02 to +0.08 °C |
+| Average winter (Dec–Feb) change | −0.06 °C | −0.11 to −0.02 °C |
+| Largest warming on a single day | +0.33 °C | +0.27 to +0.40 °C |
+| Extra days per year above 18 °C | 0.7 | 0.0 to 2.0 |
+| *Summer change if the runs were not paired* | *+0.05 °C* | *−0.30 to +0.39 °C* |
 
 ![Daily effect of the abstraction and the summer average](figures/abstraction_effect.png)
 
@@ -152,7 +152,7 @@ simulation's average summer change, paired (orange) and not paired (grey).*
   outside the range seen in calibration, the run reports every such day, with
   their number and the first date. The model is then extrapolating. Here the
   reduced flows stay inside the calibrated range.
-- **What it does not mean.** "+0.04 °C in summer" is the effect of this
+- **What it does not mean.** "+0.05 °C in summer" is the effect of this
   abstraction according to this model, on the weather of 2010–2012. It is not
   a measured effect, and it does not include the chance that the model's
   response to discharge is wrong (above).
