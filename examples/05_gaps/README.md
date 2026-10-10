@@ -143,7 +143,7 @@ For scale:
 
 - the model's typical error in those years is 0.78 °C;
 - calibrating the complete record again with other random seeds changes the
-  predictions by at most 0.004 °C.
+  predictions by at most 0.001 °C.
 
 (The error against the measurements is a blunter measure: it hardly moves for
 changes of a few hundredths of a degree.)
@@ -165,13 +165,15 @@ difference from a run without the restart:
 | Days after the restart | 0 | 1 | 2 | 3 | 4 | 5 |
 |---|---|---|---|---|---|---|
 | Restart from the measured water temperature | 0.49 °C | 0.15 °C | 0.05 °C | 0.02 °C | 0.01 °C | 0.00 °C |
-| Restart from the day-of-year average | 1.47 °C | 0.47 °C | 0.15 °C | 0.05 °C | 0.02 °C | 0.01 °C |
+| Restart from the day-of-year average | 1.47 °C | 0.46 °C | 0.15 °C | 0.05 °C | 0.02 °C | 0.01 °C |
+| Start at rest (a gap-tolerant `FORWARD` run) | 0.71 °C | 0.23 °C | 0.08 °C | 0.03 °C | 0.01 °C | 0.00 °C |
 
 *The mean difference from a run without the restart.*
 
 **Reading it.**
 
-- The Mentue forgets its restart within 3–4 days. The default warm-up,
+- The Mentue forgets its restart within 3–4 days, whichever way it starts. The
+  default warm-up,
   15 days, is about four times longer than this river needs.
 - The model's own equation gives this time: three "relaxation times", or 3/B
   days. B is how fast the water temperature returns to its balance
@@ -203,10 +205,10 @@ marks values off the scale.*
 
 | Gap | Gap-tolerant mode | Filled with a straight line | Filled with the seasonal average |
 |---|---|---|---|
-| a month | 0.01 °C (0.03) | 0.02 °C (0.03) | 0.01 °C (0.03) |
+| a month | 0.01 °C (0.03) | 0.02 °C (0.04) | 0.01 °C (0.03) |
 | a quarter | 0.02 °C (0.04) | 0.10 °C (0.12) | 0.06 °C (0.12) |
 | half a year | 0.03 °C (0.06) | 0.22 °C (0.49) | 0.07 °C (0.12) |
-| a year | 0.05 °C (0.07) | 1.14 °C (1.55) | 0.12 °C (0.16) |
+| a year | 0.05 °C (0.07) | 1.15 °C (1.55) | 0.12 °C (0.16) |
 
 *The change in the predictions for 2010–2012: the mean of the four placements,
 with the largest in brackets.*
@@ -249,8 +251,8 @@ off the scale.*
 | Measured days scored, warm-up 15 days (default) | 82% | 71% | 36% | 13% | 1% |
 | Measured days scored, warm-up 4 days | 94% | 91% | 76% | 57% | 27% |
 | Change in the predictions, warm-up 15 days | 0.04 °C | 0.07 °C | 0.09 °C | 0.24 °C | 5.2 °C (failed) |
-| Change in the predictions, warm-up 4 days | 0.02 °C | 0.03 °C | 0.03 °C | 0.06 °C | 0.15 °C |
-| Change in the predictions, filled with a straight line | 0.01 °C | 0.01 °C | 0.01 °C | 0.02 °C | 0.03 °C |
+| Change in the predictions, warm-up 4 days | 0.01 °C | 0.03 °C | 0.03 °C | 0.06 °C | 0.15 °C |
+| Change in the predictions, filled with a straight line | 0.01 °C | 0.01 °C | 0.01 °C | 0.01 °C | 0.03 °C |
 
 **Reading it.**
 
