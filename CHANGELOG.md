@@ -1,5 +1,27 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Optional conformal margins for prediction intervals.** Where the
+  cross-validation shows that intervals held less often than stated at a site,
+  they can now be widened by how far the held-out years' measurements fell
+  outside them (split conformal prediction, each held-out year weighted
+  equally; docs/METHODS.md §13). A cross-validation run writes
+  `cv_conformal_margins.csv` (margins for days, 7-day and 30-day means at each
+  level, with an out-of-sample check of each margin, `inside_after`). A FORWARD
+  run with `forward_options.conformal_margins` adds the widened daily interval
+  to its envelope file (`Twat_mod_lower_conformal`, `Twat_mod_upper_conformal`),
+  to `filled_water_temperature_forward.csv` and to its figure, and records the
+  margin in its `_meta.json`; it refuses a file made with another model version,
+  error model or ρ time scale. `scenario.conformal_margin`,
+  `scenario.conformal_range` and `scenario.widen_range` apply the margins to
+  7-day and 30-day means. Off unless set: results without it are unchanged.
+- **Validation V18: prediction intervals on 23 independent rivers.** On the
+  British Columbia rivers, which played no part in developing the error model,
+  V18_CHANGELOG
+- **Validation V19: conformal margins on 26 rivers.** V19_CHANGELOG
+
 ## [0.5.1] - 2026-10-09
 
 ### Added

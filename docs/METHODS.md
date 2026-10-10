@@ -519,8 +519,12 @@ LATHYP:
    simulations, the share of measured held-out days, and of 7-day moving means,
    inside the central 50%, 80%, 90% and 95% ranges and at `prediction_interval`.
    It shows whether intervals at the level you report held at your site.
+7. **Conformal margins** (`cv_conformal_margins.csv`). From the same
+   simulations, the margin that would have made each interval hold in the
+   held-out years, for days and 7-day and 30-day means, and how well it held
+   in each year when set from the other years only. Optional; see §13.
 
-Every range in items 5 and 6 is reported at `uncertainty_options.prediction_interval`
+Every range in items 5 to 7 is reported at `uncertainty_options.prediction_interval`
 (default 90%), and coverage at 50%, 80%, 90% and 95% as well.
 
 **What is hidden, and why.** A fold hides the held-out year's measured water
@@ -1129,6 +1133,67 @@ river-years. Version 5 predicted almost the same peak every year on the Rhône,
 where discharge drives summer temperature; the correction removes its bias, but
 not its inability to follow the years.
 
+**Widening the intervals to the misses of held-out years (optional conformal
+margins).** Where the cross-validation shows that the intervals held less often
+than stated at a site (`cv_interval_coverage.csv`, §11), they can be widened by
+how far the held-out years' measurements fell outside them. This is split
+conformal prediction (Vovk et al., 2005; Lei et al., 2018), in the form that
+adjusts an existing interval (conformalized quantile regression; Romano et al.,
+2019):
+
+1. A cross-validation of the calibration years (§11) writes
+   `cv_conformal_margins.csv`. From the simulations of item 6 of §11, each
+   measured held-out value y, with central L% range [lower, upper] in its
+   fold's simulations, gets the **score** s = max(lower − y, y − upper): how
+   far it lay outside the range (negative inside). The **margin** at level L is
+   the L% quantile of the scores, every held-out year carrying the same total
+   weight (each of its n values 1/n), so a year with more measured days does not
+   count more. Margins are given for days and for 7-day and 30-day moving means
+   (all days measured), at 50%, 80%, 90% and 95% and at `prediction_interval`.
+   With fewer than 3 held-out years no margins are written.
+2. The widened interval is [lower − margin, upper + margin], never below
+   `Tice_cover`. A negative margin narrows the interval (never past its
+   middle). A FORWARD run with `forward_options.conformal_margins` set to the
+   file adds the widened daily interval at `prediction_interval` to its
+   envelope file (`Twat_mod_lower_conformal`, `Twat_mod_upper_conformal`) next
+   to the unwidened one, and records the file, its SHA-256 and the margin in
+   its `_meta.json`. It refuses a file made with another model version, error
+   model (`noise_model`) or ρ time scale, or a run that overrides σ or ρ: a
+   margin measures the misses of one model and error model. A different
+   station name gives a note.
+3. For 7-day or 30-day means, apply the margin of the same window and level to
+   the range of the saved simulations' means: `scenario.conformal_range(means,
+   L, scenario.conformal_margin(path, L, window_days))` (for calendar months,
+   use the 30-day margin).
+
+The file's column `inside_after` checks the margin out of sample: each held-out
+year judged with a margin from the other years only. Quote it with the margin.
+
+*Why it is valid, and when it is not.* Split conformal intervals contain a new
+value with probability at least L if the calibration cases and the new case are
+exchangeable (Vovk et al., 2005). Daily values of one year are not, so the units
+here are whole years, and the misses of a predicted year are assumed to be like
+those of the held-out years. For dependent data whose behaviour does not change
+over time, the coverage of split conformal intervals approaches L as the
+calibration record grows, at a rate set by the dependence (Oliveira et al.,
+2024). It is not guaranteed for a short record: the margin from 5 years is
+uncertain, and the exact finite-sample version needs at least L/(1 − L) units
+(9 years for 90%, 19 for 95%), so it is not used. If the model's errors change
+over time (a changing catchment, a warmer climate), past misses do not describe
+future ones, as for every other method here. The margin is the same all year,
+so check coverage in the season of a limit (V19 reports summer). It comes from
+fold simulations without parameter uncertainty and is added to a FORWARD range
+that includes it, so it errs slightly wide. It does not apply to scenario
+differences (the error cancels there, below) or to yearly statistics, for which
+the bias correction above is the method: within one river, a 90% margin for a
+yearly value would need at least 9 held-out years.
+
+*What the validation shows* (V18, V19). On the 23 British Columbia rivers, which
+played no part in developing the error model, 90% intervals without margins
+held on 86.9% of days, 87.0% of 7-day means and 84.8% of 30-day means in
+2021–2022 (V18). With the margins they held on V19_BC_A (V19). In the held-out years: V19_BC_B.
+On the 3 Swiss rivers, where intervals already held, the margins gave V19_CH.
+
 **Comparing two scenarios** (for example observed versus naturalised flow): run
 FORWARD once per scenario from the same chain with `save_ensemble: true`, and
 for the second run set `forward_options.reuse_sample_indices_from` to the first
@@ -1256,7 +1321,11 @@ change one-sided.
   `noise_model: "ar1"` and must be computed from the saved simulations. Even
   then their intervals were somewhat narrow on real rivers (§12).
 - **Intervals for new years are slightly optimistic**: σ is estimated on the
-  calibration years, and errors are usually somewhat larger in other years.
+  calibration years, and errors are usually somewhat larger in other years. On
+  the British Columbia rivers 90% intervals held on about 87% of days and 85%
+  of 30-day means in later years (V18). Check coverage at your site by
+  cross-validation; where it is short, the conformal margins (§13) widen the
+  intervals by the held-out years' misses (V19).
 - **Choose the level knowing its record.** Any level can be set
   (`prediction_interval`, `parameter_interval`). On the Swiss rivers daily
   intervals held from 50% to 95%, but 99% daily intervals missed about twice
@@ -1296,7 +1365,10 @@ published errors of Toffolon and Piccolroaz (2015), computed with RK4, also
 reproduced, and their parameters returned by calibration with RK4 (V13); and
 prediction intervals on the hottest days (V14); and the simulations published
 by an independent group for 23 rivers in British Columbia, reproduced day by day
-(V15). V4, V5, V9, V10 and V14 do not pass all their criteria; the report says
+(V15); predictions from short records (V16); a comparison with regressions on
+air temperature (V17); prediction intervals on the British Columbia rivers,
+which played no part in developing the error model (V18); and the conformal
+margins on all 26 rivers (V19). V19_FAILLIST do not pass all their criteria; the report says
 where and why. V4 fails only because about 3% of its synthetic values are below
 0 °C, which no interval can contain since intervals are kept at or above
 `Tice_cover`; real water does not go below freezing, and V5, on real data, shows
@@ -1380,6 +1452,17 @@ These are deliberate; each is covered by tests.
 - Glahn, H. R. and Lowry, D. A. (1972). The use of model output statistics
   (MOS) in objective weather forecasting. *Journal of Applied Meteorology*, 11,
   1203–1211.
+- Vovk, V., Gammerman, A. and Shafer, G. (2005). *Algorithmic Learning in a
+  Random World*. Springer, New York.
+- Lei, J., G'Sell, M., Rinaldo, A., Tibshirani, R. J. and Wasserman, L. (2018).
+  Distribution-free predictive inference for regression. *Journal of the
+  American Statistical Association*, 113, 1094–1111.
+- Romano, Y., Patterson, E. and Candès, E. (2019). Conformalized quantile
+  regression. *Advances in Neural Information Processing Systems*, 32,
+  3543–3553.
+- Oliveira, R. I., Orenstein, P., Ramos, T. and Romano, J. V. (2024). Split
+  conformal prediction and non-exchangeable data. *Journal of Machine Learning
+  Research*, 25(225), 1–38.
 - Gneiting, T., Balabdaoui, F. and Raftery, A. E. (2007). Probabilistic
   forecasts, calibration and sharpness. *Journal of the Royal Statistical
   Society B*, 69, 243–268.

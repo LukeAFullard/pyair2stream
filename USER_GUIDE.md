@@ -541,7 +541,7 @@ After a calibration, look at these, in this order:
 | `sensitivity_*` | §11 |
 | `MCMC_*`, `parameter_significance_*`, `parameter_correlation_*` | §11 |
 | `Forward_Prediction_*`, `forward_projection.png` | §12 |
-| `cv_results.csv`, `cv_bias_by_month.*`, `cv_yearly_statistics*.csv`, `cv_interval_coverage.csv` | §13 |
+| `cv_results.csv`, `cv_bias_by_month.*`, `cv_yearly_statistics*.csv`, `cv_interval_coverage.csv`, `cv_conformal_margins.csv` | §13 |
 
 ### Reading the scores
 
@@ -610,6 +610,7 @@ After a calibration, look at these, in this order:
 | `Warning: the MCMC chain ... did NOT converge` | Do not use the intervals for a decision. Rerun `DE-MCMC` until it converges ([§11](#11-uncertainty-de-mcmc-and-sensitivity-analysis)). |
 | `enable_prediction_intervals is True but residual_sigma is 0.0/unavailable` | Point `mcmc_chain_path` at a chain that has its `_meta.json`, or set `residual_sigma`. |
 | `draws ... were excluded as numerically divergent` | Use `CRN` or `EXP`, or check the chain and the bounds ([§12](#12-scenario-runs-and-prediction-intervals)). |
+| `forward_options.conformal_margins: ... was made with ...` | The margins file comes from a cross-validation with another model version, error model or ρ time scale, or the run overrides σ or ρ. Make the file with the same settings as the calibration, and remove `residual_sigma` and `ar1_rho` ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `paired_difference_from_files: ... differs` | The two scenario runs did not use the same parameter sets ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `The MCMC chain ... was fitted with ...` | The FORWARD run's model version, integrator, `Qmedia`, `Tice_cover` or `min_theta_floor` differs from the chain's calibration. Use `paths.calibration_metadata` from that calibration ([§12](#12-scenario-runs-and-prediction-intervals)). |
 | `Warning: the output folder ... already holds ... file(s) from earlier runs` | Files with the same names, such as `summary.md`, are replaced. Give each run its own `output_dir` if you want to keep them ([§8](#8-understanding-the-output-files)). |
@@ -781,6 +782,7 @@ and a defensible result usually needs more than one.
 | What difference would a change in flow or climate make? | two paired `FORWARD` runs | §12 |
 | How well does the model predict years it was not fitted to? Do its ranges hold there? | cross-validation: held-out scores, `cv_interval_coverage.csv` | §13 |
 | Is the model biased on yearly peaks or counts, and by how much? | cross-validation's check of yearly statistics, then `scenario.correct_statistic` on the `FORWARD` results | §12, §13 |
+| My site's bands held less often than stated. Can they be widened? | cross-validation's `cv_conformal_margins.csv`, then `forward_options.conformal_margins` and `scenario.conformal_range` | §12, §13 |
 
 What none of them covers: errors in the input data, a river that changes
 (a new dam, a changed channel), and conditions far outside the calibration
@@ -931,6 +933,7 @@ forward_options:
   n_samples: 1000
   random_seed: 42             # default: the top-level random_seed
   residual_sigma: null        # default: taken from the chain's _meta.json
+  # conformal_margins: "output/check/cv_conformal_margins.csv"   # optional: widen the band (below)
 ```
 
 With prediction intervals, the run:
@@ -952,7 +955,9 @@ days inside the band. Method:
 **Outputs** (besides the usual files, named `forward_projection_*`):
 
 - `Forward_Prediction_Envelopes_*.csv`: the band for each day
-  (`Twat_mod_lower`, `Twat_mod_p50`, `Twat_mod_upper`);
+  (`Twat_mod_lower`, `Twat_mod_p50`, `Twat_mod_upper`; with
+  `conformal_margins`, also the widened band, `Twat_mod_lower_conformal` and
+  `Twat_mod_upper_conformal`);
 - `Forward_Prediction_Ensemble_*_meta.json`: the chain, the parameter sets
   drawn, σ, ρ, the error model and the coverage;
 - `Forward_Prediction_Ensemble_*.npz`: with `save_ensemble: true`, every
@@ -1025,6 +1030,41 @@ held-out years; with fewer than about 5, the check says little and the
 correction is wide. The correction is random (`seed=` makes it repeatable). Use
 the same threshold and season in the cross-validation and in
 `year_statistics`.
+
+**Widen the band where it held too rarely (optional).** If the
+cross-validation shows that your site's bands held less often than stated
+(`cv_interval_coverage.csv`, §13), they can be widened by how far the hidden
+years' measurements fell outside them. On 23 rivers in British Columbia, 90%
+bands held on only about 87% of days and 85% of 30-day means in later years
+([V18](validation/REPORT.md#v18)); with this margin they held on V19_BC_A_SHORT
+([V19](validation/REPORT.md#v19)). The method is split conformal prediction
+([docs/METHODS.md §13](docs/METHODS.md#13-forward-runs-and-scenario-comparisons)).
+
+1. Run a cross-validation of the calibration years (§13) with the same
+   `version`, `uncertainty_options` and `prediction_interval` as your
+   calibration. It writes `cv_conformal_margins.csv`.
+2. In the FORWARD run, set `forward_options.conformal_margins` to that file.
+   The envelope file then also has the widened daily band. The run stops if
+   the file was made with another model version, error model or ρ time
+   scale, or if the run sets `residual_sigma` or `ar1_rho`.
+3. For 7-day or 30-day means, widen their range with the margin made for them:
+
+```python
+from pyair2stream import scenario
+
+ens, dates = scenario.load_ensemble("output/prediction/Forward_Prediction_Ensemble_<...>.npz")
+weekly = scenario.aggregate(ens, dates, how="mean", freq="7D")          # one row per series
+margin = scenario.conformal_margin("output/check/cv_conformal_margins.csv", 90, window_days=7)
+lower, upper = scenario.conformal_range(weekly, 90, margin, floor=0.0)  # floor: your Tice_cover
+```
+
+The margin is the same in every season, so check the widened band in the
+season of your limit too. It needs years: from fewer than about 5 hidden years
+the margin is uncertain (the file needs at least 3). The column `inside_after`
+shows how often the widened band held in each hidden year when the margin came
+from the other years only; quote it with your result. It is not for yearly
+statistics (use `correct_statistic`, above) or for the difference between two
+scenarios (below).
 
 **Comparing two scenarios.** To get an uncertainty band for the *difference*
 (for example abstraction minus natural flow), both runs must use the same
@@ -1160,6 +1200,12 @@ A cross-validation run writes these files instead of the usual outputs:
 - **`cv_interval_coverage.csv`**: for the 50%, 80%, 90% and 95% bands and your
   `prediction_interval`, the share of hidden days and 7-day means that fell
   inside. Check the level you intend to report.
+- **`cv_conformal_margins.csv`**: for days, 7-day and 30-day means
+  (`window_days` 1, 7, 30) and each level, the margin in °C that widens the band
+  to the hidden years' coverage (`margin`), the share inside without it
+  (`inside_before`) and with a margin from the other hidden years only
+  (`inside_after`), and the settings it was made with. Used by
+  `forward_options.conformal_margins` (§12).
 
 Settings for the yearly statistics:
 
@@ -1226,6 +1272,8 @@ decision, check:
      Compute them from the saved simulations (§12).
    - For a yearly statistic (a peak, a count of days), check it by
      cross-validation and correct it (§12, §13).
+   - If the bands held too rarely in the cross-validation, widen them with
+     the conformal margins (§12), and report their check (`inside_after`).
    - Report probabilities with their ranges and the check, not as a yes or no.
 5. **Scope.** The model gives **daily means**. A limit on daily maxima, or on
    values within a day, needs a separate, justified step. Scenario inputs

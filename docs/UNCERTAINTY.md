@@ -63,6 +63,7 @@ trusted at your site comes from the second.
 | What range for a weekly or monthly mean, or a run of warm days? | the statistic computed in each simulated series | `save_ensemble: true`, then `scenario.aggregate`, `scenario.exceedance` | `MCMC_ensemble_*.npz`; `Forward_Prediction_Ensemble_*.npz` | 90% ranges for 7-day means: 87–93% (V5) | [7](#7-weekly-means-yearly-peaks-days-above-a-limit) |
 | How likely is it that a yearly limit was exceeded (highest daily mean, highest 7-day mean, days above a threshold)? | share of simulated series above the limit, **corrected** by cross-validation | `scenario.year_statistics`, then `scenario.correct_statistic` | the `.npz` above, and `cv_yearly_statistics.csv` | corrected 90% ranges: 85–94% of held-out years; uncorrected 73–92% (V11) | [7](#7-weekly-means-yearly-peaks-days-above-a-limit), [9](#9-correcting-yearly-statistics-for-the-models-bias) |
 | What difference would a change in flow or climate make? | paired difference of two scenario runs | two `FORWARD` runs, the second with `reuse_sample_indices_from`; `scenario.paired_difference_from_files` | the two `Forward_Prediction_Ensemble_*.npz` | equal to the exact effect (V8) | [10](#10-comparing-two-scenarios) |
+| My site's bands held too rarely. Can they be widened? | conformal margin, from the misses of held-out years | cross-validation, then `FORWARD` with `forward_options.conformal_margins`; `scenario.conformal_range` | `cv_conformal_margins.csv`; columns `*_conformal` of `Forward_Prediction_Envelopes_*.csv` | V19_TABLE | [6](#widening-a-band-that-held-too-rarely-optional) |
 | Did the ranges hold at my site? | cross-validation check | `cross_validation: enabled: true`, `run_mode: "DE"` | `cv_interval_coverage.csv`, `cv_yearly_statistics_summary.csv` | this is the test | [8](#8-testing-on-years-the-model-has-not-seen-cross-validation) |
 | How precisely do the data fix the model's parameters? | MCMC parameter intervals; jackknife intervals | `DE-MCMC`; cross-validation | `parameter_significance_*.csv`; rows `jackknife_*` of `cv_results.csv` | 90% intervals contained the true values 92–97% (MCMC) and 81–95% (jackknife) of the time (V4) | [11](#11-how-well-are-the-parameters-known) |
 | Is the model too warm or too cool in some season? | mean error by month and season | every run with measurements; cross-validation | `bias_by_month_*.csv`; `cv_bias_by_month.csv` | | [12](#12-mean-error-by-month-and-season) |
@@ -655,6 +656,71 @@ than stated. At 99% they miss about twice as many days as stated. On the
 hottest days, where limits are breached, version 8's bands held as stated;
 version 5's did not, because it predicted its hottest days about 0.5 °C too
 warm ([V14](../validation/REPORT.md#v14)).
+
+### Widening a band that held too rarely (optional)
+
+**What it is.** If the cross-validation shows that your site's bands held less
+often than stated (for example, 90% bands held on 85% of hidden days), both
+edges can be moved out by a **margin**: the amount that would have made them
+hold in the hidden years. On 23 rivers in British Columbia, 90% bands held on
+about 87% of days and 85% of 30-day means in later years
+([V18](../validation/REPORT.md#v18)), because the model's errors in new years
+were larger than in the calibration years.
+
+**How it is made.** In the cross-validation (section
+[8](#8-testing-on-years-the-model-has-not-seen-cross-validation)):
+
+1. For every measured day of a hidden year, record how far the measurement fell
+   outside its band (negative if inside).
+2. The margin of a 90% band is the distance that 90% of these are below, each
+   hidden year counting equally, however many days it has.
+3. The widened band runs from the lower edge minus the margin to the upper edge
+   plus the margin, never below `Tice_cover`. A negative margin (the band held
+   too often) narrows it.
+
+7-day and 30-day means get their own margins, made the same way from their own
+misses.
+
+**How to run it.** The cross-validation writes `cv_conformal_margins.csv`. In
+the `FORWARD` run, set `forward_options.conformal_margins` to that file: the
+band file then also has the widened band (`Twat_mod_lower_conformal`,
+`Twat_mod_upper_conformal`). For 7-day or 30-day means, use
+`scenario.conformal_range` with `scenario.conformal_margin(file, level,
+window_days)` ([USER_GUIDE §12](../USER_GUIDE.md#12-scenario-runs-and-prediction-intervals)).
+The run stops if the file was made with another model version or error model.
+
+**How to read it.** The column `inside_after` gives how often the widened band
+held in each hidden year when its margin came from the other years only: the
+test of the margin at your site. Quote it with the result.
+
+**What the validation shows** ([V19](../validation/REPORT.md#v19); 90% bands,
+share inside without and with the margin):
+
+V19_UNC_TABLE
+
+**Limits.**
+
+- It assumes the model's misses in the years predicted are like those in the
+  hidden years. If the river or its climate changes, they may not be.
+- The margin is the same in every season. Check the widened band in the season
+  of your limit.
+- It needs years: from fewer than about 5 hidden years the margin is uncertain
+  (the file needs at least 3).
+- It errs slightly wide: the margin comes from simulations without parameter
+  uncertainty and is added to a band that has it.
+- It is not for yearly statistics (use the correction of section
+  [9](#9-correcting-yearly-statistics-for-the-models-bias)) or for the
+  difference between two scenarios (section [10](#10-comparing-two-scenarios)).
+
+**What it rests on.** This is split conformal prediction (Vovk et al., 2005; Lei
+et al., 2018), in the form that adjusts an existing interval (conformalized
+quantile regression; Romano et al., 2019). It makes no assumption about the
+shape of the errors. Its guarantee assumes the hidden cases and the new one are
+alike in distribution; daily values of one year are not, so here the units are
+whole years. For errors that depend on each other but behave alike over time,
+its coverage approaches the stated level as the record grows (Oliveira et al.,
+2024); for a short record it is approximate, which is why its check at your site
+(`inside_after`) and V19 matter.
 
 ### What it rests on
 
@@ -1276,7 +1342,7 @@ large errors, which are the hardest to describe.
 the share of all 1,000 series above the limit; the level only decides which
 range you quote beside it.
 
-### The record on the Swiss rivers
+### The record on the real rivers
 
 | Share inside the range | 50% | 80% | 90% | 95% | 99% |
 |---|---|---|---|---|---|
@@ -1284,6 +1350,8 @@ range you quote beside it.
 | days, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.5% | 98.0–98.2% |
 | 7-day means, held-out years (V11) | 53–59% | 84–87% | 93–94% | 96% | 98.5–99.1% |
 | days, later validation years (V5) | 42–52% | 75–80% | 85–90% | 91–95% | 95–99.5% |
+| days, British Columbia, later years 2021–2022 (V18) | V18_ROW |
+| the same, with conformal margins (V19) | V19_ROW |
 | yearly statistics, corrected (V11) | 50–69% | 77–85% | 85–94% | 92–100% | 100% |
 
 \* Below the level only because about 3% of V4's synthetic values are below
@@ -1302,7 +1370,9 @@ one).*
   statistics.
 - **95%** holds for days and 7-day means over many years, and for corrected
   yearly statistics. In years unlike the calibration years it can be somewhat
-  narrow (91–95% in V5). Check it at your site (`cv_interval_coverage.csv`).
+  narrow (91–95% in V5; V18_95 on the British Columbia rivers, V18). Check it
+  at your site (`cv_interval_coverage.csv`); if it held too rarely, widen it
+  (section [6](#widening-a-band-that-held-too-rarely-optional)).
 - **99%** daily intervals missed about twice as many days as stated (98.0–98.2%
   held), because real errors have heavier tails than the normal distribution.
   Do not quote a 99% daily interval without showing its coverage at your site.
@@ -1344,7 +1414,7 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 
 | Question | pyair2stream's answer |
 |---|---|
-| Is the method tested? | The [validation suite](../validation/REPORT.md) runs 17 checks with stated pass criteria, through the same code a user runs: identical results to the original Fortran, reproduction of the published results, recovery of known truths, coverage of intervals at several levels, and performance on real rivers in Switzerland and British Columbia. Failures are reported, not hidden: the report marks each check PASS or FAIL, and says which criterion was missed. |
+| Is the method tested? | The [validation suite](../validation/REPORT.md) runs 19 checks with stated pass criteria, through the same code a user runs: identical results to the original Fortran, reproduction of the published results, recovery of known truths, coverage of intervals at several levels, and performance on real rivers in Switzerland and British Columbia. Failures are reported, not hidden: the report marks each check PASS or FAIL, and says which criterion was missed. |
 | Is its error rate known? | Yes, as coverage at each level (section [13](#13-choosing-the-level-90-95-or-99)), on synthetic data and real rivers, and at your own site through cross-validation. |
 | Does it rest on published methods? | Each component does (table below). The combination, and three approximations, are pyair2stream's own and documented as such. |
 | Can the result be reproduced? | With `random_seed`, every run gives identical results. Each run records its settings (`calibration_metadata.json`, `_meta.json` with σ, ρ, the chain's content hash and the parameter sets used), and a FORWARD run refuses a chain fitted with another model version, integrator, `Qmedia`, `Tice_cover` or `min_theta_floor`. |
@@ -1361,6 +1431,7 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 | Cross-validation and the PIT | Stone (1974); Klemeš (1986); Hastie et al. (2009); Coron et al. (2012); Dawid (1984); Gneiting et al. (2007) | | V11, V12 |
 | Correction of yearly statistics | Glahn and Lowry (1972); Gneiting et al. (2005) | the shift with its uncertainty, from held-out years | V9 C, V11 |
 | Paired scenarios | common random numbers (Law, 2015) | | V8 |
+| Conformal margins (optional) | Vovk et al. (2005); Lei et al. (2018); Romano et al. (2019); Oliveira et al. (2024) | whole years as the units | V19 |
 
 ### What to state as limitations
 
@@ -1371,14 +1442,16 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
   Swiss rivers; at 99% daily intervals were too narrow.
 - Uncertainty is estimated from the calibration years and assumes the river
   behaves alike in the years predicted. In years unlike them, intervals were
-  somewhat narrower than stated.
+  somewhat narrower than stated: on 23 British Columbia rivers, 90% intervals
+  held on about 87% of days in later years (V18). The conformal margins correct
+  this from the misses of held-out years (V19), on the same assumption.
 - Yearly statistics need the cross-validation correction; the highest daily
   mean remains the least reliable.
 - The weekly ρ, the effective-sample-size likelihood and the correction of
   yearly statistics are validated approximations, not methods published under
   those names.
-- The evidence comes from three Swiss rivers. Your river may differ: that is
-  what the check at your site is for.
+- The evidence comes from 3 Swiss and 23 British Columbia rivers. Your river
+  may differ: that is what the check at your site is for.
 
 ### How to word a result
 
@@ -1398,7 +1471,9 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 3. Multi-day and yearly quantities were computed in each simulated series.
 4. Yearly statistics were checked by cross-validation and corrected, with the
    same definition, threshold and season as the question.
-5. The coverage at the level you report was checked at your site.
+5. The coverage at the level you report was checked at your site, and, if it
+   held too rarely, the band was widened with the conformal margins and their
+   check (`inside_after`) reported.
 6. The mean error by month shows no unexplained bias in the season of the limit.
 7. The config, input files, commit, `pip freeze` and output folder are kept.
 
@@ -1513,10 +1588,16 @@ ranges.
   of continuous hydrological variables. *Hydrology and Earth System Sciences*,
   11, 1267–1277.
 - Law, A. M. (2015). *Simulation Modeling and Analysis*, 5th edn. McGraw-Hill.
+- Lei, J., G'Sell, M., Rinaldo, A., Tibshirani, R. J. and Wasserman, L. (2018).
+  Distribution-free predictive inference for regression. *Journal of the
+  American Statistical Association*, 113, 1094–1111.
 - McInerney, D., Thyer, M., Kavetski, D., Laugesen, R., Tuteja, N. and Kuczera,
   G. (2020). Multi-temporal hydrological residual error modeling for seamless
   subseasonal streamflow forecasting. *Water Resources Research*, 56,
   e2019WR026979.
+- Oliveira, R. I., Orenstein, P., Ramos, T. and Romano, J. V. (2024). Split
+  conformal prediction and non-exchangeable data. *Journal of Machine Learning
+  Research*, 25(225), 1–38.
 - Pauli, F., Racugno, W. and Ventura, L. (2011). Bayesian composite marginal
   likelihoods. *Statistica Sinica*, 21, 149–164.
 - Piccolroaz, S., Calamita, E., Majone, B., Gallice, A., Siviglia, A. and
@@ -1533,6 +1614,9 @@ ranges.
 - Ribatet, M., Cooley, D. and Davison, A. C. (2012). Bayesian inference from
   composite likelihoods, with an application to spatial extremes. *Statistica
   Sinica*, 22, 813–845.
+- Romano, Y., Patterson, E. and Candès, E. (2019). Conformalized quantile
+  regression. *Advances in Neural Information Processing Systems*, 32,
+  3543–3553.
 - Schoups, G. and Vrugt, J. A. (2010). A formal likelihood function for
   parameter and predictive inference of hydrologic models with correlated,
   heteroscedastic, and non-Gaussian errors. *Water Resources Research*, 46,
@@ -1550,6 +1634,8 @@ ranges.
   Research Letters*, 10, 114011.
 - US EPA (2009). *Guidance on the Development, Evaluation, and Application of
   Environmental Models*. EPA/100/K-09/003. US Environmental Protection Agency.
+- Vovk, V., Gammerman, A. and Shafer, G. (2005). *Algorithmic Learning in a
+  Random World*. Springer, New York.
 - Vrugt, J. A., ter Braak, C. J. F., Diks, C. G. H., Robinson, B. A., Hyman, J. M.
   and Higdon, D. (2009). Accelerating Markov chain Monte Carlo simulation by
   differential evolution with self-adaptive randomized subspace sampling.
