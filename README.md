@@ -288,7 +288,9 @@ A [validation suite](validation/README.md) tests this. Its results are in
   to ranges above 90%. The report gives the details. Check your own results on
   years not used for fitting ([User Guide §14](USER_GUIDE.md#14-checklist-for-results-that-support-a-decision)).
 
-To run the tests and the validation suite (V1 needs `gfortran`):
+To run the tests and the validation suite (the Fortran comparison tests and V1
+need `gfortran` and the submodule; without them those tests fail rather than
+skip, so a passing run always means the Fortran comparison ran):
 
 ```bash
 git submodule update --init --recursive

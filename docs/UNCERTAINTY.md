@@ -345,7 +345,7 @@ Reading it:
 - For a single 7-day mean, the daily ρ is about right in the calibration
   years. The weekly ρ makes it 9–17% too wide, which is cautious.
 - Beyond two weeks, the daily ρ is too narrow, by about a third at 60–90 days.
-  The weekly ρ stays within about 10–15% of the real errors up to three months.
+  The weekly ρ stays within 17% of the real errors up to three months (0.91–1.17).
 - Yearly peaks, counts of warm days and probabilities that a limit was exceeded
   depend on how errors hang together over a season. So they need the slow part
   too.
@@ -1127,7 +1127,8 @@ will not settle usually means the data cannot pin down all the parameters.
 `parameter_significance_*.csv` gives each parameter's mean, standard deviation
 and central interval at `uncertainty_options.parameter_interval` (default 90%),
 and whether zero lies outside its central 95% (`Significantly_Diff_From_Zero`:
-a test at the usual 5% level whatever the interval's level; meaningful only
+zero is outside the central 95% credible interval, the Bayesian counterpart of
+a 5%-level test, whatever the interval's level; meaningful only
 for parameters where zero means "no effect": `a2`, `a4`, `a5`, `a6`, `a8`).
 `parameter_correlation_*.png` shows how the parameters move together, and
 `MCMC_chain_*.csv` holds every parameter set collected.

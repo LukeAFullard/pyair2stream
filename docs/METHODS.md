@@ -362,7 +362,7 @@ values). The search maximises the objective function (§7).
 - **`PSO`** — Particle Swarm Optimisation as in the Fortran: `n_particles`
   particles, `n_run` iterations, inertia decreasing linearly from `wmax` to
   `wmin`, attraction weights `c1`, `c2`. A particle that reaches a bound stops
-  there. The search stops early once 90% of particles have converged on the best
+  there and is not scored in that iteration (as in the Fortran). The search stops early once 90% of particles have converged on the best
   position.
 - **`LATHYP`** — `n_run` Latin-hypercube samples of the bounds; the best is kept.
   This explores the parameter space rather than optimising it.
@@ -506,8 +506,9 @@ LATHYP:
    predicted percentiles, the share of series below the measured value (the
    probability integral transform, PIT, which is uniform between 0 and 1 if the
    predictions are right; Gneiting et al., 2007) and the **deviation**: measured
-   minus predicted median. The summary gives the share of years inside the 50%
-   and 90% ranges, the shares expected by chance (95% binomial range), and the
+   minus predicted median. The summary gives the share of years inside the central
+   50%, 80%, 90% and 95% ranges and the range at `prediction_interval`, the
+   shares expected by chance (95% binomial range), and the
    mean deviation with its 95% confidence interval. Parameter uncertainty is not
    included (each fold has one parameter set), so these ranges are slightly
    narrower than a FORWARD run's (§13). Set `threshold` and `season_months` to
@@ -784,8 +785,9 @@ and median), `MCMC_ensemble_*.npz` (every simulated series, with
 `save_ensemble: true`), and the
 parameter summary `parameter_significance_*.csv` (posterior mean, standard
 deviation, central credible interval at `parameter_interval`, default 90%, and
-whether zero lies outside the central 95%: a test at the usual 5% level,
-whatever the interval's level).
+whether zero lies outside the central 95% credible interval, whatever the
+interval's level). This is the Bayesian counterpart of a test at the 5% level,
+not a p-value: it says 95% of the posterior lies on one side of zero.
 Excluding zero only means something for parameters where zero means "no
 effect" (`a2`, `a4`, `a5`, `a6`, `a8`). It says nothing about `a1`, `a3` or the
 seasonal timing `a7`.
@@ -899,7 +901,7 @@ divided by that of the real errors (six cases: three rivers, versions 5 and
 | 7 | 0.94–0.98 | 1.00 | 1.09–1.17 | 1.09–1.26 |
 | 14 | 0.84–0.90 | 0.90–0.94 | 1.08–1.17 | 1.09–1.38 |
 | 30 | 0.70–0.77 | 0.75–0.81 | 1.02–1.11 | 1.07–1.46 |
-| 60 | 0.60–0.68 | 0.65–0.73 | 0.94–1.07 | 1.07–1.46 |
+| 60 | 0.61–0.68 | 0.65–0.73 | 0.94–1.07 | 1.07–1.46 |
 | 90 | 0.58–0.70 | 0.62–0.76 | 0.91–1.15 | 1.16–1.42 |
 
 In variance terms, ρ₁ understates the variance of 30–90-day mean errors by a
@@ -1138,7 +1140,10 @@ difference draw by draw, which gives an uncertainty band for the
 fixed by the chain's content and the draw's row in it, so both runs add the same
 error to the same draw on the same day and it cancels in the difference: the
 band is the parameter uncertainty of the effect. This assumes the model's error
-on a given day would be the same under both scenarios. In gap-tolerant mode each
+on a given day would be the same under both scenarios. The cancellation is not
+exact on days when a member is raised to the ice floor `Tice_cover` in one run
+but not the other (near-freezing water); there the difference is smaller than
+the simulated effect. In gap-tolerant mode each
 run starts a segment at the equilibrium temperature A/B of its own first day's
 conditions (§10), so the two runs start it at different temperatures: on a
 segment's first day the difference is the equilibrium (steady-state) response

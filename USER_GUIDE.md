@@ -891,8 +891,8 @@ ranges: such combinations do not fit the data.
 - `MCMC_ensemble_*.npz`: with `save_ensemble: true`, every simulated series of
   the calibration period;
 - `parameter_significance_*.csv`: each parameter's mean, standard deviation
-  and range at `parameter_interval`, and whether it differs from zero (at the
-  5% level);
+  and range at `parameter_interval`, and whether zero lies outside its central 95% credible
+  interval (the Bayesian counterpart of a 5%-level test);
 - `parameter_correlation_*.png`: how the parameters move together.
 
 The band in `MCMC_envelopes_*.csv` covers the calibration years. For other
@@ -1049,6 +1049,8 @@ sets, the same error settings (σ, ρ and error model) and the same dates. Each 
 also gets the same random error in both runs, so the error cancels. What is
 left is the uncertainty of the effect itself, from the parameters. This
 assumes the model's error on a given day would be the same in both scenarios.
+On days near freezing, where a member is held at `Tice_cover` in one run only,
+the error does not cancel fully.
 [Example 04](examples/04_scenario/README.md) works through a flow abstraction.
 
 **Plots.** The `pyair2stream.plots` module draws the usual figures from these

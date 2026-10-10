@@ -357,7 +357,9 @@ def paired_difference(ens_a: np.ndarray, ens_b: np.ndarray) -> np.ndarray:
     The residual noise added to each draw is fixed by the draw's chain row, so the
     same draw carries the same noise in both runs and it cancels here: the spread of
     the difference is the parameter uncertainty of the effect. This assumes the
-    model's error on a given day would be the same under both scenarios.
+    model's error on a given day would be the same under both scenarios. On days a
+    member is held at the ice floor (`Tice_cover`) in one run only, the noise does
+    not cancel exactly.
 
     This only checks `.shape` -- it has no way to detect two ensembles that happen
     to have the same shape but were drawn from different (or differently-ordered,

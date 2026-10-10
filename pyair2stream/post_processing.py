@@ -174,8 +174,8 @@ def parameter_summary(chain_df: pd.DataFrame, level: float = 90.0) -> pd.DataFra
     """
     Posterior mean, SD and central `level`% credible interval of each parameter in a
     DE-MCMC chain (`uncertainty_options.parameter_interval`). 'Significantly_Diff_From_Zero'
-    is a test at the conventional 5% level, whatever `level` is: zero lies outside the
-    central 95% of the chain.
+    is True when zero lies outside the central 95% credible interval of the chain, whatever
+    `level` is: the Bayesian counterpart of a 5%-level test, not a p-value.
     """
     rows = []
     for col in chain_df.columns:

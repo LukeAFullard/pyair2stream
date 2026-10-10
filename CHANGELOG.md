@@ -258,6 +258,8 @@
   `RunResult.messages`.
 
 ### Removed
+- Six Python wheel files committed to the repository root by mistake (about
+  29 MB); `*.whl` is now ignored.
 - ⚠ **`calendar: "360_day"`.** It never worked: a file with genuine 360-day
   dates (30 February) was refused when its dates were read, and relabelling
   the rows with ordinary dates put months and years out of step with the
@@ -267,6 +269,17 @@
   to the standard calendar first; USER_GUIDE §5 shows how with xarray.
 
 ### Documentation
+- "Differs from zero" (`Significantly_Diff_From_Zero`) is described as what it
+  is: zero lies outside the central 95% credible interval, the Bayesian
+  counterpart of a 5%-level test, not a p-value.
+- Paired scenario differences: the random error does not cancel exactly on days
+  a series is held at `Tice_cover` in one run only (METHODS §13, User Guide §12).
+- METHODS §11: the yearly-statistics summary reports the 50%, 80%, 90% and 95%
+  ranges and `prediction_interval`, not only 50% and 90%. METHODS §8: a PSO
+  particle at a bound is not scored in that iteration.
+- Corrected the 60-day row of the ρ table in METHODS §12 (0.61–0.68) and the
+  weekly-ρ summary in UNCERTAINTY §5 (within 17%, not 10–15%).
+- README: the Fortran comparison tests need `gfortran` and the submodule.
 - Validation suite rerun on 0.5.1: 12 of 17 checks pass (V4, V5, V9, V10 and
   V14 do not). README, USER_GUIDE, METHODS, UNCERTAINTY, PUBLISHED_RESULTS and
   validation/README quote the new numbers.
