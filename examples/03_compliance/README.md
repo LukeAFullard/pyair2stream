@@ -116,7 +116,10 @@ The uncorrected 90% ranges held in only 6 of the 8 years, for both. The number
 of days above 18 °C was not biased (−0.3 days, 95% interval −5.5 to +5.0). So on this river, the model (fitted to the whole
 year) puts the summer peaks too high.
 
-**The answer.**
+**The answer.** *Uncorrected* means read straight from the 1,000 simulations.
+*Corrected* means after each simulated value was shifted by the model's average
+error found by the check above (−0.65 °C for the highest 7-day mean), with a
+random allowance for the uncertainty of that average.
 
 | Year | P(7-day mean > 20 °C), corrected | uncorrected | Highest 7-day mean, 90% range, corrected | Measured | Days above 18 °C, corrected: median (90% range) | Measured |
 |---|---|---|---|---|---|---|

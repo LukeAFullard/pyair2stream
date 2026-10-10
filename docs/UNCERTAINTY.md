@@ -132,6 +132,7 @@ example by running several input scenarios.
 | **Coverage** | the share of measured values that actually fell inside the interval. For a trustworthy 90% interval it is close to 90%. |
 | **Probability of exceedance** | the share of simulated series in which a statistic (say the year's highest 7-day mean) is above the limit. |
 | **Held-out year** | a year whose measurements were hidden from the calibration, so the model can be tested on it. |
+| **Uncorrected**, **corrected** | for a yearly statistic (a peak, a count of warm days): *uncorrected* is the range or probability read straight from the simulated series; *corrected* is the same after every simulated value has been shifted by the model's average error in that statistic in the years cross-validation held out (measured minus predicted), with an allowance for the uncertainty of that average (section [9](#9-correcting-yearly-statistics-for-the-models-bias)). |
 | **PIT** | where a measured value falls among the simulations: 0.3 means 30% of the simulations were below it (section [8](#8-testing-on-years-the-model-has-not-seen-cross-validation)). |
 | **Jackknife** | a way to turn the spread of the parameters fitted in the cross-validation folds into an interval, allowing for the data the folds share (section [11](#11-how-well-are-the-parameters-known)). |
 

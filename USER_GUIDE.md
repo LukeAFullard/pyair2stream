@@ -1007,6 +1007,17 @@ dev = check[check.statistic == "highest 7-day mean"].deviation   # measured minu
 p_exceeded = (scenario.correct_statistic(peak, dev) > 20).mean() # share of series above a 20 °C limit
 ```
 
+**What the correction does.** The cross-validation predicts each calibration
+year with that year hidden, and records the *deviation*: the measured statistic
+minus the median of its simulations. `correct_statistic` adds the mean of those
+deviations to every simulated value of the statistic (on the Mentue, −0.65 °C
+for the highest 7-day mean: the model was 0.65 °C too warm), plus a random
+amount for the uncertainty of that mean, larger with fewer years. *Uncorrected*
+means the values straight from the simulations; *corrected* means after this
+shift. The correction assumes the model's average error in the statistic is the
+same in the years predicted as in the years held out
+([docs/UNCERTAINTY.md §9](docs/UNCERTAINTY.md#9-correcting-yearly-statistics-for-the-models-bias)).
+
 With the correction, the 90% ranges held in 85–94% of years (V11). Report the
 corrected probability together with the check's summary
 (`cv_yearly_statistics_summary.csv`). `correct_statistic` needs at least 3

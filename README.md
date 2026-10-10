@@ -239,8 +239,11 @@ A [validation suite](validation/README.md) tests this. Its results are in
   fitting, 90% ranges held on 85–90% of days. So they are slightly too narrow
   for new years ([V5](validation/REPORT.md#v5)).
 - **Probabilities need the check.** The model can be too warm on the hottest
-  days. So uncorrected ranges for yearly peaks held in only 73–92% of years.
-  The cross-validation check and correction brought this to 85–94%
+  days. So ranges for yearly peaks read straight from the simulations
+  (uncorrected) held in only 73–92% of years. The correction shifts every
+  simulated peak by the model's average error in that statistic in years it
+  was not fitted to, measured by cross-validation, with an allowance for the
+  uncertainty of that average. Corrected ranges held in 85–94% of years
   ([V11](validation/REPORT.md#v11)).
 - **Warmer and lower-flow years.** Fitted on the coolest years, the model
   predicted the warmest years almost as well: at most 0.07 °C worse. The same
