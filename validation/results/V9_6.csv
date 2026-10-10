@@ -1,7 +1,7 @@
 version,statistic,river-years,inside 50% range,"inside 50% range, corrected",inside 90% range,"inside 90% range, corrected",Brier skill score,"Brier skill score, corrected"
-5,highest daily mean,15,53%,60%,87%,87%,-0.0,0.11
-5,highest 7-day mean,15,20%,73%,80%,93%,-0.01,0.23
-5,days above threshold,15,60%,60%,87%,93%,0.28,0.14
-8,highest daily mean,15,47%,47%,80%,73%,0.08,0.35
-8,highest 7-day mean,15,40%,53%,93%,93%,0.43,0.47
-8,days above threshold,15,53%,60%,87%,93%,0.39,0.5
+5,highest daily mean,15,53%,60%,87%,80%,-0.01,0.11
+5,highest 7-day mean,15,20%,73%,80%,93%,-0.03,0.23
+5,days above threshold,15,60%,60%,87%,93%,0.28,0.15
+8,highest daily mean,15,33%,47%,80%,73%,0.09,0.34
+8,highest 7-day mean,15,40%,53%,93%,93%,0.42,0.47
+8,days above threshold,15,47%,53%,87%,93%,0.4,0.51

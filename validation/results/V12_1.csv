@@ -1,7 +1,7 @@
 variant,compared with,years,RMSE (°C),"RMSE of reference, same years",largest change in a year's RMSE,days inside 90%,"reference, same years",7-day means inside 90%,highest daily mean: inside 90% range,highest daily mean: mean error,highest 7-day mean: inside 90% range,highest 7-day mean: mean error,days above threshold: inside 90% range,days above threshold: mean error
-A: default: the year's water temperatures hidden,A,96,0.764,0.764,0.0,90.1%,90.1%,93.3%,80% (A 80%),-0.12 (A -0.12) °C,79% (A 79%),-0.34 (A -0.34) °C,85% (A 85%),-3.79 (A -3.79) days
-"A2: default, another optimizer seed",A,96,0.764,0.764,0.007,90.1%,90.1%,93.3%,80% (A 80%),-0.12 (A -0.12) °C,80% (A 79%),-0.34 (A -0.34) °C,85% (A 85%),-3.80 (A -3.79) days
-"B0: gap-tolerant mode, nothing else hidden",A,96,0.764,0.764,0.004,90.1%,90.1%,93.3%,80% (A 80%),-0.12 (A -0.12) °C,79% (A 79%),-0.34 (A -0.34) °C,85% (A 85%),-3.77 (A -3.79) days
-B: inputs also hidden during calibration,B0,96,0.764,0.764,0.007,90.1%,90.1%,93.3%,80% (B0 80%),-0.12 (B0 -0.12) °C,79% (B0 79%),-0.34 (B0 -0.34) °C,85% (B0 85%),-3.77 (B0 -3.77) days
-D: 60-day buffer around the year,A,96,0.765,0.764,0.008,90.1%,90.1%,93.2%,80% (A 80%),-0.12 (A -0.12) °C,80% (A 79%),-0.34 (A -0.34) °C,85% (A 85%),-3.83 (A -3.79) days
-C: forward only: calibrated on earlier years,A,78,0.787,0.785,0.062,87.1%,89.6%,90.6%,73% (A 79%),+0.04 (A -0.06) °C,82% (A 78%),-0.24 (A -0.33) °C,82% (A 83%),-1.72 (A -3.90) days
+A: default: the year's water temperatures hidden,A,96,0.764,0.764,0.0,90.1%,90.1%,93.3%,80% (A 80%),-0.12 (A -0.12) °C,79% (A 79%),-0.34 (A -0.34) °C,85% (A 85%),-3.80 (A -3.80) days
+"A2: default, another optimizer seed",A,96,0.764,0.764,0.008,90.1%,90.1%,93.3%,80% (A 80%),-0.12 (A -0.12) °C,79% (A 79%),-0.34 (A -0.34) °C,85% (A 85%),-3.81 (A -3.80) days
+"B0: gap-tolerant mode, nothing else hidden",A,96,0.764,0.764,0.005,90.1%,90.1%,93.3%,80% (A 80%),-0.12 (A -0.12) °C,79% (A 79%),-0.34 (A -0.34) °C,85% (A 85%),-3.80 (A -3.80) days
+B: inputs also hidden during calibration,B0,96,0.764,0.764,0.005,90.1%,90.1%,93.3%,80% (B0 80%),-0.12 (B0 -0.12) °C,79% (B0 79%),-0.34 (B0 -0.34) °C,85% (B0 85%),-3.79 (B0 -3.80) days
+D: 60-day buffer around the year,A,96,0.765,0.764,0.008,90.1%,90.1%,93.2%,80% (A 80%),-0.12 (A -0.12) °C,80% (A 79%),-0.34 (A -0.34) °C,85% (A 85%),-3.79 (A -3.80) days
+C: forward only: calibrated on earlier years,A,78,0.787,0.785,0.059,87.1%,89.6%,90.6%,73% (A 79%),+0.04 (A -0.06) °C,82% (A 78%),-0.24 (A -0.33) °C,82% (A 83%),-1.71 (A -3.91) days
