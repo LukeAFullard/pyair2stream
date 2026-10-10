@@ -299,7 +299,7 @@ Weekly or monthly means cannot see what happens from one day to the next. A
 parameter set whose daily simulation zigzags (in air2stream, a negative
 relaxation rate a3 makes the simulation swing between the 0 °C floor and high
 values) can then score as well as the true one. With the authors' bounds,
-which allow a negative a2 and a3, 9 of 30 weekly-scored calibrations of version
+which allow a negative a2 and a3, 8 of 30 weekly-scored calibrations of version
 5 on synthetic data ended on such a set: daily errors of about 11 °C, weekly
 means that fit (validation V4, case J). Physically, water warms with the air
 and relaxes towards equilibrium, so a2 and a3 should be at least 0; with those
@@ -539,8 +539,8 @@ its inputs, which shape only the first days to weeks of the next year.
 
 Validation V12 tested the alternatives on 96 held-out river-years. Hiding the
 inputs during calibration too (in gap-tolerant mode, where the year then becomes
-a gap) changed no year's RMSE by more than 0.007 °C against the same mode with
-the inputs kept (another optimizer seed alone: 0.007 °C), and a 60-day
+a gap) changed no year's RMSE by more than 0.005 °C against the same mode with
+the inputs kept (another optimizer seed alone: 0.008 °C), and a 60-day
 buffer of unused days on each side of the year (h-block cross-validation;
 Burman et al., 1994) by no more than 0.008 °C; neither changed the coverage of
 the 90% interval or the mean error of the yearly statistics measurably.
@@ -565,7 +565,7 @@ the 90% interval or the mean error of the yearly statistics measurably.
 Large variation of the parameters between folds means they are poorly determined
 by the data (equifinality). The spread between folds (`std`) is not a confidence
 interval: the folds share most of their data, so it understates the uncertainty
-(in validation V4 it contained the true values only 35–52% of the time).
+(in validation V4 it contained the true values only 39–60% of the time).
 
 `cv_results.csv` therefore also gives **jackknife intervals** for the parameters.
 With θᵢ the parameters fitted without block i (m folds), θ̄ their mean, and n the
@@ -584,18 +584,18 @@ When every block is held out (m = n) this is the standard delete-one-block
 jackknife. When fewer blocks are held out (first years excluded, or years with
 too few observations), the sum over n blocks is estimated as n/m times the sum
 over the m folds. In validation V4 these 90%
-intervals contained the true parameters 83–95% of the time for every version.
+intervals contained the true parameters 81–95% of the time for every version.
 On the same data, the DE-MCMC parameter intervals (§12, default likelihood)
-contained them 97% of the time for version 5 and 93% for version 8. For
+contained them 97% of the time for version 5 and 92% for version 8. For
 versions 4, 7 and 8 set `Qmedia`
 explicitly, so that every fold uses the same discharge scaling.
 
 The jackknife intervals inherit the optimizer's randomness. Where parameters
 trade off (equifinality), a fold can end on a distant parameter set with almost
 the same fit, and that one fold widens the interval. In V12, another optimizer
-seed alone changed the jackknife standard errors by a factor of 0.65 to 1.06
+seed alone changed the jackknife standard errors by a factor of 0.65 to 1.41
 (median over the parameters, for each river and version), and those of single
-parameters by up to a factor of 1.84 or to almost zero. Read the jackknife intervals of
+parameters by up to a factor of 1.46 or down to 0.10. Read the jackknife intervals of
 poorly determined parameters as indicative, and check them with a second
 `random_seed`; predictions are not affected.
 
@@ -719,33 +719,39 @@ scale, the evidence and the alternatives are set out in
 at the end of this section.
 
 **What the validation shows** ([validation/REPORT.md](../validation/REPORT.md)).
-On synthetic data from a known truth, 90% prediction intervals contained about
-90% of new observations for versions 5 and 8 with every likelihood, and with the
-default least-squares likelihood the 90% parameter intervals contained the true
-values at least 90% of the time for both versions (V4). The exact AR(1)
+On synthetic data from a known truth, 90% prediction intervals contained 87–88%
+of new observations for versions 5 and 8 with every likelihood. They fall short
+of 90% only because about 3% of the synthetic observations (noise added to the
+simulation) are below 0 °C, and the intervals, kept at or above `Tice_cover`,
+cannot contain them; real water temperatures do not go below 0 °C (none of the
+18,225 measured days of the Swiss rivers). With the default least-squares
+likelihood the 90% parameter intervals, which the ice floor does not affect,
+contained the true values at least 90% of the time for both versions (V4). The exact AR(1)
 likelihood's intervals for version 8 contained the truth only about 75% of the
 time: its parameters trade off against each other and that posterior is far from
 normal. The sampler was cross-checked against emcee's stretch move. On three real
-rivers, with the default settings, 90% intervals contained 85–89% of daily
-values in years not used for calibration (84.7–89.6% across all settings
-tested), and for 7-day means 89–94%, against 83–89% with `rho_timescale:
-"daily"` and 39–62% with `iid` (V5). On the same rivers, the parameters published by Piccolroaz et al.
+rivers, 90% intervals contained 84.8–90.0% of daily values in years not used
+for calibration (the default settings and every other setting tested gave
+values in this range), and for 7-day means 87–93% with the default settings,
+against 81–88% with `rho_timescale: "daily"` and 39–59% with `iid` (V5). On the same rivers, the parameters published by Piccolroaz et al.
 (2016) lay inside these intervals for every river and version except version 8
 on the Mentue, where 5 of its 8 lay outside (76 of 81 parameter values inside
 in all): there many parameter combinations fit almost equally well, and the
 published set is not where a least-squares calibration on these data lands
 (V2).
 
-**At other levels.** On synthetic data the intervals held at every level tested
-(50%, 80%, 90%, 95% and 99%: mean coverage within 1.3 points of the level, V4).
+**At other levels.** On synthetic data, mean coverage was below the level by at
+most 3.2 points at every level tested (50%, 80%, 90%, 95% and 99%; at 99%:
+95.9–96.3%), for the reason above; before the ice floor was applied to the
+intervals (version 0.5.1), it was within 1.3 points of every level (V4).
 On the Swiss rivers, pooled over 48 years held out by cross-validation per
-version, daily intervals held from 50% to 95% (95% intervals: 94.4–94.6% of
+version, daily intervals held from 50% to 95% (95% intervals: 94.4–94.5% of
 days), but 99% intervals held only 98.0–98.2%: the model's real errors have
 heavier tails than the normal distribution assumed (V11). In the later
 validation years of V5, whose errors were larger than in calibration, daily
-intervals were narrower than stated, more so at high levels (90%: 85–89%; 95%:
-91–95%; 99%: 95–99.5%). 7-day means held at every level (V11: 96–97% at 95%,
-98.6–99.2% at 99%).
+intervals were narrower than stated, more so at high levels (90%: 85–90%; 95%:
+91–95%; 99%: 95–99.5%). 7-day means held at every level (V11: 96% at 95%,
+98.5–99.1% at 99%).
 
 **An alternative tested: an error size that changes with the season.** The
 error size σ is the same all year. A size measured for each calendar month
@@ -766,7 +772,7 @@ remove. The constant size was therefore kept.
 
 **Where the chain is centred.** With the default least-squares likelihood the
 chain is centred on the DE best fit: in V5 the centre of the band stayed within
-0.02 °C of the best fit's. With `likelihood: "exact"` it can be centred
+0.01 °C of the best fit's. With `likelihood: "exact"` it can be centred
 elsewhere, also for versions whose parameters do not trade off: in V5 it moved
 by up to 0.11 °C (cooler, Dischmabach version 5). For a limit on warm water, a
 cooler band would understate the chance of exceedance.
@@ -933,7 +939,7 @@ slowest parameter. Validation V4 computes this formula and compares it with the
 measured spread of the estimates; they agree closely. With fast + slow errors,
 ρ₁ made a7's interval about 1.5 times too narrow (measured 1.55; the formula
 predicts 1.59). Its 90% interval contained the truth 67% of the time. The
-weekly ρ gave it the right width (90%). The cost is that the intervals of the
+weekly ρ gave it the right width (93%). The cost is that the intervals of the
 fast-varying parameters are wider than necessary, by a factor of about two to
 three in V4. That happens with either ρ: it is a property of a single effective
 sample size. The two errors are not equal: an interval that is too wide errs on
@@ -952,12 +958,12 @@ noisy, and ρ₁ sets the floor. For AR(1) errors, taking the larger changes not
 | Test | Weekly ρ (default) | Daily ρ | Check |
 |---|---|---|---|
 | AR(1) errors, synthetic: ρ estimated; 90% parameter intervals containing the truth | 0.699; 97.3% | 0.691; 97.3% | V4 E, G |
-| Fast + slow errors, synthetic: 90% parameter intervals | 98.0% | 88.7% | V4 H, I |
-| Same, interval of a7 alone | 90% | 67% | V4 H, I |
-| Same, 90% ranges of yearly peaks and counts | 90–94% | 80–88% | V9 A |
-| Real rivers, later years: daily values inside 90% intervals | 85.4–89.3% | 84.7–89.6% | V5 |
-| Same, 7-day means | 89.1–93.6% | 82.7–88.5% | V5 |
-| Same, 90% ranges of yearly peaks and counts | 80–93% | 53–87% | V9 B |
+| Fast + slow errors, synthetic: 90% parameter intervals | 98.7% | 88.7% | V4 H, I |
+| Same, interval of a7 alone | 93% | 67% | V4 H, I |
+| Same, 90% ranges of yearly peaks and counts | 89–94% | 83–90% | V9 A |
+| Real rivers, later years: daily values inside 90% intervals | 84.8–90.0% | 84.8–89.2% | V5 |
+| Same, 7-day means | 87.2–92.9% | 80.8–88.5% | V5 |
+| Same, 90% ranges of yearly peaks and counts | 80–93% | 60–87% | V9 B |
 
 The synthetic fast + slow errors are built like the real ones (60% of the
 variance in a part with ρ = 0.55, 40% in a part with ρ = 0.96). The real-river
@@ -1108,14 +1114,14 @@ years for version 8 and 73–81% for version 5. After the correction they held
 in 85–94% for both versions, within the range expected by chance, and the
 measured value sat on average at the middle of the simulations (mean PIT
 0.48–0.50, against 0.31–0.52 before). At other levels the corrected ranges held
-in 75–85% of years at 80%, 92–100% at 95% and 100% at 99%, all within the range
+in 77–85% of years at 80%, 92–100% at 95% and 100% at 99%, all within the range
 expected by chance. The highest daily mean remained at the
 low end (85%): single-day peaks are the hardest statistic to predict. Applied
 as recommended to genuinely later years (cross-validation of the calibration
 years, then correction of the FORWARD simulations of the validation years; V9
 C, 15 river-years), the correction made the probabilities closer to what
 happened for 5 of 6 version and statistic pairs (version 8's Brier skill score
-against the share of past years rose from 0.08–0.43 to 0.35–0.50), but version
+against the share of past years rose from 0.09–0.42 to 0.34–0.51), but version
 8's 90% ranges for the highest daily mean still held in only 11 of 15
 river-years. Version 5 predicted almost the same peak every year on the Rhône,
 where discharge drives summer temperature; the correction removes its bias, but
@@ -1210,7 +1216,7 @@ change one-sided.
 - **Record length.** In V16, calibrations on 3 consecutive years of a Swiss
   river predicted the later years with a median RMSE at most 0.034 °C above
   that of the calibration on the whole record (7–21 years). Single years cost
-  0.04–0.06 °C as a median and up to 0.17 °C (version 8). The later years
+  0.04–0.06 °C as a median and up to 0.18 °C (version 8). The later years
   tested were similar to the calibration years; for conditions outside them,
   see the bullet above and V10.
 - **Compared with regression.** In V17 (3 Swiss and 23 British Columbia
@@ -1218,8 +1224,8 @@ change one-sided.
   regressions on air temperature (the best chosen on each river after seeing
   the held-out years) on 23 of 26 rivers: medians 0.74 against 0.89 °C
   (Switzerland) and 0.96 against 1.17 °C (British Columbia). On yearly peaks,
-  the hottest 10% of days and the 2021 heat dome it was better on 14 of 23
-  British Columbia rivers, and on the Swiss yearly peaks on 1 of 3 (median
+  the hottest 10% of days and the 2021 heat dome it was better on 13, 16 and 14
+  of 23 British Columbia rivers, and on the Swiss yearly peaks on 1 of 3 (median
   error 0.58 against 0.60 °C). Version 5 beat the best regression on 18 of 26
   rivers.
 - **Yearly statistics need the cross-validation check.** Their computation is
@@ -1271,11 +1277,10 @@ inputs for every version and Fortran integrator (to 5×10⁻⁶ °C, the precisi
 its printed output), and identical calibration scores and weekly and monthly
 averages, with and without gaps; all 30 published RMSE values of Piccolroaz et al. (2016)
 reproduced to within 0.001 °C, and their parameters recovered by recalibration
-except where the parameters trade off (5 of 15 cases: versions 7 and 8 on the
-Mentue and the Rhône, and version 8 on the Dischmabach, where recalibration
-fits as well or slightly better with different parameters and the same
-predictions; on the Mentue and the Rhône the original program's own runs do
-not reproduce the published parameters either); recovery of a known truth; calibrated intervals
+except where the parameters trade off (4 of 15 cases: versions 7 and 8 on the
+Mentue and the Rhône, where recalibration fits slightly better with different
+parameters and the same predictions, and the original program's own runs do
+not reproduce the published parameters either); recovery of a known truth; the coverage of intervals
 on synthetic data; out-of-sample performance on three real rivers; numerical
 accuracy; gaps; exact answers from the workflow and scenario tools;
 probabilities of exceeding a limit, on synthetic data and real rivers (V9);
@@ -1286,8 +1291,11 @@ published errors of Toffolon and Piccolroaz (2015), computed with RK4, also
 reproduced, and their parameters returned by calibration with RK4 (V13); and
 prediction intervals on the hottest days (V14); and the simulations published
 by an independent group for 23 rivers in British Columbia, reproduced day by day
-(V15). V5, V9, V10 and V14 do not pass all their criteria; the report says where
-and why. The errors found in the published studies are documented in
+(V15). V4, V5, V9, V10 and V14 do not pass all their criteria; the report says
+where and why. V4 fails only because about 3% of its synthetic values are below
+0 °C, which no interval can contain since intervals are kept at or above
+`Tice_cover`; real water does not go below freezing, and V5, on real data, shows
+no such shortfall. The errors found in the published studies are documented in
 [PUBLISHED_RESULTS.md](PUBLISHED_RESULTS.md). The test
 suite (`pytest tests/`) also compares against the Fortran and checks each
 safeguard above.

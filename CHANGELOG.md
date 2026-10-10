@@ -24,7 +24,11 @@
   was added to each simulated series without the floor (`Tice_cover`) that the
   simulation itself applies, so in winter the lower edge of a 90% band could
   reach about −1 °C. Each series is now kept at or above `Tice_cover`, in the
-  DE-MCMC band, FORWARD runs and the cross-validation checks.
+  DE-MCMC band, FORWARD runs and the cross-validation checks. In validation
+  V4, about 3% of the synthetic measurements are below 0 °C, where no range
+  can now reach, so its coverage fell by up to 3 points, to below the stated
+  levels, and V4 no longer passes. Real water does not go below freezing, and
+  V5, on real rivers, shows no such drop.
 - ⚠ **Zero-flow days in gap-tolerant mode are no longer skipped silently.**
   Versions 4, 7 and 8 cannot simulate a day without flow, and gap-tolerant mode
   treated such days as gaps without a message: the output marked them as not
@@ -257,6 +261,9 @@
   to the standard calendar first; USER_GUIDE §5 shows how with xarray.
 
 ### Documentation
+- Validation suite rerun on 0.5.1: 12 of 17 checks pass (V4, V5, V9, V10 and
+  V14 do not). README, USER_GUIDE, METHODS, UNCERTAINTY, PUBLISHED_RESULTS and
+  validation/README quote the new numbers.
 - METHODS §12: a seasonal error size was tested by cross-validation on the
   Swiss rivers and not adopted (worse on the hottest days for version 8).
 - Validation: V6 writes `noleap` dates without 29 February, and V8 calibrates

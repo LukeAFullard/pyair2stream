@@ -43,6 +43,20 @@ CASES = [
 ]
 # Cases on identical synthetic data: E, G, J, K as B; F as D; I as H.
 DATA_SEED = {"E": "B", "F": "D", "G": "B", "I": "H", "J": "B", "K": "B"}
+# Why the prediction coverage fell below the levels in version 0.5.1 (measured once, on these data;
+# the synthetic data were deliberately left unchanged).
+ICE_FLOOR_NOTE = (
+    "Why the prediction coverage is below the levels, and this check fails (since version 0.5.1). The "
+    "synthetic measurements are the noise-free simulation plus random noise, and nothing keeps them at or "
+    "above 0 °C. In winter the simulated Mentue is close to 0 °C, so about 3% of the synthetic measurements "
+    "are below freezing (2.6%-3.0%, by model version and noise). Since version 0.5.1 every simulated series "
+    "of a prediction range is kept at or above Tice_cover (0 °C here), as the simulation itself is, so these "
+    "values can never lie inside a range. That accounts for the drop since the previous run, up to 3 points "
+    "(about 1 point at the 50% level; 90% intervals: 89%-91% of days before, 87%-88% now; 99% intervals: "
+    "98.6%-99.0% before, about 96% now). Real water does not go below freezing: none of the 18,225 measured days of "
+    "the Swiss rivers in data/ is below 0 °C, and the check on real data (V5) shows no such drop. The "
+    "synthetic data were left as they are, so that the effect is visible; before the ice floor, the same "
+    "check gave mean coverage within 1.3 points of every level.")
 REPORT_ONLY = ("J",)        # correctly specified but reported, not judged (see notes)
 # Weekly scoring cannot see a daily simulation that zigzags; bounds that keep a2 and a3 at least 0
 # (water warms with the air and relaxes towards equilibrium) rule such parameter sets out.
@@ -591,6 +605,7 @@ def run(ctx) -> Result:
         note += (f" With {N_JACKKNIFE} replicates per version, each share is uncertain by several percentage "
                  f"points.")
         res.notes.append(note)
+    res.notes.insert(0, ICE_FLOOR_NOTE)
     return res
 
 
@@ -616,8 +631,10 @@ def _fig_prediction_coverage(df):
     ax.set_ylabel("Held-out observations inside\nthe 90% interval (%)")
     ax.set_title("Prediction-interval coverage, one point per replicate (black: mean; dashed: nominal 90%)")
     return (save_figure(fig, "V4_interval_coverage.png"),
-            "Each point is one synthetic data set. Mean coverage is at the nominal 90% in every case, including the "
-            "deliberately wrong noise model (grey): for single days the noise model hardly matters.")
+            "Each point is one synthetic data set. Mean coverage is about the same in every case, including the "
+            "deliberately wrong noise model (grey): for single days the noise model hardly matters. It is below "
+            "90% because about 3% of the synthetic values are below 0 °C, which no range can reach since version "
+            "0.5.1 (see the notes).")
 
 
 def _fig_levels(lv):

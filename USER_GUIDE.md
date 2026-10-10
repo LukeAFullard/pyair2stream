@@ -142,9 +142,9 @@ on air temperature is quicker to fit. In
 [validation V17](validation/REPORT.md#v17), on 3 Swiss and 23 British Columbia
 rivers, version 8 predicted daily temperatures in new years better than every
 regression on 23 of the 26 rivers. On yearly peaks, the hottest days and the
-2021 heat dome its lead was smaller: it did better than every regression on 14
-of 23 British Columbia rivers, and on the yearly peaks of only 1 of the 3 Swiss
-rivers. If your question is about peaks or hot spells,
+2021 heat dome its lead was smaller: it did better than every regression on 13
+to 16 of the 23 British Columbia rivers, and on the yearly peaks of only 1 of
+the 3 Swiss rivers. If your question is about peaks or hot spells,
 compare the model with a regression on your own validation years. The best
 regression was usually an S-curve on air temperature averaged over the last
 few days or weeks; for daily temperatures, a straight line on the day's air
@@ -222,7 +222,7 @@ spare any years, use cross-validation (§13) instead.
 predicted later years almost as well as 7 to 21 years: the median error was at
 most 0.03 °C larger ([validation V16](validation/REPORT.md#v16)). One year was
 often enough too. But an unusual year, such as a heatwave summer, made the
-predictions of other years up to 0.17 °C worse. So with only one or two years,
+predictions of other years up to 0.18 °C worse. So with only one or two years,
 expect larger errors in other years, and check the model on validation years.
 
 **Climate-model data** often uses a 365-day calendar with no leap days.
@@ -382,7 +382,7 @@ calibrate again.
 the minimum of `a2` and `a3` to 0. Otherwise the fit can end on parameters
 whose daily simulation zigzags between 0 °C and high values. The zigzag
 averages out over a week or a month, so it can score well. In a test with known
-parameters, this happened in 9 of 30 weekly-scored calibrations
+parameters, this happened in 8 of 30 weekly-scored calibrations
 ([V4](validation/REPORT.md#v4)). pyair2stream warns when it happens.
 
 ### Run modes (`run_mode`)
@@ -858,7 +858,7 @@ these before you use the results:
   day, as real errors do. For single days, `"iid"` (independent errors) gives
   about the same band. For anything over several days, such as a 7-day mean,
   `"iid"` gives bands that are far too narrow. On the Swiss rivers, its 90%
-  bands for 7-day means held only 39–62% of the time
+  bands for 7-day means held only 39–59% of the time
   ([V5](validation/REPORT.md#v5)).
 - **`rho_timescale: "weekly"`** sets how long the errors last (ρ). Real errors
   have a fast part, which fades in days, and a slow part, which lasts weeks.
@@ -1169,11 +1169,11 @@ about 5 hidden years, the check says little.
 (The level is `uncertainty_options.parameter_interval`, and the row names
 follow it.) They come from how much the parameters move between folds (the
 jackknife, [docs/METHODS.md §11](docs/METHODS.md#11-cross-validation)). In a
-test with known parameters, they contained the true values 83–95% of the time
+test with known parameters, they contained the true values 81–95% of the time
 ([V4](validation/REPORT.md#v4)). Keep in mind:
 
 - Do not use the `std` row as an uncertainty. The folds share most of their
-  data, so it is far too small. It contained the true values only 35–52% of
+  data, so it is far too small. It contained the true values only 39–60% of
   the time.
 - Each interval is for one parameter on its own. Parameters that trade off
   move together, so combining the ends of several intervals gives parameter
@@ -1182,7 +1182,7 @@ test with known parameters, they contained the true values 83–95% of the time
 - The intervals also depend a little on the optimiser's random start. Where
   parameters trade off, one fold can end on a distant set with almost the same
   fit. Another `random_seed` alone changed the intervals' typical width by a
-  factor of 0.65 to 1.06 ([V12](validation/REPORT.md#v12)). For poorly
+  factor of 0.65 to 1.41 ([V12](validation/REPORT.md#v12)). For poorly
   determined parameters, repeat the run with a second seed.
 
 Cross-validation runs only with `run_mode` `DE`, `PSO` or `LATHYP`. In other
@@ -1205,7 +1205,7 @@ decision, check:
 4. **Uncertainty.** If you report a band, its coverage is close to the level
    you asked for: on validation years, and in the season your limit applies
    to. Bands for new years are usually slightly narrow: 90% bands held on
-   85–89% of days on the Swiss rivers ([V5](validation/REPORT.md#v5)). On the
+   85–90% of days on the Swiss rivers ([V5](validation/REPORT.md#v5)). On the
    hottest days, version 5's 90% bands held on only 83–84% of days; version
    8's held on 91% ([V14](validation/REPORT.md#v14)).
    - For 7-day means, runs of warm days and other quantities over several days,

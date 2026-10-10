@@ -231,9 +231,13 @@ A [validation suite](validation/README.md) tests this. Its results are in
   the fitted model predicts other years to within 0.04 °C
   ([V3](validation/REPORT.md#v3)).
 - **Uncertainty ranges close to their stated level.** On such data, 90% ranges
-  contain the truth about 90% of the time ([V4](validation/REPORT.md#v4)). On
-  real rivers, in years not used for fitting, they held on 85–89% of days. So
-  they are slightly too narrow for new years ([V5](validation/REPORT.md#v5)).
+  for single days held on 87–88% of days. They fall a little short only because
+  about 3% of the made-up values are below 0 °C, and a range never goes below
+  the ice floor; real water does not go below freezing. With the default
+  settings, 90% parameter ranges contained the true values 92–97% of the time
+  ([V4](validation/REPORT.md#v4)). On real rivers, in years not used for
+  fitting, 90% ranges held on 85–90% of days. So they are slightly too narrow
+  for new years ([V5](validation/REPORT.md#v5)).
 - **Probabilities need the check.** The model can be too warm on the hottest
   days. So uncorrected ranges for yearly peaks held in only 73–92% of years.
   The cross-validation check and correction brought this to 85–94%
@@ -247,21 +251,27 @@ A [validation suite](validation/README.md) tests this. Its results are in
 - **How many years of data.** Fitted on any 3 consecutive years, the model
   predicted later years almost as well as when fitted on the whole record (7
   to 21 years): the median error was at most 0.03 °C larger. One year was often
-  enough, but an unusual year made the predictions up to 0.17 °C worse
+  enough, but an unusual year made the predictions up to 0.18 °C worse
   ([V16](validation/REPORT.md#v16)).
 - **Better than a regression.** In years not used for fitting, version 8
   predicted daily temperatures better than every regression on air temperature
   on 23 of 26 rivers. The median error was 0.74 °C against 0.89 °C for the
   best regression in Switzerland, and 0.96 °C against 1.17 °C in British
-  Columbia. On yearly peaks and the hottest days its lead was smaller. It did
-  better than every regression on 14 of 23 British Columbia rivers. On the
-  Swiss yearly peaks, a straight line on air temperature did about as well
+  Columbia. On yearly peaks and the hottest days its lead was smaller. In
+  British Columbia it did better than every regression on 13 of 23 rivers for
+  yearly peaks, and on 16 of 23 for the hottest days. On the Swiss yearly
+  peaks, a straight line on air temperature did about as well
   ([V17](validation/REPORT.md#v17)).
-- **Where it falls short.** Four of the 17 checks do not meet all their
+- **Where it falls short.** Five of the 17 checks do not meet all their
   criteria:
+  - V4: on made-up data, 90% ranges held on 87–88% of days instead of about
+    90%. About 3% of the made-up values are below 0 °C, and no range goes
+    below the ice floor (0 °C), so those values can never be inside. Real
+    water does not go below freezing, and the check on real rivers (V5) shows
+    no such drop;
   - V5: daily 95% and 99% ranges were too narrow on some rivers in years not
     used for fitting (95% ranges held on 91–95% of days, 99% ranges on
-    95–99.5%);
+    95–99.5%), and version 5's 90% ranges on the Rhône held on 84.8%;
   - V9: for version 5 (no discharge), the probability that a yearly peak
     exceeded a limit was no better than going by how often past years
     exceeded it. Version 8's probabilities were better;
@@ -271,9 +281,9 @@ A [validation suite](validation/README.md) tests this. Its results are in
   - V14: on the hottest days of the three Swiss rivers, version 5's 90% ranges
     held on only 83–84% of days. Version 8's held on 91%.
 
-  Most of these point to version 5 on a flow-driven river, and to ranges above
-  90%. The report gives the details. Check your own results on years not used
-  for fitting ([User Guide §14](USER_GUIDE.md#14-checklist-for-results-that-support-a-decision)).
+  Apart from V4, most of these point to version 5 on a flow-driven river, and
+  to ranges above 90%. The report gives the details. Check your own results on
+  years not used for fitting ([User Guide §14](USER_GUIDE.md#14-checklist-for-results-that-support-a-decision)).
 
 To run the tests and the validation suite (V1 needs `gfortran`):
 
@@ -281,7 +291,7 @@ To run the tests and the validation suite (V1 needs `gfortran`):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # about 2 minutes; the full suite takes about 4 hours on 4 cores
+python validation/run_all.py --quick     # about 2 minutes; the full suite takes about 3.5 hours on 4 cores
 ```
 
 ## Differences from the original Fortran

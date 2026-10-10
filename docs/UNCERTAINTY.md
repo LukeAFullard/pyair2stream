@@ -59,12 +59,12 @@ trusted at your site comes from the second.
 
 | Your question | Method | Run mode or setting | Output file | How well it held in the validation | Section |
 |---|---|---|---|---|---|
-| How far could a daily prediction be from the truth? | daily prediction interval | calibration years: `DE-MCMC`; any other period: `FORWARD` with `enable_prediction_intervals: true` | `MCMC_envelopes_*.csv`; `Forward_Prediction_Envelopes_*.csv` | 90% bands: 90% of days in held-out years (V11); 85–89% in later years (V5) | [6](#6-daily-prediction-intervals) |
-| What range for a weekly or monthly mean, or a run of warm days? | the statistic computed in each simulated series | `save_ensemble: true`, then `scenario.aggregate`, `scenario.exceedance` | `MCMC_ensemble_*.npz`; `Forward_Prediction_Ensemble_*.npz` | 90% ranges for 7-day means: 89–94% (V5) | [7](#7-weekly-means-yearly-peaks-days-above-a-limit) |
+| How far could a daily prediction be from the truth? | daily prediction interval | calibration years: `DE-MCMC`; any other period: `FORWARD` with `enable_prediction_intervals: true` | `MCMC_envelopes_*.csv`; `Forward_Prediction_Envelopes_*.csv` | 90% bands: 90% of days in held-out years (V11); 85–90% in later years (V5) | [6](#6-daily-prediction-intervals) |
+| What range for a weekly or monthly mean, or a run of warm days? | the statistic computed in each simulated series | `save_ensemble: true`, then `scenario.aggregate`, `scenario.exceedance` | `MCMC_ensemble_*.npz`; `Forward_Prediction_Ensemble_*.npz` | 90% ranges for 7-day means: 87–93% (V5) | [7](#7-weekly-means-yearly-peaks-days-above-a-limit) |
 | How likely is it that a yearly limit was exceeded (highest daily mean, highest 7-day mean, days above a threshold)? | share of simulated series above the limit, **corrected** by cross-validation | `scenario.year_statistics`, then `scenario.correct_statistic` | the `.npz` above, and `cv_yearly_statistics.csv` | corrected 90% ranges: 85–94% of held-out years; uncorrected 73–92% (V11) | [7](#7-weekly-means-yearly-peaks-days-above-a-limit), [9](#9-correcting-yearly-statistics-for-the-models-bias) |
 | What difference would a change in flow or climate make? | paired difference of two scenario runs | two `FORWARD` runs, the second with `reuse_sample_indices_from`; `scenario.paired_difference_from_files` | the two `Forward_Prediction_Ensemble_*.npz` | equal to the exact effect (V8) | [10](#10-comparing-two-scenarios) |
 | Did the ranges hold at my site? | cross-validation check | `cross_validation: enabled: true`, `run_mode: "DE"` | `cv_interval_coverage.csv`, `cv_yearly_statistics_summary.csv` | this is the test | [8](#8-testing-on-years-the-model-has-not-seen-cross-validation) |
-| How precisely do the data fix the model's parameters? | MCMC parameter intervals; jackknife intervals | `DE-MCMC`; cross-validation | `parameter_significance_*.csv`; rows `jackknife_*` of `cv_results.csv` | 90% intervals contained the true values 93–97% (MCMC) and 83–95% (jackknife) of the time (V4) | [11](#11-how-well-are-the-parameters-known) |
+| How precisely do the data fix the model's parameters? | MCMC parameter intervals; jackknife intervals | `DE-MCMC`; cross-validation | `parameter_significance_*.csv`; rows `jackknife_*` of `cv_results.csv` | 90% intervals contained the true values 92–97% (MCMC) and 81–95% (jackknife) of the time (V4) | [11](#11-how-well-are-the-parameters-known) |
 | Is the model too warm or too cool in some season? | mean error by month and season | every run with measurements; cross-validation | `bias_by_month_*.csv`; `cv_bias_by_month.csv` | | [12](#12-mean-error-by-month-and-season) |
 | Should I report 90%, 95% or 99%? | the level of every range | `uncertainty_options.prediction_interval`, `parameter_interval` | | 99% daily bands held on only 98.0–98.2% of days (V11) | [13](#13-choosing-the-level-90-95-or-99) |
 | Which parameter changes the simulation most? | sensitivity analysis (**not** an uncertainty range) | `sensitivity_analysis: true` | `sensitivity_*.csv`, `.png` | | [11](#11-how-well-are-the-parameters-known) |
@@ -230,7 +230,7 @@ This matters because a compliance question is usually about several days: a
 cancel out in an average. Errors that persist do not (Figure 5). If the error
 model ignored persistence, the range for a 7-day mean would be far too narrow.
 On the Swiss rivers, 90% ranges for 7-day means made that way contained only
-39–62% of the measured values ([V5](../validation/REPORT.md#v5)).
+39–59% of the measured values ([V5](../validation/REPORT.md#v5)).
 
 ### Real errors have two memories
 
@@ -302,8 +302,8 @@ weeks' errors correlate 0.52–0.81, about twice what the daily ρ implies
 
 **A single day: almost nothing.** σ is the same, so the range for one day is
 almost the same. On the Swiss rivers, the test was years not used for
-calibration. There, 90% daily ranges held on 85.4–89.3% of days with the weekly
-ρ, and on 84.7–89.6% with the daily ρ ([V5](../validation/REPORT.md#v5)).
+calibration. There, 90% daily ranges held on 84.8–90.0% of days with the weekly
+ρ, and on 84.8–89.2% with the daily ρ ([V5](../validation/REPORT.md#v5)).
 
 **Averages over a week or more: a lot.** Figure 8 shows simulated errors with
 each ρ, made from the same random numbers. Day by day they look alike. Over a
@@ -381,13 +381,13 @@ and below is over-confident.*
 - **Errors with a fast and a slow part, built like the real ones** (made-up
   data, V4 and [V9](../validation/REPORT.md#v9)). How often the 90% ranges
   contained the truth:
-  - all parameter ranges: 98% with the weekly ρ, 89% with the daily ρ;
-  - the range of the seasonal timing `a7`: 90% against 67%;
-  - the ranges of yearly peaks and counts: 90–94% against 80–88%.
+  - all parameter ranges: 99% with the weekly ρ, 89% with the daily ρ;
+  - the range of the seasonal timing `a7`: 93% against 67%;
+  - the ranges of yearly peaks and counts: 89–94% against 83–90%.
 - **Real rivers, years not used for calibration** (V5, V9). Daily values: the
-  same with both. 90% ranges for 7-day means held 89.1–93.6% of the time with
-  the weekly ρ, against 82.7–88.5% with the daily ρ. Ranges for yearly peaks
-  and counts held in 80–93% of river-years, against 53–87%.
+  same with both. 90% ranges for 7-day means held 87.2–92.9% of the time with
+  the weekly ρ, against 80.8–88.5% with the daily ρ. Ranges for yearly peaks
+  and counts held in 80–93% of river-years, against 60–87%.
 
 ### When to use which
 
@@ -482,7 +482,7 @@ One ρ sets the width of every parameter's range.
   seasonal size `a6` and timing `a7`) need the full allowance for slow errors.
   With the daily ρ, the range of `a7` was too narrow: in the test, it contained
   the truth 67% of the time instead of 90% (V4). With the weekly ρ it held
-  (90%).
+  (93%).
 - Parameters whose effect changes from day to day (`a2`, `a3`) then get ranges
   two to three times wider than they need.
 
@@ -635,11 +635,17 @@ was **not** calibrated on: a separate validation file, or cross-validation
 
 | Share of days inside the band | 50% | 80% | 90% | 95% | 99% |
 |---|---|---|---|---|---|
-| Synthetic data, model exactly right (V4) | within 1.3 points of the level at every level | | | | |
-| Swiss rivers, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.6% | 98.0–98.2% |
-| Swiss rivers, later validation years (V5) | 43–53% | 75–79% | 85–89% | 91–95% | 95–99.5% |
+| Synthetic data, model exactly right (V4)* | 47–49% | 77–78% | 87–88% | 91.9–92.5% | 96% |
+| Swiss rivers, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.5% | 98.0–98.2% |
+| Swiss rivers, later validation years (V5) | 42–52% | 75–80% | 85–90% | 91–95% | 95–99.5% |
 | Swiss rivers, the hottest 10% of days by prediction, version 8 (V14) | | 80% | 91% | 95% | |
 | The same, version 5 (no discharge term) (V14) | | 68% | 84% | 92% | |
+
+\* About 3% of the synthetic values of V4 are below 0 °C. A band is kept at or
+above the ice floor (step 2 above), so those values can never be inside it, and
+every level comes out up to 3.2 points low. Real water does not go below freezing
+(none of the 18,225 measured days of the Swiss rivers), and the real rivers show
+no such shortfall.
 
 Up to 95% the bands hold when averaged over many years. In years unlike those
 calibrated on (the validation periods of V5 came after the calibration periods,
@@ -955,7 +961,7 @@ measured; set `season_months` to the season of your limit.
 | Held-out years inside the range (V11, 48 per version) | 80% | 90% | 95% | 99% |
 |---|---|---|---|---|
 | uncorrected | 56–85% | 73–92% | 85–94% | 92–98% |
-| corrected | 75–85% | 85–94% | 92–100% | 100% |
+| corrected | 77–85% | 85–94% | 92–100% | 100% |
 
 After the correction every statistic was within the range expected by chance at
 80%, 90% and 95%, and the measured values sat on average at the middle of the
@@ -1085,9 +1091,9 @@ Two settings choose the likelihood. Keep the defaults.
 
 | Setting | What it assumes | Evidence | Use it |
 |---|---|---|---|
-| `noise_model: "ar1"`, `likelihood: "least_squares"` (the defaults) | errors persist (ρ); least squares with the effective number of independent days | 90% parameter intervals held the truth 93–97% of the time (V4); the band stays centred on the best fit (V5) | always |
-| `noise_model: "ar1"`, `likelihood: "exact"` | errors persist; the exact AR(1) likelihood, which weighs day-to-day changes of the error more than its level, and always uses the daily ρ | version 8's 90% parameter intervals held the truth only 74% of the time (V4); on real rivers it moved the band by up to 0.11 °C, cooler in that case (V5). With weekly or monthly scoring it treats the scores as independent, with a warning | only to compare |
-| `noise_model: "iid"` | every day's error is new | parameter intervals far too narrow with persistent errors (67%, V4); 90% ranges for 7-day means held only 39–62% of the time (V5) | not for decisions |
+| `noise_model: "ar1"`, `likelihood: "least_squares"` (the defaults) | errors persist (ρ); least squares with the effective number of independent days | 90% parameter intervals held the truth 92–97% of the time (V4); the band stays centred on the best fit (V5) | always |
+| `noise_model: "ar1"`, `likelihood: "exact"` | errors persist; the exact AR(1) likelihood, which weighs day-to-day changes of the error more than its level, and always uses the daily ρ | version 8's 90% parameter intervals held the truth only 75% of the time (V4); on real rivers it moved the band by up to 0.11 °C, cooler in that case (V5). With weekly or monthly scoring it treats the scores as independent, with a warning | only to compare |
+| `noise_model: "iid"` | every day's error is new | parameter intervals far too narrow with persistent errors (67%, V4); 90% ranges for 7-day means held only 39–59% of the time (V5) | not for decisions |
 
 The error model chosen here is recorded in the chain's `_meta.json`, and
 `FORWARD` runs use it too (section [6](#6-daily-prediction-intervals)).
@@ -1156,12 +1162,12 @@ because each fold shares all but one year with the others. Only whole years coun
 
 Do **not** use the `std` row as an uncertainty. It is only the spread between
 folds, which share most of their data, so it is far too small: in V4 the
-fold mean ± 1.645 × `std` contained the true values only 35–52% of the time.
+fold mean ± 1.645 × `std` contained the true values only 39–60% of the time.
 
 The jackknife intervals depend on the optimizer too. Where parameters trade
 off, one fold can end on a distant parameter set with almost the same fit, and
 widen the interval. In [V12](../validation/REPORT.md#v12), another optimizer
-seed alone changed the jackknife standard errors by a factor of 0.65 to 1.06
+seed alone changed the jackknife standard errors by a factor of 0.65 to 1.41
 (median over the parameters, for each river and version). For poorly
 determined parameters, treat them as indicative and repeat the
 cross-validation with a second `random_seed`.
@@ -1184,9 +1190,9 @@ the data fix the parameters, and gives no range or probability.
 ### What the validation shows
 
 On synthetic data with known parameters, the default MCMC intervals (90%)
-contained the true values 93–97% of the time, and the jackknife intervals 83–95%
+contained the true values 92–97% of the time, and the jackknife intervals 81–95%
 ([V4](../validation/REPORT.md#v4)). With `likelihood: "exact"`, version 8's
-MCMC intervals contained them only 74% of the time: do not quote those as
+MCMC intervals contained them only 75% of the time: do not quote those as
 confidence statements. The parameters published for the Swiss
 rivers (Piccolroaz et al., 2016) lay inside pyair2stream's MCMC intervals for 76
 of 81 values ([V2](../validation/REPORT.md#v2)).
@@ -1272,11 +1278,14 @@ range you quote beside it.
 
 | Share inside the range | 50% | 80% | 90% | 95% | 99% |
 |---|---|---|---|---|---|
-| days, synthetic data (V4) | within 1.3 points of the level at every level | | | | |
-| days, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.6% | 98.0–98.2% |
-| 7-day means, held-out years (V11) | 53–59% | 84–88% | 93–94% | 96–97% | 98.6–99.2% |
-| days, later validation years (V5) | 43–53% | 75–79% | 85–89% | 91–95% | 95–99.5% |
-| yearly statistics, corrected (V11) | 50–69% | 75–85% | 85–94% | 92–100% | 100% |
+| days, synthetic data (V4)* | 47–49% | 77–78% | 87–88% | 91.9–92.5% | 96% |
+| days, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.5% | 98.0–98.2% |
+| 7-day means, held-out years (V11) | 53–59% | 84–87% | 93–94% | 96% | 98.5–99.1% |
+| days, later validation years (V5) | 42–52% | 75–80% | 85–90% | 91–95% | 95–99.5% |
+| yearly statistics, corrected (V11) | 50–69% | 77–85% | 85–94% | 92–100% | 100% |
+
+\* Below the level only because about 3% of V4's synthetic values are below
+0 °C, where no range can reach (section [6](#6-daily-prediction-intervals)).
 
 ![Stated against achieved coverage on the real rivers: days, summer days and 7-day means.](../validation/figures/V5_levels.png)
 
@@ -1372,9 +1381,9 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 ### How to word a result
 
 > The model, calibrated on 2002–2009 and checked by leave-one-year-out
-> cross-validation (8 held-out years), gives a probability of 0.33 that the
+> cross-validation (8 held-out years), gives a probability of 0.35 that the
 > highest 7-day mean water temperature in 2011 exceeded 20 °C (90% range for
-> that statistic 18.8–20.8 °C), after correcting for the model's average error
+> that statistic 18.8–20.7 °C), after correcting for the model's average error
 > in that statistic in the held-out years (−0.65 °C, 95% interval −1.05 to
 > −0.26 °C). Uncorrected, the probability would be 0.77. pyair2stream 0.5.1,
 > commit `<sha>`, random seed 42.
@@ -1407,14 +1416,14 @@ pyair2stream --config examples/03_compliance/check.yaml       # cross-validation
 
 | Year | P(7-day mean > 20 °C), corrected | uncorrected | Measured highest 7-day mean |
 |---|---|---|---|
-| 2010 | 0.57 | 0.92 | 21.0 °C (exceeded) |
-| 2011 | 0.33 | 0.77 | 19.8 °C (not exceeded) |
-| 2012 | 0.14 | 0.51 | 19.6 °C (not exceeded) |
+| 2010 | 0.54 | 0.92 | 21.0 °C (exceeded) |
+| 2011 | 0.35 | 0.77 | 19.8 °C (not exceeded) |
+| 2012 | 0.15 | 0.53 | 19.6 °C (not exceeded) |
 
 The check found that the model put the yearly peak 0.65 °C too high in the
 held-out years. Corrected, the probabilities matched what happened better (Brier
 score, the mean squared difference between probability and outcome; Brier,
-1950: 0.10 against 0.29), and all three measured values lay inside the corrected 90%
+1950: 0.12 against 0.29), and all three measured values lay inside the corrected 90%
 ranges.
 
 ---

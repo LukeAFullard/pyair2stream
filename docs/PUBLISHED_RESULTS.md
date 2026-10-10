@@ -11,8 +11,8 @@ repository.
 | Study | Rivers | Scheme | What pyair2stream reproduces | Errors found in the publication | Check |
 |---|---|---|---|---|---|
 | Toffolon and Piccolroaz (2015) | 3 Swiss | RK4 | errors: all 30, within rounding. Parameters: its own calibration returns the published values in all 15 cases | the Rhône's calibration and validation periods are misprinted | [V13](../validation/REPORT.md#v13) |
-| Piccolroaz et al. (2016) | 3 of 38 Swiss (the 3 distributed) | Crank–Nicolson | errors: all 30, to 0.0005 °C. Parameters: returned by calibration in 10 of 15 cases (the other 5 trade off along flat valleys); 76 of 81 published values inside pyair2stream's 90% intervals | optimiser settings not stated; in 4 of 15 cases the published parameters are not the best fit (in a fifth, calibration reaches other parameters with the same fit); validation discharge scaling not stated | [V2](../validation/REPORT.md#v2) |
-| Callahan and Moore (2025) | 23 in British Columbia | Crank–Nicolson | simulated series: 45 of 46, day by day, to 0.00013 °C. Parameters: returned by calibration at none of 23 stations; where the MCMC converged (16 stations), 115 of 128 published values inside its 90% intervals | one station's calibration record read with its seasonal cycle ten months out of phase; two stations' published calibrations far from the best fit | [V15](../validation/REPORT.md#v15) |
+| Piccolroaz et al. (2016) | 3 of 38 Swiss (the 3 distributed) | Crank–Nicolson | errors: all 30, to 0.0005 °C. Parameters: returned by calibration in 11 of 15 cases (the other 4 trade off along flat valleys); 76 of 81 published values inside pyair2stream's 90% intervals | optimiser settings not stated; in 4 of 15 cases the published parameters are not the best fit; validation discharge scaling not stated | [V2](../validation/REPORT.md#v2) |
+| Callahan and Moore (2025) | 23 in British Columbia | Crank–Nicolson | simulated series: 45 of 46, day by day, to 0.00013 °C. Parameters: returned by calibration at none of 23 stations; where the MCMC converged (17 stations), 122 of 136 published values inside its 90% intervals | one station's calibration record read with its seasonal cycle ten months out of phase; two stations' published calibrations far from the best fit | [V15](../validation/REPORT.md#v15) |
 
 The errors listed do not affect what pyair2stream computes: in every case the
 published numbers are reproduced once the publication's actual procedure is
@@ -80,18 +80,16 @@ intervals for 76 of 81 values.
    program distributed with the paper uses 500 particles and 500 iterations in
    its example, and seeds its random numbers from the clock, so each run
    differs. Run three times exactly as distributed, it returned the published
-   parameters every time in only about half of the 15 cases (7, 8 and 9 in
-   three validation runs). The published parameters of
+   parameters every time in only 6 to 10 of the 15 cases, depending on the
+   validation run (6 in the latest). The published parameters of
    the other cases cannot be reproduced exactly by anyone, including with the
    original program.
 2. *In four cases the published parameters are not the best fit.* For versions
-   7 and 8 on the Mentue and on the Rhône, and version 8 on the Dischmabach,
-   recalibration with the same objective, scheme, parameter ranges and data
-   reaches a different parameter set. In the first four it fits the
-   calibration years better (for example, the Mentue's version 8: RMSE
-   0.633 °C against the published 0.645 °C); the Dischmabach's version 8 is a
-   tie. The original program,
-   scoring both sets itself, agrees. The best fit lies along a flat valley where
+   7 and 8 on the Mentue and on the Rhône, recalibration with the same
+   objective, scheme, parameter ranges and data reaches a different parameter
+   set that fits the calibration years better (for example, the Mentue's
+   version 8: RMSE 0.633 °C against the published 0.645 °C). The original
+   program, scoring both sets itself, agrees. The best fit lies along a flat valley where
    the parameters trade off, and the published sets are points where the
    optimiser stopped. The two sets predict the validation years within
    0.002 °C of each other. The published parameter values of these versions
@@ -151,20 +149,21 @@ nevertheless consistent with the data was tested as for the 2016 paper: each
 station's calibration years give two 90% intervals for every parameter.
 
 - *DE-MCMC intervals*, the parameter values whose fit is close to the best:
-  the sampler converged at 16 of the 23 stations (chains of up to 100,000
-  steps), and there 115 of the 128 published values lie inside. Of the 13
-  outside, 7 belong to station 08KH006 (below). The other 6 lie at a bound of
-  the parameter ranges (`a4` near −1 at five stations, `a6` near 10 at one). At
-  the other 15 stations the published parameters fit the data about as well
-  as the best fit.
+  the sampler converged at 17 of the 23 stations (chains of up to 100,000
+  steps), and there 122 of the 136 published values lie inside. Of the 14
+  outside, 7 belong to station 08HA002 (below). Of the other 7, six lie at a
+  bound of the parameter ranges (`a4` near −1 at five stations, `a6` near 10
+  at one), and one is the seasonal timing `a7` of station 08GA077, whose
+  calibration record was read out of phase (below). At the other 16 stations
+  the published parameters fit the data about as well as the best fit.
 - *Jackknife intervals*, how far the best fit itself moves when a year is left
-  out: they contain 35 of those 128 values. The published sets lie among the
+  out: they contain 42 of those 136 values. The published sets lie among the
   good fits, but not where a least-squares calibration lands.
-- At 7 stations (08GA077, 08HA002, 08HA069, 08HB023, 08JA017, 08LE031,
-  08LF051) the sampler had not converged after 100,000 steps: split-R̂ stayed
-  at 1.011–2.17, above the 1.01 required. There the parameters are very
-  poorly determined by the data, or distinct parameter sets fit about equally
-  well. The jackknife intervals there contain 14 of 56 published values.
+- At 6 stations (08FF003, 08HA069, 08JA017, 08KH006, 08LF051, 08MF040) the
+  sampler had not converged after 100,000 steps: split-R̂ stayed at
+  1.012–2.22, above the 1.01 required. There the parameters are very poorly
+  determined by the data, or distinct parameter sets fit about equally well.
+  The jackknife intervals there contain 8 of 48 published values.
 - The published `a4` lies at or within 0.04 of its lower bound, −1, at 14 of
   the 23 stations: many of the published calibrations stopped on that bound.
 
@@ -177,17 +176,20 @@ the predictions, which part A reproduces, are what the model provides.
 **Finding: two stations' published calibrations are far from the best fit.**
 
 - At station 08HA002 (Cowichan River at Lake Cowichan, regulated), 7 of the 8
-  published parameter values lie well outside the region of good fits. For
-  example, `a5` is 17.0, where the best fit is 0.40 and its 90% jackknife
-  interval 0.06 to 0.71. Calibrated by pyair2stream, within the same parameter
-  ranges, the station fits its calibration years with RMSE 0.72 °C instead of
-  0.87 °C, and predicts 2021–2022 with 0.75 °C instead of the published
-  1.09 °C.
-- At station 08KH006 (Quesnel River near Quesnel), 7 of the 8 published values
-  lie outside the DE-MCMC intervals. For example, `a5` is 4.30, where the
-  interval is 0.10 to 2.14. Recalibrated, the station fits its calibration
-  years with RMSE 1.05 °C instead of 1.15 °C, and predicts 2021–2022 with
-  1.10 °C instead of 1.18 °C.
+  published parameter values lie outside both the DE-MCMC and the jackknife
+  intervals, well outside the region of good fits. For example, `a5` is 17.0,
+  where the best fit is 0.42 and its 90% DE-MCMC interval 0.27 to 1.58.
+  Calibrated by pyair2stream, within the same parameter ranges, the station
+  fits its calibration years with RMSE 0.72 °C instead of 0.87 °C, and
+  predicts 2021–2022 with 0.76 °C instead of the published 1.09 °C.
+- At station 08KH006 (Quesnel River near Quesnel), the DE-MCMC did not
+  converge within 100,000 steps (split-R̂ 1.014, just above the 1.01
+  required), so its intervals are not counted above. The 90% range of its
+  unconverged samples still excludes 7 of the 8 published values, and the
+  jackknife intervals exclude 6. For example, `a5` is 4.30, where that range
+  is 0.09 to 2.22 and the best fit 0.06. Recalibrated, the station fits its
+  calibration years with RMSE 1.05 °C instead of 1.15 °C, and predicts
+  2021–2022 with 1.08 °C instead of 1.18 °C.
 
 The dataset does not record how the published calibrations were made
 (objective, parameter ranges, optimiser and its settings), so why they stopped
@@ -206,7 +208,7 @@ out of phase, and its parameters compensate for that. Its validation record
 starts on 1 January 2021, so the same parameters were then run in phase: the
 published validation RMSE of this station is 1.44 °C. Calibrated by
 pyair2stream with the correct dates, the station fits its calibration years
-with RMSE 0.84 °C and predicts 2021–2022 with 0.97 °C. The station's published
+with RMSE 0.84 °C and predicts 2021–2022 with 0.96 °C. The station's published
 parameters and errors, and its share of any averages over stations, are
 affected; the other 22 stations are not.
 

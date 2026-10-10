@@ -43,10 +43,10 @@ python validation/run_all.py --only V2 V6
 
 With `--only`, the other checks keep their reports from the earlier run.
 `REPORT.md` then names the run each report comes from. In the committed
-report (4 cores), the full suite took about 4 hours: V15 about an hour and a
-half, V2 about an hour, V4 about half an hour, V9 and V12 about a quarter of an
-hour each, and every other check under 10 minutes (each check's report gives
-its run time). Where jobs are limited in length, run the suite in parts with
+report (4 cores), the checks took about 3.5 hours in all: V15 and V2 about 50
+minutes each, V4 about 45 minutes, V9 and V12 about a quarter of an hour each,
+and every other check under 10 minutes (each check's report gives its run
+time). Where jobs are limited in length, run the suite in parts with
 `--only`. V15, the longest check, saves each station's results in `work/v15_cache/` as it goes. If it is
 stopped, running it again reuses them, but only if the code of the package
 and of the suite is exactly the same; its report then says how many were
@@ -95,7 +95,11 @@ It shows that:
 - the software computes what it claims to;
 - calibration finds the right answer when one is known;
 - the uncertainty ranges and probabilities hold as often as they state, when
-  the model is right.
+  the model is right (V4, V9). In V4 the daily ranges fall up to 3.2 points
+  short of their level, and the check fails, only because about 3% of its
+  synthetic values are below 0 °C: since version 0.5.1 no range goes below
+  the ice floor, so those values can never be inside. Real water does not go
+  below freezing.
 
 It also shows how well the model does on real rivers, and where the approach
 falls short there:
