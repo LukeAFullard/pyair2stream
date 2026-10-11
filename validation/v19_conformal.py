@@ -17,8 +17,8 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 import pandas as pd
 
-from common import (AUTHORS_BOUNDS, DE_SETTINGS, LEVELS, RIVERS, WORK, Result, Section, Timer, accepted_real, load,
-                    mean_discharge, quiet, river_csv, plot_style, save_figure, BLUE, ORANGE, INK2, LIGHT_GREY)
+from common import (AUTHORS_BOUNDS, DE_SETTINGS, LEVELS, RIVERS, WORK, Result, Section, Timer, accepted_real,
+                    cluster_interval, load, mean_discharge, quiet, river_csv, plot_style, save_figure, BLUE, ORANGE, INK2, LIGHT_GREY)
 from v15_british_columbia import QUICK_STATIONS, _load
 from v18_bc_intervals import (HEAT_DOME, SUMMER, WINDOWS, _held_out_years, _later_years, _resumable,
                               _ranges)
@@ -246,6 +246,8 @@ def run(ctx) -> Result:
                    "n": int(n), "inside, no margin": h["inside before"].sum() / n if n else np.nan,
                    "inside, with margin": h["inside after"].sum() / n if n else np.nan,
                    "median margin (°C)": float(np.median(h.margin))}
+            lo, hi = cluster_interval(zip(h["inside after"], h.n))
+            row["with margin: 95% CI, rivers resampled"] = "" if not np.isfinite(lo) else f"{lo * 100:.1f}-{hi * 100:.1f}%"
             if part == "A":
                 row["mean width, no margin (°C)"] = float(np.average(h["width before"], weights=h.n)) if n else np.nan
                 row["mean width, with margin (°C)"] = float(np.average(h["width after"], weights=h.n)) if n else np.nan
@@ -279,15 +281,22 @@ def run(ctx) -> Result:
                     fails.append(f"{reg} (B) {what}, {lev}%: {x:.1%} (accepted {lo:.1%}-{hi:.1%})")
     res.passed = True if ctx.quick else not fails
 
+    def ci(reg, part, what, lev):
+        g = pools[(reg, part)]
+        g = g[(g["values"] == what) & (g.level == lev)]
+        x = g["with margin: 95% CI, rivers resampled"].iloc[0] if len(g) else ""
+        return f" ({x})" if x else ""
+
     def line(reg, part):
         return "; ".join(f"{what} {share(reg, part, what, 90, 'inside, no margin'):.1%} -> {share(reg, part, what, 90):.1%}"
-                         for what in WINDOWS)
+                         f"{ci(reg, part, what, 90)}" for what in WINDOWS)
     n_conv = {reg: df[(df.region == reg) & (df.part == "A") & df.converged.astype(bool)].station.nunique()
               for reg in regions}
     n_all = {reg: df[(df.region == reg)].station.nunique() for reg in regions}
     res.summary = " ".join(
         f"{reg}, share inside the 90% intervals without -> with the margins: in the later years ({n_conv[reg]} of "
         f"{n_all[reg]} rivers converged) {line(reg, 'A')}; in the held-out years {line(reg, 'B')}." for reg in regions)
+    res.summary += " In brackets: 95% confidence interval of the share with the margins, rivers resampled."
     if ctx.quick:
         res.summary += " Quick run: coverage reported, not judged."
     elif fails:

@@ -17,7 +17,7 @@ import pandas as pd
 from common import (AUTHORS_BOUNDS, DE_SETTINGS, RIVERS, VERSIONS, WORK, Result, Section, Timer, calibrate, daily,
                     load, mean_discharge, metrics, params_at_bounds, quiet, river_csv, simulate, plot_style,
                     save_figure, reference_line, SERIES, BLUE, ORANGE, AQUA, INK, INK2, LIGHT_GREY, GRID,
-                    LEVELS, coverage_by_level, accepted_real)
+                    LEVELS, coverage_by_level, accepted_real, cluster_interval)
 
 PI_VERSIONS = (5, 8)
 # Error models: iid; AR(1) with the exact AR(1) likelihood; AR(1) noise with the least-squares likelihood
@@ -107,8 +107,13 @@ def _interval(args):
     # Coverage at every tested level, from the same simulations.
     row["_levels"] = {"daily": coverage_by_level(ens, obs), "summer": coverage_by_level(ens[:, summer], obs[summer]),
                       "7-day": coverage_by_level(weekly[:, full], obs_w[full])}
+    years = pd.DatetimeIndex(dates).year.to_numpy()
+    by_year = [(int(inside[ok & (years == y)].sum()), int((ok & (years == y)).sum())) for y in np.unique(years)]
+    lo_ci, hi_ci = cluster_interval(by_year)
     return {**row, "converged": True, "steps": meta["steps_run"], "rho": round(float(meta["rho"]), 3),
             "coverage": float(inside[ok].mean()),
+            "coverage: 95% CI, years resampled": ("" if not np.isfinite(lo_ci)
+                                                  else f"{lo_ci * 100:.1f}-{hi_ci * 100:.1f}%"),
             "summer coverage (Jun-Aug)": float(inside[summer].mean()),
             "7-day mean coverage": float(np.mean((obs_w[full] >= lo[full]) & (obs_w[full] <= hi[full]))),
             "band centre bias (°C)": float(np.mean(env.Twat_mod_p50.to_numpy()[ok] - obs[ok])),

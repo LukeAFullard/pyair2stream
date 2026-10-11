@@ -223,6 +223,33 @@ def coverage_by_level(ens, obs, levels=LEVELS) -> dict:
     return out
 
 
+def cluster_interval(clusters, confidence: float = 0.95, n_boot: int = 4000, seed: int = 0) -> Tuple[float, float]:
+    """Confidence interval of a pooled share inside, by a cluster bootstrap.
+
+    `clusters` holds one (inside, n) pair per cluster: a river, or a river-year. The days of one cluster
+    are not independent (errors persist for weeks and shift from year to year), so a binomial interval over
+    days would be far too narrow. Whole clusters are resampled with replacement, the pooled share
+    (sum of inside / sum of n) is recomputed, and the central `confidence` range of the resampled shares is
+    returned (percentile bootstrap). With few clusters the interval is itself uncertain; it is (nan, nan)
+    with fewer than 3."""
+    c = np.array([(k, n) for k, n in clusters if n], dtype=float).reshape(-1, 2)
+    if len(c) < 3:
+        return float("nan"), float("nan")
+    rng = np.random.default_rng(seed)
+    pick = rng.integers(0, len(c), size=(n_boot, len(c)))
+    shares = c[pick, 0].sum(axis=1) / c[pick, 1].sum(axis=1)
+    lo, hi = np.percentile(shares, [50 - 50 * confidence, 50 + 50 * confidence])
+    return float(lo), float(hi)
+
+
+def format_interval(share, interval) -> str:
+    """'86.9% (84.1-89.3%)': a share with its cluster-bootstrap confidence interval."""
+    lo, hi = interval
+    if not np.isfinite(lo):
+        return f"{share:.1%}"
+    return f"{share:.1%} ({lo * 100:.1f}-{hi * 100:.1f}%)"
+
+
 def pit_coverage(pits, level) -> float:
     """Share of PIT values inside the central `level`% range."""
     return float(np.mean(np.abs(np.asarray(pits, float) - 0.5) <= level / 200))

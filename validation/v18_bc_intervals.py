@@ -22,8 +22,8 @@ import numpy as np
 import pandas as pd
 from scipy.stats import binom
 
-from common import (LEVELS, WORK, Result, Section, Timer, accepted_real, coverage_by_level, load, quiet,
-                    plot_style, save_figure, BLUE, ORANGE, INK2, LIGHT_GREY)
+from common import (LEVELS, WORK, Result, Section, Timer, accepted_real, cluster_interval, coverage_by_level, load,
+                    quiet, plot_style, save_figure, BLUE, ORANGE, INK2, LIGHT_GREY)
 from v15_british_columbia import (HEAT_DOME, MCMC_STEPS, MCMC_WALKERS, QUICK_STATIONS, _calibration_config, _load,
                                   _write)
 
@@ -268,6 +268,15 @@ def _pool(rows, key):
     return {lev: (k[lev] / n[lev] if n[lev] else np.nan) for lev in LEVELS}, n[LEVELS[0]]
 
 
+CI_90 = "90%: 95% CI, stations resampled"
+
+
+def _ci(clusters):
+    """'84.1-89.3%': the cluster-bootstrap 95% confidence interval of a pooled share, stations resampled."""
+    lo, hi = cluster_interval(clusters)
+    return "" if not np.isfinite(lo) else f"{lo * 100:.1f}-{hi * 100:.1f}%"
+
+
 def _inside(pits, level):
     return float(np.mean(np.abs(np.asarray(pits, float) - 0.5) <= level / 2))
 
@@ -346,12 +355,17 @@ def run(ctx) -> Result:
             if not rows:
                 continue
             share, n = _pool([r["counts"] for r in rows], what)
-            pooled_a.append({"rho": rho, "values": what, "n": n, **{f"{lev}%": share[lev] for lev in LEVELS}})
+            pooled_a.append({"rho": rho, "values": what, "n": n, **{f"{lev}%": share[lev] for lev in LEVELS},
+                             CI_90: _ci([r["counts"][what][90] for r in rows])})
     pooled_a = pd.DataFrame(pooled_a)
 
     def _get(df, rho, what, lev):
         g = df[(df.rho == rho) & (df["values"] == what)]
         return float(g[f"{lev}%"].iloc[0]) if len(g) else np.nan
+
+    def _get_ci(df, rho, what):
+        g = df[(df.rho == rho) & (df["values"] == what)]
+        return g[CI_90].iloc[0] if len(g) else ""
 
     fails = []
     for lev in JUDGED:
@@ -369,7 +383,8 @@ def run(ctx) -> Result:
     for rho in RHO:
         for what in WINDOWS:
             share, n = _pool([r["counts"][rho] for r in b], what)
-            pooled_b.append({"rho": rho, "values": what, "n": n, **{f"{lev}%": share[lev] for lev in LEVELS}})
+            pooled_b.append({"rho": rho, "values": what, "n": n, **{f"{lev}%": share[lev] for lev in LEVELS},
+                             CI_90: _ci([r["counts"][rho][what][90] for r in b])})
     pooled_b = pd.DataFrame(pooled_b)
     for what in WINDOWS:
         for lev in JUDGED[1:]:
@@ -421,12 +436,13 @@ def run(ctx) -> Result:
         f"less here.")
     res.summary = (
         f"(A) DE-MCMC converged with both rho at {n_conv} of {len(stations)} stations. In 2021-2022, pooled over "
-        f"those stations, the default intervals contained {_row(pooled_a, 'weekly', 'days')} of measured days; "
+        f"those stations, the default intervals contained {_row(pooled_a, 'weekly', 'days')} of measured days "
+        f"(90%: 95% confidence interval {_get_ci(pooled_a, 'weekly', 'days')}, stations resampled); "
         f"90% intervals contained {_get(pooled_a, 'weekly', '7-day means', 90):.1%} of 7-day means and "
         f"{_get(pooled_a, 'weekly', '30-day means', 90):.1%} of 30-day means (rho from consecutive days: "
         f"{_get(pooled_a, 'daily', '7-day means', 90):.1%} and {_get(pooled_a, 'daily', '30-day means', 90):.1%}). "
         f"(B) Over {int(sum(r['folds'] for r in b))} held-out years, the default intervals contained "
-        f"{_row(pooled_b, 'weekly', 'days')} of days; 90% intervals contained "
+        f"{_row(pooled_b, 'weekly', 'days')} of days (90%: {_get_ci(pooled_b, 'weekly', 'days')}); 90% intervals contained "
         f"{_get(pooled_b, 'weekly', '7-day means', 90):.1%} of 7-day means and "
         f"{_get(pooled_b, 'weekly', '30-day means', 90):.1%} of 30-day means (rho from consecutive days: "
         f"{_get(pooled_b, 'daily', '7-day means', 90):.1%} and {_get(pooled_b, 'daily', '30-day means', 90):.1%}). ")

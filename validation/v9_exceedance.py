@@ -22,7 +22,7 @@ import pandas as pd
 from common import (AUTHORS_BOUNDS, DE_SETTINGS, RIVERS, WORK, Result, Section, Timer, load, mean_discharge,
                     published_params, quiet, river_csv, plot_style, save_figure, BLUE, ORANGE, AQUA, INK2,
                     LIGHT_GREY)
-from v3_recovery import noise, truth_series
+from v3_recovery import noise, observe, truth_series
 
 STATS = ("highest daily mean", "highest 7-day mean", "days above threshold")
 STAT_COLOUR = dict(zip(STATS, (BLUE, ORANGE, AQUA)))
@@ -143,8 +143,8 @@ def _synthetic(args):
     # The same data for cases with the same noise and version, whatever the rho time scale.
     rng = np.random.default_rng((90000 if kind == "ar1" else 95000) + 100 * version + r)
     cal_csv, val_csv = os.path.join(folder, "cal.csv"), os.path.join(folder, "val.csv")
-    obs_c = np.round(truth_c + noise(len(truth_c), kind, rng), 3)
-    obs_v = np.round(truth_v + noise(len(truth_v), kind, rng), 3)
+    obs_c = observe(truth_c, noise(len(truth_c), kind, rng))
+    obs_v = observe(truth_v, noise(len(truth_v), kind, rng))
     src_c.assign(T_water=obs_c).to_csv(cal_csv, index=False)
     src_v.assign(T_water=obs_v).to_csv(val_csv, index=False)
     fit = _calibrate_mcmc(version, cal_csv, q_cal, folder, tag, seed=r + 1, rho_timescale=rho_timescale)

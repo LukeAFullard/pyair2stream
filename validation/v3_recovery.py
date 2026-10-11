@@ -42,6 +42,24 @@ def noise(n, kind, rng):
     return _ar1_series(n, RHO, SIGMA, e)
 
 
+TICE = 0.0         # °C, the ice floor (Tice_cover) of the interval checks
+
+
+def observe(truth, noise_values):
+    """Synthetic measurements: the noise-free simulation plus noise, rounded to 0.001 °C and kept at or
+    above the ice floor, as the model and its prediction ranges are (real water is not below 0 °C)."""
+    return np.maximum(np.round(np.asarray(truth, float) + noise_values, 3), TICE)
+
+
+def year_offsets(dates, sd, rng):
+    """One random offset per calendar year (normal, standard deviation `sd`), repeated on each of its
+    days: an error that shifts from one year to the next, as the model's errors do on real rivers
+    (V18, part C)."""
+    years = pd.DatetimeIndex(pd.to_datetime(dates)).year
+    labels, index = np.unique(years, return_inverse=True)
+    return (sd * rng.standard_normal(len(labels)))[index]
+
+
 def truth_series(version, par, period, qmedia, tag="v3"):
     """Noise-free model output on the real forcing of `period` (files named by `tag`,
     so parallel runs never share a scratch file)."""
