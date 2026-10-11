@@ -815,6 +815,17 @@ RK4 calibrations) should be re-examined before reuse at other flows
 (Sect.~\ref{sec:stability}). Word this with care: the 2015 results are valid
 as computed; the risk is in carrying them to other schemes or conditions.}
 
+\prompt{Structural uncertainty: the prediction intervals cover the parameters
+of one model version, not the choice of version. Example 04 (30\% abstraction,
+Mentue) gives a summer change of \fact{+0.05~°C (+0.02 to +0.08)} with versions
+7 and 8 but \fact{0.00} with version 4, whose ranges do not overlap: in
+version 4 discharge changes only the response speed ($\theta^{a_4}$), never
+the equilibrium, while in versions 7 and 8 it weights the terms $a_5$--$a_8$.
+Version 8 reduces to version 7 here because its $a_4$ is indistinguishable
+from zero (\fact{$-0.20$ to $0.22$}). Recommend reporting a scenario across
+the plausible versions and justifying the one chosen by held-out fit and
+coverage (\repo{examples/04\_scenario/compare\_versions.py}).}
+
 \prompt{Limitations: a lumped model at one station; stationarity of the
 parameters under climate change and extrapolation (V10); intervals on the
 hottest days (V14); the exchangeability assumption behind the conformal

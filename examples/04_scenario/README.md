@@ -86,7 +86,8 @@ It takes two to three minutes. First it makes the scenario's input: the
 measured data with the discharge multiplied by 0.7. It removes the water
 temperature, because that was not measured under the scenario. Then it runs
 three steps with one `pyair2stream.Model`, made from
-[`settings.yaml`](settings.yaml) (as in example [02](../02_uncertainty/README.md)):
+[`settings.yaml`](settings.yaml) (model version 8, as in example
+[02](../02_uncertainty/README.md)):
 
 ```python
 import pandas as pd
@@ -142,18 +143,94 @@ simulation's average summer change, paired (orange) and not paired (grey).*
 - According to the fitted model, this abstraction changes the Mentue's
   temperature only slightly on average.
 - Summers are a little warmer and winters a little colder. With less water,
-  the river follows the air more closely.
+  the river is pulled less towards the temperature linked to its flow, and more
+  towards the air (see [Does the model version matter?](#does-the-model-version-matter)).
 - On single low-flow days, the warming reaches about 0.3 °C.
 - Without pairing (the last row, grey in the figure), the same simulations
   cannot even tell whether the river gets warmer or colder (see
   [Paired and not paired](#paired-and-not-paired)).
+
+## Does the model version matter?
+
+Versions 4, 7 and 8 use discharge (versions 3 and 5 do not, so for them the
+abstraction changes nothing). `python examples/04_scenario/compare_versions.py`
+(about 10 minutes) repeats this example with each of them: the same settings,
+data and seed, with only `version` changed.
+
+| Version | RMSE, 2010–2012 | Days inside the 90% interval | a4 | Summer change | Winter change | Largest daily warming | Extra days per year above 18 °C |
+|:-:|---|---|---|---|---|---|---|
+| 4 | 0.94 °C | 86.9% | 0.200 | 0.00 (0.00 to 0.00) °C | +0.01 (0.00 to +0.02) °C | +0.18 (+0.05 to +0.34) °C | 0.0 (−0.3 to +1.0) |
+| 7 | 0.78 °C | 89.2% | (none) | +0.05 (+0.02 to +0.08) °C | −0.07 (−0.11 to −0.02) °C | +0.31 (+0.25 to +0.37) °C | +0.7 (0.0 to +2.0) |
+| 8 | 0.78 °C | 89.1% | 0.066 | +0.05 (+0.02 to +0.08) °C | −0.06 (−0.11 to −0.02) °C | +0.33 (+0.27 to +0.40) °C | +0.7 (0.0 to +2.0) |
+
+*Median and, in brackets, 90% range over the 1,000 paired simulations
+(`output/versions_summary.csv`). Version 8 is the run above.*
+
+**How discharge enters each version.** The water is pulled towards an
+equilibrium temperature, A/B in the notation of
+[USER_GUIDE §9.1](../../USER_GUIDE.md#91-numerical-stability-and-the-choice-of-integrator).
+In version 8 it is a weighted average of two temperatures:
+
+    equilibrium = (1 − w) · (a1 + a2·Ta) / a3   +   w · (a5 + a6·cos(2π(t − a7))) / a8,
+    with w = a8·θ / (a3 + a8·θ)
+
+The first is set by the air. The second is linked to the flow: it varies less
+through the year than the air, as water from groundwater, snowmelt or upstream
+would. Its share w grows with discharge θ. The factor 1/θ^a4 cancels in the
+equilibrium, so a4 changes only how fast the water gets there (its thermal
+inertia), not where it goes.
+
+- **Version 4 has only a4.** Discharge changes how fast the water follows the
+  air (with less flow, faster), but not the equilibrium. So the averages cannot
+  change. Single days can: a quicker response shows more of each warm spell.
+- **Version 7 has only the flow-linked term** (version 8 with a4 = 0).
+- **Version 8 has both, but here a4 is about zero.** Its best value is 0.066:
+  at 70% of the flow, the speed changes by 2% (0.7^0.066 = 0.977). Its 90%
+  credible interval, −0.20 to +0.22, includes zero: the data cannot tell a
+  change of speed with flow from none. So version 8 gives version 7's answer.
+
+**Why less flow warms the summer and cools the winter (version 8).** Monthly
+means over 2010–2012, from the fitted parameters
+(`output/version8_equilibrium_by_month.csv`):
+
+| | Air-driven | Flow-linked | Share w, measured flow | Share w, 70% of the flow | Change in equilibrium |
+|---|---|---|---|---|---|
+| June–August | 15.9–17.1 °C | 13.5–15.8 °C (cooler) | 0.08–0.12 | 0.06–0.09 | +0.02 to +0.06 °C |
+| December–February | 1.1–2.6 °C | 3.4–5.7 °C (warmer) | 0.22–0.36 | 0.17–0.29 | −0.08 to −0.20 °C |
+
+The abstraction takes 30% of the flow in every season. In summer the
+flow-linked temperature is cooler than the air-driven one, so losing some of
+it warms the river; in winter it is warmer, so losing some of it cools the
+river. Winter flows are higher, so the flow-linked share is larger then, and
+the same abstraction moves the equilibrium further. The warming is largest in
+spring (+0.10 °C in April) and the cooling in autumn and early winter (−0.11 °C
+in November, −0.20 °C in December), which the summer and winter averages
+above do not show.
+
+**What this means.**
+
+- **The model version is part of the answer.** Version 4's summer range and
+  version 7 and 8's do not overlap. Each range covers the uncertainty of the
+  parameters of one version only, not the choice of version.
+- **Here the evidence favours versions 7 and 8**: they predict 2010–2012
+  better (RMSE 0.78 against 0.94 °C), and version 4's 90% interval held on
+  only 86.9% of days. Version 4's mechanism is not wrong in principle (less
+  water does heat and cool faster); this record cannot detect it.
+- **The flow-linked term is fitted, not measured.** "Groundwater" or
+  "snowmelt" is an interpretation of its parameters; the model knows only
+  that, in 2002–2009, the river was closer to this temperature when the flow
+  was high.
+- **For a decision, report the result for each version that fits** and say
+  why the one relied on was chosen (its error and interval coverage in years
+  not used for calibration).
 
 ## Limits of this approach
 
 - **Parameter uncertainty only.** The narrow ranges show the uncertainty of the
   parameters *within this model*. They do not cover the chance that the
   model's response to discharge is wrong. The model learns that response from
-  the natural changes in flow during the calibration years.
+  the natural changes in flow during the calibration years. Another model
+  version can give a different answer, outside these ranges (above).
 - **Stay within the calibrated flows.** If the scenario's discharge goes
   outside the range seen in calibration, the run reports every such day, with
   their number and the first date. The model is then extrapolating. Here the

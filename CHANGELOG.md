@@ -323,6 +323,11 @@
   to the standard calendar first; USER_GUIDE §5 shows how with xarray.
 
 ### Documentation
+- Example 04: "Does the model version matter?" repeats the abstraction with
+  versions 4, 7 and 8 (`compare_versions.py`). Versions 7 and 8 agree; version
+  4, in which discharge changes only the response speed, gives no change in
+  the seasonal means. The section explains why, and what it means for a
+  scenario's uncertainty.
 - "Differs from zero" (`Significantly_Diff_From_Zero`) is described as what it
   is: zero lies outside the central 95% credible interval, the Bayesian
   counterpart of a 5%-level test, not a p-value.
