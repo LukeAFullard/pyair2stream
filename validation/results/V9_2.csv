@@ -1,13 +1,13 @@
 case,statistic,stated 10%,stated 20%,stated 30%,stated 40%,stated 50%,stated 60%,stated 70%,stated 80%,stated 90%
-"version 5, AR(1) noise",highest daily mean,7%,13%,26%,33%,41%,54%,64%,79%,91%
-"version 5, AR(1) noise",highest 7-day mean,6%,20%,26%,37%,50%,57%,67%,76%,90%
-"version 5, AR(1) noise",days above threshold,6%,11%,28%,36%,49%,59%,72%,79%,89%
-"version 8, AR(1) noise",highest daily mean,11%,19%,28%,42%,50%,58%,67%,86%,92%
-"version 8, AR(1) noise",highest 7-day mean,8%,22%,28%,42%,47%,61%,64%,75%,86%
-"version 8, AR(1) noise",days above threshold,6%,11%,25%,31%,33%,44%,56%,69%,81%
-"version 5, fast + slow noise",highest daily mean,12%,22%,34%,44%,54%,69%,77%,83%,94%
-"version 5, fast + slow noise",highest 7-day mean,11%,23%,33%,37%,49%,61%,70%,79%,92%
-"version 5, fast + slow noise",days above threshold,11%,18%,27%,36%,47%,53%,64%,80%,92%
-"version 5, fast + slow noise, rho from consecutive days",highest daily mean,10%,20%,30%,37%,46%,61%,68%,78%,87%
-"version 5, fast + slow noise, rho from consecutive days",highest 7-day mean,14%,28%,33%,37%,51%,60%,67%,74%,87%
-"version 5, fast + slow noise, rho from consecutive days",days above threshold,18%,22%,32%,38%,47%,50%,61%,72%,86%
+"version 5, AR(1) noise",highest daily mean,7%,13%,27%,32%,42%,57%,66%,81%,91%
+"version 5, AR(1) noise",highest 7-day mean,7%,19%,24%,39%,48%,57%,67%,78%,90%
+"version 5, AR(1) noise",days above threshold,6%,11%,28%,36%,48%,58%,72%,79%,89%
+"version 8, AR(1) noise",highest daily mean,11%,19%,28%,44%,50%,58%,67%,81%,92%
+"version 8, AR(1) noise",highest 7-day mean,8%,22%,28%,39%,47%,61%,64%,72%,86%
+"version 8, AR(1) noise",days above threshold,6%,14%,25%,31%,33%,50%,56%,69%,78%
+"version 5, fast + slow noise",highest daily mean,12%,22%,34%,44%,57%,70%,77%,83%,94%
+"version 5, fast + slow noise",highest 7-day mean,12%,24%,32%,36%,51%,61%,71%,82%,92%
+"version 5, fast + slow noise",days above threshold,13%,20%,27%,38%,46%,54%,67%,79%,91%
+"version 5, fast + slow noise, rho from consecutive days",highest daily mean,11%,20%,30%,37%,48%,61%,71%,79%,87%
+"version 5, fast + slow noise, rho from consecutive days",highest 7-day mean,16%,29%,33%,38%,51%,60%,68%,74%,87%
+"version 5, fast + slow noise, rho from consecutive days",days above threshold,18%,24%,33%,38%,47%,50%,60%,73%,86%
