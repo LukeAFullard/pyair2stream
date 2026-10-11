@@ -1,5 +1,48 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Validation V20: the final method, once, on 30 rivers it has never seen.**
+  After V19 the method was frozen, and V20, with its pass criteria (V19's), was
+  written before any model was run on 30 USGS gauges of the north-eastern
+  United States (`data/usa_northeast/`: water temperature and discharge from
+  the USGS, air temperature from Daymet, stations chosen by the rule in its
+  `download.py`). With the conformal margins, 90% intervals held on 91.9% of
+  days, 92.4% of 7-day means and 93.0% of 30-day means in 2021–2023, and on
+  89.8%, 89.6% and 89.6% in held-out years. V20 passes. Without the margins,
+  95% intervals in held-out years held on 91.9% of days and 91.1% of 30-day
+  means, short of the accepted 92.5%.
+- **Confidence intervals on coverage.** V18, V19 and V20 now give a 95%
+  confidence interval for each pooled coverage, resampling rivers and
+  calendar months (later years) or held-out years together, since rivers
+  share their weather (pigeonhole bootstrap), and V5 one for each river,
+  resampling years. On the British Columbia rivers, 90% intervals of
+  later-year days held on 86.9% (81.9–90.9%) without margins and 90.7%
+  (86.4–94.0%) with them.
+- **Do single rivers differ?** V18, V19 and V20 give each river's coverage
+  with its own interval, and test whether rivers differ by more than chance
+  (Cochran's Q, I², the SD of the rivers' true coverage and a 95% prediction
+  range for a new river). With the margins, a new river's 90% intervals for
+  later-year days are expected to hold on 88–98% of days (V20).
+- **V4: errors that shift from one year to the next, and scenario
+  differences.** Cases L and M add a random offset to each year's errors (as
+  V18 found on real rivers). Parameter intervals still held (99% and 100% at
+  90%), and so did the ranges of paired scenario differences, whose true
+  effect is known here; 90% intervals of 30-day means held only 83–85%, which
+  the conformal margins address.
+
+### Changed
+- **V4 passes.** Its synthetic measurements are now kept at or above 0 °C, as
+  real water temperatures and every prediction range are. Before, about 3% lay
+  below the ice floor, where no range reaches, and V4 failed for that reason
+  alone. Every level from 50% to 99% now holds to within 1.5 points. V9's
+  synthetic data are made the same way.
+- **One validation run for every check.** All 20 checks now come from the same
+  full run, at one commit (about 5 hours on 4 cores).
+- **README and documentation** quote the coverages of this run with their
+  confidence intervals, and V20.
+
 ## [0.5.1] - 2026-10-09
 
 ### Added

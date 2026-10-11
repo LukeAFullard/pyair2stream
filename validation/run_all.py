@@ -1,7 +1,7 @@
 """
 Run the validation suite and write validation/REPORT.md.
 
-    python validation/run_all.py            # full suite (about 3.5 hours on 4 cores)
+    python validation/run_all.py            # full suite (about 5 hours on 4 cores)
     python validation/run_all.py --quick    # reduced version of every check (about 2 minutes)
     python validation/run_all.py --only V2 V6
 
@@ -37,7 +37,8 @@ CHECKS = [("V1", "v1_fortran"), ("V2", "v2_published"), ("V3", "v3_recovery"), (
           ("V11", "v11_yearly_check"), ("V12", "v12_cv_design"), ("V13", "v13_published_2015"),
           ("V14", "v14_hot_days"), ("V15", "v15_british_columbia"),
           ("V16", "v16_record_length"), ("V17", "v17_regression"),
-          ("V18", "v18_bc_intervals"), ("V19", "v19_conformal")]
+          ("V18", "v18_bc_intervals"), ("V19", "v19_conformal"),
+          ("V20", "v20_usa_northeast")]
 
 
 def git_state() -> str:

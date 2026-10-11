@@ -1,0 +1,429 @@
+site_no,station_nm,dec_lat_va,dec_long_va,drain_area_sq_mi,qualifies,reason,calibration years with at least 300 days,later-year days,selected
+01010000,"St. John River at Ninemile Bridge, Maine",46.70055556,-69.7155556,1338,False,2 calibration years with at least 300 days,2.0,0.0,False
+01011000,"Allagash River near Allagash, Maine",47.0697222,-69.0794444,1478,False,4 calibration years with at least 300 days,4.0,818.0,False
+01017960,"Meduxnekeag R above S Br Medux. R nr Houlton, ME",46.105,-67.88138889,87.4,False,0 calibration years with at least 300 days,0.0,0.0,False
+01018000,"Meduxnekeag River near Houlton, Maine",46.105,-67.8666667,175,False,discharge missing on 3014 days,,,False
+01018035,"Meduxnekeag River at Lowery Rd. nr Houlton, Maine",46.1811111,-67.80388889,255,True,qualifies,9.0,1095.0,True
+01021200,"Dennys River at Dennysville, Maine",44.90138889,-67.2475,92.9,False,discharge missing on 4109 days,,,False
+01022500,"Narraguagus River at Cherryfield, Maine",44.60805556,-67.93527778,227,False,4 calibration years with at least 300 days,4.0,81.0,False
+010228955,"Outlet Bass Hbr Marsh at Rt 102 at Tremont, Maine",44.25291389,-68.3492,8.66,False,discharge missing on 4495 days,,,False
+01029100,E. Br. Penobscot River below Grand Lake Matagamon,46.1343611,-68.7939056,493,False,discharge missing on 4748 days,,,False
+01031500,"Piscataquis River near Dover-Foxcroft, Maine",45.175,-69.3147222,296,False,2 calibration years with at least 300 days,2.0,0.0,False
+01036390,"Penobscot River at Eddington, Maine",44.82666667,-68.6966667,7515,False,discharge missing on 4748 days,,,False
+01037380,"Ducktrap River near Lincolnville, Maine",44.32916667,-69.0608333,15.1,False,4 calibration years with at least 300 days,4.0,0.0,False
+01038000,"Sheepscot River at North Whitefield, Maine",44.22277778,-69.59388889,146,False,4 calibration years with at least 300 days,4.0,0.0,False
+01049265,"Kennebec River at North Sidney, Maine",44.4722222,-69.68388889,5413,False,0 calibration years with at least 300 days,0.0,0.0,False
+01064140,"Presumpscot River near West Falmouth, Maine",43.7245972,-70.3029333,598,False,discharge missing on 3587 days,,,False
+010642505,"SACO RIVER AT RIVER STREET, AT BARTLETT, NH",44.08388889,-71.2855556,91,False,4 calibration years with at least 300 days,4.0,1061.0,False
+01072870,"ISINGLASS R AT ROCHESTER NECK RD, NR DOVER, NH",43.23480487,-70.9564507,73.6,False,4 calibration years with at least 300 days,4.0,988.0,False
+01073319,"LAMPREY RIVER AT LANGFORD ROAD, AT RAYMOND, NH",43.04138889,-71.2016667,55.7,True,qualifies,5.0,973.0,False
+01078000,"SMITH RIVER NEAR BRISTOL, NH",43.56646307,-71.747857,85.8,False,0 calibration years with at least 300 days,0.0,452.0,False
+01091000,"SOUTH BRANCH PISCATAQUOG RIVER NEAR GOFFSTOWN, NH",43.01480519,-71.64146129,104,True,qualifies,8.0,1026.0,True
+01093852,"SOUHEGAN RIVER (SITE WLR-1) NEAR MILFORD, NH",42.8425858,-71.7067399,103,False,4 calibration years with at least 300 days,4.0,996.0,False
+01095220,"STILLWATER RIVER NEAR STERLING, MA",42.41080875,-71.7911516,29.1,True,qualifies,10.0,1092.0,False
+01095375,"QUINAPOXET RIVER AT CANADA MILLS NEAR HOLDEN, MA",42.37286967,-71.8281279,46.3,True,qualifies,10.0,1089.0,True
+01095434,"GATES BROOK NEAR WEST BOYLSTON, MA",42.36453675,-71.775349,3.13,False,discharge missing on 273 days,,,False
+01100568,"SHAWSHEEN RIVER AT HANSCOM FIELD NEAR BEDFORD, MA",42.46691706,-71.27224528,2.13,False,0 calibration years with at least 300 days,0.0,353.0,False
+01104370,"STONY BROOK AT VILES STREET, NEAR WESTON, MA",42.38555556,-71.2894444,10.2,True,qualifies,10.0,1090.0,True
+01104405,"HOBBS BROOK AT MILL ST NR LINCOLN, MA",42.43636172,-71.26946767,2.16,False,discharge missing on 3324 days,,,False
+01104410,"CAMBRIDGE RES., UNNAMED TRIB 1, NR LEXINGTON, MA",42.43648406,-71.2642235,0.35,False,discharge missing on 3282 days,,,False
+01104415,"CAMBRIDGE RES., UNNAMED TRIB 2, NR LEXINGTON, MA",42.43592855,-71.2600567,0.41,False,discharge zero or below on 126 days,,,False
+01104420,"CAMBRIDGE RES., UNNAMED TRIB 3, NR LEXINGTON, MA",42.4198177,-71.2575565,0.73,False,discharge missing on 319 days,,,False
+01104430,"HOBBS BK BELOW CAMBRIDGE RES NR KENDALL GREEN, MA",42.3981512,-71.2733903,6.86,True,qualifies,10.0,1089.0,True
+01104453,STONY BROOK UNNAMED TRIB 2 NR WESTON STATION,42.37138889,-71.27527778,2.23,False,discharge missing on 3008 days,,,False
+01104455,"STONY BROOK, UNNAMED TRIBUTARY 1, NEAR WALTHAM, MA",42.37259606,-71.27033448,0.48,False,discharge zero or below on 3 days,,,False
+01104460,"STONY BROOK AT RT 20 AT WALTHAM, MA",42.368985,-71.2706123,22.0,True,qualifies,10.0,1052.0,False
+01104475,"STONY BROOK RES., UNNAMED TRIB 1, NEAR WESTON, MA",42.3545408,-71.2681121,0.85,False,discharge zero or below on 2 days,,,False
+01104480,"STONY BROOK RESERVOIR AT DAM NEAR WALTHAM, MA",42.3556519,-71.2650565,23.7,False,0 water-temperature days in 2021-2023,5.0,0.0,False
+01115098,"PEEPTOAD BROOK AT ELMDALE RD NR NORTH SCITUATE, RI",41.8525992,-71.6061754,4.96,False,discharge zero or below on 51 days,,,False
+01115110,"HUNTINGHOUSE BK AT ELMDALE RD AT N SCITUATE, RI",41.8456548,-71.6095088,6.23,False,discharge missing on 3 days,,,False
+01115114,"RUSH BROOK NEAR ELMDALE RD NEAR NORTH SCITUATE, RI",41.83759929,-71.6120089,4.70,False,discharge zero or below on 224 days,,,False
+01115120,"UNNAMED TRIB TO SCITUATE RES NR NORTH SCITUATE, RI",41.8314882,-71.6089532,.28,False,discharge missing on 3345 days,,,False
+01115170,"MOSWANSICUT STREAM NR NORTH SCITUATE, RI",41.84093269,-71.584508,3.25,True,qualifies,10.0,1080.0,True
+01115183,"QUONOPAUG BK AT RT 116 NR NORTH SCITUATE, RI",41.79759966,-71.5847857,1.96,False,discharge missing on 2 days,,,False
+01115184,"SPRUCE BROOK NR NORTH SCITUATE, RI",41.7887107,-71.6200647,1.22,False,discharge missing on 2255 days,,,False
+01115187,"PONAGANSET RIVER AT SOUTH FOSTER, RI",41.8187102,-71.7050677,14.4,True,qualifies,9.0,1093.0,False
+01115190,"DOLLY COLE BK AT OLD DANIELSON PK AT S FOSTER, RI",41.8223213,-71.70034528,4.90,False,discharge zero or below on 9 days,,,False
+01115265,"HEMLOCK BROOK AT KING ROAD NR FOSTER, RI",41.7906548,-71.6986785,8.72,False,discharge zero or below on 12 days,,,False
+01115275,"BEAR TREE BROOK NR CLAYVILLE, RI",41.7824801,-71.674764,.62,False,discharge missing on 3366 days,,,False
+01115276,"WESTCONNAUG STREAM AT PLAINFIELD PIKE, RI",41.7853772,-71.6672885,5.18,True,qualifies,10.0,1093.0,False
+01115280,"CORK BK AT ROCKLAND SCITUATE RD NR CLAYVILLE, RI",41.80398827,-71.6497879,1.79,False,discharge zero or below on 112 days,,,False
+01115297,WILBUR HOLLOW BK AT OLD PLAINFIELD PK NR CLAYVILLE,41.7648219,-71.6356207,4.32,False,discharge missing on 3364 days,,,False
+01119500,"WILLIMANTIC RIVER NEAR COVENTRY, CT",41.75053857,-72.26561677,121.0,False,0 calibration years with at least 300 days,0.0,0.0,False
+01120790,"NATCHAUG RIVER AT MARCY RD. NEAR CHAPLIN, CT",41.81616944,-72.10616944,66.5,False,2 calibration years with at least 300 days,2.0,0.0,False
+01124000,"QUINEBAUG RIVER AT QUINEBAUG, CT",42.02220151,-71.95560457,155.0,False,0 calibration years with at least 300 days,0.0,0.0,False
+011277916,"Stony Brook at Rt 1 near Flanders, CT",41.35944444,-72.17527778,1.86,False,discharge missing on 4109 days,,,False
+01129200,"CONNECTICUT R BELOW INDIAN STREAM NR PITTSBURG, NH",45.04032368,-71.4439704,254,True,qualifies,10.0,1094.0,False
+01129500,"CONNECTICUT RIVER AT NORTH STRATFORD, NH",44.74977166,-71.63120018,799,True,qualifies,10.0,1095.0,True
+01139830,"PIKE HILL BR AB RICHARDSON RD, NR BRADFORD, VT",44.0639538,-72.30148518,0.11,False,discharge missing on 4748 days,,,False
+01139838,"PIKE HILL BROOK @ PIKE HILL ROAD, NR BRADFORD, VT",44.05339875,-72.25287248,3.64,False,discharge missing on 4748 days,,,False
+01154950,"COLD RIVER AT HIGH STREET, AT ALSTEAD, NH",43.14944444,-72.3616667,74.6,False,4 calibration years with at least 300 days,4.0,884.0,False
+01157000,"ASHUELOT RIVER NEAR GILSUM, NH",43.03924586,-72.2700858,71.1,False,4 calibration years with at least 300 days,4.0,1046.0,False
+01160000,"S BR ASHUELOT RIVER AT WEBB, NR MARLBOROUGH, NH",42.8720265,-72.2136952,36.0,False,discharge missing on 4566 days,,,False
+01168250,"COLD RIVER AT FLORIDA, MA",42.66669444,-73.0301667,6.47,False,discharge missing on 1423 days,,,False
+01170100,"GREEN RIVER NEAR COLRAIN, MA",42.70341695,-72.67064738,41.4,True,qualifies,5.0,1046.0,False
+01173000,"WARE RIVER AT INTAKE WORKS NEAR BARRE, MA",42.39120167,-72.0650774,96.3,False,2 calibration years with at least 300 days,2.0,1094.0,False
+01184000,"CONNECTICUT RIVER AT THOMPSONVILLE, CT",41.98720462,-72.60534826,9660.0,False,0 calibration years with at least 300 days,0.0,0.0,False
+01186000,"WEST BRANCH FARMINGTON RIVER AT RIVERTON, CT",41.9627621,-73.01758414,131.0,False,0 calibration years with at least 300 days,0.0,0.0,False
+01187300,"HUBBARD RIVER NEAR WEST HARTLAND, CT",42.0375,-72.93932778,19.9,False,2 calibration years with at least 300 days,2.0,0.0,False
+01192500,"HOCKANUM RIVER NEAR EAST HARTFORD, CT",41.78303965,-72.58729366,73.4,False,0 calibration years with at least 300 days,0.0,0.0,False
+01192704,MATTABESSET RIVER AT ROUTE 372 AT EAST BERLIN,41.60815451,-72.71509531,48.1,False,discharge missing on 4748 days,,,False
+01193500,"SALMON RIVER NEAR EAST HAMPTON, CT",41.55220783,-72.44923535,100.0,False,0 water-temperature days in 2021-2023,6.0,0.0,False
+01194000,"EIGHTMILE RIVER AT NORTH PLAIN, CT",41.44166944,-72.33267778,20.1,False,4 calibration years with at least 300 days,4.0,0.0,False
+01194500,"EAST BRANCH EIGHTMILE RIVER NEAR NORTH LYME, CT",41.42751667,-72.33477778,22.3,False,0 calibration years with at least 300 days,0.0,0.0,False
+01196500,"QUINNIPIAC RIVER AT WALLINGFORD, CT",41.45026389,-72.841275,115.0,True,qualifies,6.0,816.0,True
+01201487,"STILL RIVER AT ROUTE 7 AT BROOKFIELD CENTER, CT",41.46582222,-73.40320278,62.3,False,4 calibration years with at least 300 days,4.0,0.0,False
+01205500,"HOUSATONIC RIVER AT STEVENSON, CT",41.38380278,-73.16663889,1544.0,False,0 calibration years with at least 300 days,0.0,0.0,False
+01302020,BRONX RIVER AT NY BOTANICAL GARDEN AT BRONX NY,40.86230556,-73.87438889,38.4,False,0 calibration years with at least 300 days,0.0,902.0,False
+01306495,CONNETQUOT RIVER DISTRIBUTARY NEAR OAKDALE NY,40.747583,-73.150389,27.66,False,discharge missing on 3015 days,,,False
+01308000,SAMPAWAMS CREEK AT BABYLON NY,40.704361,-73.313639,22.7,False,discharge missing on 92 days,,,False
+01308500,CARLLS RIVER AT BABYLON NY,40.70897222,-73.32880556,35.4,False,0 calibration years with at least 300 days,0.0,0.0,False
+01309500,MASSAPEQUA CREEK AT MASSAPEQUA NY,40.689,-73.45538889,38.6,False,discharge missing on 639 days,,,False
+0134277112,HONNEDAGA LAKE TRIBUTARY NO. 2 NR FOREST LODGE NY,43.53380556,-74.8618333,0.07,False,discharge missing on 1898 days,,,False
+0134277114,HONNEDAGA LAKE TRIBUTARY NO. 3 NR FOREST LODGE NY,43.53138889,-74.8529167,0.12,False,discharge missing on 1898 days,,,False
+0134277119,HONNEDAGA L TRIB NO 4 AT FOREST LODGE NY,43.52105556,-74.8011111,0.84,False,discharge missing on 2977 days,,,False
+0134277121,HONNEDAGA LAKE TRIBUTARY NO. 5 AT FOREST LODGE NY,43.51430556,-74.7988611,0.12,False,discharge missing on 2916 days,,,False
+0134277123,HONNEDAGA LAKE TRIBUTARY NO. 6 AT FOREST LODGE NY,43.5115,-74.8148611,0.07,False,discharge missing on 3320 days,,,False
+01349527,MOHAWK R ABOVE STATE HIGHWAY 30A AT FONDA NY,42.95044444,-74.371,2118,False,discharge missing on 1370 days,,,False
+01354083,MOHAWK RIVER AT AMSTERDAM NY,42.934,-74.1918611,3152,False,discharge missing on 1476 days,,,False
+01358000,HUDSON RIVER AT GREEN ISLAND NY,42.75225,-73.68908333,8090.0,False,0 calibration years with at least 300 days,0.0,0.0,False
+01359133,PATROON CR AT NORTHERN BLVD AT ALBANY NY,42.67138889,-73.7555556,13.1,False,discharge missing on 4748 days,,,False
+0136219503,ESOPUS CREEK BELOW LOST CLOVE RD AT BIG INDIAN NY,42.09788889,-74.4490833,29.6,False,discharge missing on 2111 days,,,False
+01362200,ESOPUS CREEK AT ALLABEN NY,42.11688889,-74.38008333,63.7,False,0 calibration years with at least 300 days,0.0,0.0,False
+01362230,DIVERSION FROM SCHOHARIE RESERVOIR NY,42.11488889,-74.36361111,,True,qualifies,10.0,1093.0,True
+01362232,BROADSTREET HOLLOW BROOK AT HWY28 AT ALLABEN NY,42.112556,-74.358694,9.16,False,discharge missing on 4247 days,,,False
+0136230002,WOODLAND CREEK ABOVE MOUTH AT PHOENICIA NY,42.0797222,-74.3345833,20.6,False,0 calibration years with at least 300 days,0.0,0.0,False
+01362500,ESOPUS CREEK AT COLDBROOK NY,42.0144722,-74.2701944,192,True,qualifies,10.0,1084.0,True
+01363556,ESOPUS CREEK NEAR LOMONTVILLE NY,41.8793333,-74.1453611,279,False,discharge missing on 1042 days,,,False
+01364959,RONDOUT CR ABOVE RED BROOK AT PEEKAMOOSE NY,41.93694444,-74.3747222,5.36,False,discharge missing on 4748 days,,,False
+01365100,CANNONSVILLE RES DIV CHANNEL NR GRAHAMSVILLE NY,41.8521111,-74.51302778,,False,discharge missing on 2910 days,,,False
+01365550,CHESTNUT CREEK AT MOUTH AT GRAHAMSVILLE NY,41.8490833,-74.5318333,21.5,False,discharge missing on 2813 days,,,False
+01367800,Papakating Creek at Pellettown NJ,41.16277778,-74.67527778,15.8,False,discharge missing on 3380 days,,,False
+01379000,Passaic River near Millington NJ,40.68,-74.52888889,55.4,False,0 calibration years with at least 300 days,0.0,0.0,False
+01379773,Green Pond Brook at Picatinny Arsenal NJ,40.96,-74.53972222,7.65,False,0 calibration years with at least 300 days,0.0,0.0,False
+01379790,Green Pond Brook at Wharton NJ,40.91777778,-74.5836111,12.6,False,discharge missing on 4748 days,,,False
+01382170,Pequannock River at NJ Route 23 near Oak Ridge NJ,41.07777778,-74.4897222,19.3,False,discharge missing on 3562 days,,,False
+01382210,Pequannock River at Oak Ridge NJ,41.0397222,-74.5016667,27.4,False,discharge missing on 1 days,,,False
+01382385,Pequannock River at Green Pond Junction NJ,41.02472222,-74.40833333,57.1,False,2 calibration years with at least 300 days,2.0,0.0,False
+01382500,Pequannock River at Macopin Intake Dam NJ,41.01833333,-74.40111111,63.7,False,2 calibration years with at least 300 days,2.0,0.0,False
+01388000,Ramapo River at Pompton Lakes NJ,40.99194444,-74.28,160.0,True,qualifies,9.0,1057.0,False
+01388500,Pompton River at Pompton Plains NJ,40.9697222,-74.2819444,355,False,0 calibration years with at least 300 days,0.0,0.0,False
+01389500,Passaic River at Little Falls NJ,40.88472222,-74.22611111,762.0,False,0 calibration years with at least 300 days,0.0,0.0,False
+01390500,Saddle River at Ridgewood NJ,40.985,-74.0905556,21.6,False,0 calibration years with at least 300 days,0.0,0.0,False
+01391500,Saddle River at Lodi NJ,40.89027778,-74.0805556,54.6,False,0 calibration years with at least 300 days,0.0,0.0,False
+01394500,Rahway River near Springfield NJ,40.6875,-74.3116667,25.5,False,discharge missing on 23 days,,,False
+01395000,Rahway River at Rahway NJ,40.61888889,-74.28333333,40.9,False,0 calibration years with at least 300 days,0.0,0.0,False
+01396500,South Branch Raritan River near High Bridge NJ,40.67777778,-74.8791667,65.3,False,0 calibration years with at least 300 days,0.0,242.0,False
+01396660,Mulhockaway Creek at Van Syckel NJ,40.6475,-74.96888889,11.8,False,0 calibration years with at least 300 days,0.0,0.0,False
+01397000,South Branch Raritan River at Stanton NJ,40.57222222,-74.86805556,147.0,False,0 calibration years with at least 300 days,0.0,0.0,False
+01398000,Neshanic River at Reaville NJ,40.47333333,-74.82777778,25.7,False,0 calibration years with at least 300 days,0.0,0.0,False
+01399690,South Branch Rockaway Creek at Whitehouse NJ,40.6233333,-74.7666667,13.2,False,discharge missing on 4748 days,,,False
+01399700,Rockaway Creek at Whitehouse NJ,40.63027778,-74.7361111,37.1,False,discharge missing on 4748 days,,,False
+01400500,Raritan River at Manville NJ,40.55555556,-74.58277778,490,True,qualifies,10.0,1020.0,False
+01401000,Stony Brook at Princeton NJ,40.33305556,-74.68194444,44.5,False,0 calibration years with at least 300 days,0.0,226.0,False
+01402000,Millstone River at Blackwells Mills NJ,40.475,-74.57583333,258.0,False,0 calibration years with at least 300 days,0.0,556.0,False
+01408000,Manasquan River at Squankum NJ,40.16138889,-74.15472222,44.0,False,264 water-temperature days in 2021-2023,6.0,264.0,False
+01408029,Manasquan River near Allenwood NJ,40.14666667,-74.12222222,63.3,True,qualifies,10.0,949.0,False
+01408500,Toms River near Toms River NJ,39.98638889,-74.2233333,123,False,1 calibration years with at least 300 days,1.0,0.0,False
+01409095,Oyster Creek near Brookville NJ,39.7983333,-74.25027778,7.43,False,discharge missing on 3652 days,,,False
+01409810,West Branch Wading River near Jenkins NJ,39.68805556,-74.5480556,84.1,False,0 calibration years with at least 300 days,0.0,0.0,False
+01410784,Great Egg Harbor R near Sicklerville NJ,39.73361111,-74.95111111,15.1,False,0 calibration years with at least 300 days,0.0,0.0,False
+01411000,Great Egg Harbor River at Folsom NJ,39.59472222,-74.85166667,57.1,False,0 calibration years with at least 300 days,0.0,0.0,False
+01411500,Maurice River at Norma NJ,39.49555556,-75.07694444,112.0,False,0 calibration years with at least 300 days,0.0,333.0,False
+01412000,Menantico Creek near Millville NJ,39.41916667,-74.96583333,23.2,False,discharge missing on 3189 days,,,False
+01412080,Manumuskin River at Cumberland NJ,39.37305556,-74.94472222,27.4,False,discharge missing on 3196 days,,,False
+01413500,EAST BRANCH DELAWARE RIVER AT MARGARETVILLE NY,42.14477778,-74.65336111,163.0,False,2 calibration years with at least 300 days,2.0,1076.0,False
+01414500,MILL BROOK NEAR DUNRAVEN NY,42.10616667,-74.73052778,25.2,False,1 calibration years with at least 300 days,1.0,948.0,False
+01415000,TREMPER KILL NEAR ANDES NY,42.11966667,-74.82044444,33.2,False,1 calibration years with at least 300 days,1.0,1081.0,False
+01415460,TERRY CLOVE KILL NEAR DE LANCEY NY,42.14711111,-74.90522222,7.91,False,discharge missing on 3248 days,,,False
+01417000,EAST BRANCH DELAWARE RIVER AT DOWNSVILLE NY,42.07502778,-74.97627778,372,False,1 calibration years with at least 300 days,1.0,1095.0,False
+01417500,EAST BRANCH DELAWARE RIVER AT HARVARD NY,42.0245833,-75.11927778,458,True,qualifies,10.0,1095.0,False
+01419500,WILLOWEMOC CREEK NR LIVINGSTON MANOR NY,41.90352778,-74.81275,62.6,False,discharge missing on 2799 days,,,False
+01420500,BEAVER KILL AT COOKS FALLS NY,41.94641667,-74.9796667,241,False,4 calibration years with at least 300 days,4.0,1094.0,False
+01421000,EAST BRANCH DELAWARE RIVER AT FISHS EDDY NY,41.973278,-75.174722,784.0,True,qualifies,10.0,1094.0,True
+01421500,EAST BRANCH DELAWARE RIVER AT HANCOCK NY,41.952167,-75.276694,839.0,False,discharge missing on 4748 days,,,False
+01423000,WEST BRANCH DELAWARE RIVER AT WALTON NY,42.1661111,-75.14002778,332,False,1 calibration years with at least 300 days,1.0,948.0,False
+01425000,WEST BRANCH DELAWARE RIVER AT STILESVILLE NY,42.07491667,-75.3958056,456,True,qualifies,10.0,1077.0,False
+01425805,OQUAGA CREEK AT MCCLURE NY,42.04869444,-75.4851944,58.2,False,discharge missing on 3268 days,,,False
+01426500,WEST BRANCH DELAWARE RIVER AT HALE EDDY NY,42.00302778,-75.38352778,595,True,qualifies,10.0,935.0,False
+01427195,"Equinunk Creek near Dillontown, PA",41.84027778,-75.2383333,46.9,False,discharge missing on 2829 days,,,False
+01427207,DELAWARE RIVER AT LORDVILLE NY,41.86727778,-75.21375,1590.0,True,qualifies,10.0,1082.0,False
+01427500,CALLICOON CREEK AT CALLICOON NY,41.76055556,-75.04838889,110,False,discharge missing on 2829 days,,,False
+01427510,DELAWARE RIVER AT CALLICOON NY,41.75675,-75.05741667,1820.0,True,qualifies,10.0,1086.0,True
+01428000,TENMILE RIVER AT TUSTEN NY,41.56377778,-75.01438889,45.6,False,discharge missing on 2785 days,,,False
+01428500,DELAWARE R ABOVE LACKAWAXEN R NEAR BARRYVILLE NY,41.50875,-74.9860556,2020,True,qualifies,10.0,1070.0,True
+01428750,"West Branch Lackawaxen River near Aldenville, PA",41.67452998,-75.37601299,40.6,False,3 calibration years with at least 300 days,3.0,1091.0,False
+01429000,"West Branch Lackawaxen River at Prompton, PA",41.5872185,-75.326829,59.7,False,3 calibration years with at least 300 days,3.0,1060.0,False
+01431500,"Lackawaxen River at Hawley, PA",41.4762002,-75.1721186,290,True,qualifies,10.0,1095.0,False
+01432055,"Lackawaxen River near Baoba, PA",41.46941667,-75.1089444,542,False,discharge missing on 3814 days,,,False
+01432110,"Lackawaxen River at Rowland, PA",41.4759228,-75.036281,589,True,qualifies,10.0,1094.0,False
+01432160,DELAWARE RIVER AT BARRYVILLE NY,41.47483333,-74.91325,2659.0,False,discharge missing on 2830 days,,,False
+01432495,"Shohola Creek near Walker Lake, PA",41.45,-74.9216667,74.5,False,discharge missing on 2830 days,,,False
+01433005,MONGAUP R BELOW SWINGING BRIDGE RESERVOIR NY,41.56727778,-74.78327778,116,False,discharge missing on 3135 days,,,False
+01433500,MONGAUP RIVER NEAR MONGAUP NY,41.4612222,-74.75877778,200,False,discharge missing on 1003 days,,,False
+01434000,DELAWARE RIVER AT PORT JERVIS NY,41.3705833,-74.69713889,3076,False,1 calibration years with at least 300 days,1.0,1076.0,False
+0143400680,E BR NEVERSINK R NORTHEAST OF DENNING NY,41.967361,-74.448083,8.93,False,discharge missing on 2371 days,,,False
+01434017,EAST BRANCH NEVERSINK RIVER NEAR CLARYVILLE NY,41.92538889,-74.54005556,22.9,False,1 calibration years with at least 300 days,1.0,1095.0,False
+01434021,W BR NEVERSINK R AT WINNISOOK L NR FROST VALLEY NY,42.011111,-74.414444,0.83,False,discharge missing on 2360 days,,,False
+01434025,BISCUIT BK ABOVE PIGEON BK AT FROST VALLEY NY,41.9960833,-74.5002222,3.72,False,2 calibration years with at least 300 days,2.0,1095.0,False
+01434498,WEST BRANCH NEVERSINK RIVER AT CLARYVILLE NY,41.92041667,-74.57438889,33.8,False,1 calibration years with at least 300 days,1.0,1095.0,False
+01435000,NEVERSINK RIVER NEAR CLARYVILLE NY,41.88994444,-74.5898056,66.6,True,qualifies,9.0,1079.0,False
+01436000,NEVERSINK RIVER AT NEVERSINK NY,41.82030556,-74.63552778,92.6,False,1 calibration years with at least 300 days,1.0,1091.0,False
+01436655,SHELDRAKE STREAM AT THOMPSONVILLE NY,41.66783333,-74.62302778,28.4,False,discharge missing on 3248 days,,,False
+01436690,NEVERSINK RIVER AT BRIDGEVILLE NY,41.63780556,-74.61738889,171.0,True,qualifies,10.0,1084.0,True
+01437100,GUMAER BROOK NEAR WURTSBORO NY,41.59594444,-74.4681944,10.3,False,discharge missing on 3266 days,,,False
+01437349,BASHER KILL BLW BASHAKILL MARSH AT WESTBROOKVILLE,41.49963889,-74.5522222,63.7,False,discharge missing on 3492 days,,,False
+01437400,BASHER KILL AT CUDDEBACKVILLE NY,41.45394444,-74.5893056,70.3,False,discharge missing on 4417 days,,,False
+01437500,NEVERSINK RIVER AT GODEFFROY NY,41.44127778,-74.60183333,307.0,False,2 calibration years with at least 300 days,2.0,1057.0,False
+01438500,Delaware River at Montague NJ,41.30916667,-74.79527778,3480.0,False,1 calibration years with at least 300 days,1.0,1077.0,False
+01439500,"Bush Kill at Shoemakers, PA",41.08815078,-75.03767469,117,False,1 calibration years with at least 300 days,1.0,1074.0,False
+01440000,Flat Brook near Flatbrookville NJ,41.106111,-74.9525,64.0,False,1 calibration years with at least 300 days,1.0,1066.0,False
+01440400,"Brodhead Creek near Analomink, PA",41.0848148,-75.2146251,65.9,False,1 calibration years with at least 300 days,1.0,1095.0,False
+01445500,Pequest River at Pequest NJ,40.83055556,-74.97777778,106.0,False,0 calibration years with at least 300 days,0.0,0.0,False
+01446500,Delaware River at Belvidere NJ,40.82638889,-75.0825,4535.0,False,1 calibration years with at least 300 days,1.0,1064.0,False
+01446700,"Delaware River at Easton, PA",40.7120429,-75.1962874,4636.00,False,discharge missing on 4748 days,,,False
+01447500,"Lehigh River at Stoddartsville, PA",41.1302794,-75.62545259,91.7,False,3 calibration years with at least 300 days,3.0,1094.0,False
+01447720,"Tobyhanna Creek near Blakeslee, PA",41.08472426,-75.6054522,118,False,3 calibration years with at least 300 days,3.0,1093.0,False
+01447800,Lehigh R bl Francis E Walter Res nr White Haven PA,41.10472447,-75.73212288,290,False,3 calibration years with at least 300 days,3.0,1066.0,False
+01449360,"Pohopoco Creek at Kresgeville, PA",40.8975919,-75.5024077,49.9,False,3 calibration years with at least 300 days,3.0,1091.0,False
+01449800,"Pohopoco Cr bl Beltzville Dam nr Parryville, PA",40.84564756,-75.6457437,96.4,False,3 calibration years with at least 300 days,3.0,1083.0,False
+01451380,"Little Lehigh Creek near Trexlertown, PA",40.53111897,-75.60045519,21.3,False,discharge missing on 3238 days,,,False
+01451400,"Spring Creek at Trexlertown, PA",40.5340833,-75.6014722,23.7,False,discharge missing on 3356 days,,,False
+01451467,"Leibert Creek at Emmaus, PA",40.5216111,-75.5083333,3.98,False,discharge missing on 3490 days,,,False
+01451500,"Little Lehigh Creek near Allentown, PA",40.5823197,-75.48296088,80.8,False,1 calibration years with at least 300 days,1.0,1093.0,False
+01451630,"Cedar Creek at Mouth near Allentown, PA",40.5875,-75.4968056,14.5,False,discharge missing on 3303 days,,,False
+01451650,Little Lehigh Creek at Tenth St. Br. at Allentown,40.59648637,-75.4740717,98.2,False,1 calibration years with at least 300 days,1.0,1093.0,False
+01451800,"Jordan Creek near Schnecksville, PA",40.66176219,-75.626854,53.0,False,1 calibration years with at least 300 days,1.0,1091.0,False
+01454700,"Lehigh River at Glendon, PA",40.6692656,-75.23628808,1359,False,discharge missing on 2829 days,,,False
+01455290,Pohatcong Crk at Creek Rd nr Carpentersville NJ,40.6354722,-75.16863889,55.9,False,discharge missing on 2791 days,,,False
+01457500,Delaware River at Riegelsville NJ,40.59472222,-75.18972222,6328.0,False,discharge missing on 2830 days,,,False
+01460440,Delaware and Raritan Canal at Port Mercer NJ,40.30444444,-74.685,,False,discharge zero or below on 17 days,,,False
+01460880,Lockatong Creek at Raven Rock NJ,40.4161111,-75.01777778,22.9,False,discharge missing on 2812 days,,,False
+01463500,Delaware River at Trenton NJ,40.22166667,-74.77805556,6780.0,True,qualifies,10.0,1082.0,True
+01464290,Crosswicks Ck at Hockamik Rd near Cookstown NJ,40.03611111,-74.53611111,23.5,False,discharge missing on 3225 days,,,False
+01464500,Crosswicks Creek at Extonville NJ,40.13722222,-74.6,81.5,False,1 calibration years with at least 300 days,1.0,1095.0,False
+01464710,"Pine Run at Chalfont, PA",40.2889952,-75.2026734,11.60,False,discharge missing on 4748 days,,,False
+01464907,Little Neshaminy C at Valley Road nr Neshaminy PA,40.22927456,-75.119616,26.8,False,0 calibration years with at least 300 days,0.0,0.0,False
+01465500,"Neshaminy Creek near Langhorne, PA",40.1739982,-74.9568342,210,False,discharge missing on 1096 days,,,False
+01465850,South Branch Rancocas Creek at Vincentown NJ,39.94,-74.763056,64.5,False,1 calibration years with at least 300 days,1.0,1084.0,False
+0146587310,Haynes C at Tuckerton Rd at Lake Pine NJ,39.867722,-74.84175,14.9,False,discharge missing on 3269 days,,,False
+01466000,Middle Br Mount Misery Bk in Byrne State Forest NJ,39.91666667,-74.5080556,2.82,False,discharge missing on 4748 days,,,False
+01466500,McDonalds Branch in Byrne State Forest NJ,39.885,-74.50527778,2.35,True,qualifies,9.0,1071.0,True
+01466900,Greenwood Branch at New Lisbon NJ,39.9561111,-74.62777778,77.9,False,1 calibration years with at least 300 days,1.0,1090.0,False
+01467000,North Branch Rancocas Creek at Pemberton NJ,39.97,-74.68444444,118.0,False,1 calibration years with at least 300 days,1.0,1095.0,False
+01467081,South Branch Pennsauken Creek at Cherry Hill NJ,39.94166667,-75.00111111,8.98,False,0 calibration years with at least 300 days,0.0,674.0,False
+01467087,"Frankford Creek at Castor Ave, Philadelphia, PA",40.0159454,-75.0968411,30.4,False,2 calibration years with at least 300 days,2.0,950.0,False
+01467150,Cooper River at Haddonfield NJ,39.90305556,-75.02138889,17.0,False,0 calibration years with at least 300 days,0.0,1031.0,False
+01467471,"Schuylkill River ab Mill Creek at Port Carbon, PA",40.6937472,-76.1647722,27.2,False,discharge missing on 4748 days,,,False
+01467492,"Mill Cr ab Schuylkill River at Port Carbon, PA",40.69381944,-76.1649556,25.5,False,discharge missing on 4748 days,,,False
+01467688,WB Schuylkill River ab Pine Knot Disch at Duncott,40.70422839,-76.2493078,17.1,False,discharge missing on 4501 days,,,False
+01467752,"WB Schuylkill River ab West Cr near Pottsville, PA",40.6686861,-76.2364222,24.1,False,discharge missing on 3406 days,,,False
+01467861,"West Cr West Branch Schuylkill near Pottsville, PA",40.6687722,-76.2379444,18.6,False,discharge missing on 3477 days,,,False
+01469700,"Little Schuylkill River at South Tamaqua, PA",40.77314556,-75.9565925,65.7,False,discharge missing on 4748 days,,,False
+01470736,"Sacony Creek at Normal Avenue at Kutztown, PA",40.5156111,-75.7701944,20.40,False,discharge missing on 4748 days,,,False
+01470779,"Tulpehocken Creek near Bernville, PA",40.4133443,-76.1715854,70.4,False,3 calibration years with at least 300 days,3.0,1095.0,False
+01470960,Tulpehocken Cr at Blue Marsh Damsite near Reading,40.37056658,-76.025192,175,False,3 calibration years with at least 300 days,3.0,1093.0,False
+01471875,"Manatawny Creek near Spangsville, PA",40.339538,-75.7421359,56.9,False,discharge missing on 360 days,,,False
+01472157,"French Creek near Phoenixville, PA",40.15149064,-75.601305,59.1,False,4 calibration years with at least 300 days,4.0,1089.0,False
+01473000,"Perkiomen Creek at Graterford, PA",40.22954725,-75.451567,279,False,2 calibration years with at least 300 days,2.0,1075.0,False
+01473169,Valley Creek at PA Turnpike Br near Valley Forge,40.07927367,-75.46074808,20.8,False,2 calibration years with at least 300 days,2.0,1095.0,False
+01473470,"Stony Creek at Sterigere Street at Norristown, PA",40.12733007,-75.3449047,20.40,False,discharge missing on 3287 days,,,False
+01473500,"Schuylkill River at Norristown, PA",40.11555556,-75.3561111,1760,False,discharge missing on 1 days,,,False
+01473900,"Wissahickon Creek at Fort Washington, PA",40.1239987,-75.2198992,40.8,False,0 calibration years with at least 300 days,0.0,61.0,False
+01474000,"Wissahickon Creek at Mouth, Philadelphia, PA",40.0152903,-75.2068343,64.0,False,0 calibration years with at least 300 days,0.0,66.0,False
+01474500,"Schuylkill River at Philadelphia, PA",39.9677908,-75.1885007,1893,False,2 calibration years with at least 300 days,2.0,1086.0,False
+01475001,Mantua Creek at East Holly Avenue at Pitman NJ,39.73888889,-75.1144444,6.24,False,0 calibration years with at least 300 days,0.0,380.0,False
+01475510,"Darby Creek near Darby, PA",39.92900154,-75.2724064,37.40,False,discharge missing on 2879 days,,,False
+01475530,"Cobbs Cr at U.S. Hghwy No. 1 at Philadelphia, PA",39.9747355,-75.2798924,4.78,False,1 calibration years with at least 300 days,1.0,871.0,False
+01475548,"Cobbs Creek at Mt. Moriah Cemetery, Philadelphia",39.9327861,-75.2376361,19.9,False,1 calibration years with at least 300 days,1.0,879.0,False
+01477070,Raccoon Creek at Wrights Mill NJ,39.68611111,-75.18444444,4.23,False,discharge missing on 3316 days,,,False
+01477120,Raccoon Creek near Swedesboro NJ,39.74055556,-75.25916667,26.9,False,0 calibration years with at least 300 days,0.0,994.0,False
+01478000,"CHRISTINA RIVER AT COOCHS BRIDGE, DE",39.63738889,-75.72788889,20.5,False,2 calibration years with at least 300 days,2.0,1082.0,False
+01478100,"EB White Clay Creek Trib near London Grove, PA",39.85834967,-75.7832425,2.79,False,discharge missing on 3469 days,,,False
+01478120,"East Branch White Clay Creek at Avondale, PA",39.8284429,-75.780773,11.3,False,1 calibration years with at least 300 days,1.0,1090.0,False
+01478137,"Trout Run at Avondale, PA",39.8217764,-75.7791061,1.34,False,discharge missing on 3260 days,,,False
+01478185,"Middle Branch White Clay Creek near West Grove,PA",39.8325833,-75.8450833,4.68,False,discharge missing on 3338 days,,,False
+01478220,"West Branch White Clay Creek near Chesterville, PA",39.76566619,-75.7960492,9.92,False,discharge missing on 3356 days,,,False
+01478245,"White Clay Creek near Strickersville, PA",39.7475,-75.7708333,59.2,False,1 calibration years with at least 300 days,1.0,1089.0,False
+01478650,"WHITE CLAY CREEK AT NEWARK, DE",39.6892222,-75.74875,69.0,False,1 calibration years with at least 300 days,1.0,1074.0,False
+01478950,"PIKE CREEK NEAR NEWARK, DE",39.70688889,-75.6950833,5.89,False,discharge missing on 3195 days,,,False
+01479000,"WHITE CLAY CREEK NEAR NEWARK, DE",39.6992222,-75.67502778,89.1,False,2 calibration years with at least 300 days,2.0,1089.0,False
+01480000,"RED CLAY CREEK AT WOODDALE, DE",39.76280556,-75.6365,47.0,False,2 calibration years with at least 300 days,2.0,1090.0,False
+01480400,"Birch Run near Wagontown, PA",40.0273261,-75.8449449,4.55,True,qualifies,10.0,1095.0,True
+01480500,"West Branch Brandywine Creek at Coatesville, PA",39.98566144,-75.8274467,45.8,True,qualifies,10.0,1095.0,True
+01480617,"West Branch Brandywine Creek at Modena, PA",39.9617734,-75.8013341,55.0,True,qualifies,5.0,1089.0,True
+01480629,"Buck Run at Doe Run, PA",39.9295515,-75.82300028,22.60,False,discharge missing on 3331 days,,,False
+014806318,"Doe Run above Tributary at Springdell, PA",39.9073296,-75.8332776,11.2,False,discharge missing on 4748 days,,,False
+01480685,"Marsh Creek near Downingtown, PA",40.0552915,-75.71629489,20.3,False,0 calibration years with at least 300 days,0.0,0.0,False
+01480870,"East Branch Brandywine Creek below Downingtown, PA",39.9687191,-75.6732715,89.9,True,qualifies,6.0,1087.0,False
+01480878,"Unn Trib to Valley Cr at Hwy 30 at Exton, PA",40.0264954,-75.6360443,2.64,False,discharge missing on 4748 days,,,False
+01481000,"Brandywine Creek at Chadds Ford, PA",39.8698328,-75.5932623,287,True,qualifies,6.0,1094.0,False
+01481500,"BRANDYWINE CREEK AT WILMINGTON, DE",39.7695,-75.576694,314.0,True,qualifies,10.0,1095.0,True
+01482500,Salem River at Woodstown NJ,39.64388889,-75.33027778,14.6,False,0 calibration years with at least 300 days,0.0,0.0,False
+01483155,"SILVER LAKE TRIBUTARY AT MIDDLETOWN, DE",39.4309722,-75.7094722,1.73,False,0 calibration years with at least 300 days,0.0,932.0,False
+01483700,"ST JONES RIVER AT DOVER, DE",39.1637222,-75.5190833,31.9,False,0 calibration years with at least 300 days,0.0,976.0,False
+01484100,"BEAVERDAM BRANCH AT HOUSTON, DE",38.905778,-75.51275,3.02,False,1 calibration years with at least 300 days,1.0,1083.0,False
+01484525,"MILLSBORO POND OUTLET AT MILLSBORO, DE",38.594556,-75.291028,61.7,True,qualifies,9.0,1095.0,True
+01487000,"NANTICOKE RIVER NEAR BRIDGEVILLE, DE",38.728333,-75.561861,75.4,False,0 calibration years with at least 300 days,0.0,0.0,False
+01487150,"BUCKS BRANCH NEAR ATLANTA, DE",38.6914722,-75.63488889,2.97,False,discharge missing on 3857 days,,,False
+01491000,"CHOPTANK RIVER NEAR GREENSBORO, MD",38.99719444,-75.7858056,113,False,1 calibration years with at least 300 days,1.0,0.0,False
+01493112,"CHESTERVILLE BRANCH NEAR CRUMPTON, MD",39.257056,-75.940139,6.12,False,discharge missing on 179 days,,,False
+01503000,SUSQUEHANNA RIVER AT CONKLIN NY,42.03555556,-75.80227778,2232,False,1 calibration years with at least 300 days,1.0,0.0,False
+01507000,CHENANGO RIVER AT GREENE NY,42.32444444,-75.77125,593,False,0 calibration years with at least 300 days,0.0,0.0,False
+01516350,"Tioga River near Mansfield, PA",41.7970183,-77.0802457,153,False,4 calibration years with at least 300 days,4.0,1086.0,False
+01518700,"Tioga River at Tioga Junction, PA",41.95257385,-77.1152486,446,True,qualifies,5.0,1089.0,True
+01520000,"Cowanesque River near Lawrenceville, PA",41.99674048,-77.1399724,298,False,3 calibration years with at least 300 days,3.0,1095.0,False
+015319015,"N Br Towanda Cr, Clark Rd nr Granville Summit PA",41.71691667,-76.6668056,17.8,False,discharge missing on 4748 days,,,False
+01537524,"Nanticoke Creek at Warrior Run, PA",41.18313786,-75.9513103,1.32,False,discharge missing on 4748 days,,,False
+01540500,"Susquehanna River at Danville, PA",40.95814218,-76.6191222,11220,True,qualifies,8.0,936.0,False
+01541490,"Little Clearfield Creek at Dimeling, PA",40.96950187,-78.4083534,45.70,False,discharge missing on 4748 days,,,False
+01542500,"WB Susquehanna River at Karthaus, PA",41.11755906,-78.108896,1462,True,qualifies,10.0,1090.0,False
+01544500,"Kettle Creek at Cross Fork, PA",41.47583829,-77.82580078,136,True,qualifies,10.0,1094.0,True
+01545600,"Young Womans Creek near Renovo, PA",41.3894498,-77.6907967,46.2,True,qualifies,9.0,1048.0,False
+01547500,"Bald Eagle Creek at Blanchard, PA",41.05173127,-77.6044379,339,False,3 calibration years with at least 300 days,3.0,1095.0,False
+01547950,"Beech Creek at Monument, PA",41.1117307,-77.7022159,152,False,0 calibration years with at least 300 days,0.0,0.0,False
+01548303,"Straight Run, Site 1, at Marsh Creek, PA",41.78479405,-77.4019232,6.48,False,discharge missing on 2848 days,,,False
+01549100,"Blockhouse Creek Tributary at Liberty, PA",41.56785194,-77.1013593,1.08,False,discharge missing on 4748 days,,,False
+01549300,"Blockhouse Creek at Buttonwood, PA",41.4953513,-77.1502508,27.60,False,discharge missing on 4748 days,,,False
+01549350,"Steam Valley Run at Buttonwood, PA",41.49424019,-77.1505286,5.34,False,discharge missing on 4748 days,,,False
+01549500,"Blockhouse Creek near English Center, PA",41.4736144,-77.2307812,37.7,False,0 calibration years with at least 300 days,0.0,0.0,False
+01549700,"Pine Creek bl L Pine Creek near Waterville, PA",41.27361657,-77.3241186,944,True,qualifies,9.0,1085.0,False
+01551500,"WB Susquehanna River at Williamsport, PA",41.23611599,-76.996608,5682,False,0 calibration years with at least 300 days,0.0,0.0,False
+01555400,"East Mahantango Creek at Klingerstown, PA",40.6634186,-76.69135408,44.7,False,discharge missing on 4748 days,,,False
+01559795,"Bobs Creek near Pavia, PA",40.2725763,-78.5983506,16.6,False,discharge missing on 4748 days,,,False
+01563200,"Rays Br Juniata R bl Rays Dam nr Huntingdon, PA",40.42896398,-77.9911135,960,False,3 calibration years with at least 300 days,3.0,1089.0,False
+01564997,"Kishacoquillas Creek at Lumber City, PA",40.66173647,-77.5999947,57.4,False,discharge missing on 4748 days,,,False
+01567000,"Juniata River at Newport, PA",40.478333,-77.129444,3354.0,False,3 calibration years with at least 300 days,3.0,0.0,False
+01570500,"Susquehanna River at Harrisburg, PA",40.25473717,-76.8860538,24100,False,0 calibration years with at least 300 days,0.0,606.0,False
+01571490,"Cedar Run at Eberlys Mill, PA",40.2250901,-76.90636279,12.6,False,discharge missing on 4748 days,,,False
+0157155014,"Swatara Creek, Site C3, at Newtown, PA",40.65786674,-76.344952,2.92,False,discharge missing on 4748 days,,,False
+01571778,"Lorberry Creek near Lorberry Junction, PA",40.5875889,-76.4260683,3.59,False,discharge missing on 4748 days,,,False
+01571820,"Swatara Creek at Ravine, PA",40.58064485,-76.4046785,43.3,False,discharge missing on 4748 days,,,False
+01572025,"Swatara Creek near Pine Grove, PA",40.53258999,-76.4021793,116,False,0 calibration years with at least 300 days,0.0,0.0,False
+01573095,"Bachman Run at Annville, PA",40.3162028,-76.5158,7.3,False,discharge missing on 4748 days,,,False
+01573208,"Swatara Creek near Palmyra, PA",40.32223889,-76.6293944,437,False,discharge missing on 4358 days,,,False
+01573660,"Fishing Creek at Goldsboro, PA",40.1533333,-76.7555556,17.5,False,discharge missing on 3349 days,,,False
+01573684,"Little Conewago Crk, Gingrich Rd at Upper Lawn PA",40.22519444,-76.55452778,5.2,False,discharge missing on 4723 days,,,False
+01573695,"Conewago Creek near Bellaire, PA",40.19527778,-76.56777778,20.5,False,discharge missing on 371 days,,,False
+01573710,"Conewago Creek near Falmouth, PA",40.14930556,-76.68775,47.5,False,discharge missing on 161 days,,,False
+01574000,"West Conewago Creek near Manchester, PA",40.08082205,-76.71805199,510,False,1 calibration years with at least 300 days,1.0,1076.0,False
+01575598,"Codorus Creek near Saginaw, PA",40.0522222,-76.6544444,277,False,discharge missing on 3195 days,,,False
+01575735,"Chickies Creek above Manheim Lake near Manheim, PA",40.20592694,-76.40246178,12.60,False,discharge missing on 4748 days,,,False
+01575746,"Chickies Creek at Manheim, PA",40.15342817,-76.393017,29.00,False,discharge missing on 4748 days,,,False
+01575900,"Chiques Creek near Marietta, PA",40.0628745,-76.5155214,108,False,discharge missing on 3625 days,,,False
+01576000,"Susquehanna River at Marietta, PA",40.0545413,-76.5307992,25990,False,0 calibration years with at least 300 days,0.0,0.0,False
+01576007,"Kreutz Creek at Strickler, PA",40.01416667,-76.5480556,32.3,False,discharge missing on 3350 days,,,False
+01576045,"Fishing Creek at Craley, PA",39.94194444,-76.50027778,15.8,False,discharge missing on 3295 days,,,False
+01576381,"Hammer Creek at Obie Rd nr Schafferstown, PA",40.2710833,-76.3217222,12.8,False,discharge missing on 4716 days,,,False
+01576516,"Big Spring Run ab Trib near Willow Street, PA",39.99154444,-76.2609306,0.36,False,discharge missing on 2283 days,,,False
+015765185,Unnamed Trib to Big Spring Run nr Willow Street PA,39.99119167,-76.26395278,1.05,False,discharge missing on 2283 days,,,False
+015765195,"Big Spring Run near Mylin Corners, PA",39.9959361,-76.26403889,1.68,True,qualifies,8.0,1081.0,False
+01576540,"Mill Creek at Eshelman Mill Road near Lyndon, PA",40.0100985,-76.2771806,54.2,False,discharge missing on 4748 days,,,False
+01577300,"Muddy Creek at Muddy Creek Forks, PA",39.80760259,-76.47579759,71.9,False,discharge missing on 4748 days,,,False
+01577500,"Muddy Creek at Castle Fin, PA",39.77260378,-76.3157919,133.00,False,discharge missing on 1195 days,,,False
+01581752,"PLUMTREE RUN NEAR BEL AIR, MD",39.49627778,-76.34744444,2.5,True,qualifies,7.0,1054.0,False
+01581920,"GUNPOWDER FALLS NEAR PARKTON, MD",39.61905556,-76.69036111,81.5,True,qualifies,9.0,1062.0,False
+01585075,"FOSTER BRANCH NEAR JOPPATOWNE, MD",39.40852778,-76.34263889,1.83,False,discharge missing on 1733 days,,,False
+01585219,"HERRING RUN AT SINCLAIR LANE AT BALTIMORE, MD",39.31797222,-76.55513889,16.3,False,discharge missing on 1004 days,,,False
+01585225,"MOORES RUN TRIB. NEAR TODD AVE AT BALTIMORE, MD",39.33669444,-76.5406111,0.15,False,discharge missing on 447 days,,,False
+01585230,"MOORES RUN AT RADECKE AVE AT BALTIMORE, MD",39.330083,-76.534889,3.52,False,discharge missing on 447 days,,,False
+01589290,"SCOTTS LEVEL BRANCH AT ROCKDALE, MD",39.36158333,-76.76175,3.23,True,qualifies,5.0,1087.0,True
+01591610,Patuxent River below Brighton Dam near Brighton MD,39.19219444,-77.00438889,78.6,False,3 calibration years with at least 300 days,3.0,0.0,False
+01595200,"STONY RIVER NEAR MOUNT STORM, WV",39.26954905,-79.2622625,48.5,False,discharge missing on 4748 days,,,False
+01595800,"NORTH BRANCH POTOMAC RIVER AT BARNUM, WV",39.44511111,-79.11080556,266.0,True,qualifies,8.0,1073.0,True
+01596500,"SAVAGE RIVER NEAR BARTON, MD",39.57005556,-79.1019444,49.1,True,qualifies,8.0,1039.0,True
+01597500,"SAVAGE RIV BL SAVAGE RIV DAM NEAR BLOOMINGTON, MD",39.50275,-79.1239722,106,True,qualifies,8.0,1095.0,False
+01598500,"NORTH BRANCH POTOMAC RIVER AT LUKE, MD",39.47897222,-79.06377778,406.0,False,0 calibration years with at least 300 days,0.0,0.0,False
+01600000,"NORTH BRANCH POTOMAC RIVER AT PINTO, MD",39.56680556,-78.8395556,607,False,discharge missing on 4748 days,,,False
+01608070,"SOUTH BRANCH POTOMAC RIVER NEAR MOOREFIELD, WV",39.10391667,-78.9593056,1216,False,discharge missing on 4748 days,,,False
+01608500,"SOUTH BRANCH POTOMAC RIVER NEAR SPRINGFIELD, WV",39.44703879,-78.6541817,1461,False,11 water-temperature days in 2021-2023,10.0,11.0,False
+01610400,"WAITES RUN NEAR WARDENSVILLE, WV",39.0427222,-78.5983333,11.4,False,0 water-temperature days in 2021-2023,8.0,0.0,False
+01611500,"CACAPON RIVER NEAR GREAT CACAPON, WV",39.5823158,-78.3097312,675,False,0 water-temperature days in 2021-2023,10.0,0.0,False
+01613900,"HOGUE CREEK NEAR HAYFIELD, VA",39.2145479,-78.2880592,15.9,False,0 calibration years with at least 300 days,0.0,0.0,False
+01614830,"OPEQUON CREEK NEAR STEPHENS CITY, VA",39.1089948,-78.2050011,15.2,False,discharge missing on 4748 days,,,False
+01615000,"OPEQUON CREEK NEAR BERRYVILLE, VA",39.1747222,-78.0783333,58.2,False,0 calibration years with at least 300 days,0.0,0.0,False
+01616100,"DRY MARSH RUN NEAR BERRYVILLE, VA",39.19259167,-78.0686306,11.0,False,3 calibration years with at least 300 days,3.0,0.0,False
+01621050,"MUDDY CREEK AT MOUNT CLINTON, VA",38.48679008,-78.96030749,14.3,False,0 calibration years with at least 300 days,0.0,0.0,False
+01622000,"NORTH RIVER NEAR BURKETOWN, VA",38.3404051,-78.9136385,376,False,0 calibration years with at least 300 days,0.0,0.0,False
+01625000,"MIDDLE RIVER NEAR GROTTOES, VA",38.26179616,-78.8619703,373,False,0 calibration years with at least 300 days,0.0,0.0,False
+01630700,"GOONEY RUN NEAR GLEN ECHO, VA",38.83511474,-78.2319454,20.5,False,discharge missing on 4748 days,,,False
+01631000,"S F SHENANDOAH RIVER AT FRONT ROYAL, VA",38.91400059,-78.21083388,1634,False,0 calibration years with at least 300 days,0.0,0.0,False
+01632000,"N F SHENANDOAH RIVER AT COOTES STORE, VA",38.63706254,-78.852803,210,False,0 calibration years with at least 300 days,0.0,0.0,False
+01632082,"LINVILLE CREEK AT BROADWAY, VA",38.60678588,-78.803357,45.7,False,discharge missing on 1 days,,,False
+01633000,"N F SHENANDOAH RIVER AT MOUNT JACKSON, VA",38.74567048,-78.6389042,508,False,0 calibration years with at least 300 days,0.0,0.0,False
+01634500,"CEDAR CREEK NEAR WINCHESTER, VA",39.0812176,-78.3294486,102,False,0 calibration years with at least 300 days,0.0,0.0,False
+01635090,"CEDAR CREEK ABOVE HWY 11 NEAR MIDDLETOWN, VA",39.00677495,-78.3163924,154,False,discharge missing on 4748 days,,,False
+01635500,"PASSAGE CREEK NEAR BUCKTON, VA",38.95816564,-78.2666685,86.5,False,0 calibration years with at least 300 days,0.0,0.0,False
+01636242,"CROOKED RUN BELOW HWY 340 AT RIVERTON, VA",38.9551101,-78.1972225,46.9,False,discharge missing on 4748 days,,,False
+0163626650,"MANASSAS RUN AT RT 645 NEAR FRONT ROYAL, VA",38.93416667,-78.1280556,11.2,False,discharge missing on 4748 days,,,False
+01636316,"SPOUT RUN AT RT 621 NEAR MILLWOOD, VA",39.067025,-78.0037528,21.4,False,2 calibration years with at least 300 days,2.0,0.0,False
+01636500,"SHENANDOAH RIVER AT MILLVILLE, WV",39.28204576,-77.7891606,3041,False,discharge missing on 2 days,,,False
+01636845,"LITTLE CATOCTIN CREEK NEAR ROSEMONT, MD",39.34125,-77.6340833,4.16,False,discharge missing on 3374 days,,,False
+01636846,"LITTLE CATOCTIN CREEK AT ROSEMONT, MD",39.3376111,-77.6264722,4.55,False,discharge missing on 3379 days,,,False
+01638500,"POTOMAC RIVER AT POINT OF ROCKS, MD",39.2735833,-77.5431111,9651,False,0 calibration years with at least 300 days,0.0,966.0,False
+01640152,"SAMS CREEK AT MCKINSTRYS MILL, MD",39.53308056,-77.15888889,,False,discharge missing on 4748 days,,,False
+01640975,"BIG HUNTING CREEK NEAR THURMONT, MD",39.6300833,-77.45527778,7.08,False,discharge missing on 4748 days,,,False
+01642198,"CARROLL CREEK NEAR FREDERICK, MD",39.436028,-77.440583,4.35,False,discharge missing on 2434 days,,,False
+01642199,"CARROLL CREEK ABOVE ROCK CREEK AT FREDERICK, MD",39.42441667,-77.42977778,7.33,False,discharge missing on 2465 days,,,False
+01643580,"MONOCACY RIVER NEAR DICKERSON, MD",39.2633972,-77.4357417,961,False,discharge missing on 4555 days,,,False
+01643700,"GOOSE CREEK NEAR MIDDLEBURG, VA",38.98649818,-77.7966614,122,False,discharge zero or below on 13 days,,,False
+01644280,"BROAD RUN NEAR LEESBURG, VA",39.04641667,-77.43238889,76.1,False,0 calibration years with at least 300 days,0.0,0.0,False
+01646000,"DIFFICULT RUN NEAR GREAT FALLS, VA",38.97594346,-77.24581439,57.8,False,79 water-temperature days in 2021-2023,8.0,79.0,False
+01646305,"DEAD RUN AT WHANN AVENUE NEAR MCLEAN, VA",38.95977716,-77.1756743,2.05,True,qualifies,10.0,926.0,True
+01646500,"POTOMAC RIVER NEAR WASH, DC LITTLE FALLS PUMP STA",38.94977778,-77.12763889,11560.0,False,0 water-temperature days in 2021-2023,8.0,0.0,False
+01648010,"Rock Creek at Joyce Rd Washington, DC",38.960167,-77.042056,63.7,False,discharge missing on 639 days,,,False
+01648011,Luzon Branch above Rock Creek at Washington DC,38.96169444,-77.04138889,1.03,False,discharge missing on 4241 days,,,False
+01649190,"PAINT BRANCH NEAR COLLEGE PARK, MD",39.03336111,-76.96402778,13.1,True,qualifies,10.0,1053.0,False
+01649500,"NORTHEAST BRANCH ANACOSTIA RIVER AT RIVERDALE, MD",38.96025,-76.9259722,72.8,True,qualifies,10.0,1075.0,False
+01650800,"SLIGO CREEK NEAR TAKOMA PARK, MD",38.9862222,-77.0048611,6.45,True,qualifies,7.0,1093.0,True
+01651000,"NORTHWEST BR ANACOSTIA RIVER NR HYATTSVILLE, MD",38.95255556,-76.96513889,49.4,False,discharge missing on 48 days,,,False
+01651003,"NORTHWEST BRANCH ANACOSTIA RIVER AT BRENTWOOD, MD",38.9489722,-76.9562222,51.3,False,discharge missing on 4528 days,,,False
+01651770,"HICKEY RUN AT NATIONAL ARBORETUM AT WASHINGTON, DC",38.9161111,-76.9688611,1.01,False,discharge missing on 639 days,,,False
+01651800,"WATTS BRANCH AT WASHINGTON, DC",38.90127778,-76.94327778,3.36,True,qualifies,8.0,1074.0,True
+01653521,"PISCATAWAY CREEK AT JOINT BASE ANDREWS, MD",38.7906,-76.86703056,0.96,False,discharge missing on 4748 days,,,False
+01653620,"MEETINGHOUSE BRANCH AT CAMP SPRINGS, MD",38.79841667,-76.90225,3.50,False,discharge missing on 4748 days,,,False
+0165389205,"ACCOTINK CREEK NEAR RANGER ROAD AT FAIRFAX, VA",38.86624167,-77.2863833,3.99,False,discharge missing on 3563 days,,,False
+01654500,"LONG BRANCH NEAR ANNANDALE, VA",38.81358508,-77.2364549,3.72,False,discharge missing on 768 days,,,False
+01655794,"TURKEY RUN AT ROUTE 643 NEAR CATLETT, VA",38.67577778,-77.7475556,5.19,False,discharge missing on 3399 days,,,False
+01656000,"CEDAR RUN NEAR CATLETT, VA",38.63678689,-77.6249897,93.4,False,0 calibration years with at least 300 days,0.0,0.0,False
+01656903,"FLATLICK BRANCH ABOVE FROG BRANCH AT CHANTILLY, VA",38.8823899,-77.4319047,4.20,True,qualifies,10.0,1068.0,False
+01658000,"MATTAWOMAN CREEK NEAR POMONKEY, MD",38.59613889,-77.05602778,54.8,False,discharge zero or below on 571 days,,,False
+01660400,"AQUIA CREEK NEAR GARRISONVILLE, VA",38.49040138,-77.4335942,35.0,False,0 calibration years with at least 300 days,0.0,0.0,False
+01661977,"CARTER RUN AT ROUTE 681 NEAR JEFFERSONTON, VA",38.7244722,-77.9105278,48.5,False,discharge missing on 3398 days,,,False
+01665500,"RAPIDAN RIVER NEAR RUCKERSVILLE, VA",38.28068606,-78.340007,115,False,0 calibration years with at least 300 days,0.0,0.0,False
+01666500,"ROBINSON RIVER NEAR LOCUST DALE, VA",38.32513047,-78.0955557,179,False,0 calibration years with at least 300 days,0.0,0.0,False
+01667500,"RAPIDAN RIVER NEAR CULPEPER, VA",38.35040774,-77.9749972,468,False,0 calibration years with at least 300 days,0.0,0.0,False
+0166818623,"MILL CREEK ABV PEUMANSEND CREEK NR PORT ROYAL, VA",38.1296111,-77.2321667,14.3,False,discharge missing on 3944 days,,,False
+0166818985,"MILL CREEK BLW PEUMANSEND CREEK NR PORT ROYAL, VA",38.12894444,-77.2235,28.0,False,discharge missing on 3823 days,,,False
+01669000,"PISCATAWAY CREEK NEAR TAPPAHANNOCK, VA",37.8770819,-76.900521,27.9,False,0 calibration years with at least 300 days,0.0,0.0,False
+01671020,"NORTH ANNA RIVER AT HART CORNER NEAR DOSWELL, VA",37.85014024,-77.42775949,462,False,0 calibration years with at least 300 days,0.0,0.0,False
+01671100,"LITTLE RIVER NEAR DOSWELL, VA",37.8726401,-77.5130392,107,False,0 calibration years with at least 300 days,0.0,0.0,False
+01673638,"COHOKE MILL CREEK NEAR LESTER MANOR, VA",37.6268101,-76.962467,8.81,False,discharge missing on 4748 days,,,False
+01674000,"MATTAPONI RIVER NEAR BOWLING GREEN, VA",38.061801,-77.3858142,256,False,0 calibration years with at least 300 days,0.0,0.0,False
+02011400,"JACKSON RIVER NEAR BACOVA, VA",38.04234707,-79.8814439,157,False,discharge missing on 1 days,,,False
+02011460,"BACK CREEK NEAR SUNRISE, VA",38.24540129,-79.76866328,60.9,False,0 calibration years with at least 300 days,0.0,0.0,False
+02011470,"BACK CREEK AT SUNRISE, VA",38.19040156,-79.81172,75.6,False,0 calibration years with at least 300 days,0.0,2.0,False
+02011490,"LITTLE BACK CREEK NEAR SUNRISE, VA",38.21456767,-79.8375546,4.90,False,discharge missing on 1 days,,,False
+02011500,"BACK CREEK NEAR MOUNTAIN GROVE, VA",38.0695688,-79.8970003,134,True,qualifies,10.0,421.0,True
+02011800,"JACKSON RIVER BL GATHRIGHT DAM NR HOT SPGS, VA",37.94845825,-79.94922369,345,False,0 calibration years with at least 300 days,0.0,0.0,False
+02013000,"DUNLAP CREEK NEAR COVINGTON, VA",37.8029022,-80.0470043,162,False,0 calibration years with at least 300 days,0.0,0.0,False
+02014000,"POTTS CREEK NEAR COVINGTON, VA",37.72901408,-80.0422802,153,False,0 calibration years with at least 300 days,0.0,0.0,False
+02015700,"BULLPASTURE RIVER AT WILLIAMSVILLE, VA",38.19540308,-79.57032338,110,False,0 calibration years with at least 300 days,0.0,0.0,False
+02016000,"COWPASTURE RIVER NEAR CLIFTON FORGE, VA",37.79179587,-79.7594917,461,False,0 calibration years with at least 300 days,0.0,0.0,False
+02016500,"JAMES RIVER AT LICK RUN, VA",37.77374009,-79.7844925,1371,False,0 calibration years with at least 300 days,0.0,0.0,False
+02017500,"JOHNS CREEK AT NEW CASTLE, VA",37.5062397,-80.106715,105,False,0 calibration years with at least 300 days,0.0,0.0,False
+02018000,"CRAIG CREEK AT PARR, VA",37.66596174,-79.9114388,329,False,0 calibration years with at least 300 days,0.0,0.0,False
+02019500,"JAMES RIVER AT BUCHANAN, VA",37.53068995,-79.6789281,2073,False,0 calibration years with at least 300 days,0.0,0.0,False
+02020500,"CALFPASTURE RIVER ABOVE MILL CREEK AT GOSHEN, VA",37.98790619,-79.49365288,141,False,0 calibration years with at least 300 days,0.0,0.0,False
+02021500,"MAURY RIVER AT ROCKBRIDGE BATHS, VA",37.90735266,-79.42198289,329,False,0 calibration years with at least 300 days,0.0,0.0,False
+02024000,"MAURY RIVER NEAR BUENA VISTA, VA",37.76263275,-79.3914251,647,False,0 calibration years with at least 300 days,0.0,0.0,False
+02025500,"JAMES RIVER AT HOLCOMB ROCK, VA",37.5012508,-79.2625287,3256,False,discharge missing on 1 days,,,False
+02026000,"JAMES RIVER AT BENT CREEK, VA",37.5362539,-78.8294611,3649,False,0 calibration years with at least 300 days,0.0,0.0,False
+02030000,"HARDWARE RIVER BL BRIERY RUN NR SCOTTSVILLE, VA",37.81264259,-78.4552862,116,False,discharge missing on 1 days,,,False
+02032640,"N F RIVANNA RIVER NEAR EARLYSVILLE, VA",38.1634674,-78.4247323,108,False,discharge missing on 125 days,,,False
+02038830,"FISHPOND CREEK NEAR HIXBURG, VA",37.36931388,-78.6455609,13.9,False,discharge missing on 4748 days,,,False
+02038880,"VAUGHANS CREEK NEAR HIXBURG, VA",37.35237064,-78.5988915,23.2,False,discharge missing on 4748 days,,,False
+02039500,"APPOMATTOX RIVER AT FARMVILLE, VA",37.3070965,-78.388607,302,False,0 calibration years with at least 300 days,0.0,0.0,False
+02040000,"APPOMATTOX RIVER AT MATTOAX, VA",37.42153845,-77.8588876,725,False,0 calibration years with at least 300 days,0.0,0.0,False
+02041000,"DEEP CREEK NEAR MANNBORO, VA",37.28320595,-77.869722,158,False,discharge zero or below on 3 days,,,False
+02042500,"CHICKAHOMINY RIVER NEAR PROVIDENCE FORGE, VA",37.43625765,-77.0608027,251,False,298 water-temperature days in 2021-2023,10.0,298.0,False

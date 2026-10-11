@@ -7,7 +7,10 @@ on three held-out years, exactly as a user would. Over the replicates, a 90%
 prediction interval should contain about 90% of the held-out observations,
 and the 90% credible interval of each parameter should contain its true value
 about 90% of the time. Parameter intervals from leaving one year out (as
-cross-validation does) are also tested.
+cross-validation does) are also tested. Cases L and M add an error that shifts
+from one year to the next, as the model's errors do on real rivers (V18), and
+cases E, F, L and M also test paired scenario comparisons, whose true effect is
+known.
 """
 
 import json
@@ -19,8 +22,8 @@ import pandas as pd
 
 from common import (DE_SETTINGS, WORK, Result, Section, Timer, load, mean_discharge, published_params, quiet,
                     river_csv, AUTHORS_BOUNDS, plot_style, save_figure, reference_line, BLUE, ORANGE, AQUA, INK,
-                    INK2, LIGHT_GREY, LEVELS, coverage_by_level)
-from v3_recovery import SIGMA, RHO, noise, truth_series
+                    INK2, LIGHT_GREY, LEVELS, binomial_range, coverage_by_level)
+from v3_recovery import SIGMA, RHO, noise, observe, truth_series, year_offsets
 
 # (label, true version, noise in the data, error model of the likelihood, replicates full / quick).
 # Error model: "iid", "ar1" (exact AR(1) likelihood) or "ar1-ls" (least-squares likelihood with the
@@ -32,7 +35,7 @@ CASES = [
     ("C: version 5, AR(1) noise, iid model (mis-specified)", 5, "ar1", "iid", 30, 0),
     ("D: version 8, AR(1) noise, exact ar1 likelihood", 8, "ar1", "ar1", 12, 0),
     ("E: version 5, AR(1) noise, least-squares likelihood", 5, "ar1", "ar1-ls", 30, 3),
-    ("F: version 8, AR(1) noise, least-squares likelihood", 8, "ar1", "ar1-ls", 12, 0),
+    ("F: version 8, AR(1) noise, least-squares likelihood", 8, "ar1", "ar1-ls", 30, 0),
     ("G: version 5, AR(1) noise, least squares, rho from consecutive days", 5, "ar1", "ar1-ls-daily", 30, 0),
     ("H: version 5, fast + slow noise, least squares (mis-specified noise)", 5, "two-part", "ar1-ls", 30, 0),
     ("I: version 5, fast + slow noise, least squares, rho from consecutive days (mis-specified noise)", 5,
@@ -40,23 +43,32 @@ CASES = [
     ("J: version 5, AR(1) noise, least squares, weekly scoring (time_resolution 1w), authors' bounds", 5, "ar1",
      "ar1-ls-1w", 30, 0),
     ("K: as J, with a2 and a3 at least 0", 5, "ar1", "ar1-ls-1w-pos", 30, 0),
+    ("L: version 5, AR(1) noise plus a yearly offset, least squares (mis-specified noise)", 5, "ar1+year",
+     "ar1-ls", 30, 0),
+    ("M: version 8, AR(1) noise plus a yearly offset, least squares (mis-specified noise)", 8, "ar1+year",
+     "ar1-ls", 30, 0),
 ]
 # Cases on identical synthetic data: E, G, J, K as B; F as D; I as H.
 DATA_SEED = {"E": "B", "F": "D", "G": "B", "I": "H", "J": "B", "K": "B"}
-# Why the prediction coverage fell below the levels in version 0.5.1 (measured once, on these data;
-# the synthetic data were deliberately left unchanged).
+# The yearly offset of cases L and M: one normal value per calendar year, added to the AR(1) noise. Its
+# size, 0.36 sigma, is the median excess of the yearly mean errors over what the error model allows,
+# measured on the 23 British Columbia rivers held out by cross-validation (V18, part C).
+YEAR_SD = round(0.36 * SIGMA, 2)
+# Paired scenario comparisons (cases E, F, L, M): a FORWARD run of the validation years under a changed
+# input, from the same parameter draws as the baseline run. The true effect is the difference between
+# the noise-free simulations of the true parameters under the two inputs.
+SCENARIOS = {5: ("air temperature +2 °C", "T_air", lambda x: x + 2.0),
+             8: ("70% of the discharge", "Discharge", lambda x: 0.7 * x)}
+SCENARIO_CASES = ("E", "F", "L", "M")
+SUMMER = (6, 7, 8)
+# The synthetic measurements are kept at or above the ice floor (v3_recovery.observe), as real water
+# temperatures and the model's prediction ranges are.
 ICE_FLOOR_NOTE = (
-    "Why the prediction coverage is below the levels, and this check fails (since version 0.5.1). The "
-    "synthetic measurements are the noise-free simulation plus random noise, and nothing keeps them at or "
-    "above 0 °C. In winter the simulated Mentue is close to 0 °C, so about 3% of the synthetic measurements "
-    "are below freezing (2.6%-3.0%, by model version and noise). Since version 0.5.1 every simulated series "
-    "of a prediction range is kept at or above Tice_cover (0 °C here), as the simulation itself is, so these "
-    "values can never lie inside a range. That accounts for the drop since the previous run, up to 3 points "
-    "(about 1 point at the 50% level; 90% intervals: 89%-91% of days before, 87%-88% now; 99% intervals: "
-    "98.6%-99.0% before, about 96% now). Real water does not go below freezing: none of the 18,225 measured days of "
-    "the Swiss rivers in data/ is below 0 °C, and the check on real data (V5) shows no such drop. The "
-    "synthetic data were left as they are, so that the effect is visible; before the ice floor, the same "
-    "check gave mean coverage within 1.3 points of every level.")
+    "The synthetic measurements are the noise-free simulation plus random noise, kept at or above 0 °C "
+    "(Tice_cover), as real water temperatures are and as every simulated series of a prediction range is. "
+    "Before this was done (until the run of 2026-10-10), about 3% of the synthetic values were below 0 °C, "
+    "where no range can reach, and the daily ranges fell up to 3.2 points short of their level for that "
+    "reason alone (90% intervals: 87%-88% of days).")
 REPORT_ONLY = ("J",)        # correctly specified but reported, not judged (see notes)
 # Weekly scoring cannot see a daily simulation that zigzags; bounds that keep a2 and a3 at least 0
 # (water warms with the air and relaxes towards equilibrium) rule such parameter sets out.
@@ -82,8 +94,8 @@ def replicate(args):
     src_v, truth_v = truth_series(version, par_true, "validation", q_cal, tag=tag)
     rng = np.random.default_rng(1000 * (ord(DATA_SEED.get(label[0], label[0])) - 64) + r)
     cal_csv, val_csv = os.path.join(folder, "cal.csv"), os.path.join(folder, "val.csv")
-    src_c.assign(T_water=np.round(truth_c + noise(len(truth_c), noise_kind, rng), 3)).to_csv(cal_csv, index=False)
-    src_v.assign(T_water=np.round(truth_v + noise(len(truth_v), noise_kind, rng), 3)).to_csv(val_csv, index=False)
+    src_c.assign(T_water=observe(truth_c, synthetic_noise(src_c.Date, noise_kind, rng))).to_csv(cal_csv, index=False)
+    src_v.assign(T_water=observe(truth_v, synthetic_noise(src_v.Date, noise_kind, rng))).to_csv(val_csv, index=False)
 
     out = os.path.join(folder, "out")
     bounds = POSITIVE_BOUNDS if model_noise.endswith("-pos") else AUTHORS_BOUNDS
@@ -127,8 +139,13 @@ def replicate(args):
     # Coverage at every tested level, from the saved simulations; parameters likewise from the chain.
     from pyair2stream import scenario
     npz = os.path.join(folder, "fwd", "Forward_Prediction_Ensemble_S_c_1d.npz")
-    ens, _ = scenario.load_ensemble(npz)
-    by_level = coverage_by_level(ens, pd.read_csv(val_csv).T_water.to_numpy(float))
+    ens, dates = scenario.load_ensemble(npz)
+    obs_v = pd.read_csv(val_csv).T_water.to_numpy(float)
+    by_level = coverage_by_level(ens, obs_v)
+    by_window = {w: window_coverage(ens, obs_v, w) for w in (7, 30)}
+    effect = None
+    if label[0] in SCENARIO_CASES:
+        effect = scenario_effect(version, par_true, q_cal, src_v, truth_v, folder, fcfg, npz, dates, tag)
     os.remove(npz)          # about 8 MB per replicate; only the coverage is needed
     par_by_level = {}
     for level in LEVELS:
@@ -142,7 +159,63 @@ def replicate(args):
             "calibration coverage": meta["interval_coverage"],
             "held-out coverage": fmeta["interval_coverage"],
             "parameters inside 90% interval": float(np.mean(inside)), "n parameters": len(inside),
-            "per_param": per_param, "held-out coverage by level": by_level, "parameters inside by level": par_by_level}
+            "per_param": per_param, "held-out coverage by level": by_level, "parameters inside by level": par_by_level,
+            "held-out coverage of means": by_window, "scenario": effect}
+
+
+def synthetic_noise(dates, kind, rng):
+    """Noise of a synthetic record: `noise` of v3_recovery, or for "ar1+year" AR(1) noise plus one
+    offset per calendar year (YEAR_SD)."""
+    if kind == "ar1+year":
+        e = noise(len(dates), "ar1", rng)
+        return e + year_offsets(dates, YEAR_SD, rng)
+    return noise(len(dates), kind, rng)
+
+
+def window_coverage(ens, obs, window, levels=LEVELS):
+    """Share of the `window`-day moving means of `obs` inside the central range of the same moving
+    means of the members of `ens` (members x days), for each level."""
+    kernel = np.ones(window) / window
+    obs_m = np.convolve(obs, kernel, mode="valid")
+    ens_m = np.apply_along_axis(lambda x: np.convolve(x, kernel, mode="valid"), 1, ens)
+    return coverage_by_level(ens_m, obs_m, levels)
+
+
+def scenario_effect(version, par_true, q_cal, src_v, truth_v, folder, fcfg, npz_base, dates, tag):
+    """A paired scenario comparison as a user makes it (METHODS §13): a FORWARD run of the validation
+    years under the changed input, reusing the baseline run's parameter draws, then the difference draw
+    by draw (scenario.paired_difference_from_files). Returns, for the average summer difference over the
+    three years and for each summer day, whether the true effect lies inside the central range at each
+    level, and the median and 90% width of the summer effect."""
+    from pyair2stream import scenario
+    from common import simulate
+    name, column, change = SCENARIOS[version]
+    scen_csv = os.path.join(folder, "scenario.csv")
+    src_v.assign(**{column: change(src_v[column]), "T_water": np.nan}).to_csv(scen_csv, index=False)
+    truth_s = simulate(scen_csv, version, par_true, "CRN", q_cal, name=f"{tag}_scen_truth").Twat_mod[365:]
+    scfg = json.loads(json.dumps(fcfg))
+    scfg["paths"] = {"input_data": scen_csv, "output_dir": os.path.join(folder, "fwd_scen")}
+    scfg["forward_options"]["reuse_sample_indices_from"] = os.path.join(
+        folder, "fwd", "Forward_Prediction_Ensemble_S_c_1d_meta.json")
+    sdata = load(scfg, tag + "_scen")
+    with quiet():
+        from pyair2stream.optimization import forward_mode
+        forward_mode(sdata)
+    npz_s = os.path.join(folder, "fwd_scen", "Forward_Prediction_Ensemble_S_c_1d.npz")
+    diff = scenario.paired_difference_from_files(npz_s, npz_base)       # scenario minus baseline
+    os.remove(npz_s)
+    true_diff = np.asarray(truth_s, float) - np.asarray(truth_v, float)
+    summer = np.isin(pd.DatetimeIndex(dates).month, SUMMER)
+    eff = np.nanmean(diff[:, summer], axis=1)
+    true_eff = float(np.mean(true_diff[summer]))
+    out = {"true summer effect": true_eff, "median summer effect": float(np.median(eff)),
+           "90% width": float(np.subtract(*np.percentile(eff, [95, 5])))}
+    for level in LEVELS:
+        lo, hi = np.percentile(eff, [50 - level / 2, 50 + level / 2])
+        out[f"summer inside {level}"] = bool(lo <= true_eff <= hi)
+        dlo, dhi = np.nanpercentile(diff[:, summer], [50 - level / 2, 50 + level / 2], axis=0)
+        out[f"days inside {level}"] = float(np.mean((true_diff[summer] >= dlo) & (true_diff[summer] <= dhi)))
+    return out
 
 
 def implausible(data):
@@ -213,7 +286,7 @@ def leave_one_year_out(args):
         os.makedirs(folder, exist_ok=True)
         src, clean = truth_series(version, truth, "calibration", q_cal, tag=f"v4_jk{version}_{r}")
         rng = np.random.default_rng(50000 + 100 * version + r)
-        src.assign(T_water=np.round(clean + noise(len(clean), "ar1", rng), 3)).to_csv(
+        src.assign(T_water=observe(clean, noise(len(clean), "ar1", rng))).to_csv(
             os.path.join(folder, "cal.csv"), index=False)
     cfg = {"version": version, "integrator": "CRN", "run_mode": "DE", "objective_function": "NSE",
            "random_seed": r + 1, "Qmedia": q_cal, "parameter_bounds": AUTHORS_BOUNDS,
@@ -300,7 +373,8 @@ def run(ctx) -> Result:
         question="Do the 90% prediction intervals contain about 90% of new observations, and do the "
                  "parameter intervals contain the true parameters about 90% of the time?",
         method=f"As V3, synthetic data are generated from known parameters on real Mentue forcing, with "
-               f"noise of {SIGMA} °C (iid, or AR(1) with rho = {RHO}). Each replicate (a new noise draw) is "
+               f"noise of {SIGMA} °C (iid, or AR(1) with rho = {RHO}), kept at or above 0 °C as real water "
+               f"temperatures are. Each replicate (a new noise draw) is "
                f"calibrated with DE-MCMC (CRN, 32 walkers, run until converged, at most 20,000 steps) on "
                f"2002-2009. A FORWARD run then produces 90% prediction intervals for 2010-2012 from the "
                f"chain, and the share of 2010-2012 observations inside them is recorded. The share of "
@@ -316,6 +390,15 @@ def run(ctx) -> Result:
                f"and K repeat case E with weekly scoring (time_resolution 1w): the likelihood then compares "
                f"weekly means, whose errors are much less correlated from week to week than days are. J uses "
                f"the authors' bounds, which allow a negative a2 and a3; K requires both to be at least 0. "
+               f"Cases L (version 5) and M (version 8) repeat E and F with an error that shifts from one year "
+               f"to the next: AR(1) noise plus one normal offset per calendar year, of standard deviation "
+               f"{YEAR_SD} °C (0.36 sigma, the median excess of the yearly mean errors over what the error model "
+               f"allows on the British Columbia rivers held out in V18). In cases E, F, L and M a second FORWARD "
+               f"run, from the same parameter draws (reuse_sample_indices_from), predicts the validation years "
+               f"under a changed input (version 5: {SCENARIOS[5][0]}; version 8: {SCENARIOS[8][0]}), and the "
+               f"paired difference (scenario.paired_difference_from_files) is compared with the true effect, the "
+               f"difference of the noise-free simulations of the true parameters: its average over the summers "
+               f"(June-August) and each summer day. "
                f"The same simulations give the coverage of the "
                f"{', '.join(f'{x}%' for x in LEVELS)} intervals (central percentiles of the 1000 simulations "
                f"on each day), and the chain that of the parameter intervals at those levels.",
@@ -325,8 +408,9 @@ def run(ctx) -> Result:
                   f"within {LEVEL_TOLERANCE * 100:.0f} percentage points of their level (at most 100%). For cases "
                   f"A, B, E, F, G and K: pooled parameter-interval coverage at least "
                   f"{PAR_MIN:.0%}. Results are reported, not judged, for case C (wrong noise model, expected to "
-                  f"be too narrow), case D (see notes), cases H and I (noise that AR(1) can only approximate) and "
-                  f"case J (see notes).")
+                  f"be too narrow), case D (see notes), cases H and I (noise that AR(1) can only approximate), "
+                  f"case J (see notes), cases L and M (yearly offsets, added after the first runs to test V18's "
+                  f"finding) and for every scenario comparison.")
     jobs = []
     for label, v, nk, nm, n_full, n_quick in CASES:
         for r in range(n_quick if ctx.quick else n_full):
@@ -605,8 +689,90 @@ def run(ctx) -> Result:
         note += (f" With {N_JACKKNIFE} replicates per version, each share is uncertain by several percentage "
                  f"points.")
         res.notes.append(note)
+    _year_and_scenario_sections(res, df)
     res.notes.insert(0, ICE_FLOOR_NOTE)
     return res
+
+
+def _year_and_scenario_sections(res, df):
+    """Cases L and M against E and F (yearly offsets), and the paired scenario comparisons."""
+    conv = df[df.converged.astype(bool)] if len(df) else df
+    rows = []
+    for c in ("E", "L", "F", "M"):
+        g = conv[conv.case.str.startswith(c + ":")]
+        if g.empty:
+            continue
+        rows.append({"case": c, "version": 5 if c in "EL" else 8,
+                     "noise": "AR(1) plus a yearly offset" if c in "LM" else "AR(1)", "replicates": len(g),
+                     "mean rho": round(float(g.rho.mean()), 3),
+                     "parameters inside 90%": float(np.average(g["parameters inside 90% interval"],
+                                                               weights=g["n parameters"])),
+                     **{f"{w} inside 90%": float(np.mean([x[w][90] for x in g["held-out coverage of means"]]))
+                        for w in (7, 30)},
+                     "days inside 90%": float(np.mean([x[90] for x in g["held-out coverage by level"]]))})
+    if rows:
+        t = pd.DataFrame(rows)
+        shown = t.copy()
+        for col in t.columns:
+            if "inside" in col:
+                shown[col] = t[col].map(lambda x: f"{x:.1%}")
+        shown = shown.rename(columns={"7 inside 90%": "7-day means inside 90%", "30 inside 90%": "30-day means inside 90%"})
+        res.sections.append(Section(
+            "Errors that shift from one year to the next (cases L, M)",
+            f"On real rivers each year's mean error varies about twice as much as the error model allows (V18, part "
+            f"C). Cases L and M add such a shift, one offset per calendar year ({YEAR_SD} °C), to the AR(1) noise of "
+            f"cases E and F, and are calibrated and predicted in the same way.",
+            tables=[("Coverage of 90% intervals with and without yearly offsets (means over replicates)", shown)]))
+        get = {r["case"]: r for r in rows}
+        if all(k in get for k in "ELFM"):
+            res.notes.append(
+                f"Yearly offsets (cases L, M). The weekly rho rose from {get['E']['mean rho']:.2f} to "
+                f"{get['L']['mean rho']:.2f} (version 5) and from {get['F']['mean rho']:.2f} to "
+                f"{get['M']['mean rho']:.2f} (version 8), because the offsets make errors persist longer. Parameter "
+                f"intervals still contained the true values {get['L']['parameters inside 90%']:.0%} and "
+                f"{get['M']['parameters inside 90%']:.0%} of the time ({get['E']['parameters inside 90%']:.0%} and "
+                f"{get['F']['parameters inside 90%']:.0%} without offsets): the single effective sample size is "
+                f"already wider than needed for most parameters (see the sandwich table), which absorbs the offsets. "
+                f"Daily intervals held on {get['L']['days inside 90%']:.0%} and {get['M']['days inside 90%']:.0%} of "
+                f"days. 30-day means were hit hardest: {get['L']['30 inside 90%']:.0%} and "
+                f"{get['M']['30 inside 90%']:.0%} inside the 90% interval, against {get['E']['30 inside 90%']:.0%} and "
+                f"{get['F']['30 inside 90%']:.0%}, as on the British Columbia rivers (V18); the conformal margins "
+                f"address this (V19, V20).")
+    sc = []
+    for c in ("E", "L", "F", "M"):
+        g = conv[conv.case.str.startswith(c + ":")] if len(conv) else conv
+        effects = [x for x in g.get("scenario", []) if isinstance(x, dict)]
+        if not effects:
+            continue
+        v = 5 if c in "EL" else 8
+        row = {"case": c, "scenario": SCENARIOS[v][0], "replicates": len(effects),
+               "true summer effect (°C)": round(effects[0]["true summer effect"], 3),
+               "mean of median estimates (°C)": round(float(np.mean([e["median summer effect"] for e in effects])), 3),
+               "mean 90% width (°C)": round(float(np.mean([e["90% width"] for e in effects])), 3)}
+        for level in LEVELS:
+            row[f"summer effect inside {level}%"] = float(np.mean([e[f"summer inside {level}"] for e in effects]))
+        row["summer days inside 90%"] = float(np.mean([e["days inside 90"] for e in effects]))
+        sc.append(row)
+    if sc:
+        t = pd.DataFrame(sc)
+        shown = t.copy()
+        for col in t.columns:
+            if "inside" in col:
+                shown[col] = t[col].map(lambda x: f"{x:.0%}")
+        lo, hi = binomial_range(int(t.replicates.min()), 90)
+        res.sections.append(Section(
+            "Paired scenario comparisons",
+            "The band of a paired difference holds parameter uncertainty only: the same error is added to a draw in "
+            "both runs and cancels (METHODS §13). Here the true effect is known, so the band can be checked: the "
+            "share of replicates whose range of the average summer effect contains the true effect, at each level, "
+            "and the share of summer days whose daily range contains the true daily effect. Not judged.",
+            tables=[("Paired scenario comparisons: true effect inside the range", shown)]))
+        res.notes.append(
+            f"Paired scenario comparisons. The range of the average summer effect contained the true effect in "
+            + ", ".join(f"{r['summer effect inside 90%']:.0%} (case {r['case']})" for r in sc)
+            + f" of replicates at 90%; with {int(t.replicates.min())} replicates, chance alone gives "
+            f"{lo:.0%}-{hi:.0%}. The ranges are narrow (a few hundredths of a degree) because the error cancels in "
+            f"the difference; with yearly offsets in the data (L, M) they still held.")
 
 
 def _fig_prediction_coverage(df):
@@ -625,16 +791,16 @@ def _fig_prediction_coverage(df):
     short = {"A": "A\nversion 5\niid noise", "B": "B\nversion 5\nexact AR(1)", "C": "C\nversion 5\nwrong model",
              "D": "D\nversion 8\nexact AR(1)", "E": "E\nversion 5\nleast squares", "F": "F\nversion 8\nleast squares",
              "G": "G\nas E,\ndaily rho", "H": "H\nfast + slow\nnoise", "I": "I\nas H,\ndaily rho",
-             "J": "J\nweekly scoring,\nauthors' bounds", "K": "K\nweekly scoring,\na2, a3 >= 0"}
+             "J": "J\nweekly scoring,\nauthors' bounds", "K": "K\nweekly scoring,\na2, a3 >= 0",
+             "L": "L\nversion 5,\nyearly offset", "M": "M\nversion 8,\nyearly offset"}
     ax.set_xticks(range(len(cases)), [short.get(c[0], c) for c in cases], fontsize=7)
     ax.grid(axis="x", visible=False)
     ax.set_ylabel("Held-out observations inside\nthe 90% interval (%)")
     ax.set_title("Prediction-interval coverage, one point per replicate (black: mean; dashed: nominal 90%)")
     return (save_figure(fig, "V4_interval_coverage.png"),
             "Each point is one synthetic data set. Mean coverage is about the same in every case, including the "
-            "deliberately wrong noise model (grey): for single days the noise model hardly matters. It is below "
-            "90% because about 3% of the synthetic values are below 0 °C, which no range can reach since version "
-            "0.5.1 (see the notes).")
+            "deliberately wrong noise model and the yearly offsets (grey): for single days the noise model hardly "
+            "matters.")
 
 
 def _fig_levels(lv):

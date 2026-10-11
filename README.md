@@ -234,22 +234,39 @@ A [validation suite](validation/README.md) tests this. Its results are in
 - **Finds a known answer.** On data made by the model from known parameters,
   the fitted model predicts other years to within 0.04 °C
   ([V3](validation/REPORT.md#v3)).
-- **Uncertainty ranges close to their stated level.** On such data, 90% ranges
-  for single days held on 87–88% of days. They fall a little short only because
-  about 3% of the made-up values are below 0 °C, and a range never goes below
-  the ice floor; real water does not go below freezing. With the default
-  settings, 90% parameter ranges contained the true values 92–97% of the time
-  ([V4](validation/REPORT.md#v4)). On real rivers, in years not used for
-  fitting, 90% ranges held on 85–90% of days. So they are slightly too narrow
-  for new years ([V5](validation/REPORT.md#v5)). On 23 rivers in British
-  Columbia, which played no part in developing the error model, they held on
-  87% of days and 85% of 30-day means ([V18](validation/REPORT.md#v18)).
+- **Uncertainty ranges on made-up data.** On data made by the model from
+  known parameters, 90% ranges for single days held on 89–91% of days, and
+  every level from 50% to 99% was within 1.5 points of its target. With the
+  default settings, 90% parameter ranges contained the true values 93–98% of
+  the time. That stayed true when each year's errors were shifted by a
+  different amount, as on real rivers: parameter ranges and the ranges of
+  paired scenario differences still held, but 90% ranges of 30-day means held
+  only 83–85% of the time ([V4](validation/REPORT.md#v4)).
+- **Uncertainty ranges on real rivers are a little narrow.** On real rivers, in
+  years not used for fitting, 90% ranges held on 85–90% of days
+  ([V5](validation/REPORT.md#v5)). On 23 rivers in British Columbia, which
+  played no part in developing the error model, they held on 87% of days (95%
+  confidence interval 82–91%, rivers and months resampled) and 85% of 30-day
+  means (77–92%) ([V18](validation/REPORT.md#v18)).
 - **An optional widening for sites where ranges hold too rarely.** The
   cross-validation measures how far the years it held out fell outside their
   ranges, and a margin of that size can widen the ranges (conformal margins).
-  On the British Columbia rivers, 90% ranges then held on 91% of days and 92%
-  of 30-day means. On the Swiss rivers, where they already held, the margins
-  were small and the ranges kept holding ([V19](validation/REPORT.md#v19)).
+  On the British Columbia rivers, 90% ranges then held on 91% of days
+  (86–94%) and 92% of 30-day means (86–97%). On the Swiss rivers, where they
+  already held, the margins were small and the ranges kept holding
+  ([V19](validation/REPORT.md#v19)).
+- **Tested once on rivers it had never seen.** After V19 the method was frozen,
+  and the pass criteria were written down before any model was run on 30
+  rivers of the north-eastern United States, chosen by a fixed rule from USGS
+  records. With the margins, 90% ranges in later years held on 92% of days
+  (90–94%) and 93% of 30-day means (90–96%), and the check passes. Without
+  them they held on 91% of days, but 95% ranges in held-out years held on only
+  92% of days and 91% of 30-day means ([V20](validation/REPORT.md#v20)).
+- **Single rivers vary.** The figures above are averages over rivers. With the
+  margins, a new river's 90% ranges for later-year days are expected to hold on
+  about 88–98% of days (95% prediction range from how much the rivers differed,
+  V20; 88–97% in British Columbia, V19). Check your own river by
+  cross-validation ([User Guide §14](USER_GUIDE.md#14-checklist-for-results-that-support-a-decision)).
 - **Probabilities need the check.** The model can be too warm on the hottest
   days. So ranges for yearly peaks read straight from the simulations
   (uncorrected) held in only 73–92% of years. The correction shifts every
@@ -277,13 +294,8 @@ A [validation suite](validation/README.md) tests this. Its results are in
   yearly peaks, and on 16 of 23 for the hottest days. On the Swiss yearly
   peaks, a straight line on air temperature did about as well
   ([V17](validation/REPORT.md#v17)).
-- **Where it falls short.** Six of the 19 checks do not meet all their
+- **Where it falls short.** Five of the 20 checks do not meet all their
   criteria:
-  - V4: on made-up data, 90% ranges held on 87–88% of days instead of about
-    90%. About 3% of the made-up values are below 0 °C, and no range goes
-    below the ice floor (0 °C), so those values can never be inside. Real
-    water does not go below freezing, and the check on real rivers (V5) shows
-    no such drop;
   - V5: daily 95% and 99% ranges were too narrow on some rivers in years not
     used for fitting (95% ranges held on 91–95% of days, 99% ranges on
     95–99.5%), and version 5's 90% ranges on the Rhône held on 84.8%;
@@ -301,8 +313,9 @@ A [validation suite](validation/README.md) tests this. Its results are in
     highest daily mean and of days above a threshold held in 81% and 76% of
     held-out years.
 
-  Apart from V4, most of these point to version 5 on a flow-driven river, and
-  to ranges above 90%. The report gives the details. Check your own results on
+  Most of these point to version 5 on a flow-driven river, to ranges above
+  90%, and to 30-day means; the conformal margins (V19, V20) correct the
+  last two. The report gives the details. Check your own results on
   years not used for fitting ([User Guide §14](USER_GUIDE.md#14-checklist-for-results-that-support-a-decision)).
 
 To run the tests and the validation suite (the Fortran comparison tests and V1
@@ -313,7 +326,7 @@ skip, so a passing run always means the Fortran comparison ran):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # about 2 minutes; the full suite takes about 3.5 hours on 4 cores
+python validation/run_all.py --quick     # about 2 minutes; the full suite takes about 5 hours on 4 cores
 ```
 
 ## Differences from the original Fortran

@@ -215,7 +215,8 @@ class TestVersionConsistency(unittest.TestCase):
         pyproject_version = m.group(1)
 
         changelog_text = (REPO_ROOT / 'CHANGELOG.md').read_text()
-        m = re.search(r'^## \[([^\]]+)\]', changelog_text, re.MULTILINE)
+        # The newest released heading; an "[Unreleased]" section above it is allowed.
+        m = re.search(r'^## \[(?!Unreleased\])([^\]]+)\]', changelog_text, re.MULTILINE)
         self.assertIsNotNone(m, "Could not find newest heading in CHANGELOG.md")
         changelog_version = m.group(1)
 

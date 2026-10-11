@@ -16,7 +16,7 @@ before its result.
 | V1 | Does it compute the same temperatures as the original Fortran program, on real, variable inputs? Does it compute the same calibration score, from the same weekly and monthly averages, also when the record has gaps? | Shows the model equations, solution schemes and scoring were translated correctly. |
 | V2 | Given the published parameters, does it reproduce the published model errors for every model version on three Swiss rivers? Does its own calibration, done the way the paper did it, fit at least as well (judged by the original program too) and find the published parameters? Do the published parameters lie inside its uncertainty intervals? | Ties the package to the peer-reviewed results of Piccolroaz et al. (2016). |
 | V3 | When data are made by the model itself from known parameters, does calibration recover them well enough to predict other years? | Only with a known truth can we tell whether calibration finds the right answer. |
-| V4 | Do the 90% uncertainty intervals contain the truth about 90% of the time, with each likelihood the package offers, with ρ (error persistence) measured over days or over weeks, and when calibrating on weekly means? Do intervals at 50%, 80%, 95% and 99% hold too? | An interval is only useful if its stated confidence is honest, at the level the user asks for. |
+| V4 | Do the 90% uncertainty intervals contain the truth about 90% of the time, with each likelihood the package offers, with ρ (error persistence) measured over days or over weeks, and when calibrating on weekly means? Do intervals at 50%, 80%, 95% and 99% hold too? When each year's errors are shifted by a different amount, as on real rivers, do the parameter intervals and the ranges of paired scenario differences still hold? | An interval is only useful if its stated confidence is honest, at the level the user asks for. |
 | V5 | On real rivers, how well does a calibrated model predict years it has not seen, compared with simple alternatives? Do its intervals contain about 90% of real measurements, for single days and for 7-day means, and are they centred on the best fit? How do intervals at other levels (50-99%) do? | Tests the whole approach on real data, not only the code. |
 | V6 | How accurate are the numerical schemes, does the package stop runs that go wrong, and does the choice of stable scheme matter? | Rules out numerical error as a source of wrong answers. |
 | V7 | Do gaps in the water or air temperature record bias the result? | Real records have gaps. |
@@ -32,6 +32,7 @@ before its result.
 | V17 | Does air2stream predict years it was not calibrated on better than regressions of water temperature on air temperature (same day, averaged, S-curve, with discharge), fitted on the same years? On the 3 Swiss and 23 British Columbia rivers, by daily error, 7-day means, yearly peaks, hot days and the 2021 heat dome. | A regression is quicker and needs no special software; the model must earn its extra effort. |
 | V18 | On 23 British Columbia rivers that played no part in developing the error model, do the prediction intervals hold at their stated levels, for days, 7-day and 30-day means, in the later years 2021-2022 and in years held out by cross-validation? Do the corrected ranges of yearly statistics hold? Does the default ρ do better over several weeks than ρ from consecutive days? | The error model's persistence rule was chosen on the Swiss rivers; evidence from rivers it was not tuned on shows whether it generalises. |
 | V19 | Do the optional conformal margins, which widen an interval by how far held-out years' measurements fell outside it, make the intervals hold at their stated levels on the 23 British Columbia rivers, where they were too narrow, and leave them holding on the 3 Swiss rivers? For days, 7-day and 30-day means, in later years and in held-out years. | A correction must fix intervals that are too narrow without making good ones too wide. |
+| V20 | With the method frozen after V19 and the pass criteria written down first, do the intervals hold, without and with the conformal margins, on 30 rivers of the north-eastern United States chosen by a fixed rule and never used to develop or correct the method? | A method tuned and corrected on the rivers it is judged on can look better than it is; one run on new rivers, judged by criteria fixed in advance, cannot. |
 
 ## Running it
 
@@ -45,9 +46,9 @@ python validation/run_all.py --only V2 V6
 
 With `--only`, the other checks keep their reports from the earlier run.
 `REPORT.md` then names the run each report comes from. In the committed
-report (4 cores), the checks took about 5.5 hours in all: V18 about 1 hour 45
-minutes, V15 and V2 about 50 minutes each, V4 about 45 minutes, V9 and V12
-about a quarter of an hour each, and every other check under 10 minutes (each
+report (4 cores), the checks took about 5 hours in all: V18 about 1 hour 25
+minutes, V4 about 50 minutes, V15 and V2 about 40 minutes each, V20 about half an
+hour, V9 and V12 about a quarter of an hour each, and every other check under 10 minutes (each
 check's report gives its run time). V19 reuses V18's runs when it runs after
 V18 with the same code (4 minutes); on its own it repeats them. Where jobs are limited in length, run the suite in parts with
 `--only`. V15 and V18, the longest checks, save each station's results in `work/v15_cache/` and `work/v18_cache/` as they go. If it is
@@ -91,7 +92,10 @@ with the published parameters and model errors of Piccolroaz et al. (2016) and
 of Toffolon and Piccolroaz (2015). V15, V17, V18 and V19 use the 23 British Columbia streams of
 Callahan and Moore (2025) in [`data/british_columbia/`](../data/british_columbia/README.md),
 from their published dataset (https://doi.org/10.5281/zenodo.14502248, CC BY
-4.0). Each README gives the sources, periods and licence. The errors found in
+4.0). V20 uses 30 USGS gauges of the north-eastern United States in
+[`data/usa_northeast/`](../data/usa_northeast/README.md), with water temperature
+and discharge from the USGS National Water Information System and air
+temperature from Daymet, chosen by the rule in its `download.py`. Each README gives the sources, periods and licence. The errors found in
 the three publications are documented in
 [docs/PUBLISHED_RESULTS.md](../docs/PUBLISHED_RESULTS.md).
 
@@ -102,16 +106,17 @@ It shows that:
 - the software computes what it claims to;
 - calibration finds the right answer when one is known;
 - the uncertainty ranges and probabilities hold as often as they state, when
-  the model is right (V4, V9). In V4 the daily ranges fall up to 3.2 points
-  short of their level, and the check fails, only because about 3% of its
-  synthetic values are below 0 °C: since version 0.5.1 no range goes below
-  the ice floor, so those values can never be inside. Real water does not go
-  below freezing.
+  the model is right (V4, V9), including the parameter intervals and the
+  ranges of paired scenario differences when each year's errors are shifted
+  by a different amount (V4, cases L and M);
+- with the conformal margins, intervals hold on rivers never used to develop
+  or correct the method, judged by criteria fixed before the run (V20).
 
 It also shows how well the model does on real rivers, and where the approach
 falls short there:
 
-- Ranges for new years are slightly too narrow (V5).
+- Ranges for new years are slightly too narrow (V5, V18), above all for
+  30-day means; the conformal margins correct this (V19, V20).
 - The model can be too warm on the hottest days. So uncorrected ranges for
   yearly statistics miss more often than stated. The cross-validated
   correction largely fixes this (V9, V11).

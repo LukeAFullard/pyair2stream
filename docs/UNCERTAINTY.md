@@ -65,7 +65,7 @@ trusted at your site comes from the second.
 | What difference would a change in flow or climate make? | paired difference of two scenario runs | two `FORWARD` runs, the second with `reuse_sample_indices_from`; `scenario.paired_difference_from_files` | the two `Forward_Prediction_Ensemble_*.npz` | equal to the exact effect (V8) | [10](#10-comparing-two-scenarios) |
 | My site's bands held too rarely. Can they be widened? | conformal margin, from the misses of held-out years | cross-validation, then `FORWARD` with `forward_options.conformal_margins`; `scenario.conformal_range` | `cv_conformal_margins.csv`; columns `*_conformal` of `Forward_Prediction_Envelopes_*.csv` | 90% bands, British Columbia, later years: 86.9% of days and 84.8% of 30-day means without, 90.7% and 92.1% with; Swiss rivers 87.8% and 89.9% without, 88.9% and 89.8% with (V18, V19) | [6](#widening-a-band-that-held-too-rarely-optional) |
 | Did the ranges hold at my site? | cross-validation check | `cross_validation: enabled: true`, `run_mode: "DE"` | `cv_interval_coverage.csv`, `cv_yearly_statistics_summary.csv` | this is the test | [8](#8-testing-on-years-the-model-has-not-seen-cross-validation) |
-| How precisely do the data fix the model's parameters? | MCMC parameter intervals; jackknife intervals | `DE-MCMC`; cross-validation | `parameter_significance_*.csv`; rows `jackknife_*` of `cv_results.csv` | 90% intervals contained the true values 92–97% (MCMC) and 81–95% (jackknife) of the time (V4) | [11](#11-how-well-are-the-parameters-known) |
+| How precisely do the data fix the model's parameters? | MCMC parameter intervals; jackknife intervals | `DE-MCMC`; cross-validation | `parameter_significance_*.csv`; rows `jackknife_*` of `cv_results.csv` | 90% intervals contained the true values 93–98% (MCMC) and 83–95% (jackknife) of the time (V4) | [11](#11-how-well-are-the-parameters-known) |
 | Is the model too warm or too cool in some season? | mean error by month and season | every run with measurements; cross-validation | `bias_by_month_*.csv`; `cv_bias_by_month.csv` | | [12](#12-mean-error-by-month-and-season) |
 | Should I report 90%, 95% or 99%? | the level of every range | `uncertainty_options.prediction_interval`, `parameter_interval` | | 99% daily bands held on only 98.0–98.2% of days (V11) | [13](#13-choosing-the-level-90-95-or-99) |
 | Which parameter changes the simulation most? | sensitivity analysis (**not** an uncertainty range) | `sensitivity_analysis: true` | `sensitivity_*.csv`, `.png` | | [11](#11-how-well-are-the-parameters-known) |
@@ -637,17 +637,15 @@ was **not** calibrated on: a separate validation file, or cross-validation
 
 | Share of days inside the band | 50% | 80% | 90% | 95% | 99% |
 |---|---|---|---|---|---|
-| Synthetic data, model exactly right (V4)* | 47–49% | 77–78% | 87–88% | 91.9–92.5% | 96% |
+| Synthetic data, model exactly right (V4) | 49–52% | 79–80% | 89–90% | 94.3–94.7% | 98.6–98.7% |
 | Swiss rivers, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.5% | 98.0–98.2% |
 | Swiss rivers, later validation years (V5) | 42–52% | 75–80% | 85–90% | 91–95% | 95–99.5% |
 | Swiss rivers, the hottest 10% of days by prediction, version 8 (V14) | | 80% | 91% | 95% | |
 | The same, version 5 (no discharge term) (V14) | | 68% | 84% | 92% | |
 
-\* About 3% of the synthetic values of V4 are below 0 °C. A band is kept at or
-above the ice floor (step 2 above), so those values can never be inside it, and
-every level comes out up to 3.2 points low. Real water does not go below freezing
-(none of the 18,225 measured days of the Swiss rivers), and the real rivers show
-no such shortfall.
+The synthetic values of V4 are kept at or above 0 °C, as real water
+temperatures are (none of the 18,225 measured days of the Swiss rivers is below
+0 °C) and as every band is (step 2 above).
 
 Up to 95% the bands hold when averaged over many years. In years unlike those
 calibrated on (the validation periods of V5 came after the calibration periods,
@@ -702,6 +700,8 @@ share inside without and with the margin):
 | British Columbia, 160 held-out years (23 rivers) | 86.3% → 89.5% | 86.2% → 89.3% | 82.3% → 88.8% |
 | Swiss rivers, later validation years | 87.8% → 88.9% | 91.4% → 89.5% | 89.9% → 89.8% |
 | Swiss rivers, 33 held-out years | 88.8% → 89.8% | 92.4% → 89.6% | 90.1% → 89.6% |
+| North-eastern United States, later years 2021–2023 (29 rivers; [V20](../validation/REPORT.md#v20)) | 90.8% → 91.9% | 92.8% → 92.4% | 90.7% → 93.0% |
+| North-eastern United States, 260 held-out years (30 rivers; V20) | 87.4% → 89.8% | 89.2% → 89.6% | 86.1% → 89.6% |
 
 On the British Columbia rivers the typical margin for days was 0.21 °C, and the
 90% band became 0.35 °C wider (3.13 against 2.78 °C). In summer it held on
@@ -709,7 +709,16 @@ On the British Columbia rivers the typical margin for days was 0.21 °C, and the
 (81.6%). On the Swiss rivers, where the bands already held, the margins were
 small (0.07 °C for days, slightly negative for 7-day means) and the bands kept
 holding. Averaged over rivers the widened bands hold; single rivers still vary
-(77–96% of later-year days for 90% bands in British Columbia).
+(77–96% of later-year days for 90% bands in British Columbia). The 95%
+confidence interval of a pooled share, from resampling rivers and months (or
+years) together, is in each report: for later-year days in British Columbia
+with the margins, 86.4–94.0%. How far a single river can be from the pooled
+share is also in each report: with the margins, a new river's 90% band for
+later-year days is expected to hold on about 88–98% of days (V20), so check
+yours by cross-validation (`inside_after`).
+The north-eastern United States rivers (V20) were a test fixed in advance: the
+method was frozen after V19, and the pass criteria were written before any model
+was run on them. With the margins every criterion was met.
 
 **Limits.**
 
@@ -1171,8 +1180,8 @@ Two settings choose the likelihood. Keep the defaults.
 
 | Setting | What it assumes | Evidence | Use it |
 |---|---|---|---|
-| `noise_model: "ar1"`, `likelihood: "least_squares"` (the defaults) | errors persist (ρ); least squares with the effective number of independent days | 90% parameter intervals held the truth 92–97% of the time (V4); the band stays centred on the best fit (V5) | always |
-| `noise_model: "ar1"`, `likelihood: "exact"` | errors persist; the exact AR(1) likelihood, which weighs day-to-day changes of the error more than its level, and always uses the daily ρ | version 8's 90% parameter intervals held the truth only 75% of the time (V4); on real rivers it moved the band by up to 0.11 °C, cooler in that case (V5). With weekly or monthly scoring it treats the scores as independent, with a warning | only to compare |
+| `noise_model: "ar1"`, `likelihood: "least_squares"` (the defaults) | errors persist (ρ); least squares with the effective number of independent days | 90% parameter intervals held the truth 93–98% of the time (V4); the band stays centred on the best fit (V5) | always |
+| `noise_model: "ar1"`, `likelihood: "exact"` | errors persist; the exact AR(1) likelihood, which weighs day-to-day changes of the error more than its level, and always uses the daily ρ | version 8's 90% parameter intervals held the truth only 76% of the time (V4); on real rivers it moved the band by up to 0.11 °C, cooler in that case (V5). With weekly or monthly scoring it treats the scores as independent, with a warning | only to compare |
 | `noise_model: "iid"` | every day's error is new | parameter intervals far too narrow with persistent errors (67%, V4); 90% ranges for 7-day means held only 39–59% of the time (V5) | not for decisions |
 
 The error model chosen here is recorded in the chain's `_meta.json`, and
@@ -1271,9 +1280,9 @@ the data fix the parameters, and gives no range or probability.
 ### What the validation shows
 
 On synthetic data with known parameters, the default MCMC intervals (90%)
-contained the true values 92–97% of the time, and the jackknife intervals 81–95%
+contained the true values 93–98% of the time, and the jackknife intervals 83–95%
 ([V4](../validation/REPORT.md#v4)). With `likelihood: "exact"`, version 8's
-MCMC intervals contained them only 75% of the time: do not quote those as
+MCMC intervals contained them only 76% of the time: do not quote those as
 confidence statements. The parameters published for the Swiss
 rivers (Piccolroaz et al., 2016) lay inside pyair2stream's MCMC intervals for 76
 of 81 values ([V2](../validation/REPORT.md#v2)).
@@ -1359,16 +1368,15 @@ range you quote beside it.
 
 | Share inside the range | 50% | 80% | 90% | 95% | 99% |
 |---|---|---|---|---|---|
-| days, synthetic data (V4)* | 47–49% | 77–78% | 87–88% | 91.9–92.5% | 96% |
+| days, synthetic data (V4) | 49–52% | 79–80% | 89–90% | 94.3–94.7% | 98.6–98.7% |
 | days, 48 held-out years per version (V11) | 52–54% | 81–82% | 90% | 94.4–94.5% | 98.0–98.2% |
 | 7-day means, held-out years (V11) | 53–59% | 84–87% | 93–94% | 96% | 98.5–99.1% |
 | days, later validation years (V5) | 42–52% | 75–80% | 85–90% | 91–95% | 95–99.5% |
 | days, British Columbia, later years 2021–2022 (V18) | 48.7% | 76.7% | 86.9% | 92.0% | 97.0% |
 | the same, with conformal margins (V19) | 48.3% | 80.3% | 90.7% | 95.6% | 98.9% |
+| days, north-eastern United States, later years 2021–2023 (V20) | 55.3% | 83.0% | 90.8% | 94.5% | 97.7% |
+| the same, with conformal margins (V20) | 53.8% | 83.5% | 91.9% | 95.8% | 98.8% |
 | yearly statistics, corrected (V11) | 50–69% | 77–85% | 85–94% | 92–100% | 100% |
-
-\* Below the level only because about 3% of V4's synthetic values are below
-0 °C, where no range can reach (section [6](#6-daily-prediction-intervals)).
 
 ![Stated against achieved coverage on the real rivers: days, summer days and 7-day means.](../validation/figures/V5_levels.png)
 
@@ -1427,7 +1435,7 @@ same of model results (Jakeman et al., 2006; Refsgaard et al., 2007; US EPA,
 
 | Question | pyair2stream's answer |
 |---|---|
-| Is the method tested? | The [validation suite](../validation/REPORT.md) runs 19 checks with stated pass criteria, through the same code a user runs: identical results to the original Fortran, reproduction of the published results, recovery of known truths, coverage of intervals at several levels, and performance on real rivers in Switzerland and British Columbia. Failures are reported, not hidden: the report marks each check PASS or FAIL, and says which criterion was missed. |
+| Is the method tested? | The [validation suite](../validation/REPORT.md) runs 20 checks with stated pass criteria, through the same code a user runs: identical results to the original Fortran, reproduction of the published results, recovery of known truths, coverage of intervals at several levels, and performance on real rivers in Switzerland, British Columbia and the north-eastern United States, the last judged by criteria fixed before any model was run on them. Failures are reported, not hidden: the report marks each check PASS or FAIL, and says which criterion was missed. |
 | Is its error rate known? | Yes, as coverage at each level (section [13](#13-choosing-the-level-90-95-or-99)), on synthetic data and real rivers, and at your own site through cross-validation. |
 | Does it rest on published methods? | Each component does (table below). The combination, and three approximations, are pyair2stream's own and documented as such. |
 | Can the result be reproduced? | With `random_seed`, every run gives identical results. Each run records its settings (`calibration_metadata.json`, `_meta.json` with σ, ρ, the chain's content hash and the parameter sets used), and a FORWARD run refuses a chain fitted with another model version, integrator, `Qmedia`, `Tice_cover` or `min_theta_floor`. |

@@ -223,6 +223,152 @@ def coverage_by_level(ens, obs, levels=LEVELS) -> dict:
     return out
 
 
+def cluster_interval(clusters, confidence: float = 0.95, n_boot: int = 4000, seed: int = 0) -> Tuple[float, float]:
+    """Confidence interval of a pooled share inside, by a cluster bootstrap.
+
+    `clusters` holds one (inside, n) pair per cluster: a river, or a river-year. The days of one cluster
+    are not independent (errors persist for weeks and shift from year to year), so a binomial interval over
+    days would be far too narrow. Whole clusters are resampled with replacement, the pooled share
+    (sum of inside / sum of n) is recomputed, and the central `confidence` range of the resampled shares is
+    returned (percentile bootstrap). With few clusters the interval is itself uncertain; it is (nan, nan)
+    with fewer than 3."""
+    c = np.array([(k, n) for k, n in clusters if n], dtype=float).reshape(-1, 2)
+    if len(c) < 3:
+        return float("nan"), float("nan")
+    rng = np.random.default_rng(seed)
+    pick = rng.integers(0, len(c), size=(n_boot, len(c)))
+    shares = c[pick, 0].sum(axis=1) / c[pick, 1].sum(axis=1)
+    lo, hi = np.percentile(shares, [50 - 50 * confidence, 50 + 50 * confidence])
+    return float(lo), float(hi)
+
+
+def _cell_matrices(cells):
+    """Inside and n as (clusters x blocks) matrices, from (cluster, block, inside, n) tuples."""
+    df = pd.DataFrame(list(cells), columns=["cluster", "block", "k", "n"])
+    df = df[df.n > 0]
+    if df.empty:
+        return np.zeros((0, 0)), np.zeros((0, 0))
+    k = df.pivot_table(index="cluster", columns="block", values="k", aggfunc="sum", fill_value=0)
+    n = df.pivot_table(index="cluster", columns="block", values="n", aggfunc="sum", fill_value=0)
+    return k.to_numpy(float), n.to_numpy(float)
+
+
+def pigeonhole_interval(cells, confidence: float = 0.95, n_boot: int = 4000, seed: int = 0) -> Tuple[float, float]:
+    """Confidence interval of a pooled share inside, resampling rivers and time blocks together.
+
+    `cells` holds (river, block, inside, n): the values of one river in one time block (a calendar month,
+    or a held-out year). Rivers share their time blocks: a heat wave or a wet year affects many rivers at
+    once, so resampling rivers alone (`cluster_interval`) misses that source of uncertainty. Here rivers
+    and blocks are resampled independently, with replacement, and every cell of a drawn river in a drawn
+    block counts once per pair of draws (the pigeonhole bootstrap; Owen, 2007, Ann. Appl. Stat. 1, 386-411,
+    which shows it errs on the wide side). Percentile interval; (nan, nan) with fewer than 3 rivers, and
+    rivers only with a single block."""
+    k, n = _cell_matrices(cells)
+    if k.shape[0] < 3:
+        return float("nan"), float("nan")
+    if k.shape[1] < 2:
+        return cluster_interval(zip(k.sum(axis=1), n.sum(axis=1)), confidence, n_boot, seed)
+    rng = np.random.default_rng(seed)
+    r, b = k.shape
+    w = rng.multinomial(r, np.full(r, 1 / r), size=n_boot).astype(float)
+    v = rng.multinomial(b, np.full(b, 1 / b), size=n_boot).astype(float)
+    num = np.einsum("ir,rb,ib->i", w, k, v)
+    den = np.einsum("ir,rb,ib->i", w, n, v)
+    shares = num[den > 0] / den[den > 0]
+    lo, hi = np.percentile(shares, [50 - 50 * confidence, 50 + 50 * confidence])
+    return float(lo), float(hi)
+
+
+def block_interval(blocks, confidence: float = 0.95, n_boot: int = 4000, seed: int = 0) -> Tuple[float, float]:
+    """Confidence interval of one river's share inside, resampling its time blocks ((inside, n) per
+    block). Values within a block may depend on each other; blocks are treated as independent, which a
+    shift shared by the months of one year would make too narrow."""
+    return cluster_interval(blocks, confidence, n_boot, seed)
+
+
+def heterogeneity(cells) -> dict:
+    """Do rivers differ in coverage by more than chance?
+
+    From (river, block, inside, n) cells: each river's share p_r and its sampling variance from the
+    spread of its blocks (the linearised variance of a ratio, m/(m-1) sum_b (k_b - p_r n_b)^2 / N_r^2, not
+    below the binomial variance at the pooled share), as in a meta-analysis of proportions. Cochran's Q
+    tests that every river has the same true share; I^2 = (Q - df)/Q is the part of the spread between
+    rivers beyond chance; tau is the standard deviation of the rivers' true shares (DerSimonian and Laird,
+    1986); and the prediction range is where a new river's true share is expected to fall, 95% (Higgins,
+    Thompson and Spiegelhalter, 2009, J. R. Stat. Soc. A 172, 137-159)."""
+    from scipy import stats
+    k, n = _cell_matrices(cells)
+    nan = float("nan")
+    out = {"rivers": int(k.shape[0]), "Q": nan, "df": max(int(k.shape[0]) - 1, 0), "p": nan, "I2": nan,
+           "tau": nan, "mean": nan, "new river": (nan, nan)}
+    if k.shape[0] < 3:
+        return out
+    tot_k, tot_n = k.sum(axis=1), n.sum(axis=1)
+    p = tot_k / tot_n
+    pooled = tot_k.sum() / tot_n.sum()
+    m = (n > 0).sum(axis=1)
+    lin = np.array([mi / (mi - 1) * np.sum((k[i] - p[i] * n[i]) ** 2) / tot_n[i] ** 2 if mi > 1 else np.inf
+                    for i, mi in enumerate(m)])
+    var = np.maximum(lin, pooled * (1 - pooled) / tot_n)
+    w = 1 / var
+    mean_fixed = np.sum(w * p) / np.sum(w)
+    q = float(np.sum(w * (p - mean_fixed) ** 2))
+    df = len(p) - 1
+    tau2 = max(0.0, (q - df) / (np.sum(w) - np.sum(w ** 2) / np.sum(w)))
+    w_re = 1 / (var + tau2)
+    mu = float(np.sum(w_re * p) / np.sum(w_re))
+    half = stats.t.ppf(0.975, max(len(p) - 2, 1)) * np.sqrt(tau2 + 1 / np.sum(w_re))
+    out.update({"Q": q, "p": float(stats.chi2.sf(q, df)), "I2": max(0.0, (q - df) / q) if q > 0 else 0.0,
+                "tau": float(np.sqrt(tau2)), "mean": mu,
+                "new river": (float(max(mu - half, 0.0)), float(min(mu + half, 1.0)))})
+    return out
+
+
+def heterogeneity_row(cells) -> dict:
+    """heterogeneity() as table columns."""
+    h = heterogeneity(cells)
+    lo, hi = h["new river"]
+    return {"rivers": h["rivers"],
+            "Q (df)": "" if not np.isfinite(h["Q"]) else f"{h['Q']:.1f} ({h['df']})",
+            "p, same share at every river": "" if not np.isfinite(h["p"]) else (f"{h['p']:.2g}" if h["p"] >= 1e-4 else "<0.0001"),
+            "I2": "" if not np.isfinite(h["I2"]) else f"{h['I2']:.0%}",
+            "SD of rivers' true shares": "" if not np.isfinite(h["tau"]) else f"{h['tau'] * 100:.1f} points",
+            "a new river: 95% prediction range": "" if not np.isfinite(lo) else f"{lo * 100:.0f}-{hi * 100:.0f}%"}
+
+
+INTERVALS_TEXT = (
+    "Confidence intervals (95%) of a pooled share resample rivers and time blocks together: calendar months in "
+    "the later years, held-out years in the cross-validation. Rivers share their weather (a heat wave or a wet "
+    "year affects many at once), so resampling rivers alone would give intervals that are too narrow "
+    "(pigeonhole bootstrap; Owen, 2007). A single river's interval resamples its own blocks; with months as "
+    "blocks it leaves out shifts shared by the months of one year, so it is a lower bound on that river's "
+    "uncertainty.")
+
+HETEROGENEITY_TEXT = (
+    "Do rivers differ in how often their intervals hold, by more than chance? Each river's share and its "
+    "sampling variance (from the spread of its time blocks) are combined as in a meta-analysis: Q tests that "
+    "every river has the same true share (p small: they differ); I2 is the part of the spread between rivers "
+    "beyond chance; the standard deviation of the rivers' true shares and the 95% prediction range for a new "
+    "river (DerSimonian and Laird, 1986; Higgins et al., 2009) say how far a single river's coverage can be "
+    "from the pooled one. With months as blocks the sampling variance leaves out shifts shared by the months "
+    "of one year, which overstates the differences in the later years; the held-out years, with years as "
+    "blocks, are the better test.")
+
+
+def format_ci(interval) -> str:
+    """'84.1-89.3%', or '' when there is no interval."""
+    lo, hi = interval
+    return "" if not np.isfinite(lo) else f"{lo * 100:.1f}-{hi * 100:.1f}%"
+
+
+def format_interval(share, interval) -> str:
+    """'86.9% (84.1-89.3%)': a share with its cluster-bootstrap confidence interval."""
+    lo, hi = interval
+    if not np.isfinite(lo):
+        return f"{share:.1%}"
+    return f"{share:.1%} ({lo * 100:.1f}-{hi * 100:.1f}%)"
+
+
 def pit_coverage(pits, level) -> float:
     """Share of PIT values inside the central `level`% range."""
     return float(np.mean(np.abs(np.asarray(pits, float) - 0.5) <= level / 200))

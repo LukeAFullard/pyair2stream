@@ -596,9 +596,9 @@ When every block is held out (m = n) this is the standard delete-one-block
 jackknife. When fewer blocks are held out (first years excluded, or years with
 too few observations), the sum over n blocks is estimated as n/m times the sum
 over the m folds. In validation V4 these 90%
-intervals contained the true parameters 81–95% of the time for every version.
+intervals contained the true parameters 83–95% of the time for every version.
 On the same data, the DE-MCMC parameter intervals (§12, default likelihood)
-contained them 97% of the time for version 5 and 92% for version 8. For
+contained them 97% of the time for version 5 and 93% for version 8. For
 versions 4, 7 and 8 set `Qmedia`
 explicitly, so that every fold uses the same discharge scaling.
 
@@ -731,14 +731,16 @@ scale, the evidence and the alternatives are set out in
 at the end of this section.
 
 **What the validation shows** ([validation/REPORT.md](../validation/REPORT.md)).
-On synthetic data from a known truth, 90% prediction intervals contained 87–88%
-of new observations for versions 5 and 8 with every likelihood. They fall short
-of 90% only because about 3% of the synthetic observations (noise added to the
-simulation) are below 0 °C, and the intervals, kept at or above `Tice_cover`,
-cannot contain them; real water temperatures do not go below 0 °C (none of the
-18,225 measured days of the Swiss rivers). With the default least-squares
-likelihood the 90% parameter intervals, which the ice floor does not affect,
-contained the true values at least 90% of the time for both versions (V4). The exact AR(1)
+On synthetic data from a known truth, kept at or above 0 °C as real water
+temperatures are (none of the 18,225 measured days of the Swiss rivers is below
+0 °C), 90% prediction intervals contained 89–91% of new observations for
+versions 5 and 8 with every likelihood. With the default least-squares
+likelihood the 90% parameter intervals contained the true values 93–98% of
+the time for both versions (V4). When each calendar year's errors were also
+shifted by a random offset (0.18 °C, about the excess year-to-year variation
+found on real rivers, V18), the parameter intervals still contained the truth
+99–100% of the time, and the ranges of paired scenario differences held, but
+90% intervals of 30-day means held only 83–85% of the time (V4, cases L and M). The exact AR(1)
 likelihood's intervals for version 8 contained the truth only about 75% of the
 time: its parameters trade off against each other and that posterior is far from
 normal. The sampler was cross-checked against emcee's stretch move. On three real
@@ -752,10 +754,11 @@ in all): there many parameter combinations fit almost equally well, and the
 published set is not where a least-squares calibration on these data lands
 (V2).
 
-**At other levels.** On synthetic data, mean coverage was below the level by at
-most 3.2 points at every level tested (50%, 80%, 90%, 95% and 99%; at 99%:
-95.9–96.3%), for the reason above; before the ice floor was applied to the
-intervals (version 0.5.1), it was within 1.3 points of every level (V4).
+**At other levels.** On synthetic data, mean coverage was within 1.5 points of
+every level tested (50%, 80%, 90%, 95% and 99%) for every correctly specified
+case (V4). (Before the synthetic data were kept at or above 0 °C, about 3% of
+them lay below the ice floor, where no interval reaches, and coverage fell up
+to 3.2 points short.)
 On the Swiss rivers, pooled over 48 years held out by cross-validation per
 version, daily intervals held from 50% to 95% (95% intervals: 94.4–94.5% of
 days), but 99% intervals held only 98.0–98.2%: the model's real errors have
@@ -1212,7 +1215,38 @@ held-out years 89.8%, 89.6% and 89.6%. Pooled coverage is right; single rivers
 still vary. With the margins, 90% intervals held on 77–96% of the later-year
 days of the converged British Columbia rivers. 99% intervals with the margins
 held on 98.9% of later-year days in British Columbia but 97.0% in Switzerland:
-a 99% margin rests on the few largest misses, and is uncertain.
+a 99% margin rests on the few largest misses, and is uncertain. The 95%
+confidence intervals of these shares, from resampling rivers and calendar
+months (later years) or held-out years together, since rivers share their
+weather (pigeonhole bootstrap; Owen, 2007), are given in the reports: for 90%
+intervals of later-year days in British Columbia, 81.9–90.9% without margins
+and 86.4–94.0% with them.
+
+*A test fixed in advance* (V20). After V19 the method was frozen, and V20, with
+its pass criteria, was written before any model was run on 30 rivers of the
+north-eastern United States, chosen by a fixed rule from USGS records
+(`data/usa_northeast/`). With the margins, 90% intervals held in 2021–2023 on
+91.9% of days (95% confidence interval 89.7–93.9%, rivers and months
+resampled), 92.4% of 7-day means and 93.0% of 30-day means, and in the held-out
+years on 89.8%, 89.6% and 89.6%: every criterion was met. Without them, 90%
+intervals held on 90.8% of later-year days and 87.4% of held-out days, and 95%
+intervals in held-out years on 91.9% of days and 91.1% of 30-day means, short
+of the accepted 92.5%.
+
+*Single rivers* (V18–V20). Whether rivers differ by more than chance is tested
+as in a meta-analysis of proportions: each river's share, with a sampling
+variance from the spread of its months or years; Cochran's Q, I², the standard
+deviation τ of the rivers' true shares (DerSimonian and Laird, 1986) and a 95%
+prediction range for a new river (Higgins et al., 2009). Without margins, the
+north-eastern United States rivers differed in their held-out years (τ = 3.8
+points for days; a new river 80–96%), and the British Columbia rivers did not
+(τ = 0). With the margins, a new river's 90% intervals for later-year days are
+expected to hold on 88–98% of days (V20; 88–97% in British Columbia). In the
+held-out years the margins make the rivers alike almost by construction, since
+each river's margin comes from its own other years; the later years are the
+test. With months as blocks, shifts shared by the months of one year are left
+out of a river's sampling variance, so the later-year differences are, if
+anything, overstated.
 
 **Comparing two scenarios** (for example observed versus naturalised flow): run
 FORWARD once per scenario from the same chain with `save_ensemble: true`, and
@@ -1345,7 +1379,8 @@ change one-sided.
   the British Columbia rivers 90% intervals held on about 87% of days and 85%
   of 30-day means in later years (V18). Check coverage at your site by
   cross-validation; where it is short, the conformal margins (§13) widen the
-  intervals by the held-out years' misses (V19).
+  intervals by the held-out years' misses (V19), and on rivers never used to
+  develop the method they then held at their stated levels (V20).
 - **Choose the level knowing its record.** Any level can be set
   (`prediction_interval`, `parameter_interval`). On the Swiss rivers daily
   intervals held from 50% to 95%, but 99% daily intervals missed about twice
@@ -1387,12 +1422,11 @@ prediction intervals on the hottest days (V14); and the simulations published
 by an independent group for 23 rivers in British Columbia, reproduced day by day
 (V15); predictions from short records (V16); a comparison with regressions on
 air temperature (V17); prediction intervals on the British Columbia rivers,
-which played no part in developing the error model (V18); and the conformal
-margins on all 26 rivers (V19). V4, V5, V9, V10, V14 and V18 do not pass all their criteria; the report says
-where and why. V4 fails only because about 3% of its synthetic values are below
-0 °C, which no interval can contain since intervals are kept at or above
-`Tice_cover`; real water does not go below freezing, and V5, on real data, shows
-no such shortfall. The errors found in the published studies are documented in
+which played no part in developing the error model (V18); the conformal
+margins on all 26 rivers (V19); and the frozen method on 30 rivers of the
+north-eastern United States, with criteria fixed in advance (V20). V5, V9,
+V10, V14 and V18 do not pass all their criteria; the report says where and
+why. The errors found in the published studies are documented in
 [PUBLISHED_RESULTS.md](PUBLISHED_RESULTS.md). The test
 suite (`pytest tests/`) also compares against the Fortran and checks each
 safeguard above.
@@ -1480,6 +1514,15 @@ These are deliberate; each is covered by tests.
 - Romano, Y., Patterson, E. and Candès, E. (2019). Conformalized quantile
   regression. *Advances in Neural Information Processing Systems*, 32,
   3543–3553.
+- Owen, A. B. (2007). The pigeonhole bootstrap. *The Annals of Applied
+  Statistics* 1(2), 386–411. https://doi.org/10.1214/07-AOAS122
+- DerSimonian, R. and Laird, N. (1986). Meta-analysis in clinical trials.
+  *Controlled Clinical Trials* 7(3), 177–188.
+  https://doi.org/10.1016/0197-2456(86)90046-2
+- Higgins, J. P. T., Thompson, S. G. and Spiegelhalter, D. J. (2009). A
+  re-evaluation of random-effects meta-analysis. *Journal of the Royal
+  Statistical Society: Series A* 172(1), 137–159.
+  https://doi.org/10.1111/j.1467-985X.2008.00552.x
 - Oliveira, R. I., Orenstein, P., Ramos, T. and Romano, J. V. (2024). Split
   conformal prediction and non-exchangeable data. *Journal of Machine Learning
   Research*, 25(225), 1–38.

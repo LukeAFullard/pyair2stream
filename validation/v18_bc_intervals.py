@@ -22,8 +22,9 @@ import numpy as np
 import pandas as pd
 from scipy.stats import binom
 
-from common import (LEVELS, WORK, Result, Section, Timer, accepted_real, coverage_by_level, load, quiet,
-                    plot_style, save_figure, BLUE, ORANGE, INK2, LIGHT_GREY)
+from common import (LEVELS, WORK, Result, Section, Timer, accepted_real, block_interval, coverage_by_level, format_ci,
+                    heterogeneity_row, load, pigeonhole_interval, HETEROGENEITY_TEXT, INTERVALS_TEXT,
+                    quiet, plot_style, save_figure, BLUE, ORANGE, INK2, LIGHT_GREY)
 from v15_british_columbia import (HEAT_DOME, MCMC_STEPS, MCMC_WALKERS, QUICK_STATIONS, _calibration_config, _load,
                                   _write)
 
@@ -85,6 +86,16 @@ def _counts(ens, obs, levels=LEVELS):
     return {lev: (0 if n == 0 else int(round(share[lev] * n)), n) for lev in levels}
 
 
+def _counts_by_block(ens, obs, blocks, levels=LEVELS):
+    """{block: {level: (inside, n)}}: _counts within each time block (`blocks`: one label per value)."""
+    blocks = np.asarray(blocks)
+    return {b: _counts(ens[:, blocks == b], obs[blocks == b], levels) for b in pd.unique(blocks)}
+
+
+def _months(dates):
+    return np.asarray(pd.DatetimeIndex(dates).strftime("%Y-%m"))
+
+
 def _error_diagnostics(err, sigma, rho):
     """How the errors of a period compare with the error model (sigma, rho) it was predicted with: their
     RMSE, and their mean in units of the standard deviation the error model gives a mean of that many
@@ -139,6 +150,9 @@ def _later_years(args):
     heat = (dates >= pd.Timestamp(HEAT_DOME[0])) & (dates <= pd.Timestamp(HEAT_DOME[1]))
     counts = {what: _counts(_rolling(ens, w), _rolling(obs, w)[0] if w > 1 else obs)
               for what, w in WINDOWS.items()}
+    # The same counts by calendar month, for confidence intervals that resample rivers and months.
+    cells = {what: _counts_by_block(_rolling(ens, w), _rolling(obs, w)[0] if w > 1 else obs, _months(dates))
+             for what, w in WINDOWS.items()}
     counts["summer days"] = _counts(ens[:, summer], obs[summer])
     counts["heat-dome days"] = _counts(ens[:, heat], obs[heat])
     ok = np.isfinite(obs)
@@ -148,7 +162,7 @@ def _later_years(args):
     median = np.median(ens[:, ok], axis=0)
     return {"station": st, "rho_timescale": rho, "converged": bool(meta["converged"]),
             "steps": int(meta["steps_run"]), "rho": float(meta["rho"]), "sigma": float(meta["sigma"]),
-            "counts": counts, "diagnostics": diag, "width": float(np.mean(hi - lo)), "centre bias": float(np.mean(median - obs[ok])),
+            "counts": counts, "cells": cells, "diagnostics": diag, "width": float(np.mean(hi - lo)), "centre bias": float(np.mean(median - obs[ok])),
             "ranges": _ranges(ens, obs, dates)}
 
 
@@ -211,17 +225,19 @@ def _fold_rhos(cfg, tag, folds):
 
 
 def _window_coverage(folds, window, levels=LEVELS, seed=1):
-    """As cross_validation.check_interval_coverage, for moving means of `window` days: {level: (inside, n)}."""
+    """As cross_validation.check_interval_coverage, for moving means of `window` days: {level: (inside, n)}
+    over every fold, and the same for each held-out year, {year: {level: (inside, n)}}."""
     from pyair2stream.cross_validation import _fold_ensemble
     totals = {lev: [0, 0] for lev in levels}
+    by_year = {}
     for r in folds:
         rng = np.random.default_rng([int(seed), int(r.fold_id), 7])
         obs, ens = _fold_ensemble(r, "ar1", CHECK_SIMULATIONS, rng)
-        for lev, (k, n) in _counts(_rolling(ens, window), _rolling(obs, window)[0] if window > 1 else obs,
-                                   levels).items():
+        by_year[str(r.label)] = _counts(_rolling(ens, window), _rolling(obs, window)[0] if window > 1 else obs, levels)
+        for lev, (k, n) in by_year[str(r.label)].items():
             totals[lev][0] += k
             totals[lev][1] += n
-    return {lev: tuple(v) for lev, v in totals.items()}
+    return {lev: tuple(v) for lev, v in totals.items()}, by_year
 
 
 def _held_out_years(args):
@@ -233,7 +249,7 @@ def _held_out_years(args):
     with quiet():
         _, folds = cross_validate(data, "DE", return_folds=True)
         by_rho = _fold_rhos(cfg, tag, folds)
-    out = {"station": st, "folds": len(folds), "counts": {}, "years": [], "rho": {},
+    out = {"station": st, "folds": len(folds), "counts": {}, "cells": {}, "years": [], "rho": {},
            "fold results": by_rho["weekly"],          # for V19
            "folds raised": int(sum(w.rho > d.rho for w, d in zip(by_rho["weekly"], by_rho["daily"])))}
     out["diagnostics"] = []
@@ -245,7 +261,9 @@ def _held_out_years(args):
             out["diagnostics"].append({"fold": f.label, **d})
     for rho, fl in by_rho.items():
         out["rho"][rho] = float(np.mean([f.rho for f in fl]))
-        out["counts"][rho] = {what: _window_coverage(fl, w) for what, w in WINDOWS.items()}
+        cov = {what: _window_coverage(fl, w) for what, w in WINDOWS.items()}
+        out["counts"][rho] = {what: c[0] for what, c in cov.items()}
+        out["cells"][rho] = {what: c[1] for what, c in cov.items()}
         with quiet():
             per_year, _, sims = check_yearly_statistics(fl, seed=1, return_simulations=True)
         rng = np.random.default_rng(18)
@@ -266,6 +284,30 @@ def _pool(rows, key):
     k = {lev: sum(r[key][lev][0] for r in rows) for lev in LEVELS}
     n = {lev: sum(r[key][lev][1] for r in rows) for lev in LEVELS}
     return {lev: (k[lev] / n[lev] if n[lev] else np.nan) for lev in LEVELS}, n[LEVELS[0]]
+
+
+CI_90 = "90%: 95% CI"
+
+
+def _cells(rows, get, what, lev=90, keep=None):
+    """(station, block, inside, n) of the `lev`% interval, from each row's {block: {level: (inside, n)}}
+    (`get(row)[what]`); `keep(block)` selects blocks."""
+    return [(r["station"], blk, *c[lev]) for r in rows for blk, c in get(r)[what].items()
+            if keep is None or keep(blk)]
+
+
+def _ci(cells):
+    """'84.1-89.3%': the 95% confidence interval of a pooled share, stations and time blocks resampled."""
+    return format_ci(pigeonhole_interval(cells))
+
+
+def _summer(month):
+    return int(month[-2:]) in SUMMER
+
+
+def _station_ci(cells):
+    """95% interval of one station's share, its time blocks resampled."""
+    return format_ci(block_interval([(k, n) for _, _, k, n in cells]))
 
 
 def _inside(pits, level):
@@ -346,12 +388,24 @@ def run(ctx) -> Result:
             if not rows:
                 continue
             share, n = _pool([r["counts"] for r in rows], what)
-            pooled_a.append({"rho": rho, "values": what, "n": n, **{f"{lev}%": share[lev] for lev in LEVELS}})
+            # One heat dome is one event: no interval from resampling it.
+            ci = ("" if what == "heat-dome days" else
+                  _ci(_cells(rows, lambda r: r["cells"], "days", keep=_summer)) if what == "summer days" else
+                  _ci(_cells(rows, lambda r: r["cells"], what)))
+            pooled_a.append({"rho": rho, "values": what, "n": n, **{f"{lev}%": share[lev] for lev in LEVELS},
+                             CI_90: ci})
     pooled_a = pd.DataFrame(pooled_a)
 
     def _get(df, rho, what, lev):
         g = df[(df.rho == rho) & (df["values"] == what)]
         return float(g[f"{lev}%"].iloc[0]) if len(g) else np.nan
+
+    def _bracket(text, value):
+        return f" ({text})" if value else ""
+
+    def _get_ci(df, rho, what):
+        g = df[(df.rho == rho) & (df["values"] == what)]
+        return g[CI_90].iloc[0] if len(g) else ""
 
     fails = []
     for lev in JUDGED:
@@ -369,7 +423,8 @@ def run(ctx) -> Result:
     for rho in RHO:
         for what in WINDOWS:
             share, n = _pool([r["counts"][rho] for r in b], what)
-            pooled_b.append({"rho": rho, "values": what, "n": n, **{f"{lev}%": share[lev] for lev in LEVELS}})
+            pooled_b.append({"rho": rho, "values": what, "n": n, **{f"{lev}%": share[lev] for lev in LEVELS},
+                             CI_90: _ci(_cells(b, lambda r, rho=rho: r["cells"][rho], what))})
     pooled_b = pd.DataFrame(pooled_b)
     for what in WINDOWS:
         for lev in JUDGED[1:]:
@@ -421,12 +476,13 @@ def run(ctx) -> Result:
         f"less here.")
     res.summary = (
         f"(A) DE-MCMC converged with both rho at {n_conv} of {len(stations)} stations. In 2021-2022, pooled over "
-        f"those stations, the default intervals contained {_row(pooled_a, 'weekly', 'days')} of measured days; "
+        f"those stations, the default intervals contained {_row(pooled_a, 'weekly', 'days')} of measured days "
+        f"{_bracket('90%: 95% confidence interval ' + _get_ci(pooled_a, 'weekly', 'days') + ', stations and months resampled', _get_ci(pooled_a, 'weekly', 'days'))}; "
         f"90% intervals contained {_get(pooled_a, 'weekly', '7-day means', 90):.1%} of 7-day means and "
         f"{_get(pooled_a, 'weekly', '30-day means', 90):.1%} of 30-day means (rho from consecutive days: "
         f"{_get(pooled_a, 'daily', '7-day means', 90):.1%} and {_get(pooled_a, 'daily', '30-day means', 90):.1%}). "
         f"(B) Over {int(sum(r['folds'] for r in b))} held-out years, the default intervals contained "
-        f"{_row(pooled_b, 'weekly', 'days')} of days; 90% intervals contained "
+        f"{_row(pooled_b, 'weekly', 'days')} of days{_bracket('90%: ' + _get_ci(pooled_b, 'weekly', 'days') + ', stations and years resampled', _get_ci(pooled_b, 'weekly', 'days'))}; 90% intervals contained "
         f"{_get(pooled_b, 'weekly', '7-day means', 90):.1%} of 7-day means and "
         f"{_get(pooled_b, 'weekly', '30-day means', 90):.1%} of 30-day means (rho from consecutive days: "
         f"{_get(pooled_b, 'daily', '7-day means', 90):.1%} and {_get(pooled_b, 'daily', '30-day means', 90):.1%}). ")
@@ -455,6 +511,8 @@ def run(ctx) -> Result:
         for what in (*WINDOWS, "summer days", "heat-dome days"):
             k, n = r["counts"][what][90]
             row[f"{what} inside 90%"] = f"{k / n:.0%} of {n}" if n else ""
+            if what in WINDOWS and n:
+                row[f"{what}: 95% CI, months resampled"] = _station_ci(_cells([r], lambda x: x["cells"], what))
         row["mean 90% width (°C)"] = round(r["width"], 2)
         row["median minus measured (°C)"] = round(r["centre bias"], 2)
         by_station.append(row)
@@ -466,6 +524,9 @@ def run(ctx) -> Result:
             for what in WINDOWS:
                 k, n = r["counts"][rho][what][90]
                 row[f"{what} inside 90% ({rho})"] = f"{k / n:.0%}" if n else ""
+                if rho == "weekly" and n:
+                    row[f"{what} ({rho}): 95% CI, years resampled"] = _station_ci(
+                        _cells([r], lambda x: x["cells"]["weekly"], what))
         by_station_b.append(row)
     accepted = pd.DataFrame([{"level": f"{x}%", "accepted share inside": "{:.1%}-{:.1%}".format(*accepted_real(x)),
                               "judged": "yes" if x in JUDGED else "no (reported)"} for x in LEVELS])
@@ -487,6 +548,19 @@ def run(ctx) -> Result:
         tables=[("B. Pooled over every held-out year", _fmt(pooled_b)),
                 ("B. Yearly statistics, share of held-out years inside the central range", _fmt(yearly)),
                 ("B. By station, 90% intervals", pd.DataFrame(by_station_b))]))
+    hetero = []
+    rows_a = [r for r in a if r["rho_timescale"] == "weekly" and r["station"] in pooled_stations]
+    for part, rows, get in (("A. later years (months as blocks)", rows_a, lambda r: r["cells"]),
+                            ("B. held-out years (years as blocks)", b, lambda r: r["cells"]["weekly"])):
+        for what in WINDOWS:
+            cells = _cells(rows, get, what)
+            k, n = sum(c[2] for c in cells), sum(c[3] for c in cells)
+            hetero.append({"part": part, "values": what, "pooled share inside 90%": f"{k / n:.1%}" if n else "",
+                           **heterogeneity_row(cells)})
+    res.sections.append(Section(
+        "Confidence intervals, and differences between stations (default rho, 90% intervals)",
+        INTERVALS_TEXT + " " + HETEROGENEITY_TEXT,
+        tables=[("Differences between stations", pd.DataFrame(hetero))]))
 
     # Why intervals miss: held-out errors against the error model they were predicted with
     from scipy.stats import norm
