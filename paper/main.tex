@@ -2,8 +2,8 @@
 %
 % Structure only. The text is yours to write. Each \prompt{...} says what a
 % paragraph should do and points to its evidence in the repository; each
-% \fact{...} is a number taken from the repository (validation/REPORT.md, run
-% of 2026-10-10, pyair2stream 0.5.1). Rerun the validation suite on the release
+% \fact{...} is a number taken from the repository (validation/REPORT.md, runs
+% of 2026-10-10 and, for V4, V5, V9, V18-V20, 2026-10-11; pyair2stream 0.5.1). Rerun the validation suite on the release
 % you submit and update every \fact before submission.
 %
 % Build:  cd paper && latexmk -pdf main.tex      (or pdflatex, bibtex, pdflatex x2)
@@ -81,7 +81,7 @@ DE-MCMC with an autocorrelated error model; year-by-year cross-validation;
 the chance that a yearly statistic exceeded a limit, corrected for the
 model's bias; paired scenario comparisons; and an auditable record of every
 run;
-(4) how it was tested: \fact{402} automated tests and a 19-check validation
+(4) how it was tested: \fact{520} automated tests and a 20-check validation
 suite with criteria stated in advance, against the Fortran, three published
 studies and 26 rivers in Switzerland and British Columbia;
 (5) the main findings, including the failures (intervals hold at
@@ -248,7 +248,7 @@ Each row points to the section that describes it.}
     \multicolumn{3}{@{}l}{\textit{Use and audit}} \\
     Interfaces & text input files; Windows executable or compile & YAML settings; command line, \texttt{run} and \texttt{Model} in Python; \texttt{pip} on any platform (Sect.~\ref{sec:architecture}) \\
     Results & text files; MATLAB plotting script & a summary of each run, its settings and versions; built-in figures \\
-    Evidence & the published applications & \fact{402} tests and a 19-check validation suite (Sect.~\ref{sec:validation}) \\
+    Evidence & the published applications & \fact{520} tests and a 20-check validation suite (Sect.~\ref{sec:validation}) \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -672,8 +672,8 @@ Table~\ref{tab:validation} is the map of this section.}
 
 \begin{table}[htbp]
   \centering
-  \caption{The validation suite (\repo{validation/REPORT.md}; run of
-  2026-10-10, \pkg{} \version). \fact{Update the results for the release submitted.}}
+  \caption{The validation suite (\repo{validation/REPORT.md}; runs of
+  2026-10-10 and 2026-10-11, \pkg{} \version). \fact{Update the results for the release submitted.}}
   \label{tab:validation}
   \small
   \begin{tabularx}{\linewidth}{@{}llXc@{}}
@@ -700,20 +700,21 @@ Table~\ref{tab:validation} is the map of this section.}
       & V16 & Record length needed & \fact{pass} \\
       & V17 & Better than regression on air temperature? & \fact{pass} \\
     \midrule
-    \multirow{7}{*}{Uncertainty}
-      & V4  & Intervals calibrated (synthetic data) & \fact{fail} \\
+    \multirow{8}{*}{Uncertainty}
+      & V4  & Intervals calibrated (synthetic data) & \fact{pass} \\
       & V9  & Probabilities of exceeding a limit & \fact{fail} \\
       & V11 & Cross-validated correction of yearly statistics & \fact{pass} \\
       & V12 & Cross-validation design & \fact{pass} \\
       & V14 & Intervals on the hottest days & \fact{fail} \\
       & V18 & Intervals on independent rivers & \fact{fail} \\
       & V19 & Conformal margins on 26 rivers & \fact{pass} \\
+      & V20 & Frozen method, 30 new rivers, criteria fixed in advance & \fact{pass} \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
 \subsection{Software testing}
-\prompt{\fact{402} automated tests (unit, regression and documentation-link
+\prompt{\fact{520} automated tests (unit, regression and documentation-link
 tests). Golden tests compile the Fortran and compare outputs. Continuous
 integration runs them on several Python versions and against the locked
 dependencies (\repo{.github/workflows/tests.yml}).}
@@ -763,12 +764,21 @@ the whole record.}
 
 \subsection{Calibration of the uncertainty}
 \prompt{The honest heart of the paper. Synthetic data (V4): stated levels are
-met to within \fact{3.2} points. Real rivers (V5, V18): the 90\% intervals
-hold \fact{85--90\%} of the time; on the hottest days (V14) and some British
-Columbia rivers, they are too narrow. Cross-validation corrects yearly
+met to within \fact{1.5} points; with a random offset added to each year's
+errors, as on real rivers, parameter intervals still hold (\fact{99\%} and
+\fact{100\%} at 90\%) and so do paired scenario differences, but 30-day
+means do not (\fact{83--85\%}). Real rivers (V5, V18): the 90\% intervals
+hold \fact{85--90\%} of the time (British Columbia days \fact{86.9\%}, 95\%
+CI \fact{83.9--89.4\%}, rivers resampled); on the hottest days (V14) and
+for 30-day means, they are too narrow. Cross-validation corrects yearly
 statistics (V11), and conformal margins correct the intervals (V19:
 British Columbia 30-day means \fact{84.8\% $\to$ 92.1\%}, without making
-the Swiss intervals too wide). Say what each failure means for a user.}
+the Swiss intervals too wide). Then the method was frozen, and V20 was
+written, with its criteria, before any model was run on 30 rivers of the
+north-eastern United States: with the margins, 90\% intervals held on
+\fact{91.9\%} of later-year days (\fact{90.4--93.2\%}) and \fact{93.0\%}
+of 30-day means; every criterion met. Report every coverage with its
+cluster-bootstrap interval. Say what each failure means for a user.}
 
 \begin{figure}[htbp]
   \centering
@@ -868,7 +878,9 @@ calibration, or other error models).}
 (\url{https://github.com/LukeAFullard/pyair2stream}), and the data with their
 licences: Swiss data from FOEN
 (\repo{data/switzerland/README.md}); British Columbia data from
-\citet{moore2024data} (CC BY 4.0). Say how to rerun the validation
+\citet{moore2024data} (CC BY 4.0); north-eastern United States data from the
+USGS National Water Information System and Daymet version 4
+(\repo{data/usa_northeast/README.md}, which gives their terms and citations). Say how to rerun the validation
 (\texttt{python validation/run\_all.py}).}
 
 \section*{Author contributions}

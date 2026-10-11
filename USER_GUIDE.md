@@ -1325,7 +1325,7 @@ about 5 hidden years, the check says little.
 (The level is `uncertainty_options.parameter_interval`, and the row names
 follow it.) They come from how much the parameters move between folds (the
 jackknife, [docs/METHODS.md §11](docs/METHODS.md#11-cross-validation)). In a
-test with known parameters, they contained the true values 81–95% of the time
+test with known parameters, they contained the true values 83–95% of the time
 ([V4](validation/REPORT.md#v4)). Keep in mind:
 
 - Do not use the `std` row as an uncertainty. The folds share most of their
