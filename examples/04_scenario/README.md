@@ -145,7 +145,9 @@ simulation's average summer change, paired (orange) and not paired (grey).*
 - Summers are a little warmer and winters a little colder. With less water,
   the river is pulled less towards the temperature linked to its flow, and more
   towards the air (see [Does the model version matter?](#does-the-model-version-matter)).
-- On single low-flow days, the warming reaches about 0.3 °C.
+- On single days, the warming reaches about 0.3 °C, and the cooling about
+  0.5 °C. These days are in winter and spring at above-median flows, not on
+  the days of lowest flow (see [Other flow changes](#other-flow-changes)).
 - Without pairing (the last row, grey in the figure), the same simulations
   cannot even tell whether the river gets warmer or colder (see
   [Paired and not paired](#paired-and-not-paired)).
@@ -223,6 +225,63 @@ above do not show.
 - **For a decision, report the result for each version that fits** and say
   why the one relied on was chosen (its error and interval coverage in years
   not used for calibration).
+
+## Other flow changes
+
+What if flow is added instead, or changed only on the days of lowest or
+highest flow? `python examples/04_scenario/flow_regimes.py` (about 10 minutes,
+after `compare_versions.py`) runs six scenarios, each paired with the same
+baseline. "Lowest flows" are the 10% of days of 2010–2012 with the least flow
+(below 0.236 m³/s; July to December, mostly September and October), "highest
+flows" the 10% with the most (above 2.25 m³/s; mostly November to February).
+Every scenario stays within the flows of the calibration years.
+
+Version 8, change from the baseline, median and 90% range
+(`output/flow_regimes_summary.csv`; version 7 is within 0.02 °C of these):
+
+| Scenario | Hottest 10% of days | Yearly highest 7-day mean | Days above 18 °C per year | Largest daily warming | Largest daily cooling |
+|---|---|---|---|---|---|
+| 30% taken, every day | +0.07 (+0.03 to +0.11) °C | +0.08 (+0.04 to +0.11) °C | +0.7 (0.0 to +2.0) | +0.33 °C | −0.54 °C |
+| 30% added, every day | −0.07 (−0.10 to −0.03) °C | −0.07 (−0.11 to −0.04) °C | −0.7 (−2.0 to 0.0) | +0.47 °C | −0.27 °C |
+| 30% taken, lowest flows | +0.01 (0.00 to +0.02) °C | +0.03 (+0.02 to +0.05) °C | 0.0 (0.0 to +0.3) | +0.10 °C | −0.10 °C |
+| 30% added, lowest flows | −0.01 (−0.02 to 0.00) °C | −0.03 (−0.05 to −0.02) °C | 0.0 (−0.3 to 0.0) | +0.09 °C | −0.09 °C |
+| 30% taken, highest flows | 0.00 °C | 0.00 °C | 0.0 | +0.29 °C | −0.51 °C |
+| 30% added, highest flows | 0.00 °C | 0.00 °C | 0.0 | +0.38 °C | −0.21 °C |
+
+*The hottest 10% of days are those with the warmest baseline (median of its
+simulations). Largest daily warming and cooling: medians over the
+simulations.*
+
+**Reading it.**
+
+- **Adding mirrors taking.** 30% more flow cools the hottest days and the
+  yearly peaks by about as much as 30% less flow warms them.
+- **Changing only the lowest flows barely matters, according to the model**:
+  at most 0.03 °C on the yearly highest 7-day mean. There are two reasons.
+  The lowest flows come mostly in September and October, after the hottest
+  weeks: only 21% of the hottest days are among them. And on those days the
+  model gives the flow little weight. A change in flow moves the equilibrium
+  by w·(1 − w)·(flow-linked − air-driven) per unit change of ln θ, and w, the
+  flow-linked share, is smallest when flow is lowest (about 0.06 in August,
+  against 0.36 in December; see the table above).
+- **Changing only the highest flows changes nothing in summer.** The highest
+  flows are mostly winter floods, and the largest single-day changes (±0.2 to
+  0.5 °C) are on those days.
+- **The hot extremes follow the flow of the whole warm season**, not the
+  lowest-flow days alone: only the every-day scenarios move them.
+- **Version 4** changes none of these statistics by more than 0.03 °C.
+
+**A caution about low flows.** That low flows barely matter is a property of
+the model's structure, learned from 2002–2009, not a measured fact. In
+versions 7 and 8 the flow-linked share shrinks with the flow, so the model
+cannot make a given relative change of flow matter more at low flow. The
+mechanism that could (shallow, slow water heating and cooling faster) is a4,
+and this record did not detect it (above). The model also has no direct
+sunlight or water depth: it sees them only through air temperature and
+discharge. So for a question about the lowest flows, such as a drought
+abstraction limit, treat these small numbers as what this model can say, and
+look for measurements at such flows, or a model that represents depth and
+radiation, before relying on them.
 
 ## Limits of this approach
 

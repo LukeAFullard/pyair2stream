@@ -328,6 +328,10 @@
   4, in which discharge changes only the response speed, gives no change in
   the seasonal means. The section explains why, and what it means for a
   scenario's uncertainty.
+- Example 04: "Other flow changes" (`flow_regimes.py`) adds 30% of the flow,
+  and adds or takes 30% on the lowest or highest 10% of flows only. Corrected
+  the README: the largest single-day warming is in winter and spring at
+  above-median flows, not on low-flow days.
 - "Differs from zero" (`Significantly_Diff_From_Zero`) is described as what it
   is: zero lies outside the central 95% credible interval, the Bayesian
   counterpart of a 5%-level test, not a p-value.
