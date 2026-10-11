@@ -485,6 +485,64 @@ for version in (5, 8):
     print(version, round(r.scores["validation"]["RMSE"], 3))
 ```
 
+### 7.3 Several steps: `pyair2stream.Model`
+
+A prediction with uncertainty takes several runs: calibrate (DE-MCMC), check
+by cross-validation, then predict, perhaps for several scenarios. Each later
+run needs the calibration's files (its parameters, `Qmedia`, MCMC sample) and
+the same model settings. `pyair2stream.Model` holds the settings once and
+passes the files on:
+
+```python
+import pyair2stream
+
+m = pyair2stream.Model("settings.yaml", output_dir="output")    # or a dict with the same keys
+m.calibrate()                                                   # DE-MCMC on paths.input_data
+m.check()                                                       # cross-validation of the calibration years
+m.predict("2010-2012.csv", name="baseline", conformal=True)     # 1,000 series, widened by the margins
+m.predict(scenario_df, name="drier", paired_with="baseline")    # a DataFrame; the same parameter sets
+diff = m.difference("drier", "baseline")                        # simulation by simulation (§12)
+```
+
+- **The settings** are those of a calibration (§6): station, version,
+  integrator, seed, bounds, `uncertainty_options`, and `paths.input_data` (the
+  calibration data; `paths.validation_data` too, if you have it). A
+  `cross_validation` block is used by `check` only. `run_mode` names the
+  optimizer (default `DE`); each step sets its own run mode.
+- **The steps.** `calibrate()` runs DE-MCMC (`uncertainty=False`: a best fit
+  only). `check()` runs the cross-validation of §13 with the calibration's
+  `Qmedia`, error model and level, so its coverage and margins apply to the
+  predictions; `cross_validation={...}` adds settings for it. `predict(data,
+  name=...)` is a FORWARD run (§12): `data` is a file or a DataFrame (Date,
+  T_air, Discharge, and T_water where measured). It draws 1,000 parameter sets
+  (`n_samples=`) and keeps every series (`save_ensemble=True`). `paired_with=`
+  reuses an earlier prediction's parameter sets; `conformal=True` widens the
+  intervals by `check`'s margins.
+- **The record.** Each step runs in its own folder (`output/calibration`,
+  `output/check`, `output/<name>`). Its settings are first written to
+  `output/<step>.yaml`, and the step runs from that file, as it would from a
+  settings file written by hand: `pyair2stream --config output/check.yaml`
+  runs it again. A DataFrame is written to `output/inputs/<name>.csv` first. Each
+  step returns its result, as `run` does (§7.2).
+- **Kept the same.** Settings the parameters depend on (version, integrator,
+  station, series, `Tice_cover`, `min_theta_floor`, `calendar`, `Qmedia`, the
+  error model) cannot be changed in one step: `changes={...}` changes anything
+  else for one step only, for example
+  `m.predict(..., changes={"forward_options": {"n_samples": 500}})`. FORWARD
+  runs also refuse a chain, calibration or margins file made with other
+  settings (§12).
+- **Later sessions.** `m.use_calibration("output/calibration")`,
+  `m.use_check("output/check")` and `m.use_prediction("baseline",
+  "output/baseline")` take up earlier steps without running them again.
+- **Reading the results.** `m.ensemble(name)` gives a prediction's series and
+  dates, `m.difference(name, baseline)` the paired difference, and
+  `m.margins()` the conformal margins.
+
+Examples [02](examples/02_uncertainty/README.md),
+[03](examples/03_compliance/README.md), [04](examples/04_scenario/README.md)
+and [08](examples/08_climate/README.md) use it. For a single run,
+`pyair2stream.run` is simpler.
+
 ## 8. Understanding the output files
 
 All files go to `output_dir`. Their names include the run mode, the score

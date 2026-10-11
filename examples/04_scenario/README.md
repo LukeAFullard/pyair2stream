@@ -82,25 +82,32 @@ Run everything with one command, from the repository's top folder:
 python examples/04_scenario/run.py
 ```
 
-It takes two to three minutes. First it makes the scenario's input file: the
-measured file with the discharge multiplied by 0.7. It removes the water
-temperature, because that was not measured under the scenario. Then it runs:
+It takes two to three minutes. First it makes the scenario's input: the
+measured data with the discharge multiplied by 0.7. It removes the water
+temperature, because that was not measured under the scenario. Then it runs
+three steps with one `pyair2stream.Model`, made from
+[`settings.yaml`](settings.yaml) (as in example [02](../02_uncertainty/README.md)):
 
 ```python
+import pandas as pd
 import pyair2stream
 
-calibrate = pyair2stream.run("examples/04_scenario/calibrate.yaml")       # calibrate with uncertainty, as in example 02
-baseline = pyair2stream.run("examples/04_scenario/baseline.yaml")         # 1,000 simulations with the measured discharge
-abstraction = pyair2stream.run("examples/04_scenario/abstraction.yaml")   # the same, with 70% of the discharge
+measured = pd.read_csv("data/switzerland/MAH_2369_validation.csv")
+abstraction = measured.assign(Discharge=measured.Discharge * 0.7, T_water=float("nan"))
+
+m = pyair2stream.Model("examples/04_scenario/settings.yaml")
+m.calibrate()                                                        # with uncertainty, as in example 02
+m.predict("data/switzerland/MAH_2369_validation.csv", name="baseline")      # 1,000 simulations, measured discharge
+m.predict(abstraction, name="abstraction", paired_with="baseline")  # the same, with 70% of the discharge
 ```
 
-From a terminal, `pyair2stream --config <settings file>` does the same.
+A DataFrame is first written to `output/inputs/abstraction.csv`, so the run is
+recorded like any other. Two settings of the abstraction run
+(`output/abstraction.yaml`) matter, and the Model sets both:
 
-Two settings in [`abstraction.yaml`](abstraction.yaml) matter:
-
-- `reuse_sample_indices_from` points at the baseline run's record of which
-  parameter sets it used. So this run uses exactly the same ones, in the same
-  order: this is what pairs the simulations.
+- `reuse_sample_indices_from` (from `paired_with`) points at the baseline run's
+  record of which parameter sets it used. So this run uses exactly the same
+  ones, in the same order: this is what pairs the simulations.
 - `calibration_metadata` keeps the calibration's mean discharge (`Qmedia`). The
   model sees discharge only relative to `Qmedia`. If `Qmedia` were recomputed
   from the reduced flows, the reduction would cancel out. The scenario would
@@ -109,12 +116,7 @@ Two settings in [`abstraction.yaml`](abstraction.yaml) matter:
 Then the difference, simulation by simulation:
 
 ```python
-from pyair2stream import scenario
-
-out = "examples/04_scenario/output"
-diff = scenario.paired_difference_from_files(
-    f"{out}/abstraction/Forward_Prediction_Ensemble_Mentue_c_1d.npz",
-    f"{out}/baseline/Forward_Prediction_Ensemble_Mentue_c_1d.npz")
+diff = m.difference("abstraction", "baseline")
 # abstraction minus baseline: one row per simulation, one column per day.
 # It refuses runs that did not use the same parameter sets.
 ```

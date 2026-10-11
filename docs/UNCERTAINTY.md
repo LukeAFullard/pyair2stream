@@ -1501,9 +1501,10 @@ computes the statistics, the correction and the table:
 ```python
 import pyair2stream
 
-pyair2stream.run("examples/03_compliance/calibrate.yaml")   # DE-MCMC on 2002-2009: parameters, σ, ρ
-pyair2stream.run("examples/03_compliance/predict.yaml")     # FORWARD on 2010-2012: 1,000 series
-pyair2stream.run("examples/03_compliance/check.yaml")       # cross-validation of 2002-2009
+m = pyair2stream.Model("examples/03_compliance/settings.yaml")
+m.calibrate()                                       # DE-MCMC on 2002-2009: parameters, σ, ρ
+m.predict("data/switzerland/MAH_2369_validation.csv", name="prediction")   # FORWARD on 2010-2012: 1,000 series
+m.check()                                           # cross-validation of 2002-2009
 ```
 
 | Year | P(7-day mean > 20 °C), corrected | uncorrected | Measured highest 7-day mean |

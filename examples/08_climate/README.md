@@ -16,27 +16,28 @@ data](#climate-model-data) below).
 python examples/08_climate/run.py
 ```
 
-It takes about five minutes. It makes the two scenario files from the measured
-2010–2012 file, then runs:
+It takes about five minutes. It makes the two scenarios from the measured
+2010–2012 data (`warmer` and `warmer_drier`, DataFrames), then runs five steps
+with one `pyair2stream.Model`, made from [`settings.yaml`](settings.yaml) (as
+in example [02](../02_uncertainty/README.md)):
 
 ```python
 import pyair2stream
 
-results = {}
-results["calibrate"] = pyair2stream.run("examples/08_climate/calibrate.yaml")        # calibrate with uncertainty (as example 02)
-results["baseline"] = pyair2stream.run("examples/08_climate/baseline.yaml")          # 1,000 simulations, as measured
-results["warmer"] = pyair2stream.run("examples/08_climate/warmer.yaml")              # the same, with the air 2 °C warmer
-results["warmer_drier"] = pyair2stream.run("examples/08_climate/warmer_drier.yaml")  # 2 °C warmer, 20% less flow in June-September
-results["check"] = pyair2stream.run("examples/08_climate/check.yaml")                # cross-validation, to check the yearly peaks (as example 03)
+m = pyair2stream.Model("examples/08_climate/settings.yaml")
+m.calibrate()                                                          # with uncertainty (as example 02)
+m.predict("data/switzerland/MAH_2369_validation.csv", name="baseline")      # 1,000 simulations, as measured
+m.predict(warmer, name="warmer", paired_with="baseline")              # the same, with the air 2 °C warmer
+m.predict(warmer_drier, name="warmer_drier", paired_with="baseline")  # 2 °C warmer, 20% less flow in June-September
+m.check()                                                              # cross-validation, to check the yearly peaks (as example 03)
 ```
 
-From a terminal, `pyair2stream --config <settings file>` does the same.
+Each step's settings are written to `output/<step>.yaml`, and each scenario's
+input to `output/inputs/<name>.csv`. Two settings of the scenario runs matter,
+and the Model sets both:
 
-Two settings in [`warmer.yaml`](warmer.yaml) and
-[`warmer_drier.yaml`](warmer_drier.yaml) matter:
-
-- `reuse_sample_indices_from` makes each scenario use the same 1,000
-  parameter sets as the baseline. The change can then be computed simulation
+- `reuse_sample_indices_from` (from `paired_with`) makes each scenario use the
+  same 1,000 parameter sets as the baseline. The change can then be computed simulation
   by simulation, as in example [04](../04_scenario/README.md).
 - `calibration_metadata` keeps the calibration's mean discharge (`Qmedia`), so
   a reduced flow is seen as reduced.

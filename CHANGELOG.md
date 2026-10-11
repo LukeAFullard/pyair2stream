@@ -3,6 +3,16 @@
 ## [0.5.1] - 2026-10-09
 
 ### Added
+- **`pyair2stream.Model`: several steps from one settings file.**
+  `calibrate()`, `check()` and `predict(data, name=...)` run the calibration,
+  the cross-validation and FORWARD runs, and pass the calibration metadata, the
+  MCMC chain, the conformal margins and the paired parameter sets from step to
+  step. `data` can be a file or a DataFrame. Each step's settings are written
+  to `<output_dir>/<step>.yaml` and the step runs from that file, so it can be
+  rerun from the command line. Settings the parameters depend on cannot be
+  changed in one step. `ensemble`, `difference` and `margins` read the results
+  (USER_GUIDE §7.3). Examples 02, 03, 04 and 08 use it, with one
+  `settings.yaml` instead of one settings file per step.
 - **Cross-validation figures.** A cross-validation run now also draws
   `cv_error_by_fold.png` (the RMSE on each held-out year),
   `cv_parameters_by_fold.png` (the parameters fitted without each year, with
