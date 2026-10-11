@@ -246,22 +246,27 @@ A [validation suite](validation/README.md) tests this. Its results are in
   years not used for fitting, 90% ranges held on 85–90% of days
   ([V5](validation/REPORT.md#v5)). On 23 rivers in British Columbia, which
   played no part in developing the error model, they held on 87% of days (95%
-  confidence interval 84–89%, rivers resampled) and 85% of 30-day means
-  (79–90%) ([V18](validation/REPORT.md#v18)).
+  confidence interval 82–91%, rivers and months resampled) and 85% of 30-day
+  means (77–92%) ([V18](validation/REPORT.md#v18)).
 - **An optional widening for sites where ranges hold too rarely.** The
   cross-validation measures how far the years it held out fell outside their
   ranges, and a margin of that size can widen the ranges (conformal margins).
   On the British Columbia rivers, 90% ranges then held on 91% of days
-  (88–93%) and 92% of 30-day means (88–95%). On the Swiss rivers, where they
+  (86–94%) and 92% of 30-day means (86–97%). On the Swiss rivers, where they
   already held, the margins were small and the ranges kept holding
   ([V19](validation/REPORT.md#v19)).
 - **Tested once on rivers it had never seen.** After V19 the method was frozen,
   and the pass criteria were written down before any model was run on 30
   rivers of the north-eastern United States, chosen by a fixed rule from USGS
   records. With the margins, 90% ranges in later years held on 92% of days
-  (90–93%) and 93% of 30-day means (91–95%), and the check passes. Without
+  (90–94%) and 93% of 30-day means (90–96%), and the check passes. Without
   them they held on 91% of days, but 95% ranges in held-out years held on only
   92% of days and 91% of 30-day means ([V20](validation/REPORT.md#v20)).
+- **Single rivers vary.** The figures above are averages over rivers. With the
+  margins, a new river's 90% ranges for later-year days are expected to hold on
+  about 88–98% of days (95% prediction range from how much the rivers differed,
+  V20; 88–97% in British Columbia, V19). Check your own river by
+  cross-validation ([User Guide §14](USER_GUIDE.md#14-checklist-for-results-that-support-a-decision)).
 - **Probabilities need the check.** The model can be too warm on the hottest
   days. So ranges for yearly peaks read straight from the simulations
   (uncorrected) held in only 73–92% of years. The correction shifts every
@@ -321,7 +326,7 @@ skip, so a passing run always means the Fortran comparison ran):
 git submodule update --init --recursive
 pip install -e . pytest
 pytest tests/
-python validation/run_all.py --quick     # about 2 minutes; the full suite takes about 3.5 hours on 4 cores
+python validation/run_all.py --quick     # about 2 minutes; the full suite takes about 5 hours on 4 cores
 ```
 
 ## Differences from the original Fortran

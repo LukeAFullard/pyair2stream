@@ -2,8 +2,8 @@
 %
 % Structure only. The text is yours to write. Each \prompt{...} says what a
 % paragraph should do and points to its evidence in the repository; each
-% \fact{...} is a number taken from the repository (validation/REPORT.md, runs
-% of 2026-10-10 and, for V4, V5, V9, V18-V20, 2026-10-11; pyair2stream 0.5.1). Rerun the validation suite on the release
+% \fact{...} is a number taken from the repository (validation/REPORT.md, full
+% run of 2026-10-11, pyair2stream 0.5.1, every check at one commit). Rerun the validation suite on the release
 % you submit and update every \fact before submission.
 %
 % Build:  cd paper && latexmk -pdf main.tex      (or pdflatex, bibtex, pdflatex x2)
@@ -672,8 +672,8 @@ Table~\ref{tab:validation} is the map of this section.}
 
 \begin{table}[htbp]
   \centering
-  \caption{The validation suite (\repo{validation/REPORT.md}; runs of
-  2026-10-10 and 2026-10-11, \pkg{} \version). \fact{Update the results for the release submitted.}}
+  \caption{The validation suite (\repo{validation/REPORT.md}; run of
+  2026-10-11, \pkg{} \version). \fact{Update the results for the release submitted.}}
   \label{tab:validation}
   \small
   \begin{tabularx}{\linewidth}{@{}llXc@{}}
@@ -769,16 +769,20 @@ errors, as on real rivers, parameter intervals still hold (\fact{99\%} and
 \fact{100\%} at 90\%) and so do paired scenario differences, but 30-day
 means do not (\fact{83--85\%}). Real rivers (V5, V18): the 90\% intervals
 hold \fact{85--90\%} of the time (British Columbia days \fact{86.9\%}, 95\%
-CI \fact{83.9--89.4\%}, rivers resampled); on the hottest days (V14) and
+CI \fact{81.9--90.9\%}, rivers and months resampled); on the hottest days (V14) and
 for 30-day means, they are too narrow. Cross-validation corrects yearly
 statistics (V11), and conformal margins correct the intervals (V19:
 British Columbia 30-day means \fact{84.8\% $\to$ 92.1\%}, without making
 the Swiss intervals too wide). Then the method was frozen, and V20 was
 written, with its criteria, before any model was run on 30 rivers of the
 north-eastern United States: with the margins, 90\% intervals held on
-\fact{91.9\%} of later-year days (\fact{90.4--93.2\%}) and \fact{93.0\%}
+\fact{91.9\%} of later-year days (\fact{89.7--93.9\%}) and \fact{93.0\%}
 of 30-day means; every criterion met. Report every coverage with its
-cluster-bootstrap interval. Say what each failure means for a user.}
+two-way (rivers and months or years) bootstrap interval \citep[pigeonhole
+bootstrap;][]{owen2007}, and say how far single rivers differ: with the margins
+a new river's later-year days are expected to hold \fact{88--98\%} (95\%
+prediction range, random-effects meta-analysis;
+\citealp{dersimonian1986,higgins2009}). Say what each failure means for a user.}
 
 \begin{figure}[htbp]
   \centering

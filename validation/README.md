@@ -46,8 +46,8 @@ python validation/run_all.py --only V2 V6
 
 With `--only`, the other checks keep their reports from the earlier run.
 `REPORT.md` then names the run each report comes from. In the committed
-report (4 cores), the checks took about 6 hours in all: V18 about 1 hour 20
-minutes, V15 and V2 about 50 minutes each, V4 about 45 minutes, V20 about half an
+report (4 cores), the checks took about 5 hours in all: V18 about 1 hour 25
+minutes, V4 about 50 minutes, V15 and V2 about 40 minutes each, V20 about half an
 hour, V9 and V12 about a quarter of an hour each, and every other check under 10 minutes (each
 check's report gives its run time). V19 reuses V18's runs when it runs after
 V18 with the same code (4 minutes); on its own it repeats them. Where jobs are limited in length, run the suite in parts with

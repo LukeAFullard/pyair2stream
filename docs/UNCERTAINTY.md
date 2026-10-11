@@ -710,8 +710,12 @@ On the British Columbia rivers the typical margin for days was 0.21 °C, and the
 small (0.07 °C for days, slightly negative for 7-day means) and the bands kept
 holding. Averaged over rivers the widened bands hold; single rivers still vary
 (77–96% of later-year days for 90% bands in British Columbia). The 95%
-confidence interval of a pooled share, from resampling whole rivers, is in each
-report: for later-year days in British Columbia with the margins, 88.2–92.8%.
+confidence interval of a pooled share, from resampling rivers and months (or
+years) together, is in each report: for later-year days in British Columbia
+with the margins, 86.4–94.0%. How far a single river can be from the pooled
+share is also in each report: with the margins, a new river's 90% band for
+later-year days is expected to hold on about 88–98% of days (V20), so check
+yours by cross-validation (`inside_after`).
 The north-eastern United States rivers (V20) were a test fixed in advance: the
 method was frozen after V19, and the pass criteria were written before any model
 was run on them. With the margins every criterion was met.

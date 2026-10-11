@@ -1216,20 +1216,37 @@ still vary. With the margins, 90% intervals held on 77–96% of the later-year
 days of the converged British Columbia rivers. 99% intervals with the margins
 held on 98.9% of later-year days in British Columbia but 97.0% in Switzerland:
 a 99% margin rests on the few largest misses, and is uncertain. The 95%
-confidence intervals of these shares, from resampling whole rivers, are given
-in the reports: for 90% intervals of later-year days in British Columbia,
-83.9–89.4% without margins and 88.2–92.8% with them.
+confidence intervals of these shares, from resampling rivers and calendar
+months (later years) or held-out years together, since rivers share their
+weather (pigeonhole bootstrap; Owen, 2007), are given in the reports: for 90%
+intervals of later-year days in British Columbia, 81.9–90.9% without margins
+and 86.4–94.0% with them.
 
 *A test fixed in advance* (V20). After V19 the method was frozen, and V20, with
 its pass criteria, was written before any model was run on 30 rivers of the
 north-eastern United States, chosen by a fixed rule from USGS records
 (`data/usa_northeast/`). With the margins, 90% intervals held in 2021–2023 on
-91.9% of days (95% confidence interval 90.4–93.2%, rivers resampled), 92.4% of
-7-day means and 93.0% of 30-day means, and in the held-out years on 89.8%,
-89.6% and 89.6%: every criterion was met. Without them, 90% intervals held on
-90.8% of later-year days and 87.4% of held-out days, and 95% intervals in
-held-out years on 91.9% of days and 91.1% of 30-day means, short of the
-accepted 92.5%.
+91.9% of days (95% confidence interval 89.7–93.9%, rivers and months
+resampled), 92.4% of 7-day means and 93.0% of 30-day means, and in the held-out
+years on 89.8%, 89.6% and 89.6%: every criterion was met. Without them, 90%
+intervals held on 90.8% of later-year days and 87.4% of held-out days, and 95%
+intervals in held-out years on 91.9% of days and 91.1% of 30-day means, short
+of the accepted 92.5%.
+
+*Single rivers* (V18–V20). Whether rivers differ by more than chance is tested
+as in a meta-analysis of proportions: each river's share, with a sampling
+variance from the spread of its months or years; Cochran's Q, I², the standard
+deviation τ of the rivers' true shares (DerSimonian and Laird, 1986) and a 95%
+prediction range for a new river (Higgins et al., 2009). Without margins, the
+north-eastern United States rivers differed in their held-out years (τ = 3.8
+points for days; a new river 80–96%), and the British Columbia rivers did not
+(τ = 0). With the margins, a new river's 90% intervals for later-year days are
+expected to hold on 88–98% of days (V20; 88–97% in British Columbia). In the
+held-out years the margins make the rivers alike almost by construction, since
+each river's margin comes from its own other years; the later years are the
+test. With months as blocks, shifts shared by the months of one year are left
+out of a river's sampling variance, so the later-year differences are, if
+anything, overstated.
 
 **Comparing two scenarios** (for example observed versus naturalised flow): run
 FORWARD once per scenario from the same chain with `save_ensemble: true`, and
@@ -1497,6 +1514,15 @@ These are deliberate; each is covered by tests.
 - Romano, Y., Patterson, E. and Candès, E. (2019). Conformalized quantile
   regression. *Advances in Neural Information Processing Systems*, 32,
   3543–3553.
+- Owen, A. B. (2007). The pigeonhole bootstrap. *The Annals of Applied
+  Statistics* 1(2), 386–411. https://doi.org/10.1214/07-AOAS122
+- DerSimonian, R. and Laird, N. (1986). Meta-analysis in clinical trials.
+  *Controlled Clinical Trials* 7(3), 177–188.
+  https://doi.org/10.1016/0197-2456(86)90046-2
+- Higgins, J. P. T., Thompson, S. G. and Spiegelhalter, D. J. (2009). A
+  re-evaluation of random-effects meta-analysis. *Journal of the Royal
+  Statistical Society: Series A* 172(1), 137–159.
+  https://doi.org/10.1111/j.1467-985X.2008.00552.x
 - Oliveira, R. I., Orenstein, P., Ramos, T. and Romano, J. V. (2024). Split
   conformal prediction and non-exchangeable data. *Journal of Machine Learning
   Research*, 25(225), 1–38.

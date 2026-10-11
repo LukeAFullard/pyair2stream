@@ -13,12 +13,18 @@
   89.8%, 89.6% and 89.6% in held-out years. V20 passes. Without the margins,
   95% intervals in held-out years held on 91.9% of days and 91.1% of 30-day
   means, short of the accepted 92.5%.
-- **Confidence intervals on coverage.** V5, V18, V19 and V20 now give a 95%
-  confidence interval for each pooled coverage, from a cluster bootstrap that
-  resamples whole rivers (or years), so a coverage is not read as more precise
-  than its few rivers allow. On the British Columbia rivers, 90% intervals of
-  later-year days held on 86.9% (83.9–89.4%) without margins and 90.7%
-  (88.2–92.8%) with them.
+- **Confidence intervals on coverage.** V18, V19 and V20 now give a 95%
+  confidence interval for each pooled coverage, resampling rivers and
+  calendar months (later years) or held-out years together, since rivers
+  share their weather (pigeonhole bootstrap), and V5 one for each river,
+  resampling years. On the British Columbia rivers, 90% intervals of
+  later-year days held on 86.9% (81.9–90.9%) without margins and 90.7%
+  (86.4–94.0%) with them.
+- **Do single rivers differ?** V18, V19 and V20 give each river's coverage
+  with its own interval, and test whether rivers differ by more than chance
+  (Cochran's Q, I², the SD of the rivers' true coverage and a 95% prediction
+  range for a new river). With the margins, a new river's 90% intervals for
+  later-year days are expected to hold on 88–98% of days (V20).
 - **V4: errors that shift from one year to the next, and scenario
   differences.** Cases L and M add a random offset to each year's errors (as
   V18 found on real rivers). Parameter intervals still held (99% and 100% at
@@ -32,6 +38,8 @@
   below the ice floor, where no range reaches, and V4 failed for that reason
   alone. Every level from 50% to 99% now holds to within 1.5 points. V9's
   synthetic data are made the same way.
+- **One validation run for every check.** All 20 checks now come from the same
+  full run, at one commit (about 5 hours on 4 cores).
 - **README and documentation** quote the coverages of this run with their
   confidence intervals, and V20.
 
