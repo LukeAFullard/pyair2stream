@@ -1,0 +1,884 @@
+% pyair2stream: journal article outline.
+%
+% Structure only. The text is yours to write. Each \prompt{...} says what a
+% paragraph should do and points to its evidence in the repository; each
+% \fact{...} is a number taken from the repository (validation/REPORT.md, run
+% of 2026-10-10, pyair2stream 0.5.1). Rerun the validation suite on the release
+% you submit and update every \fact before submission.
+%
+% Build:  cd paper && latexmk -pdf main.tex      (or pdflatex, bibtex, pdflatex x2)
+% Hide the prompts: change \drafttrue to \draftfalse.
+%
+% Written in plain `article` so it builds anywhere. For Geoscientific Model
+% Development, move the text into Copernicus's template (copernicus.cls); the
+% section order already follows GMD's model description papers, including the
+% required "Code and data availability" section.
+
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=25mm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs,tabularx,multirow}
+\usepackage{siunitx}
+\usepackage[round,authoryear]{natbib}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\usepackage{lineno}
+
+\graphicspath{{../validation/figures/}{../docs/figures/}{../examples/}}
+\sisetup{range-phrase = \text{--}, range-units = single}
+
+% ---------------------------------------------------------------- draft notes
+\newif\ifdraft
+\drafttrue
+\ifdraft
+  \newcommand{\prompt}[1]{\par\noindent\fcolorbox{orange!70!black}{orange!8}{%
+    \parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\small\sffamily\textbf{Write:} #1}}\par\medskip}
+  \newcommand{\fact}[1]{\textcolor{teal!70!black}{#1}}
+  \linenumbers
+\else
+  \newcommand{\prompt}[1]{}
+  \newcommand{\fact}[1]{#1}
+\fi
+\newcommand{\pkg}{\texttt{pyair2stream}}
+\newcommand{\aas}{\texttt{air2stream}}
+\newcommand{\repo}[1]{\texttt{#1}}   % a file in the repository
+
+% Software version and archive: fill in at release.
+\newcommand{\version}{0.5.1}
+\newcommand{\softwaredoi}{10.5281/zenodo.XXXXXXX}
+
+\title{\pkg{} v\version: an open, tested Python implementation of the
+\aas{} river temperature model, with uncertainty quantification and
+cross-validation}
+% GMD requires the model name and version number in the title.
+
+\author{Luke Fullard\thanks{Affiliation, address. Correspondence: email.}
+% \and Co-authors
+}
+\date{}
+
+\begin{document}
+\maketitle
+
+% =========================================================================
+\begin{abstract}
+\prompt{About 200--250 words, five or six sentences:
+(1) why daily river temperature matters, and why it must often be predicted
+from air temperature and discharge alone;
+(2) \aas{} \citep{toffolon2015} and its standing (widely used; Fortran
+original);
+(3) what \pkg{} is: a Python implementation that reproduces the Fortran
+to \fact{\SI{5e-6}{\celsius}}, corrects its silent errors, and adds what a
+decision needs: checks on inputs and runs, including a stability check
+from the daily relaxation rate that catches explicit-scheme runs that fail
+while looking plausible; records with gaps; uncertainty by
+DE-MCMC with an autocorrelated error model; year-by-year cross-validation;
+the chance that a yearly statistic exceeded a limit, corrected for the
+model's bias; paired scenario comparisons; and an auditable record of every
+run;
+(4) how it was tested: \fact{402} automated tests and a 19-check validation
+suite with criteria stated in advance, against the Fortran, three published
+studies and 26 rivers in Switzerland and British Columbia;
+(5) the main findings, including the failures (intervals hold at
+\fact{87--90\%} for a stated 90\% on held-out data; too narrow on the hottest
+days and on some British Columbia rivers, which the optional conformal
+margins correct; one published calibration found to have its seasonal
+cycle ten months out of phase);
+(6) availability and licence.}
+\end{abstract}
+
+\noindent\textbf{Keywords:} river water temperature; air2stream; hybrid
+model; uncertainty quantification; Markov chain Monte Carlo;
+cross-validation; conformal prediction; reproducibility; open-source software
+
+% =========================================================================
+\section{Introduction}
+\label{sec:intro}
+
+\prompt{Why river temperature matters: aquatic ecology (fish thermal
+limits), regulation (temperature limits, permits, compliance), and climate
+change and abstraction scenarios. Where a decision rests on it, the
+prediction must come with an honest range.}
+
+\prompt{The modelling options: process-based energy-balance models (data
+hungry), statistical regressions on air temperature (simple, but poor
+outside the calibration range), and hybrid models. Introduce \aas{}
+\citep{toffolon2015}, its lake counterpart \texttt{air2water}
+\citep{piccolroaz2013}, its comparison with statistical approaches
+\citep{piccolroaz2016}, and independent evaluations
+\citep[e.g.][]{callahan2025}.}
+
+\prompt{The gap this paper fills. The Fortran original
+\citep{air2stream_code} calibrates and runs the model, and no more: a best
+fit without uncertainty; no test on years not used for calibration; no
+checks on its inputs or on unstable runs; air temperature and discharge must
+be complete; a record must start on 1~January, unchecked; results are
+plotted with a separate MATLAB script. Results used in regulation or in court
+must be reproducible, tested, checked on data the model was not fitted to,
+and carry a stated confidence.}
+
+\prompt{Contributions, as a list (Table~\ref{tab:capabilities} summarises them):
+(i) a verified port of every model version, integrator and objective, with
+the Fortran's silent errors corrected (Sect.~\ref{sec:implementation});
+(ii) checks that stop or flag bad inputs, and support for records with
+gaps (Sect.~\ref{sec:implementation});
+(ii$'$) an analysis of numerical stability: why the explicit Runge--Kutta
+schemes the Fortran offers fail on the published parameters and in
+scenarios, often without any visible sign, and a check that catches them
+(Sect.~\ref{sec:stability});
+(iii) uncertainty quantification designed for autocorrelated errors
+(Sect.~\ref{sec:uq});
+(iv) year-by-year cross-validation, with bias correction and conformal
+margins (Sect.~\ref{sec:cv});
+(v) tools for decisions: the chance a limit was exceeded, and paired
+scenario comparisons (Sect.~\ref{sec:decisions});
+(vi) a validation suite with stated pass criteria, whose failures are
+reported (Sect.~\ref{sec:validation});
+(vii) the outline of the paper.}
+
+% =========================================================================
+\section{The air2stream model}
+\label{sec:model}
+
+\prompt{A short recap for readers who do not know the model; the
+original papers carry the derivation. Source:
+\repo{docs/METHODS.md} §1--§9.}
+
+\subsection{Governing equation and model versions}
+The full eight-parameter model is
+\begin{equation}
+  \frac{\mathrm{d}T_w}{\mathrm{d}t} = \frac{1}{\theta^{a_4}}
+  \left[ a_1 + a_2 T_a - a_3 T_w
+  + \theta \left( a_5 + a_6 \cos\!\left(2\pi\left(t - a_7\right)\right) - a_8 T_w \right) \right],
+  \label{eq:a2s}
+\end{equation}
+with $T_w$ the water temperature, $T_a$ the air temperature, $t$ the time of
+year as a fraction, and $\theta = Q/\bar{Q}$ the discharge scaled by its
+mean over the calibration period (\texttt{Qmedia}).
+
+\prompt{Explain each term in words (METHODS §5), and why $\bar{Q}$ is held at
+the calibration value in prediction and scenario runs (METHODS §4).}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Model versions: the simpler ones fix parameters at zero.}
+  \label{tab:versions}
+  \begin{tabular}{@{}cllcc@{}}
+    \toprule
+    Version & Parameters & Right-hand side & Discharge & Seasonal term \\
+    \midrule
+    3 & $a_1$--$a_3$ & $a_1 + a_2T_a - a_3T_w$ & no & no \\
+    4 & $a_1$--$a_4$ & $(a_1 + a_2T_a - a_3T_w)/\theta^{a_4}$ & yes & no \\
+    5 & $a_1$--$a_3$, $a_6$, $a_7$ & $a_1 + a_2T_a - a_3T_w + a_6\cos(\cdot)$ & no & yes \\
+    7 & all but $a_4$ & Eq.~\eqref{eq:a2s} with $\theta^{a_4}=1$ & yes & yes \\
+    8 & $a_1$--$a_8$ & Eq.~\eqref{eq:a2s} & yes & yes \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Numerical solution}
+\prompt{The daily time step and the Fortran's four integrators:
+Crank--Nicolson (\texttt{CRN}), RK4, RK2 and Euler; \pkg{} adds an
+exponential scheme (\texttt{EXP}). Their stability is the subject of
+Sect.~\ref{sec:stability}. Stability of
+the explicit schemes, and why parameters belong to the scheme they were
+calibrated with (METHODS §6; the evidence is V6 and V13).}
+
+\subsection{Objective functions and calibration}
+\prompt{NSE \citep{nash1970}, RMSE and KGE \citep{gupta2009}, scored on daily,
+weekly or monthly means. The warm-up year (METHODS §3). The Fortran's
+optimizers: PSO \citep{kennedy1995} and Latin hypercube sampling.}
+
+% =========================================================================
+\section{What pyair2stream adds}
+\label{sec:overview}
+
+\prompt{One paragraph that walks through Table~\ref{tab:capabilities}: what the
+Fortran does, and what \pkg{} adds to it. Group the additions by the question
+a user is trying to answer: can I trust this run, how uncertain is it, does it
+hold in years it was not fitted to, and what does it mean for my decision.
+Each row points to the section that describes it.}
+
+\begin{table}[htbp]
+  \centering
+  \caption{The Fortran original and \pkg{}. ``---'': not available.}
+  \label{tab:capabilities}
+  \small
+  \begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.2\linewidth}>{\raggedright}p{0.25\linewidth}X@{}}
+    \toprule
+    & Fortran & \pkg{} \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{The model}} \\
+    Versions, objectives & 3, 4, 5, 7, 8; RMS, NSE, KGE & the same, reproduced to \fact{\SI{5e-6}{\celsius}} (Sect.~\ref{sec:v-fortran}) \\
+    Integrators & CRN, RK4, RK2, EUL; no stability check & the same, and \texttt{EXP}; CRN by default (Sect.~\ref{sec:stability}) \\
+    Calibration & PSO, Latin hypercube & the same, and DE with L-BFGS-B (default) \\
+    Errors in the original & --- & corrected: seasonal phase from the dates, PSO, \texttt{Qmedia}, scoring (Table~\ref{tab:differences}) \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{Can I trust this run?}} \\
+    Input checks & none & missing, repeated, implausible or negative values; short records (Sect.~\ref{sec:checks}) \\
+    Run checks & none & stability from the B series before a run; divergence and implausible output after (Sect.~\ref{sec:stability}); unused parameters \\
+    Consistency between runs & --- & a prediction refuses a calibration or chain made with other settings \\
+    Data report & --- & checks, gaps and usable segments before a run \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{Can I use my data?}} \\
+    Gaps & in water temperature only; a missing air temperature or discharge ($-999$) enters the equation as a value & also air temperature and discharge (gap-tolerant mode, Sect.~\ref{sec:data}) \\
+    Record start & 1 January, unchecked & any date \\
+    Calendars & standard & also 365-day (climate-model output) \\
+    Zero discharge & not handled & a floor on scaled discharge \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{How uncertain is it?}} \\
+    Parameters & best fit only & DE-MCMC with an autocorrelated error model (Sect.~\ref{sec:uq}) \\
+    Predictions & one series & 1,000 series: intervals for days, 7- and 30-day means, yearly statistics \\
+    Sensitivity & --- & local one-at-a-time index \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{Does it hold in other years?}} \\
+    Held-out years & a validation file & leave-one-year-out cross-validation (Sect.~\ref{sec:cv}) \\
+    Interval check & --- & coverage at each level; conformal margins where too narrow \\
+    Parameter intervals & --- & jackknife intervals across folds \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{What does it mean for a decision?}} \\
+    Limits & --- & the chance a yearly statistic exceeded a limit, corrected for bias (Sect.~\ref{sec:decisions}) \\
+    Scenarios & a second run & paired runs: the difference simulation by simulation \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{Use and audit}} \\
+    Interfaces & text input files; Windows executable or compile & YAML settings; command line, \texttt{run} and \texttt{Model} in Python; \texttt{pip} on any platform (Sect.~\ref{sec:architecture}) \\
+    Results & text files; MATLAB plotting script & a summary of each run, its settings and versions; built-in figures \\
+    Evidence & the published applications & \fact{402} tests and a 19-check validation suite (Sect.~\ref{sec:validation}) \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+% =========================================================================
+\section{Implementation}
+\label{sec:implementation}
+
+\subsection{Design and architecture}
+\label{sec:architecture}
+\prompt{The software stack: NumPy, SciPy, pandas and matplotlib; the time loop
+is compiled with Numba \citep{lam2015}; MCMC uses emcee
+\citep{foremanmackey2013}. One settings file (YAML) describes a run; the run
+modes are calibration, DE-MCMC, FORWARD and cross-validation. Interfaces: the
+command line, \texttt{pyair2stream.run}, and the \texttt{pyair2stream.Model}
+workflow (calibrate, check, predict), which records each step's settings in
+a file that reruns it. Each run writes a summary (\texttt{summary.md} and
+\texttt{.html}) with its settings, data, scores, warnings and software
+versions, so it can be audited and repeated. Built-in figures are readable
+without colour. A figure could show the workflow.}
+
+% \begin{figure}[htbp]
+%   \centering
+%   \includegraphics[width=\linewidth]{U01_pipeline.png}
+%   \caption{From data to a statement with a stated confidence: the steps \pkg{} runs.}
+%   \label{fig:workflow}
+% \end{figure}
+
+\subsection{Correcting the original}
+\prompt{Everything the Fortran computes is reproduced
+(Sect.~\ref{sec:v-fortran}). Where the two differ, \pkg{} differs on purpose,
+because the Fortran was wrong or silent; Table~\ref{tab:differences} lists each
+case. Lead with the seasonal phase: it changed a published result (V15). Source:
+\repo{docs/METHODS.md} §17 and \repo{docs/PUBLISHED\_RESULTS.md}.}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Deliberate differences from the Fortran original
+  (\repo{docs/METHODS.md} §17). Each is covered by a test.}
+  \label{tab:differences}
+  \small
+  \begin{tabularx}{\linewidth}{@{}lXX@{}}
+    \toprule
+    Topic & Fortran & \pkg{} \\
+    \midrule
+    Seasonal phase & from the row number; a record is assumed to start on 1~January, unchecked
+                   & from each row's date; a record may start on any date \\
+    PSO global best & taken from a score array that is still zero, so always the first particle
+                    & the best initial particle \\
+    PSO stopping & a test that can never be met & tolerance $10^{-4}$ \\
+    \texttt{Qmedia} & recomputed from each file, including days the model cannot simulate
+                    & fixed at the calibration value; zero-flow days excluded where they cannot be simulated \\
+    Weekly/monthly scoring & out-of-range index in a partial last block; division by zero when \texttt{prc}=0
+                           & a block without data is never scored; \texttt{prc} applies to the calendar length \\
+    Defaults & --- & \texttt{CRN} integrator; DE with L-BFGS-B \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Numerical schemes and calibration}
+\label{sec:numerics}
+\prompt{A fifth scheme, exponential (\texttt{EXP}), stable for every $B$ like
+CRN; CRN as the default; the choice of scheme is the subject of
+Sect.~\ref{sec:stability}. Differential evolution \citep{storn1997} with
+L-BFGS-B polishing \citep{byrd1995} as the default optimizer, and why (V2: it
+fits at least as well as the published parameters). PSO and Latin hypercube
+kept for comparison with published work.}
+
+\subsection{Checks on inputs and runs}
+\label{sec:checks}
+\prompt{The Fortran runs on silently. Summarise METHODS §15 as a few classes:
+the inputs (missing, repeated or implausible values; negative discharge);
+the run (stability of the explicit schemes, judged by the relaxation rate and
+by how much an error can grow; non-finite or implausible output); and
+consistency between runs (a prediction refuses a chain or calibration made
+with another version, integrator, \texttt{Qmedia} or ice threshold, and warns
+when discharge leaves the calibrated range). The data report
+(\texttt{analyze\_timeseries}) makes the same checks before a run.}
+
+\subsection{Data with gaps, other calendars and zero flow}
+\label{sec:data}
+\prompt{Gap-tolerant mode: the record is split into segments with complete
+inputs, each started at rest (METHODS §10); the evidence that gaps do not bias
+the result is V7. Records may start on any date. A 365-day calendar for
+climate-model output (METHODS §2). Zero discharge with
+\texttt{min\_theta\_floor} (METHODS §5).}
+
+% =========================================================================
+\section{Numerical stability: the B series, and why explicit schemes need extreme caution}
+\label{sec:stability}
+
+\prompt{Why this section matters. The model is a stiff linear ODE whenever the
+water responds within a day, and its stiffness changes with discharge. The
+Fortran offers four schemes, three of them explicit, with no stability check;
+the 2015 paper calibrated with RK4. This section shows, from theory and on
+the 30 published parameter sets, when the explicit schemes fail, why a
+failing run can look plausible, why parameters cannot move between schemes,
+and why a scheme stable on the record can fail in a scenario. Source:
+\repo{examples/09\_integrator\_stability/README.md} (every number below comes
+from its \texttt{run.py}), \repo{docs/METHODS.md} §6 and §15, V1, V2, V6, V13.}
+
+\subsection{One number per day decides stability}
+Every model version can be written as
+\begin{equation}
+  \frac{\mathrm{d}T_w}{\mathrm{d}t} = A(t) - B(t)\,T_w,
+  \qquad
+  B = \frac{a_3 + a_8\,\theta}{\theta^{a_4}} \quad\text{(version 8)},
+  \label{eq:AB}
+\end{equation}
+where $B$ (per day) is the rate at which the water relaxes towards the
+equilibrium $A/B$, and $1/B$ its response time.
+
+\begin{table}[htbp]
+  \centering
+  \caption{$A$ and $B$ of Eq.~\eqref{eq:AB} for each version. In versions 3
+  and 5 the stability of a scheme is settled by one number; in versions 4, 7
+  and 8 it changes with discharge.}
+  \label{tab:AB}
+  \small
+  \begin{tabular}{@{}cll@{}}
+    \toprule
+    Version & $A(t)$ & $B(t)$ \\
+    \midrule
+    3 & $a_1 + a_2T_a$ & $a_3$ \\
+    4 & $(a_1 + a_2T_a)/\theta^{a_4}$ & $a_3/\theta^{a_4}$ \\
+    5 & $a_1 + a_2T_a + a_6\cos(2\pi(t-a_7))$ & $a_3$ \\
+    7 & $a_1 + a_2T_a + \theta(a_5 + a_6\cos(2\pi(t-a_7)))$ & $a_3 + a_8\theta$ \\
+    8 & $[a_1 + a_2T_a + \theta(a_5 + a_6\cos(2\pi(t-a_7)))]/\theta^{a_4}$ & $(a_3 + a_8\theta)/\theta^{a_4}$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\prompt{Because the equation is linear in $T_w$, a difference between two
+simulations is multiplied each step by an amplification factor $R$ that
+depends only on $B$ and the scheme. The analysis is therefore exact, apart from
+the ice floor \texttt{Tice\_cover}.}
+
+\subsection{Stability limits from B-series}
+\prompt{Explain the name clash: the \emph{B series} (the daily values of $B$)
+and \emph{B-series} in numerical analysis \citep{hairer1974,hairer2006}. One
+Runge--Kutta step expands as a sum over rooted trees
+\citep{butcher2016}; for the test equation $y' = -By$ only the tall trees
+(chains) survive, and the B-series collapses to the stability function
+$R(z)$, $z = -B\Delta t$ (Table~\ref{tab:rz}). Consequences:
+(i) no explicit Runge--Kutta method is stable for every $B$, because its $R$
+is a polynomial;
+(ii) the limits are where $\lvert R(-B)\rvert = 1$: 2 for Euler and Heun,
+\fact{2.785} for RK4;
+(iii) matching more terms of $\exp(z)$ (RK4) gives accuracy at small $B$, not
+stability at large $B$; CRN is A-stable but not L-stable (fast components
+zigzag); EXP is exact for the decay \citep{hochbruck2010,hairer1996}.
+Give the Butcher tableaux in an appendix.}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Stability function $R(z)$, $z=-B\Delta t$, of each scheme with a
+  one-day step, and the largest $B$ for which it is stable.}
+  \label{tab:rz}
+  \small
+  \begin{tabular}{@{}lllc@{}}
+    \toprule
+    \texttt{integrator} & Method & $R(z)$ & Stable for \\
+    \midrule
+    \texttt{EUL} & explicit Euler & $1 + z$ & $B \le 2$ \\
+    \texttt{RK2} & Heun & $1 + z + z^2/2$ & $B \le 2$ \\
+    \texttt{RK4} & classical Runge--Kutta & $1 + z + z^2/2 + z^3/6 + z^4/24$ & $B \le 2.785$ \\
+    \texttt{CRN} & Crank--Nicolson (implicit trapezoidal) & $(1 + z/2)/(1 - z/2)$ & all $B \ge 0$ \\
+    \texttt{EXP} & exponential (integrating factor) & $\exp(z)$ & all $B \ge 0$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\linewidth]{09_integrator_stability/figures/amplification.png}
+  \caption{Amplification factor of each scheme against $B$, with the
+  equation's $\exp(-B)$, and values measured through the package.}
+  \label{fig:amplification}
+\end{figure}
+
+\subsection{The B series of the published parameters}
+\prompt{With the 2016 parameters (CRN), $B$ exceeds 2 on at least half of the
+days on the Rh\^one and the Dischmabach in every version; floods drive it to
+\fact{39 per day} on the Dischmabach (a response time under an hour). In versions
+4, 7 and 8, $B$ follows discharge: in version 4 it rises as flow falls when
+$a_4>0$ and as flow rises when $a_4<0$; in version 7 it rises with flow; in
+version 8 ($B = a_3\theta^{-a_4} + a_8\theta^{1-a_4}$) floods raise it, and
+with $0<a_4<1$ (the 2015 sets) low flows do too. Show Fig.~\ref{fig:bseries}; a small table of the
+largest $B$ and the share of days above each limit could go in the appendix.}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{09_integrator_stability/figures/b_series_published.png}
+  \caption{The B series of every published parameter set. The 2015 sets,
+  calibrated with RK4, stay under RK4's limit.}
+  \label{fig:bseries}
+\end{figure}
+
+\subsection{Every scheme with every published parameter set}
+\prompt{Each of the 30 published sets run with each scheme, against a solution
+with 96 steps per day. CRN stays within \fact{0.10}, EXP within \fact{0.21~°C}
+RMS. With the 2016 (CRN) parameters, RK4 fails for \fact{10 of 15} sets, RK2
+and Euler for \fact{12}. The Fortran runs these without warning: in V1 both
+programs diverge on the same days.}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{09_integrator_stability/figures/every_integrator_every_version.png}
+  \caption{RMS difference of each scheme from the fine-step solution, for
+  the 30 published parameter sets, and the package's response.}
+  \label{fig:every}
+\end{figure}
+
+\subsection{Unstable runs that look plausible}
+\prompt{The key danger. The ice floor cuts off every downward excursion, so an
+unstable run need not blow up: Euler flips between 0 and \fact{25~°C} on the
+Rh\^one; RK4 sits at 0~°C for five months on the Dischmabach
+(Fig.~\ref{fig:failure}). A check on the output (not finite, or above
+\SI{60}{\celsius}) misses them. \pkg{} therefore checks the B series before a
+run: the largest growth of a difference over any stretch of days, the
+product of the daily factors (Eq.~\ref{eq:growth}), known before anything is
+simulated. Of the runs whose difference could grow more than 1,000 times,
+\fact{46 of 47} were more than 1~°C off or diverged; where it could grow at
+most 10 times, every RK2 run and every RK4 run but one (the RK4 calibration of
+Sect.~\ref{sec:rk4limit}) stayed within \fact{0.34~°C}
+(Fig.~\ref{fig:predicts}). For CRN the product telescopes, so a difference
+never grows by more than about half the largest $B$ (\fact{2.6 times} at most
+here), however long the run.}
+
+\begin{equation}
+  G_{m,n} = \prod_{j=m}^{n-1} R_j,
+  \qquad
+  R_j^{\mathrm{CRN}} = \frac{1 - B_j/2}{1 + B_{j+1}/2}
+  \;\Rightarrow\;
+  G^{\mathrm{CRN}}_{m,n} = \frac{1 - B_m/2}{1 + B_n/2}\prod_{j=m+1}^{n-1}\frac{1 - B_j/2}{1 + B_j/2}.
+  \label{eq:growth}
+\end{equation}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{09_integrator_stability/figures/failure_modes.png}
+  \caption{Three unstable runs on real forcing that a check on the output
+  misses: Euler zigzags, RK4 sits at 0~°C for months, RK2 falls to 0~°C in a
+  flood.}
+  \label{fig:failure}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{09_integrator_stability/figures/what_predicts_a_wrong_run.png}
+  \caption{What predicts a wrong run: the share of days above the limit
+  (left) and the largest growth over a stretch of days (right), for the 90
+  explicit-scheme runs.}
+  \label{fig:predicts}
+\end{figure}
+
+\subsection{Stable is not accurate, and a calibration learns its scheme}
+\label{sec:rk4limit}
+\prompt{Even where stable, Euler is \fact{0.45--0.98~°C} RMS from the
+equation (V6: up to \fact{4.5~°C} on single days). The parameters absorb a
+scheme's behaviour, so they belong to it: the 2015 (RK4) parameters run with
+CRN differ from the published errors by up to \fact{0.32~°C} (V13); the 2016
+(CRN) parameters are unstable with RK4 in \fact{8 of 15} sets (V2). A
+calibration with RK4 keeps $B$ under RK4's limit, and can do more: on the
+Dischmabach, version 5, $a_3 = $ \fact{2.768}, \fact{0.6\%} under the limit,
+where RK4 leaves \fact{97\%} of a difference in place each day against the
+equation's \fact{6\%}. With RK4 the fit is \fact{0.70~°C} RMSE; the same
+equation solved exactly gives \fact{0.97~°C}, the difference lying in winter,
+where RK4's slow decay holds the water above the ice floor
+(Fig.~\ref{fig:rk4limit}). The calibration fitted a numerical effect. A
+warning sign for users: a calibrated $B$ just under an explicit scheme's
+limit.}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{09_integrator_stability/figures/rk4_calibration_near_its_limit.png}
+  \caption{Dischmabach, winter 2005--2006, 2015 parameters (version 5): RK4
+  keeps the water above 0~°C; the equation solved exactly does not.}
+  \label{fig:rk4limit}
+\end{figure}
+
+\subsection{Stable on the record, unstable in a scenario}
+\prompt{In versions 4, 7 and 8, stability depends on discharge, so it can be
+lost in exactly the runs a decision rests on. With the 2015 version 8
+parameters and the recorded flow scaled by 0.1 to 3 (Table~\ref{tab:flows}):
+on the Rh\^one, RK4 is within \fact{0.02~°C} on the recorded flow but
+diverges at a tenth of it (a large abstraction or a drought); on the Mentue,
+doubled flows put RK4 \fact{0.50~°C} off. CRN stays within \fact{0.14~°C}, EXP
+within \fact{0.22~°C} in every case.}
+
+\begin{table}[htbp]
+  \centering
+  \caption{2015 version 8 parameters with the recorded discharge scaled:
+  RMS difference from the fine-step solution (°C), and the package's
+  response. \fact{From \repo{examples/09\_integrator\_stability}, section 8.}}
+  \label{tab:flows}
+  \small
+  \begin{tabular}{@{}cllll@{}}
+    \toprule
+    Flow $\times$ & Mentue RK4 & Mentue RK2 & Rh\^one RK4 & Rh\^one RK2 \\
+    \midrule
+    0.1 & 0.03 & 0.30 & diverged, stopped & diverged, stopped \\
+    0.2 & 0.02 & 0.26 & 0.07 & 0.84, warned \\
+    0.5 & 0.02 & 0.24, warned & 0.02 & 0.21 \\
+    1 (recorded) & 0.04, warned & 0.28, warned & 0.02 & 0.13, warned \\
+    1.5 & 0.16, warned & 0.57, warned & 0.01 & 0.10, warned \\
+    2 & 0.50, stopped & 0.98, stopped & 0.01 & 0.80, stopped \\
+    3 & diverged, stopped & diverged, stopped & 0.01, warned & 3.32, stopped \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Safeguards and recommendations}
+\prompt{What \pkg{} does: CRN is the default; choosing an explicit scheme
+prints a note; before a run it checks the share of days above the limit and
+the largest growth, and stops above a growth of 100 or more than 10\% of days
+above the limit; after a run it stops on non-finite or implausible output; a
+FORWARD run refuses parameters calibrated with another scheme; in DE-MCMC and
+prediction ensembles, unstable draws are dropped and counted. What users
+should do: use CRN (EXP as a second opinion); use explicit schemes only to
+reproduce the Fortran, with parameters calibrated with that scheme, on flows
+like the calibration's; check the B series of a scenario's inputs before
+running it. Say what the growth check cannot catch (inaccuracy of a stable
+scheme; the RK4 calibration above), and why that argues for CRN rather than
+a tighter check.}
+
+% =========================================================================
+\section{Uncertainty quantification}
+\label{sec:uq}
+
+\prompt{Present it as a chain: error model, then parameter uncertainty, then
+prediction intervals. Sect.~\ref{sec:cv} checks the chain on held-out years.
+Source: \repo{docs/METHODS.md} §12--§13 and \repo{docs/UNCERTAINTY.md}.}
+
+\subsection{Error model and likelihood}
+\prompt{Model errors persist from day to day, so treating them as independent
+understates the uncertainty. Describe the AR(1) error model and the effective
+number of observations $n_\mathrm{eff} = n/F$ \citep{bayley1946}, with $F$
+summed over the pairs of scored days, so gaps are handled. Give the
+log-likelihood (Eq.~\ref{eq:likelihood}); its maximum is the least-squares
+fit. Explain why $\rho$ is estimated on a weekly scale rather than from
+consecutive days (evidence: V4, V18; \citealp{mcinerney2020}). Compare the
+exact AR(1) likelihood and the independent-error likelihood, and say why
+neither is the default \citep{evin2014}.}
+
+\begin{equation}
+  \log L(\mathbf{a}) = -\frac{n_\mathrm{eff}}{2}\,\ln\!\frac{\mathrm{SSE}(\mathbf{a})}{n},
+  \qquad
+  F = 1 + \frac{2}{n}\sum_{i<j} \rho^{\lvert t_i - t_j\rvert}.
+  \label{eq:likelihood}
+\end{equation}
+
+\subsection{Parameter uncertainty by DE-MCMC}
+\prompt{The prior is uniform within the bounds. Sampling starts from the DE
+best fit, with the affine-invariant ensemble sampler
+\citep{goodman2010,foremanmackey2013}. Convergence is judged by the
+autocorrelation time and split-$\hat{R}$ \citep{gelman2013}.}
+
+\subsection{Prediction intervals}
+\prompt{A FORWARD run draws parameter sets from the chain and adds AR(1) noise
+\citep{box2015}, giving an ensemble of series. Intervals for days, 7-day and
+30-day means, and yearly statistics come from the ensemble.}
+
+\subsection{Sensitivity analysis}
+\prompt{One sentence or two: a local, one-at-a-time index (METHODS §14), and
+its limits.}
+
+% =========================================================================
+\section{Checking predictions on years not used for calibration}
+\label{sec:cv}
+
+\prompt{An interval is only useful if it holds on data the model has not seen.
+Source: \repo{docs/METHODS.md} §11 and \repo{docs/UNCERTAINTY.md} §8.}
+
+\subsection{Leave-one-year-out cross-validation}
+\prompt{Each year is held out in turn \citep{stone1974,klemes1986}; the hidden
+year keeps its air temperature and discharge, which V12 shows does not
+flatter the model \citep{burman1994}. Outputs: the error of each held-out
+year, the coverage of the intervals at each level, and jackknife intervals
+for the parameters \citep{kunsch1989}.}
+
+\subsection{Correcting yearly statistics}
+\prompt{The bias of each yearly statistic in the held-out years, and its
+correction, in the manner of model output statistics \citep{glahn1972}
+(METHODS §13; evidence V11).}
+
+\subsection{Conformal margins}
+\prompt{Optional margins widen an interval by the amount held-out years fell
+outside it \citep{vovk2005,lei2018,romano2019}; state the exchangeability
+caveat \citep{oliveira2024}. Evidence: V19.}
+
+% =========================================================================
+\section{Tools for decisions}
+\label{sec:decisions}
+
+\subsection{The chance that a limit was exceeded}
+\prompt{Yearly statistics (highest daily mean, highest 7-day mean, days above
+a threshold) from each simulated series, giving the chance that a limit was
+exceeded, corrected by Sect.~\ref{sec:cv}. Judge the probabilities by the
+Brier score \citep{brier1950} and the PIT \citep{gneiting2007}; evidence V9 and
+V11.}
+
+\subsection{Paired scenario comparisons}
+\prompt{A scenario run (abstraction, warmer air, climate-model inputs) reuses
+the baseline's parameter draws and noise, so the uncertainty common to both
+cancels in their difference, simulation by simulation (METHODS §13). Discharge
+outside the calibrated range is flagged. Illustrate with example 04 (30\%
+abstraction): summer change \fact{+\SI{0.05}{\celsius}, 90\% range 0.02 to
+0.08} paired, against \fact{$-0.30$ to 0.39} unpaired.}
+
+% =========================================================================
+\section{Verification and validation}
+\label{sec:validation}
+
+\prompt{Separate verification (is the code right?) from validation (is the
+method fit for purpose?). Every check states its question, method and pass
+criterion before its result, and all are reported, including those that fail.
+Reproducibility: seeded, with software versions recorded. Source:
+\repo{validation/README.md} and \repo{validation/REPORT.md}.
+Table~\ref{tab:validation} is the map of this section.}
+
+\begin{table}[htbp]
+  \centering
+  \caption{The validation suite (\repo{validation/REPORT.md}; run of
+  2026-10-10, \pkg{} \version). \fact{Update the results for the release submitted.}}
+  \label{tab:validation}
+  \small
+  \begin{tabularx}{\linewidth}{@{}llXc@{}}
+    \toprule
+    & Check & Question & Result \\
+    \midrule
+    \multirow{2}{*}{Verification}
+      & V1  & Same results as the Fortran (all versions, integrators, objectives; with gaps) & \fact{pass} \\
+      & V6  & Numerical accuracy; warnings on unstable runs & \fact{pass} \\
+    \midrule
+    \multirow{3}{*}{Published results}
+      & V13 & Toffolon and Piccolroaz (2015) & \fact{pass} \\
+      & V2  & Piccolroaz et al.\ (2016): 3 Swiss rivers, every version & \fact{pass} \\
+      & V15 & Callahan and Moore (2025): 23 rivers in British Columbia & \fact{pass} \\
+    \midrule
+    \multirow{3}{*}{Known truth}
+      & V3  & Calibration recovers known parameters & \fact{pass} \\
+      & V7  & Gaps do not bias the result & \fact{pass} \\
+      & V8  & Workflow and scenario tools are exact & \fact{pass} \\
+    \midrule
+    \multirow{4}{*}{Prediction}
+      & V5  & Real rivers, years not calibrated on & \fact{fail} \\
+      & V10 & Warmer or lower-flow years than calibrated on & \fact{fail} \\
+      & V16 & Record length needed & \fact{pass} \\
+      & V17 & Better than regression on air temperature? & \fact{pass} \\
+    \midrule
+    \multirow{7}{*}{Uncertainty}
+      & V4  & Intervals calibrated (synthetic data) & \fact{fail} \\
+      & V9  & Probabilities of exceeding a limit & \fact{fail} \\
+      & V11 & Cross-validated correction of yearly statistics & \fact{pass} \\
+      & V12 & Cross-validation design & \fact{pass} \\
+      & V14 & Intervals on the hottest days & \fact{fail} \\
+      & V18 & Intervals on independent rivers & \fact{fail} \\
+      & V19 & Conformal margins on 26 rivers & \fact{pass} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Software testing}
+\prompt{\fact{402} automated tests (unit, regression and documentation-link
+tests). Golden tests compile the Fortran and compare outputs. Continuous
+integration runs them on several Python versions and against the locked
+dependencies (\repo{.github/workflows/tests.yml}).}
+
+\subsection{Agreement with the Fortran}
+\label{sec:v-fortran}
+\prompt{V1: \fact{all 20 version $\times$ integrator cases agree within
+\SI{5e-6}{\celsius}}, the last digit the Fortran prints; \fact{99}
+scoring combinations agree, with and without gaps. V6: the schemes' error
+against the exact solution.}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\linewidth]{V1_max_difference.png}
+  \caption{Largest difference from the Fortran original, by model version
+  and integrator (V1).}
+  \label{fig:v1}
+\end{figure}
+
+\subsection{Reproducing published results}
+\prompt{V13 (2015 paper): reproduced with RK4, not with CRN, so parameters
+belong to their integrator. V2 (2016 paper): \fact{all 30 published RMSE values
+within \SI{0.0005}{\celsius}}. V15 (British Columbia): \fact{45 of 46} series
+reproduced day by day; the 46th has its record starting on 1~November, so
+the original's row-based seasonal phase put it ten months out of phase. That
+is a concrete case of a silent error that a date-based implementation
+prevents; describe it with care and respect for the original authors.}
+
+% \begin{figure}[htbp]
+%   \centering
+%   \includegraphics[width=\linewidth]{V15_british_columbia.png}
+%   \caption{Published and recomputed simulations, 23 rivers in British Columbia (V15).}
+%   \label{fig:v15}
+% \end{figure}
+
+\subsection{Recovery of a known truth}
+\prompt{V3, V7 and V8, in a short paragraph each, or one paragraph and a
+table.}
+
+\subsection{Predictive performance}
+\prompt{V5: against simple alternatives on held-out years. V17: version 8
+beats every regression on \fact{3 of 3} Swiss and \fact{20 of 23} British
+Columbia rivers (median daily RMSE \fact{0.74 against \SI{0.89}{\celsius}};
+\fact{0.96 against \SI{1.17}{\celsius}}). V10: extrapolation to the warmest
+and lowest-flow years. V16: \fact{3 or more years} of record are close to
+the whole record.}
+
+\subsection{Calibration of the uncertainty}
+\prompt{The honest heart of the paper. Synthetic data (V4): stated levels are
+met to within \fact{3.2} points. Real rivers (V5, V18): the 90\% intervals
+hold \fact{85--90\%} of the time; on the hottest days (V14) and some British
+Columbia rivers, they are too narrow. Cross-validation corrects yearly
+statistics (V11), and conformal margins correct the intervals (V19:
+British Columbia 30-day means \fact{84.8\% $\to$ 92.1\%}, without making
+the Swiss intervals too wide). Say what each failure means for a user.}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\linewidth]{V19_levels.png}
+  \caption{Share of measurements inside the intervals at each stated level,
+  without and with conformal margins (V19).}
+  \label{fig:v19}
+\end{figure}
+
+% =========================================================================
+\section{Example application: a compliance question}
+\label{sec:example}
+
+\prompt{One worked example from data to a statement. Example 03 asks how likely
+it is that the 7-day mean of the Mentue exceeded \SI{20}{\celsius} in
+2010--2012. Uncorrected and corrected probabilities: \fact{0.92 / 0.54, 0.77 /
+0.35, 0.53 / 0.15}; the Brier score falls from \fact{0.29 to 0.12}
+(\repo{examples/03\_compliance/README.md}; \repo{docs/UNCERTAINTY.md}
+§16). Optionally, add example 08 (air $+2\,^\circ$C, 20\% less summer flow) to
+show paired scenarios. Show the three \texttt{Model} calls (listing below).}
+
+\begin{verbatim}
+import pyair2stream
+m = pyair2stream.Model("settings.yaml")
+m.calibrate()                                   # DE-MCMC
+m.predict("2010-2012.csv", name="prediction")   # 1,000 series
+m.check()                                       # leave-one-year-out
+\end{verbatim}
+
+% \begin{figure}[htbp]
+%   \centering
+%   \includegraphics[width=\linewidth]{03_compliance/figures/peak_7day_mean.png}
+%   \caption{Highest 7-day mean of each year: predicted range, corrected range and measurement.}
+%   \label{fig:example}
+% \end{figure}
+
+% =========================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+\prompt{The integrator: published parameters belong to the scheme they
+were calibrated with, and results obtained with explicit schemes (including
+RK4 calibrations) should be re-examined before reuse at other flows
+(Sect.~\ref{sec:stability}). Word this with care: the 2015 results are valid
+as computed; the risk is in carrying them to other schemes or conditions.}
+
+\prompt{Limitations: a lumped model at one station; stationarity of the
+parameters under climate change and extrapolation (V10); intervals on the
+hottest days (V14); the exchangeability assumption behind the conformal
+margins; dependence on the prior bounds; the local nature of the sensitivity
+index.}
+
+\prompt{Use in regulation and in court: what makes a result defensible
+(stated criteria, held-out checks, recorded settings and versions, reruns
+that give the same numbers), and what a report should state
+(\repo{docs/PUBLISHED\_RESULTS.md}, ``What a publication should state'';
+USER\_GUIDE §14).}
+
+\prompt{Relation to the original: an independent port, not maintained or
+endorsed by the original authors; the scientific credit for the model is
+theirs.}
+
+% =========================================================================
+\section{Conclusions}
+\label{sec:conclusions}
+
+\prompt{Three to five sentences: what \pkg{} is, the evidence, what it lets a
+user do that the Fortran did not, and future work (for example, multi-site
+calibration, or other error models).}
+
+% =========================================================================
+\section*{Code and data availability}
+\prompt{GMD requires a persistent archive of the exact version
+(Zenodo DOI \texttt{\softwaredoi}), the licence, the repository URL
+(\url{https://github.com/LukeAFullard/pyair2stream}), and the data with their
+licences: Swiss data from FOEN
+(\repo{data/switzerland/README.md}); British Columbia data from
+\citet{moore2024data} (CC BY 4.0). Say how to rerun the validation
+(\texttt{python validation/run\_all.py}).}
+
+\section*{Author contributions}
+\prompt{CRediT roles.}
+
+\section*{Competing interests}
+\prompt{State them, or that there are none.}
+
+\section*{Acknowledgements}
+\prompt{The original \aas{} authors and code; FOEN; R.~D.~Moore and
+L.~Callahan for the published data and scripts; funding.}
+
+% =========================================================================
+\appendix
+\section{Example settings file}
+\label{app:settings}
+\prompt{A complete \texttt{settings.yaml} from example 03 or 08, annotated.}
+
+\section{Butcher tableaux and B-series coefficients}
+\label{app:butcher}
+\prompt{The tableaux of EUL, RK2, CRN and RK4, the elementary weights of the 8
+trees up to order 4, and the coefficients of $R(z)$
+(\repo{examples/09\_integrator\_stability}, section 4; the figure
+\texttt{butcher\_trees.png}).}
+
+\section{Validation criteria}
+\label{app:criteria}
+\prompt{Each check's pass criterion, stated as in its report
+(\repo{validation/reports/V*.md}). This lets a reader see that the criteria
+were set before the results.}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
