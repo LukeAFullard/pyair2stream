@@ -22,9 +22,10 @@ import numpy as np
 import pandas as pd
 
 from common import (AUTHORS_BOUNDS, DE_SETTINGS, LEVELS, REPO, WORK, Result, Section, Timer, accepted_real,
-                    cluster_interval, load, quiet, plot_style, save_figure, BLUE, ORANGE, INK2, LIGHT_GREY)
+                    block_interval, format_ci, heterogeneity_row, load, pigeonhole_interval, quiet, plot_style,
+                    save_figure, BLUE, ORANGE, INK2, LIGHT_GREY, HETEROGENEITY_TEXT, INTERVALS_TEXT)
 from v18_bc_intervals import SUMMER, WINDOWS, _error_diagnostics, _ranges, _resumable
-from v19_conformal import _later_counts, _margins
+from v19_conformal import _held_out_cells, _later_cells, _later_counts, _margins
 
 DATA = os.path.join(REPO, "data", "usa_northeast")
 QUICK_STATIONS = 2
@@ -79,7 +80,9 @@ def _cross_validation(args):
             diagnostics.append({"fold": f.label, **d})
     if os.path.abspath(os.path.join(data.folder, "cv_conformal_margins.csv")) != _margins_csv(st):
         raise RuntimeError(f"{st}: the margins were written to {data.folder}")
-    return {"station": st, "folds": len(folds), "margins": _margins(folds), "diagnostics": diagnostics}
+    table = _margins(folds)
+    cells = _held_out_cells(folds, table, st) if not table.empty else []
+    return {"station": st, "folds": len(folds), "margins": table, "cells": cells, "diagnostics": diagnostics}
 
 
 def _margins_csv(st):
@@ -173,7 +176,9 @@ def run(ctx) -> Result:
                "judged without a margin and with a margin from the river's other held-out years only "
                "(inside_after). (C) For each predicted period, its mean error against what the error model "
                "allows (z, as V18 part C). Shares are pooled over stations, weighted by the number of values; "
-               "95% confidence intervals resample stations (cluster bootstrap).",
+               "95% confidence intervals resample stations and months (A) or years (B) together. The confidence "
+               "intervals and the comparison of stations were added after the first run of this check; they "
+               "report its results more fully and change no criterion.",
         criterion="Fixed in this file before the check was first run, with the method unchanged since V19. With "
                   "the conformal margins: (A) for the stations whose DE-MCMC converged, pooled, the share of "
                   f"later-year days inside the interval is within the accepted range at "
@@ -196,6 +201,18 @@ def run(ctx) -> Result:
     no_margins = [st for st in sts if cv[st]["margins"].empty]
     df = pd.DataFrame([r for st in sts if st not in no_margins for r in _rows(st, cv[st], later[st])])
     pool_conv = not ctx.quick
+    cell_rows = []
+    for st in sts:
+        if st in no_margins:
+            continue
+        margins = {(int(r.window_days), int(r.level)): float(r.margin) for r in cv[st]["margins"].itertuples()}
+        for c in cv[st]["cells"] + _later_cells(later[st]["ranges"], margins, later[st]["ice_floor"]):
+            cell_rows.append({"station": st, "converged": later[st]["converged"] if c["part"] == "A" else True, **c})
+    cells = pd.DataFrame(cell_rows)
+
+    def cell_subset(part, what, lev):
+        c = cells[(cells.part == part) & (cells["values"] == what) & (cells.level == lev)]
+        return c[c.converged.astype(bool)] if part == "A" and pool_conv else c
 
     def pooled(part):
         g = df[df.part == part]
@@ -207,8 +224,10 @@ def run(ctx) -> Result:
             row = {"values": what, "level": lev, "stations": h.station.nunique(), "n": int(n)}
             for col, label in (("inside before", "no margin"), ("inside after", "with margin")):
                 row[f"inside, {label}"] = h[col].sum() / n if n else np.nan
-                lo, hi = cluster_interval(zip(h[col], h.n))
-                row[f"{label}: 95% CI"] = "" if not np.isfinite(lo) else f"{lo * 100:.1f}-{hi * 100:.1f}%"
+                c = (cell_subset(part, what, lev) if what in WINDOWS else
+                     cell_subset(part, "days", lev).pipe(lambda x: x[x.block.str[-2:].astype(int).isin(SUMMER)]))
+                row[f"{label}: 95% CI"] = ("" if c is None else
+                                           format_ci(pigeonhole_interval(zip(c.station, c.block, c[col], c.n))))
             row["median margin (°C)"] = float(np.median(h.margin))
             if part == "A":
                 row["mean width, no margin (°C)"] = float(np.average(h["width before"], weights=h.n)) if n else np.nan
@@ -257,7 +276,7 @@ def run(ctx) -> Result:
         return "; ".join(f"{what} {share(part, what, 90, 'inside, no margin'):.1%}{bracket(ci(part, what, 90, 'no margin'))} "
                          f"-> {share(part, what, 90):.1%}{bracket(ci(part, what, 90))}" for what in WINDOWS)
     res.summary = (f"{len(sts)} rivers ({n_conv} with a converged DE-MCMC). Share inside the 90% intervals without -> "
-                   f"with the margins (95% confidence intervals, stations resampled): in the later years 2021-2023 "
+                   f"with the margins (95% confidence intervals, stations and months or years resampled): in the later years 2021-2023 "
                    f"{line('A')}; in the held-out years {line('B')}. ")
     if ctx.quick:
         res.summary += "Quick run: coverage reported, not judged."
@@ -292,6 +311,11 @@ def run(ctx) -> Result:
                 if len(h) and h.n.iloc[0]:
                     r = h.iloc[0]
                     row[f"{part}: {what}"] = f"{r['inside before'] / r.n:.0%} -> {r['inside after'] / r.n:.0%}"
+        for part, blocks in (("A", "months"), ("B", "years")):
+            c = cells[(cells.station == st) & (cells.part == part) & (cells["values"] == "days") & (cells.level == 90)] \
+                if len(cells) else cells
+            row[f"{part}: days with margin, 95% CI, {blocks} resampled"] = (
+                format_ci(block_interval(zip(c["inside after"], c.n))) if len(c) else "")
         h = g[(g.part == "B") & (g["values"] == "days")]
         row["margin, days (°C)"] = round(float(h.margin.iloc[0]), 2) if len(h) else np.nan
         row["held-out years"] = int(h["held-out years"].iloc[0]) if len(h) else 0
@@ -313,6 +337,19 @@ def run(ctx) -> Result:
         tables=[("B. Pooled over every held-out year", fmt(pools["B"]))]))
     res.sections.append(Section("By station, 90% intervals", "Share inside without -> with the margin.",
                                 tables=[("By station", pd.DataFrame(by_station))]))
+    hetero = []
+    for part, blocks in (("A", "months"), ("B", "years")):
+        for what in WINDOWS:
+            c = cell_subset(part, what, 90)
+            for col, label in (("inside before", "no margin"), ("inside after", "with margin")):
+                n = c.n.sum()
+                hetero.append({"part": f"{part} ({blocks} as blocks)", "values": what, "margin": label,
+                               "pooled share inside 90%": f"{c[col].sum() / n:.1%}" if n else "",
+                               **heterogeneity_row(zip(c.station, c.block, c[col], c.n))})
+    res.sections.append(Section(
+        "Confidence intervals, and differences between stations (90% intervals)",
+        INTERVALS_TEXT + " " + HETEROGENEITY_TEXT,
+        tables=[("Differences between stations", pd.DataFrame(hetero))]))
 
     diag_b = [d for st in sts for d in cv[st]["diagnostics"]]
     diag_a = [later[st]["diagnostics"] for st in sts if later[st]["diagnostics"] and later[st]["converged"]]
