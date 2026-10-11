@@ -250,9 +250,12 @@ def run(ctx) -> Result:
 
     n_conv = df[(df.part == "A") & df.converged.astype(bool)].station.nunique()
 
+    def bracket(x):
+        return f" ({x})" if x else ""
+
     def line(part):
-        return "; ".join(f"{what} {share(part, what, 90, 'inside, no margin'):.1%} ({ci(part, what, 90, 'no margin')}) "
-                         f"-> {share(part, what, 90):.1%} ({ci(part, what, 90)})" for what in WINDOWS)
+        return "; ".join(f"{what} {share(part, what, 90, 'inside, no margin'):.1%}{bracket(ci(part, what, 90, 'no margin'))} "
+                         f"-> {share(part, what, 90):.1%}{bracket(ci(part, what, 90))}" for what in WINDOWS)
     res.summary = (f"{len(sts)} rivers ({n_conv} with a converged DE-MCMC). Share inside the 90% intervals without -> "
                    f"with the margins (95% confidence intervals, stations resampled): in the later years 2021-2023 "
                    f"{line('A')}; in the held-out years {line('B')}. ")

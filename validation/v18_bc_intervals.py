@@ -363,6 +363,9 @@ def run(ctx) -> Result:
         g = df[(df.rho == rho) & (df["values"] == what)]
         return float(g[f"{lev}%"].iloc[0]) if len(g) else np.nan
 
+    def _bracket(text, value):
+        return f" ({text})" if value else ""
+
     def _get_ci(df, rho, what):
         g = df[(df.rho == rho) & (df["values"] == what)]
         return g[CI_90].iloc[0] if len(g) else ""
@@ -437,12 +440,12 @@ def run(ctx) -> Result:
     res.summary = (
         f"(A) DE-MCMC converged with both rho at {n_conv} of {len(stations)} stations. In 2021-2022, pooled over "
         f"those stations, the default intervals contained {_row(pooled_a, 'weekly', 'days')} of measured days "
-        f"(90%: 95% confidence interval {_get_ci(pooled_a, 'weekly', 'days')}, stations resampled); "
+        f"{_bracket('90%: 95% confidence interval ' + _get_ci(pooled_a, 'weekly', 'days') + ', stations resampled', _get_ci(pooled_a, 'weekly', 'days'))}; "
         f"90% intervals contained {_get(pooled_a, 'weekly', '7-day means', 90):.1%} of 7-day means and "
         f"{_get(pooled_a, 'weekly', '30-day means', 90):.1%} of 30-day means (rho from consecutive days: "
         f"{_get(pooled_a, 'daily', '7-day means', 90):.1%} and {_get(pooled_a, 'daily', '30-day means', 90):.1%}). "
         f"(B) Over {int(sum(r['folds'] for r in b))} held-out years, the default intervals contained "
-        f"{_row(pooled_b, 'weekly', 'days')} of days (90%: {_get_ci(pooled_b, 'weekly', 'days')}); 90% intervals contained "
+        f"{_row(pooled_b, 'weekly', 'days')} of days{_bracket('90%: ' + _get_ci(pooled_b, 'weekly', 'days'), _get_ci(pooled_b, 'weekly', 'days'))}; 90% intervals contained "
         f"{_get(pooled_b, 'weekly', '7-day means', 90):.1%} of 7-day means and "
         f"{_get(pooled_b, 'weekly', '30-day means', 90):.1%} of 30-day means (rho from consecutive days: "
         f"{_get(pooled_b, 'daily', '7-day means', 90):.1%} and {_get(pooled_b, 'daily', '30-day means', 90):.1%}). ")
