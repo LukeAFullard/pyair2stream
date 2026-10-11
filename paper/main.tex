@@ -74,7 +74,9 @@ from air temperature and discharge alone;
 original);
 (3) what \pkg{} is: a Python implementation that reproduces the Fortran
 to \fact{\SI{5e-6}{\celsius}}, corrects its silent errors, and adds what a
-decision needs: checks on inputs and runs; records with gaps; uncertainty by
+decision needs: checks on inputs and runs, including a stability check
+from the daily relaxation rate that catches explicit-scheme runs that fail
+while looking plausible; records with gaps; uncertainty by
 DE-MCMC with an autocorrelated error model; year-by-year cross-validation;
 the chance that a yearly statistic exceeded a limit, corrected for the
 model's bias; paired scenario comparisons; and an auditable record of every
@@ -123,8 +125,12 @@ and carry a stated confidence.}
 \prompt{Contributions, as a list (Table~\ref{tab:capabilities} summarises them):
 (i) a verified port of every model version, integrator and objective, with
 the Fortran's silent errors corrected (Sect.~\ref{sec:implementation});
-(ii) checks that stop or flag bad inputs and unstable runs, and support for
-records with gaps (Sect.~\ref{sec:implementation});
+(ii) checks that stop or flag bad inputs, and support for records with
+gaps (Sect.~\ref{sec:implementation});
+(ii$'$) an analysis of numerical stability: why the explicit Runge--Kutta
+schemes the Fortran offers fail on the published parameters and in
+scenarios, often without any visible sign, and a check that catches them
+(Sect.~\ref{sec:stability});
 (iii) uncertainty quantification designed for autocorrelated errors
 (Sect.~\ref{sec:uq});
 (iv) year-by-year cross-validation, with bias correction and conformal
@@ -178,7 +184,8 @@ the calibration value in prediction and scenario runs (METHODS §4).}
 \subsection{Numerical solution}
 \prompt{The daily time step and the Fortran's four integrators:
 Crank--Nicolson (\texttt{CRN}), RK4, RK2 and Euler; \pkg{} adds an
-exponential scheme (\texttt{EXP}, Sect.~\ref{sec:numerics}). Stability of
+exponential scheme (\texttt{EXP}). Their stability is the subject of
+Sect.~\ref{sec:stability}. Stability of
 the explicit schemes, and why parameters belong to the scheme they were
 calibrated with (METHODS §6; the evidence is V6 and V13).}
 
@@ -208,13 +215,13 @@ Each row points to the section that describes it.}
     \midrule
     \multicolumn{3}{@{}l}{\textit{The model}} \\
     Versions, objectives & 3, 4, 5, 7, 8; RMS, NSE, KGE & the same, reproduced to \fact{\SI{5e-6}{\celsius}} (Sect.~\ref{sec:v-fortran}) \\
-    Integrators & CRN, RK4, RK2, EUL & the same, and \texttt{EXP} (Sect.~\ref{sec:numerics}) \\
+    Integrators & CRN, RK4, RK2, EUL; no stability check & the same, and \texttt{EXP}; CRN by default (Sect.~\ref{sec:stability}) \\
     Calibration & PSO, Latin hypercube & the same, and DE with L-BFGS-B (default) \\
     Errors in the original & --- & corrected: seasonal phase from the dates, PSO, \texttt{Qmedia}, scoring (Table~\ref{tab:differences}) \\
     \midrule
     \multicolumn{3}{@{}l}{\textit{Can I trust this run?}} \\
     Input checks & none & missing, repeated, implausible or negative values; short records (Sect.~\ref{sec:checks}) \\
-    Run checks & none & unstable or diverging schemes; implausible output; unused parameters \\
+    Run checks & none & stability from the B series before a run; divergence and implausible output after (Sect.~\ref{sec:stability}); unused parameters \\
     Consistency between runs & --- & a prediction refuses a calibration or chain made with other settings \\
     Data report & --- & checks, gaps and usable segments before a run \\
     \midrule
@@ -303,11 +310,12 @@ case. Lead with the seasonal phase: it changed a published result (V15). Source:
 
 \subsection{Numerical schemes and calibration}
 \label{sec:numerics}
-\prompt{The exponential (integrating-factor) scheme, stable like CRN
-(METHODS §6). Differential evolution \citep{storn1997} with L-BFGS-B polishing
-\citep{byrd1995} as the default optimizer, and why (V2: it fits at least as
-well as the published parameters). PSO and Latin hypercube kept for
-comparison with published work.}
+\prompt{A fifth scheme, exponential (\texttt{EXP}), stable for every $B$ like
+CRN; CRN as the default; the choice of scheme is the subject of
+Sect.~\ref{sec:stability}. Differential evolution \citep{storn1997} with
+L-BFGS-B polishing \citep{byrd1995} as the default optimizer, and why (V2: it
+fits at least as well as the published parameters). PSO and Latin hypercube
+kept for comparison with published work.}
 
 \subsection{Checks on inputs and runs}
 \label{sec:checks}
@@ -327,6 +335,245 @@ inputs, each started at rest (METHODS §10); the evidence that gaps do not bias
 the result is V7. Records may start on any date. A 365-day calendar for
 climate-model output (METHODS §2). Zero discharge with
 \texttt{min\_theta\_floor} (METHODS §5).}
+
+% =========================================================================
+\section{Numerical stability: the B series, and why explicit schemes need extreme caution}
+\label{sec:stability}
+
+\prompt{Why this section matters. The model is a stiff linear ODE whenever the
+water responds within a day, and its stiffness changes with discharge. The
+Fortran offers four schemes, three of them explicit, with no stability check;
+the 2015 paper calibrated with RK4. This section shows, from theory and on
+the 30 published parameter sets, when the explicit schemes fail, why a
+failing run can look plausible, why parameters cannot move between schemes,
+and why a scheme stable on the record can fail in a scenario. Source:
+\repo{examples/09\_integrator\_stability/README.md} (every number below comes
+from its \texttt{run.py}), \repo{docs/METHODS.md} §6 and §15, V1, V2, V6, V13.}
+
+\subsection{One number per day decides stability}
+Every model version can be written as
+\begin{equation}
+  \frac{\mathrm{d}T_w}{\mathrm{d}t} = A(t) - B(t)\,T_w,
+  \qquad
+  B = \frac{a_3 + a_8\,\theta}{\theta^{a_4}} \quad\text{(version 8)},
+  \label{eq:AB}
+\end{equation}
+where $B$ (per day) is the rate at which the water relaxes towards the
+equilibrium $A/B$, and $1/B$ its response time.
+
+\begin{table}[htbp]
+  \centering
+  \caption{$A$ and $B$ of Eq.~\eqref{eq:AB} for each version. In versions 3
+  and 5 the stability of a scheme is settled by one number; in versions 4, 7
+  and 8 it changes with discharge.}
+  \label{tab:AB}
+  \small
+  \begin{tabular}{@{}cll@{}}
+    \toprule
+    Version & $A(t)$ & $B(t)$ \\
+    \midrule
+    3 & $a_1 + a_2T_a$ & $a_3$ \\
+    4 & $(a_1 + a_2T_a)/\theta^{a_4}$ & $a_3/\theta^{a_4}$ \\
+    5 & $a_1 + a_2T_a + a_6\cos(2\pi(t-a_7))$ & $a_3$ \\
+    7 & $a_1 + a_2T_a + \theta(a_5 + a_6\cos(2\pi(t-a_7)))$ & $a_3 + a_8\theta$ \\
+    8 & $[a_1 + a_2T_a + \theta(a_5 + a_6\cos(2\pi(t-a_7)))]/\theta^{a_4}$ & $(a_3 + a_8\theta)/\theta^{a_4}$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\prompt{Because the equation is linear in $T_w$, a difference between two
+simulations is multiplied each step by an amplification factor $R$ that
+depends only on $B$ and the scheme. The analysis is therefore exact, apart from
+the ice floor \texttt{Tice\_cover}.}
+
+\subsection{Stability limits from B-series}
+\prompt{Explain the name clash: the \emph{B series} (the daily values of $B$)
+and \emph{B-series} in numerical analysis \citep{hairer1974,hairer2006}. One
+Runge--Kutta step expands as a sum over rooted trees
+\citep{butcher2016}; for the test equation $y' = -By$ only the tall trees
+(chains) survive, and the B-series collapses to the stability function
+$R(z)$, $z = -B\Delta t$ (Table~\ref{tab:rz}). Consequences:
+(i) no explicit Runge--Kutta method is stable for every $B$, because its $R$
+is a polynomial;
+(ii) the limits are where $\lvert R(-B)\rvert = 1$: 2 for Euler and Heun,
+\fact{2.785} for RK4;
+(iii) matching more terms of $\exp(z)$ (RK4) gives accuracy at small $B$, not
+stability at large $B$; CRN is A-stable but not L-stable (fast components
+zigzag); EXP is exact for the decay \citep{hochbruck2010,hairer1996}.
+Give the Butcher tableaux in an appendix.}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Stability function $R(z)$, $z=-B\Delta t$, of each scheme with a
+  one-day step, and the largest $B$ for which it is stable.}
+  \label{tab:rz}
+  \small
+  \begin{tabular}{@{}lllc@{}}
+    \toprule
+    \texttt{integrator} & Method & $R(z)$ & Stable for \\
+    \midrule
+    \texttt{EUL} & explicit Euler & $1 + z$ & $B \le 2$ \\
+    \texttt{RK2} & Heun & $1 + z + z^2/2$ & $B \le 2$ \\
+    \texttt{RK4} & classical Runge--Kutta & $1 + z + z^2/2 + z^3/6 + z^4/24$ & $B \le 2.785$ \\
+    \texttt{CRN} & Crank--Nicolson (implicit trapezoidal) & $(1 + z/2)/(1 - z/2)$ & all $B \ge 0$ \\
+    \texttt{EXP} & exponential (integrating factor) & $\exp(z)$ & all $B \ge 0$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\linewidth]{09_integrator_stability/figures/amplification.png}
+  \caption{Amplification factor of each scheme against $B$, with the
+  equation's $\exp(-B)$, and values measured through the package.}
+  \label{fig:amplification}
+\end{figure}
+
+\subsection{The B series of the published parameters}
+\prompt{With the 2016 parameters (CRN), $B$ exceeds 2 on at least half of the
+days on the Rh\^one and the Dischmabach in every version; floods drive it to
+\fact{39 per day} on the Dischmabach (a response time under an hour). In versions
+4, 7 and 8, $B$ follows discharge: in version 4 it rises as flow falls when
+$a_4>0$ and as flow rises when $a_4<0$; in version 7 it rises with flow; in
+version 8 ($B = a_3\theta^{-a_4} + a_8\theta^{1-a_4}$) floods raise it, and
+with $0<a_4<1$ (the 2015 sets) low flows do too. Show Fig.~\ref{fig:bseries}; a small table of the
+largest $B$ and the share of days above each limit could go in the appendix.}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{09_integrator_stability/figures/b_series_published.png}
+  \caption{The B series of every published parameter set. The 2015 sets,
+  calibrated with RK4, stay under RK4's limit.}
+  \label{fig:bseries}
+\end{figure}
+
+\subsection{Every scheme with every published parameter set}
+\prompt{Each of the 30 published sets run with each scheme, against a solution
+with 96 steps per day. CRN stays within \fact{0.10}, EXP within \fact{0.21~°C}
+RMS. With the 2016 (CRN) parameters, RK4 fails for \fact{10 of 15} sets, RK2
+and Euler for \fact{12}. The Fortran runs these without warning: in V1 both
+programs diverge on the same days.}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{09_integrator_stability/figures/every_integrator_every_version.png}
+  \caption{RMS difference of each scheme from the fine-step solution, for
+  the 30 published parameter sets, and the package's response.}
+  \label{fig:every}
+\end{figure}
+
+\subsection{Unstable runs that look plausible}
+\prompt{The key danger. The ice floor cuts off every downward excursion, so an
+unstable run need not blow up: Euler flips between 0 and \fact{25~°C} on the
+Rh\^one; RK4 sits at 0~°C for five months on the Dischmabach
+(Fig.~\ref{fig:failure}). A check on the output (not finite, or above
+\SI{60}{\celsius}) misses them. \pkg{} therefore checks the B series before a
+run: the largest growth of a difference over any stretch of days, the
+product of the daily factors (Eq.~\ref{eq:growth}), known before anything is
+simulated. Of the runs whose difference could grow more than 1,000 times,
+\fact{46 of 47} were more than 1~°C off or diverged; where it could grow at
+most 10 times, every RK2 run and every RK4 run but one (the RK4 calibration of
+Sect.~\ref{sec:rk4limit}) stayed within \fact{0.34~°C}
+(Fig.~\ref{fig:predicts}). For CRN the product telescopes, so a difference
+never grows by more than about half the largest $B$ (\fact{2.6 times} at most
+here), however long the run.}
+
+\begin{equation}
+  G_{m,n} = \prod_{j=m}^{n-1} R_j,
+  \qquad
+  R_j^{\mathrm{CRN}} = \frac{1 - B_j/2}{1 + B_{j+1}/2}
+  \;\Rightarrow\;
+  G^{\mathrm{CRN}}_{m,n} = \frac{1 - B_m/2}{1 + B_n/2}\prod_{j=m+1}^{n-1}\frac{1 - B_j/2}{1 + B_j/2}.
+  \label{eq:growth}
+\end{equation}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{09_integrator_stability/figures/failure_modes.png}
+  \caption{Three unstable runs on real forcing that a check on the output
+  misses: Euler zigzags, RK4 sits at 0~°C for months, RK2 falls to 0~°C in a
+  flood.}
+  \label{fig:failure}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{09_integrator_stability/figures/what_predicts_a_wrong_run.png}
+  \caption{What predicts a wrong run: the share of days above the limit
+  (left) and the largest growth over a stretch of days (right), for the 90
+  explicit-scheme runs.}
+  \label{fig:predicts}
+\end{figure}
+
+\subsection{Stable is not accurate, and a calibration learns its scheme}
+\label{sec:rk4limit}
+\prompt{Even where stable, Euler is \fact{0.45--0.98~°C} RMS from the
+equation (V6: up to \fact{4.5~°C} on single days). The parameters absorb a
+scheme's behaviour, so they belong to it: the 2015 (RK4) parameters run with
+CRN differ from the published errors by up to \fact{0.32~°C} (V13); the 2016
+(CRN) parameters are unstable with RK4 in \fact{8 of 15} sets (V2). A
+calibration with RK4 keeps $B$ under RK4's limit, and can do more: on the
+Dischmabach, version 5, $a_3 = $ \fact{2.768}, \fact{0.6\%} under the limit,
+where RK4 leaves \fact{97\%} of a difference in place each day against the
+equation's \fact{6\%}. With RK4 the fit is \fact{0.70~°C} RMSE; the same
+equation solved exactly gives \fact{0.97~°C}, the difference lying in winter,
+where RK4's slow decay holds the water above the ice floor
+(Fig.~\ref{fig:rk4limit}). The calibration fitted a numerical effect. A
+warning sign for users: a calibrated $B$ just under an explicit scheme's
+limit.}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{09_integrator_stability/figures/rk4_calibration_near_its_limit.png}
+  \caption{Dischmabach, winter 2005--2006, 2015 parameters (version 5): RK4
+  keeps the water above 0~°C; the equation solved exactly does not.}
+  \label{fig:rk4limit}
+\end{figure}
+
+\subsection{Stable on the record, unstable in a scenario}
+\prompt{In versions 4, 7 and 8, stability depends on discharge, so it can be
+lost in exactly the runs a decision rests on. With the 2015 version 8
+parameters and the recorded flow scaled by 0.1 to 3 (Table~\ref{tab:flows}):
+on the Rh\^one, RK4 is within \fact{0.02~°C} on the recorded flow but
+diverges at a tenth of it (a large abstraction or a drought); on the Mentue,
+doubled flows put RK4 \fact{0.50~°C} off. CRN stays within \fact{0.14~°C}, EXP
+within \fact{0.22~°C} in every case.}
+
+\begin{table}[htbp]
+  \centering
+  \caption{2015 version 8 parameters with the recorded discharge scaled:
+  RMS difference from the fine-step solution (°C), and the package's
+  response. \fact{From \repo{examples/09\_integrator\_stability}, section 8.}}
+  \label{tab:flows}
+  \small
+  \begin{tabular}{@{}cllll@{}}
+    \toprule
+    Flow $\times$ & Mentue RK4 & Mentue RK2 & Rh\^one RK4 & Rh\^one RK2 \\
+    \midrule
+    0.1 & 0.03 & 0.30 & diverged, stopped & diverged, stopped \\
+    0.2 & 0.02 & 0.26 & 0.07 & 0.84, warned \\
+    0.5 & 0.02 & 0.24, warned & 0.02 & 0.21 \\
+    1 (recorded) & 0.04, warned & 0.28, warned & 0.02 & 0.13, warned \\
+    1.5 & 0.16, warned & 0.57, warned & 0.01 & 0.10, warned \\
+    2 & 0.50, stopped & 0.98, stopped & 0.01 & 0.80, stopped \\
+    3 & diverged, stopped & diverged, stopped & 0.01, warned & 3.32, stopped \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Safeguards and recommendations}
+\prompt{What \pkg{} does: CRN is the default; choosing an explicit scheme
+prints a note; before a run it checks the share of days above the limit and
+the largest growth, and stops above a growth of 100 or more than 10\% of days
+above the limit; after a run it stops on non-finite or implausible output; a
+FORWARD run refuses parameters calibrated with another scheme; in DE-MCMC and
+prediction ensembles, unstable draws are dropped and counted. What users
+should do: use CRN (EXP as a second opinion); use explicit schemes only to
+reproduce the Fortran, with parameters calibrated with that scheme, on flows
+like the calibration's; check the B series of a scenario's inputs before
+running it. Say what the growth check cannot catch (inaccuracy of a stable
+scheme; the RK4 calibration above), and why that argues for CRN rather than
+a tighter check.}
 
 % =========================================================================
 \section{Uncertainty quantification}
@@ -562,6 +809,12 @@ m.check()                                       # leave-one-year-out
 \section{Discussion}
 \label{sec:discussion}
 
+\prompt{The integrator: published parameters belong to the scheme they
+were calibrated with, and results obtained with explicit schemes (including
+RK4 calibrations) should be re-examined before reuse at other flows
+(Sect.~\ref{sec:stability}). Word this with care: the 2015 results are valid
+as computed; the risk is in carrying them to other schemes or conditions.}
+
 \prompt{Limitations: a lumped model at one station; stationarity of the
 parameters under climate change and extrapolation (V10); intervals on the
 hottest days (V14); the exchangeability assumption behind the conformal
@@ -611,6 +864,13 @@ L.~Callahan for the published data and scripts; funding.}
 \section{Example settings file}
 \label{app:settings}
 \prompt{A complete \texttt{settings.yaml} from example 03 or 08, annotated.}
+
+\section{Butcher tableaux and B-series coefficients}
+\label{app:butcher}
+\prompt{The tableaux of EUL, RK2, CRN and RK4, the elementary weights of the 8
+trees up to order 4, and the coefficients of $R(z)$
+(\repo{examples/09\_integrator\_stability}, section 4; the figure
+\texttt{butcher\_trees.png}).}
 
 \section{Validation criteria}
 \label{app:criteria}
