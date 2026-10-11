@@ -263,7 +263,7 @@ simulations.*
   model gives the flow little weight. A change in flow moves the equilibrium
   by w·(1 − w)·(flow-linked − air-driven) per unit change of ln θ, and w, the
   flow-linked share, is smallest when flow is lowest (0.08 in August on average,
-against 0.36 in December; see the table above).
+  against 0.36 in December; see the table above).
 - **Changing only the highest flows changes nothing in summer.** The highest
   flows are mostly winter floods, and the largest single-day changes (±0.2 to
   0.5 °C) are on those days.
