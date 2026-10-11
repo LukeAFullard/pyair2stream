@@ -73,10 +73,12 @@ from air temperature and discharge alone;
 (2) \aas{} \citep{toffolon2015} and its standing (widely used; Fortran
 original);
 (3) what \pkg{} is: a Python implementation that reproduces the Fortran
-to \fact{\SI{5e-6}{\celsius}}, plus what it adds (uncertainty by DE-MCMC with an
-autocorrelated error model, prediction intervals and paired scenarios,
-year-by-year cross-validation, conformal margins, gap-tolerant runs,
-input and stability checks);
+to \fact{\SI{5e-6}{\celsius}}, corrects its silent errors, and adds what a
+decision needs: checks on inputs and runs; records with gaps; uncertainty by
+DE-MCMC with an autocorrelated error model; year-by-year cross-validation;
+the chance that a yearly statistic exceeded a limit, corrected for the
+model's bias; paired scenario comparisons; and an auditable record of every
+run;
 (4) how it was tested: \fact{402} automated tests and a 19-check validation
 suite with criteria stated in advance, against the Fortran, three published
 studies and 26 rivers in Switzerland and British Columbia;
@@ -110,21 +112,28 @@ outside the calibration range), and hybrid models. Introduce \aas{}
 \citep[e.g.][]{callahan2025}.}
 
 \prompt{The gap this paper fills. The Fortran original
-\citep{air2stream_code} gives a best fit only: no parameter or prediction
-uncertainty, no cross-validation, few input checks; it assumes a record
-starts on 1 January; it is distributed as source and a Windows executable.
-Results used in regulation or in court must be reproducible, tested and
-carry a stated confidence.}
+\citep{air2stream_code} calibrates and runs the model, and no more: a best
+fit without uncertainty; no test on years not used for calibration; no
+checks on its inputs or on unstable runs; air temperature and discharge must
+be complete; a record must start on 1~January, unchecked; results are
+plotted with a separate MATLAB script. Results used in regulation or in court
+must be reproducible, tested, checked on data the model was not fitted to,
+and carry a stated confidence.}
 
-\prompt{Contributions, as a list:
-(i) a verified port of every model version, integrator and objective;
-(ii) uncertainty quantification designed for autocorrelated errors;
-(iii) year-by-year cross-validation, bias correction of yearly statistics,
-and conformal margins;
-(iv) scenario comparisons with paired simulations;
-(v) a validation suite with stated pass criteria, whose failures are
-reported;
-(vi) the outline of the paper.}
+\prompt{Contributions, as a list (Table~\ref{tab:capabilities} summarises them):
+(i) a verified port of every model version, integrator and objective, with
+the Fortran's silent errors corrected (Sect.~\ref{sec:implementation});
+(ii) checks that stop or flag bad inputs and unstable runs, and support for
+records with gaps (Sect.~\ref{sec:implementation});
+(iii) uncertainty quantification designed for autocorrelated errors
+(Sect.~\ref{sec:uq});
+(iv) year-by-year cross-validation, with bias correction and conformal
+margins (Sect.~\ref{sec:cv});
+(v) tools for decisions: the chance a limit was exceeded, and paired
+scenario comparisons (Sect.~\ref{sec:decisions});
+(vi) a validation suite with stated pass criteria, whose failures are
+reported (Sect.~\ref{sec:validation});
+(vii) the outline of the paper.}
 
 % =========================================================================
 \section{The air2stream model}
@@ -167,32 +176,92 @@ the calibration value in prediction and scenario runs (METHODS §4).}
 \end{table}
 
 \subsection{Numerical solution}
-\prompt{The daily time step and the five integrators: Crank--Nicolson
-(\texttt{CRN}), exponential (\texttt{EXP}), RK4, RK2 and Euler. Stability of
+\prompt{The daily time step and the Fortran's four integrators:
+Crank--Nicolson (\texttt{CRN}), RK4, RK2 and Euler; \pkg{} adds an
+exponential scheme (\texttt{EXP}, Sect.~\ref{sec:numerics}). Stability of
 the explicit schemes, and why parameters belong to the scheme they were
 calibrated with (METHODS §6; the evidence is V6 and V13).}
 
 \subsection{Objective functions and calibration}
 \prompt{NSE \citep{nash1970}, RMSE and KGE \citep{gupta2009}, scored on daily,
-weekly or monthly means. The warm-up year (METHODS §3). Optimizers:
-differential evolution \citep{storn1997} with L-BFGS-B polishing
-\citep{byrd1995} as the default, plus PSO \citep{kennedy1995} and Latin
-hypercube as in the Fortran.}
+weekly or monthly means. The warm-up year (METHODS §3). The Fortran's
+optimizers: PSO \citep{kennedy1995} and Latin hypercube sampling.}
+
+% =========================================================================
+\section{What pyair2stream adds}
+\label{sec:overview}
+
+\prompt{One paragraph that walks through Table~\ref{tab:capabilities}: what the
+Fortran does, and what \pkg{} adds to it. Group the additions by the question
+a user is trying to answer: can I trust this run, how uncertain is it, does it
+hold in years it was not fitted to, and what does it mean for my decision.
+Each row points to the section that describes it.}
+
+\begin{table}[htbp]
+  \centering
+  \caption{The Fortran original and \pkg{}. ``---'': not available.}
+  \label{tab:capabilities}
+  \small
+  \begin{tabularx}{\linewidth}{@{}>{\raggedright}p{0.2\linewidth}>{\raggedright}p{0.25\linewidth}X@{}}
+    \toprule
+    & Fortran & \pkg{} \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{The model}} \\
+    Versions, objectives & 3, 4, 5, 7, 8; RMS, NSE, KGE & the same, reproduced to \fact{\SI{5e-6}{\celsius}} (Sect.~\ref{sec:v-fortran}) \\
+    Integrators & CRN, RK4, RK2, EUL & the same, and \texttt{EXP} (Sect.~\ref{sec:numerics}) \\
+    Calibration & PSO, Latin hypercube & the same, and DE with L-BFGS-B (default) \\
+    Errors in the original & --- & corrected: seasonal phase from the dates, PSO, \texttt{Qmedia}, scoring (Table~\ref{tab:differences}) \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{Can I trust this run?}} \\
+    Input checks & none & missing, repeated, implausible or negative values; short records (Sect.~\ref{sec:checks}) \\
+    Run checks & none & unstable or diverging schemes; implausible output; unused parameters \\
+    Consistency between runs & --- & a prediction refuses a calibration or chain made with other settings \\
+    Data report & --- & checks, gaps and usable segments before a run \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{Can I use my data?}} \\
+    Gaps & in water temperature only; a missing air temperature or discharge ($-999$) enters the equation as a value & also air temperature and discharge (gap-tolerant mode, Sect.~\ref{sec:data}) \\
+    Record start & 1 January, unchecked & any date \\
+    Calendars & standard & also 365-day (climate-model output) \\
+    Zero discharge & not handled & a floor on scaled discharge \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{How uncertain is it?}} \\
+    Parameters & best fit only & DE-MCMC with an autocorrelated error model (Sect.~\ref{sec:uq}) \\
+    Predictions & one series & 1,000 series: intervals for days, 7- and 30-day means, yearly statistics \\
+    Sensitivity & --- & local one-at-a-time index \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{Does it hold in other years?}} \\
+    Held-out years & a validation file & leave-one-year-out cross-validation (Sect.~\ref{sec:cv}) \\
+    Interval check & --- & coverage at each level; conformal margins where too narrow \\
+    Parameter intervals & --- & jackknife intervals across folds \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{What does it mean for a decision?}} \\
+    Limits & --- & the chance a yearly statistic exceeded a limit, corrected for bias (Sect.~\ref{sec:decisions}) \\
+    Scenarios & a second run & paired runs: the difference simulation by simulation \\
+    \midrule
+    \multicolumn{3}{@{}l}{\textit{Use and audit}} \\
+    Interfaces & text input files; Windows executable or compile & YAML settings; command line, \texttt{run} and \texttt{Model} in Python; \texttt{pip} on any platform (Sect.~\ref{sec:architecture}) \\
+    Results & text files; MATLAB plotting script & a summary of each run, its settings and versions; built-in figures \\
+    Evidence & the published applications & \fact{402} tests and a 19-check validation suite (Sect.~\ref{sec:validation}) \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
 
 % =========================================================================
 \section{Implementation}
 \label{sec:implementation}
 
 \subsection{Design and architecture}
+\label{sec:architecture}
 \prompt{The software stack: NumPy, SciPy, pandas and matplotlib; the time loop
 is compiled with Numba \citep{lam2015}; MCMC uses emcee
-\citep{foremanmackey2013}. One settings file (YAML) describes a run, and the
-run modes are calibration, DE-MCMC, FORWARD and cross-validation.
-Interfaces: the command line, \texttt{pyair2stream.run} and the
-\texttt{pyair2stream.Model} workflow (calibrate, check, predict). Each run
-writes a summary (\texttt{summary.md}/\texttt{.html}) and its settings, so
-it can be audited and repeated. A figure could show the workflow (data,
-calibration, check, prediction, scenario).}
+\citep{foremanmackey2013}. One settings file (YAML) describes a run; the run
+modes are calibration, DE-MCMC, FORWARD and cross-validation. Interfaces: the
+command line, \texttt{pyair2stream.run}, and the \texttt{pyair2stream.Model}
+workflow (calibrate, check, predict), which records each step's settings in
+a file that reruns it. Each run writes a summary (\texttt{summary.md} and
+\texttt{.html}) with its settings, data, scores, warnings and software
+versions, so it can be audited and repeated. Built-in figures are readable
+without colour. A figure could show the workflow.}
 
 % \begin{figure}[htbp]
 %   \centering
@@ -201,11 +270,12 @@ calibration, check, prediction, scenario).}
 %   \label{fig:workflow}
 % \end{figure}
 
-\subsection{Correspondence with the Fortran original, and deliberate differences}
-\prompt{Everything the Fortran computes is reproduced (Sect.~\ref{sec:v-fortran}).
-Where the two differ, \pkg{} differs on purpose, because the Fortran was wrong
-or silent; Table~\ref{tab:differences} lists each case. Source:
-\repo{docs/METHODS.md} §17.}
+\subsection{Correcting the original}
+\prompt{Everything the Fortran computes is reproduced
+(Sect.~\ref{sec:v-fortran}). Where the two differ, \pkg{} differs on purpose,
+because the Fortran was wrong or silent; Table~\ref{tab:differences} lists each
+case. Lead with the seasonal phase: it changed a published result (V15). Source:
+\repo{docs/METHODS.md} §17 and \repo{docs/PUBLISHED\_RESULTS.md}.}
 
 \begin{table}[htbp]
   \centering
@@ -226,37 +296,56 @@ or silent; Table~\ref{tab:differences} lists each case. Source:
                     & fixed at the calibration value; zero-flow days excluded where they cannot be simulated \\
     Weekly/monthly scoring & out-of-range index in a partial last block; division by zero when \texttt{prc}=0
                            & a block without data is never scored; \texttt{prc} applies to the calendar length \\
-    Input checks & none: runs on silently & missing, implausible or non-positive inputs; unused parameters; stability and divergence \\
     Defaults & --- & \texttt{CRN} integrator; DE with L-BFGS-B \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-\subsection{Data handling}
-\prompt{Input checks (METHODS §2 and §15). Gap-tolerant mode: segments are
-started at rest (METHODS §10). Non-standard calendars (365-day, 360-day)
-for climate-model inputs. Zero discharge and \texttt{min\_theta\_floor}.}
+\subsection{Numerical schemes and calibration}
+\label{sec:numerics}
+\prompt{The exponential (integrating-factor) scheme, stable like CRN
+(METHODS §6). Differential evolution \citep{storn1997} with L-BFGS-B polishing
+\citep{byrd1995} as the default optimizer, and why (V2: it fits at least as
+well as the published parameters). PSO and Latin hypercube kept for
+comparison with published work.}
+
+\subsection{Checks on inputs and runs}
+\label{sec:checks}
+\prompt{The Fortran runs on silently. Summarise METHODS §15 as a few classes:
+the inputs (missing, repeated or implausible values; negative discharge);
+the run (stability of the explicit schemes, judged by the relaxation rate and
+by how much an error can grow; non-finite or implausible output); and
+consistency between runs (a prediction refuses a chain or calibration made
+with another version, integrator, \texttt{Qmedia} or ice threshold, and warns
+when discharge leaves the calibrated range). The data report
+(\texttt{analyze\_timeseries}) makes the same checks before a run.}
+
+\subsection{Data with gaps, other calendars and zero flow}
+\label{sec:data}
+\prompt{Gap-tolerant mode: the record is split into segments with complete
+inputs, each started at rest (METHODS §10); the evidence that gaps do not bias
+the result is V7. Records may start on any date. A 365-day calendar for
+climate-model output (METHODS §2). Zero discharge with
+\texttt{min\_theta\_floor} (METHODS §5).}
 
 % =========================================================================
 \section{Uncertainty quantification}
 \label{sec:uq}
 
-\prompt{The core methodological contribution. Present it as a chain: error
-model, then parameter uncertainty, then prediction intervals, then a check on
-held-out years, then a correction where the check fails. Source:
-\repo{docs/METHODS.md} §11--§13 and \repo{docs/UNCERTAINTY.md}.}
+\prompt{Present it as a chain: error model, then parameter uncertainty, then
+prediction intervals. Sect.~\ref{sec:cv} checks the chain on held-out years.
+Source: \repo{docs/METHODS.md} §12--§13 and \repo{docs/UNCERTAINTY.md}.}
 
 \subsection{Error model and likelihood}
 \prompt{Model errors persist from day to day, so treating them as independent
 understates the uncertainty. Describe the AR(1) error model and the effective
 number of observations $n_\mathrm{eff} = n/F$ \citep{bayley1946}, with $F$
 summed over the pairs of scored days, so gaps are handled. Give the
-log-likelihood $-\tfrac{n_\mathrm{eff}}{2}\ln(\mathrm{SSE}/n)$; its maximum
-is the least-squares fit. Explain why $\rho$ is estimated on a weekly scale
-rather than from consecutive days (evidence: V4, V18;
-\citealp{mcinerney2020}). Compare the exact AR(1) likelihood and the
-independent-error likelihood, and say why neither is the default
-\citep{evin2014}.}
+log-likelihood (Eq.~\ref{eq:likelihood}); its maximum is the least-squares
+fit. Explain why $\rho$ is estimated on a weekly scale rather than from
+consecutive days (evidence: V4, V18; \citealp{mcinerney2020}). Compare the
+exact AR(1) likelihood and the independent-error likelihood, and say why
+neither is the default \citep{evin2014}.}
 
 \begin{equation}
   \log L(\mathbf{a}) = -\frac{n_\mathrm{eff}}{2}\,\ln\!\frac{\mathrm{SSE}(\mathbf{a})}{n},
@@ -269,32 +358,59 @@ independent-error likelihood, and say why neither is the default
 \prompt{The prior is uniform within the bounds. Sampling starts from the DE
 best fit, with the affine-invariant ensemble sampler
 \citep{goodman2010,foremanmackey2013}. Convergence is judged by the
-autocorrelation time and split-$\hat{R}$ \citep{gelman2013}. Jackknife
-parameter intervals come from cross-validation \citep{kunsch1989}.}
+autocorrelation time and split-$\hat{R}$ \citep{gelman2013}.}
 
-\subsection{Prediction intervals and paired scenarios}
+\subsection{Prediction intervals}
 \prompt{A FORWARD run draws parameter sets from the chain and adds AR(1) noise
 \citep{box2015}, giving an ensemble of series. Intervals for days, 7-day and
-30-day means, and yearly statistics (highest daily mean, highest 7-day mean,
-days above a threshold) come from the ensemble. Paired scenarios reuse the
-same parameter draws and noise, so the uncertainty common to both cancels in
-their difference (METHODS §13). Use example 04 (abstraction) as the
-illustration.}
-
-\subsection{Cross-validation, bias correction and conformal margins}
-\prompt{Leave one year out \citep{stone1974,klemes1986}: the hidden year keeps
-its air temperature and discharge (justified by V12;
-\citealp{burman1994}). From the held-out years, report the interval coverage
-and the bias of each yearly statistic, corrected in the manner of model output
-statistics \citep{glahn1972}. Optional conformal margins widen an interval by
-the amount held-out years fell outside it
-\citep{vovk2005,lei2018,romano2019}; describe the exchangeability caveat
-\citep{oliveira2024}. Judge probabilities by the Brier score
-\citep{brier1950} and the PIT \citep{gneiting2007}.}
+30-day means, and yearly statistics come from the ensemble.}
 
 \subsection{Sensitivity analysis}
 \prompt{One sentence or two: a local, one-at-a-time index (METHODS §14), and
 its limits.}
+
+% =========================================================================
+\section{Checking predictions on years not used for calibration}
+\label{sec:cv}
+
+\prompt{An interval is only useful if it holds on data the model has not seen.
+Source: \repo{docs/METHODS.md} §11 and \repo{docs/UNCERTAINTY.md} §8.}
+
+\subsection{Leave-one-year-out cross-validation}
+\prompt{Each year is held out in turn \citep{stone1974,klemes1986}; the hidden
+year keeps its air temperature and discharge, which V12 shows does not
+flatter the model \citep{burman1994}. Outputs: the error of each held-out
+year, the coverage of the intervals at each level, and jackknife intervals
+for the parameters \citep{kunsch1989}.}
+
+\subsection{Correcting yearly statistics}
+\prompt{The bias of each yearly statistic in the held-out years, and its
+correction, in the manner of model output statistics \citep{glahn1972}
+(METHODS §13; evidence V11).}
+
+\subsection{Conformal margins}
+\prompt{Optional margins widen an interval by the amount held-out years fell
+outside it \citep{vovk2005,lei2018,romano2019}; state the exchangeability
+caveat \citep{oliveira2024}. Evidence: V19.}
+
+% =========================================================================
+\section{Tools for decisions}
+\label{sec:decisions}
+
+\subsection{The chance that a limit was exceeded}
+\prompt{Yearly statistics (highest daily mean, highest 7-day mean, days above
+a threshold) from each simulated series, giving the chance that a limit was
+exceeded, corrected by Sect.~\ref{sec:cv}. Judge the probabilities by the
+Brier score \citep{brier1950} and the PIT \citep{gneiting2007}; evidence V9 and
+V11.}
+
+\subsection{Paired scenario comparisons}
+\prompt{A scenario run (abstraction, warmer air, climate-model inputs) reuses
+the baseline's parameter draws and noise, so the uncertainty common to both
+cancels in their difference, simulation by simulation (METHODS §13). Discharge
+outside the calibrated range is flagged. Illustrate with example 04 (30\%
+abstraction): summer change \fact{+\SI{0.05}{\celsius}, 90\% range 0.02 to
+0.08} paired, against \fact{$-0.30$ to 0.39} unpaired.}
 
 % =========================================================================
 \section{Verification and validation}
