@@ -237,7 +237,7 @@ flows" the 10% with the most (above 2.25 m³/s; mostly November to February).
 Every scenario stays within the flows of the calibration years.
 
 Version 8, change from the baseline, median and 90% range
-(`output/flow_regimes_summary.csv`; version 7 is within 0.02 °C of these):
+(`output/flow_regimes_summary.csv`; version 7 is within 0.03 °C of these):
 
 | Scenario | Hottest 10% of days | Yearly highest 7-day mean | Days above 18 °C per year | Largest daily warming | Largest daily cooling |
 |---|---|---|---|---|---|
@@ -262,14 +262,15 @@ simulations.*
   weeks: only 21% of the hottest days are among them. And on those days the
   model gives the flow little weight. A change in flow moves the equilibrium
   by w·(1 − w)·(flow-linked − air-driven) per unit change of ln θ, and w, the
-  flow-linked share, is smallest when flow is lowest (about 0.06 in August,
-  against 0.36 in December; see the table above).
+  flow-linked share, is smallest when flow is lowest (0.08 in August on average,
+against 0.36 in December; see the table above).
 - **Changing only the highest flows changes nothing in summer.** The highest
   flows are mostly winter floods, and the largest single-day changes (±0.2 to
   0.5 °C) are on those days.
 - **The hot extremes follow the flow of the whole warm season**, not the
   lowest-flow days alone: only the every-day scenarios move them.
-- **Version 4** changes none of these statistics by more than 0.03 °C.
+- **Version 4** changes the hottest days and the yearly peaks by at most
+  0.03 °C in every scenario.
 
 **A caution about low flows.** That low flows barely matter is a property of
 the model's structure, learned from 2002–2009, not a measured fact. In
